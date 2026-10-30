@@ -9,7 +9,7 @@
   let messages = $state<Msg[]>([]);
   let input = $state("");
   let streaming = $state(false);
-  let model = $state("Qwen3-0.6B Q4 (local)");
+  let model = $state("Qwen2.5-0.5B Q4 (local)");
   let streamText = $state("");
   let systemPrompt = $state("You are a helpful local AI assistant.");
   let showSystem = $state(false);
@@ -144,9 +144,10 @@
     </div>
     <label class="sr-only" for="model-select">Model</label>
     <select id="model-select" bind:value={model} class="text-xs bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-zinc-200 focus:outline-none focus:border-fuchsia-500">
-      <option>Qwen3-0.6B Q4 (local)</option>
-      <option>Qwen3-0.8B Q4 (local)</option>
-      <option>Qwen3-4B Q4 (local)</option>
+      <option>Qwen2.5-0.5B Q4 (local)</option>
+      <option>Qwen2.5-1.5B Q4 (local)</option>
+      <option>Qwen2.5-3B Q4 (local)</option>
+      <option>Qwen2.5-7B Q4 (local)</option>
       <option>Cloud LLM (OpenRouter)</option>
     </select>
   </div>

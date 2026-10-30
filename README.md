@@ -111,10 +111,10 @@ Edit `src-tauri/tauri.conf.json` for product name and bundle settings. The app i
 
 Presets compute a RAM budget as `(total RAM − 2 GB) × 0.7`.
 
-- **Tiny** ~1.9 GB – EmbeddingGemma 2, Qwen3-0.6B Q4, Whisper Tiny, Piper small
-- **Small** ~2.7 GB – EmbeddingGemma 2, Qwen3-0.8B Q4, Whisper Base
-- **Balanced** ~4.3 GB – EmbeddingGemma 2, Qwen3-4B Q4, Whisper Base, Piper
-- **Advanced** ~9.5 GB – Qwen3-9B Q4, EmbeddingGemma 2, Vision SLM
+- **Tiny** ~1.9 GB – EmbeddingGemma 2, Qwen2.5-0.5B Q4, Whisper Tiny, Piper small
+- **Small** ~2.7 GB – EmbeddingGemma 2, Qwen2.5-1.5B Q4, Whisper Base
+- **Balanced** ~4.3 GB – EmbeddingGemma 2, Qwen2.5-3B Q4, Whisper Base, Piper
+- **Advanced** ~9.5 GB – Qwen2.5-7B Q4, EmbeddingGemma 2, Vision SLM
 
 Downloads are verified by SHA-256 and can be resumed or cancelled.
 
