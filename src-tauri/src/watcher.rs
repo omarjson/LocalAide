@@ -99,7 +99,7 @@ impl IndexWatcher {
             }
         });
 
-        let mut lock = self.watcher.lock().unwrap();
+        let mut lock = self.watcher.lock().map_err(|e| format!("watcher mutex poisoned: {e}"))?;
         *lock = Some(watcher);
         Ok(())
     }

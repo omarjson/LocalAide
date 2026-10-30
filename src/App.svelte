@@ -159,10 +159,10 @@
 
   {#if cmdOpen}
     <div class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false}>
-      <div class="w-full max-w-lg mx-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Command palette" class="w-full max-w-lg mx-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()}>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
           <span>🔍</span>
-          <input bind:value={cmdQuery} autofocus placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-zinc-600"/>
+          <input aria-label="Jump to screen" bind:value={cmdQuery} autofocus placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-zinc-600"/>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">ESC</span>
         </div>
         <div class="p-2 max-h-80 overflow-auto">
@@ -187,7 +187,7 @@
 
   {#if showHelp}
     <div class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false}>
-      <div class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()}>
         <h3 class="text-lg font-semibold mb-4">Keyboard shortcuts</h3>
         <div class="space-y-3 text-sm">
           <div class="flex justify-between"><span class="text-zinc-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs">⌘K</kbd></div>

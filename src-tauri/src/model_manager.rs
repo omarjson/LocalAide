@@ -682,7 +682,6 @@ impl ModelManager {
         drop(file);
 
         // Verify full file hash after download completes
-        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         let mut f = std::fs::File::open(dest).map_err(|e| e.to_string())?;
         let mut buf = Vec::new();

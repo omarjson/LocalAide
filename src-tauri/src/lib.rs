@@ -213,13 +213,13 @@ fn search_index(state: State<'_, Arc<Indexer>>, query: String, mode: Option<Stri
     };
     let limit = limit.unwrap_or(20);
     let results = state.inner().search(&query, mode, limit)?;
-    Ok(results.iter().map(|r| serde_json::to_value(r).unwrap()).collect())
+    Ok(results.iter().filter_map(|r| serde_json::to_value(r).ok()).collect())
 }
 
 /// List indexed documents.
 #[tauri::command]
 fn list_index(state: State<'_, Arc<Indexer>>) -> Result<Vec<serde_json::Value>, String> {
-    Ok(state.inner().list().iter().map(|d| serde_json::to_value(d).unwrap()).collect())
+    Ok(state.inner().list().iter().filter_map(|d| serde_json::to_value(d).ok()).collect())
 }
 
 /// Indexer statistics.
@@ -302,7 +302,7 @@ fn memory_search(state: State<'_, Arc<Indexer>>, query: String) -> Result<Vec<se
     }
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     results.truncate(20);
-    Ok(results.iter().map(|r| serde_json::to_value(r).unwrap()).collect())
+    Ok(results.iter().filter_map(|r| serde_json::to_value(r).ok()).collect())
 }
 
 /// STT transcribe audio file.

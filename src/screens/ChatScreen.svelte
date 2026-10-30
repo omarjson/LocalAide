@@ -139,10 +139,11 @@
     <div class="flex items-center gap-2">
       <span class="size-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
       <span class="text-xs uppercase tracking-widest text-zinc-400">Local model</span>
-      <button onclick={() => showSystem = !showSystem} class="ml-3 text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200">System</button>
-      <button onclick={summarizeLast} disabled={streaming} class="ml-1 text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-50">Summarize</button>
+      <button aria-label="Toggle system prompt" onclick={() => showSystem = !showSystem} class="ml-3 text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200">System</button>
+      <button aria-label="Summarize last message" onclick={summarizeLast} disabled={streaming} class="ml-1 text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-50">Summarize</button>
     </div>
-    <select bind:value={model} class="text-xs bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-zinc-200 focus:outline-none focus:border-fuchsia-500">
+    <label class="sr-only" for="model-select">Model</label>
+    <select id="model-select" bind:value={model} class="text-xs bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-zinc-200 focus:outline-none focus:border-fuchsia-500">
       <option>Qwen3-0.6B Q4 (local)</option>
       <option>Qwen3-0.8B Q4 (local)</option>
       <option>Qwen3-4B Q4 (local)</option>
@@ -152,7 +153,8 @@
 
   {#if showSystem}
     <div class="px-6 py-3 border-b border-zinc-800 bg-zinc-950/50">
-      <textarea bind:value={systemPrompt} rows="2" placeholder="System prompt" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
+      <label for="system-prompt" class="sr-only">System prompt</label>
+      <textarea id="system-prompt" bind:value={systemPrompt} rows="2" placeholder="System prompt" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
     </div>
   {/if}
 

@@ -52,7 +52,7 @@ impl LlamaState {
 
     pub(crate) fn active_model_path(&self) -> Option<std::path::PathBuf> {
         let guard = self.model_path.lock().ok()?;
-        Some(guard.clone())
+        guard.clone()
     }
 }
 
