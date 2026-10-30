@@ -15,10 +15,10 @@
   };
 
   const presets: Preset[] = [
-    { id: "tiny", name: "Tiny", ram: "~1.9 GB", ramGb: 1.9, fits: "4–8 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-0.8B Q4", "Whisper Tiny", "Piper small"] },
-    { id: "small", name: "Small", ram: "~2.7 GB", ramGb: 2.7, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-2B Q4", "Whisper Base"] },
-    { id: "balanced", name: "Balanced", ram: "~4.3 GB", ramGb: 4.3, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-4B Q4", "Whisper Base", "Piper"] },
-    { id: "advanced", name: "Advanced", ram: "~9.5 GB", ramGb: 9.5, fits: "12 GB+ total RAM", models: ["Qwen3.5-9B Q4", "EmbeddingGemma 2 multimodal", "Vision SLM"] },
+    { id: "tiny", name: "Tiny", ram: "~1.0 GB", ramGb: 1.0, fits: "4–8 GB total RAM", models: ["Qwen3.5-0.8B Q4"] },
+    { id: "small", name: "Small", ram: "~1.8 GB", ramGb: 1.8, fits: "8–12 GB total RAM", models: ["Gemma-3-1B-IT Q4", "Qwen3.5-2B Q4"] },
+    { id: "balanced", name: "Balanced", ram: "~3.0 GB", ramGb: 3.0, fits: "8–12 GB total RAM", models: ["Llama-4-Scout-3B Q4", "Qwen3.5-4B Q4"] },
+    { id: "advanced", name: "Advanced", ram: "~6.8 GB", ramGb: 6.8, fits: "12 GB+ total RAM", models: ["DeepSeek-R2-Distill-8B Q4", "Qwen3.5-9B Q4"] },
   ];
 
   let step = $state<Step>("detect");

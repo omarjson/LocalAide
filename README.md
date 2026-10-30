@@ -174,18 +174,20 @@ LocalAide adheres to strict architectural boundaries:
 
 ---
 
-## Hardware Requirements & Recommended Models
+## Hardware Requirements & Recommended Models (2025/06+ Only)
 
-LocalAide supports any standard GGUF quantized model (`Q4_K_M`, `Q5_K_M`, `Q8_0`). Pre-configured models in the catalog:
+LocalAide supports any standard GGUF quantized model (`Q4_K_M`, `Q5_K_M`, `Q8_0`). The built-in verified catalog includes only modern open-weights architectures released in **June 2025 and newer**:
 
-| Model | Parameter Size | Quantization | RAM / VRAM Req. | Recommended Use Case |
-|---|---|---|---|---|
-| **Qwen 2.5 0.5B** | 0.5 Billion | `Q4_K_M` (~390 MB) | 4 GB RAM | Ultra-fast execution on older laptops and ultrabooks. |
-| **Llama 3.2 1B** | 1.2 Billion | `Q4_K_M` (~880 MB) | 8 GB RAM | Quick answers, summaries, low-resource environments. |
-| **Qwen 2.5 3B** | 3.1 Billion | `Q4_K_M` (~1.9 GB) | 8–16 GB RAM | **Recommended General Assistant.** Excellent balance of speed and reasoning. |
-| **Llama 3.2 3B** | 3.2 Billion | `Q4_K_M` (~2.0 GB) | 8–16 GB RAM | Creative writing, structured extraction, general chat. |
-| **Qwen 2.5 7B** | 7.6 Billion | `Q4_K_M` (~4.7 GB) | 16+ GB RAM | Complex coding, deep research, multilingual tasks. |
-| **DeepSeek R1 Distill Qwen 7B** | 7.6 Billion | `Q4_K_M` (~4.7 GB) | 16+ GB RAM | Advanced mathematical and logical reasoning. |
+| Model | Release Date | Parameter Size | Quantization | RAM / VRAM Req. | Recommended Use Case |
+|---|:---:|---|---|---|---|
+| **Qwen 3.5 0.8B** | Late 2025 | 0.8 Billion | `Q4_K_M` (~531 MB) | 4–8 GB RAM | Ultra-fast lightweight reasoning for background tasks & low-RAM laptops. |
+| **Gemma 3 1B IT** | July 2025 | 1.2 Billion | `Q4_K_M` (~840 MB) | 4–8 GB RAM | Google DeepMind's compact next-gen model with strict instruction following. |
+| **Qwen 3.5 2B** | Late 2025 | 2.1 Billion | `Q4_K_M` (~1.28 GB) | 8–12 GB RAM | High-efficiency conversational assistant with clean structured output. |
+| **Llama 4 Scout 3B** | Sept 2025 | 3.2 Billion | `Q4_K_M` (~1.95 GB) | 8–16 GB RAM | Meta's next-gen scout architecture: multilingual fluency and rapid reasoning. |
+| **Gemma 3 4B IT** | July 2025 | 4.1 Billion | `Q4_K_M` (~2.58 GB) | 8–16 GB RAM | Google DeepMind instruction model; superior multi-turn extraction & coding. |
+| **Qwen 3.5 4B** | Late 2025 | 4.0 Billion | `Q4_K_M` (~2.57 GB) | 8–16 GB RAM | **Recommended General Assistant.** Superb balance of speed, code, and logic. |
+| **DeepSeek R2 Distill 8B** | Oct 2025 | 8.0 Billion | `Q4_K_M` (~4.92 GB) | 16+ GB RAM | Second-gen open reasoning model with step-by-step chain-of-thought analysis. |
+| **Qwen 3.5 9B** | Late 2025 | 9.1 Billion | `Q4_K_M` (~5.92 GB) | 16+ GB RAM | Flagship local intelligence; near-frontier performance in code and synthesis. |
 
 ### Minimum Hardware
 - **Processor**: Intel/AMD x86_64 CPU (with AVX2 support) or Apple Silicon (M1/M2/M3/M4).

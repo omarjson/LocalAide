@@ -64,13 +64,8 @@ impl Preset {
             id: "tiny".into(),
             name: "Tiny".into(),
             fits_ram_gb: "4-8 GB".into(),
-            total_ram_gb: 1.9,
-            models: vec![
-                "embeddinggemma-2-300m".into(),
-                "qwen3-0.6b-q4".into(),
-                "whisper-tiny-q5".into(),
-                "piper-small".into(),
-            ],
+            total_ram_gb: 1.0,
+            models: vec!["qwen3.5-0.8b-q4".into()],
         }
     }
     pub fn small() -> Self {
@@ -78,12 +73,8 @@ impl Preset {
             id: "small".into(),
             name: "Small".into(),
             fits_ram_gb: "8-12 GB".into(),
-            total_ram_gb: 2.7,
-            models: vec![
-                "embeddinggemma-2-300m".into(),
-                "qwen3-0.8b-q4".into(),
-                "whisper-base-q5".into(),
-            ],
+            total_ram_gb: 1.8,
+            models: vec!["gemma3-1b-it-q4".into(), "qwen3.5-2b-q4".into()],
         }
     }
     pub fn balanced() -> Self {
@@ -91,13 +82,8 @@ impl Preset {
             id: "balanced".into(),
             name: "Balanced".into(),
             fits_ram_gb: "8-12 GB".into(),
-            total_ram_gb: 4.3,
-            models: vec![
-                "embeddinggemma-2-300m".into(),
-                "qwen3-4b-q4".into(),
-                "whisper-base-q5".into(),
-                "piper-small".into(),
-            ],
+            total_ram_gb: 3.0,
+            models: vec!["llama4-3b-q4".into(), "qwen3.5-4b-q4".into()],
         }
     }
     pub fn advanced() -> Self {
@@ -105,12 +91,8 @@ impl Preset {
             id: "advanced".into(),
             name: "Advanced".into(),
             fits_ram_gb: "12 GB+".into(),
-            total_ram_gb: 9.5,
-            models: vec![
-                "qwen3-9b-q4".into(),
-                "embeddinggemma-2-300m".into(),
-                "qwen25-vl-3b-q4".into(),
-            ],
+            total_ram_gb: 6.8,
+            models: vec!["deepseek-r2-8b-q4".into(), "qwen3.5-9b-q4".into()],
         }
     }
 }
