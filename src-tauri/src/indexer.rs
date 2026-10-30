@@ -408,7 +408,8 @@ impl Indexer {
         for path in paths {
             let p = Path::new(path);
             if !p.exists() || !p.is_file() {
-                return Err(format!("not a file: {path}"));
+                log::warn!("skip missing file: {path}");
+                continue;
             }
             let metadata = fs::metadata(p).map_err(|e| e.to_string())?;
             let size = metadata.len();
@@ -475,7 +476,7 @@ impl Indexer {
                 Ok(e) => e,
                 Err(e) => {
                     log::warn!("skip dir {}: {e}", dir.display());
-                    *if dir == root { &mut skipped } else { &mut skipped } += 1;
+                    skipped += 1;
                     continue;
                 }
             };
@@ -681,10 +682,9 @@ impl Indexer {
     }
 
     pub fn stats(&self) -> IndexerStats {
-        let total_bytes = self.inner.sled.iter().filter_map(|r| r.ok()).count();
+        let total_bytes: usize = self.inner.sled.iter().filter_map(|r| r.ok()).map(|(_, v)| v.len()).sum();
         IndexerStats {
             doc_count: self.inner.count(),
-            // Byte total is far more expensive than the count, so it is optional.
             total_bytes: total_bytes as u64,
             storage_path: index_dir().to_string_lossy().to_string(),
         }

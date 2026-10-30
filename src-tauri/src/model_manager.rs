@@ -617,13 +617,11 @@ impl ModelManager {
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .truncate(true)
             .open(dest)
             .map_err(|e| e.to_string())?;
         file.seek(std::io::SeekFrom::Start(offset))
             .map_err(|e| e.to_string())?;
 
-        let mut hasher = Sha256::new();
         let mut downloaded = offset;
         let mut stream = res.bytes_stream();
         let mut last_emit = std::time::Instant::now();
@@ -636,7 +634,6 @@ impl ModelManager {
             }
             let chunk = chunk.map_err(|e| e.to_string())?;
             file.write_all(&chunk).map_err(|e| e.to_string())?;
-            hasher.update(&chunk);
             downloaded += chunk.len() as u64;
 
             if last_emit.elapsed() >= Duration::from_millis(100) {
@@ -661,6 +658,13 @@ impl ModelManager {
         file.flush().map_err(|e| e.to_string())?;
         drop(file);
 
+        // Verify full file hash after download completes
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        let mut f = std::fs::File::open(dest).map_err(|e| e.to_string())?;
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::BufReader::new(&mut f), &mut buf).map_err(|e| e.to_string())?;
+        hasher.update(&buf);
         let digest = format!("{:x}", hasher.finalize());
         if let Some(expected) = expected {
             let expected = expected.trim();

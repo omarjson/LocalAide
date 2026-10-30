@@ -82,14 +82,17 @@ impl IndexWatcher {
                         .collect();
                     if !paths.is_empty() {
                         // Batch commit to avoid one commit per file.
-                        let _ = indexer_clone.index_files(&paths);
+                        if let Err(e) = indexer_clone.index_files(&paths) {
+                            log::warn!("watcher index_files error: {e}");
+                        }
                     }
                 }
 
                 if !to_remove.is_empty() {
                     for path in to_remove.drain() {
-                        if let Some(s) = path.to_str() {
-                            let _ = indexer_clone.remove(s);
+                        let s = path.to_string_lossy().to_string();
+                        if let Err(e) = indexer_clone.remove(&s) {
+                            log::warn!("watcher remove error for {s}: {e}");
                         }
                     }
                 }

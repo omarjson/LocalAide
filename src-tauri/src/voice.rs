@@ -4,13 +4,6 @@ use std::path::Path;
 use crate::models_dir;
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum VoiceModelKind {
-    Stt,
-    Tts,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct SttResult {
     pub text: String,
     pub language: String,
@@ -100,7 +93,8 @@ impl VoiceManager {
         }
 
         // Duration estimate from sample count
-        let duration_ms = (samples.len() as u64 * 1000) / spec.sample_rate as u64;
+        let sample_rate = spec.sample_rate as u64;
+        let duration_ms = if sample_rate == 0 { 0 } else { (samples.len() as u64 * 1000) / sample_rate };
         Ok(SttResult { text: text.trim().to_string(), language: "en".to_string(), duration_ms })
     }
 

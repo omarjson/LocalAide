@@ -68,7 +68,6 @@ impl EmbeddingEngine {
         let dim = self.config.dim;
         let mut vec = vec![0f32; dim];
         for word in text.split_whitespace() {
-            if word.is_empty() { continue; }
             let mut hasher = Sha256::new();
             hasher.update(word.as_bytes());
             let digest = hasher.finalize();
