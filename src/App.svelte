@@ -201,6 +201,4 @@
   {/if}
 </main>
 
-<script lang="ts" context="module">
-  // Svelte 5 module context reserved for shared state if needed later
-</script>
+<!-- Svelte 5 module context reserved for shared state if needed later -->

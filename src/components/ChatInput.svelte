@@ -40,7 +40,7 @@
     </div>
   {/if}
   <form onsubmit={(e) => { e.preventDefault(); onSend(); }} class="flex gap-2">
-    <textarea bind:value={input} placeholder="Message…" disabled={streaming} rows="1" onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }} class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500 resize-none"/>
+    <textarea bind:value={input} placeholder="Message…" disabled={streaming} rows="1" onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }} class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500 resize-none"></textarea>
     <button type="button" disabled={streaming} onclick={onVoice} class="size-11 grid place-items-center rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-zinc-300" title="Push-to-talk">🎙️</button>
     <button type="submit" disabled={streaming || !input.trim()} class="px-5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-40">Send</button>
   </form>

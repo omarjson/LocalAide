@@ -154,7 +154,7 @@
   {#if showSystem}
     <div class="px-6 py-3 border-b border-zinc-800 bg-zinc-950/50">
       <label for="system-prompt" class="sr-only">System prompt</label>
-      <textarea id="system-prompt" bind:value={systemPrompt} rows="2" placeholder="System prompt" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
+      <textarea id="system-prompt" bind:value={systemPrompt} rows="2" placeholder="System prompt" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500"></textarea>
     </div>
   {/if}
 

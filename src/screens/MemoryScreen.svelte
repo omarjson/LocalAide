@@ -132,7 +132,7 @@
   {#if loading}
     <div class="space-y-3">
       {#each Array(3) as _,i}
-        <div class="h-24 rounded-2xl bg-zinc-900/40 animate-pulse"/>
+        <div class="h-24 rounded-2xl bg-zinc-900/40 animate-pulse"></div>
       {/each}
     </div>
   {:else if filtered.length === 0}
@@ -166,7 +166,7 @@
   <div class="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
     <h3 class="text-lg font-semibold mb-4">New memory note</h3>
     <input bind:value={newTitle} placeholder="Title" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 mb-3 text-sm focus:outline-none focus:border-fuchsia-500"/>
-    <textarea bind:value={newContent} placeholder="Content (markdown)" rows="8" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-fuchsia-500"/>
+    <textarea bind:value={newContent} placeholder="Content (markdown)" rows="8" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-fuchsia-500"></textarea>
     <div class="flex justify-end gap-2 mt-4">
       <button onclick={() => showNew = false} class="px-4 py-2 rounded-xl bg-white/5 border border-zinc-800 text-sm">Cancel</button>
       <button onclick={createNote} class="px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-sm font-medium">Save</button>
@@ -195,7 +195,7 @@
     </div>
     <div class="p-5 overflow-auto flex-1">
       {#if editing}
-        <textarea bind:value={selectedContent} rows="20" class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-100 focus:outline-none focus:border-fuchsia-500 resize-none"/>
+        <textarea bind:value={selectedContent} rows="20" class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-100 focus:outline-none focus:border-fuchsia-500 resize-none"></textarea>
       {:else}
         <div class="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{selectedContent}</div>
       {/if}
