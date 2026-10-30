@@ -15,10 +15,10 @@
   };
 
   const presets: Preset[] = [
-    { id: "tiny", name: "Tiny", ram: "~1.9 GB", ramGb: 1.9, fits: "4–8 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen2.5-0.5B Q4", "Whisper Tiny", "Piper small"] },
-    { id: "small", name: "Small", ram: "~2.7 GB", ramGb: 2.7, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen2.5-1.5B Q4", "Whisper Base"] },
-    { id: "balanced", name: "Balanced", ram: "~4.3 GB", ramGb: 4.3, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen2.5-3B Q4", "Whisper Base", "Piper"] },
-    { id: "advanced", name: "Advanced", ram: "~9.5 GB", ramGb: 9.5, fits: "12 GB+ total RAM", models: ["Qwen2.5-7B Q4", "EmbeddingGemma 2 multimodal", "Vision SLM"] },
+    { id: "tiny", name: "Tiny", ram: "~1.9 GB", ramGb: 1.9, fits: "4–8 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-0.8B Q4", "Whisper Tiny", "Piper small"] },
+    { id: "small", name: "Small", ram: "~2.7 GB", ramGb: 2.7, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-2B Q4", "Whisper Base"] },
+    { id: "balanced", name: "Balanced", ram: "~4.3 GB", ramGb: 4.3, fits: "8–12 GB total RAM", models: ["EmbeddingGemma 2 multimodal", "Qwen3.5-4B Q4", "Whisper Base", "Piper"] },
+    { id: "advanced", name: "Advanced", ram: "~9.5 GB", ramGb: 9.5, fits: "12 GB+ total RAM", models: ["Qwen3.5-9B Q4", "EmbeddingGemma 2 multimodal", "Vision SLM"] },
   ];
 
   let step = $state<Step>("detect");
