@@ -1,0 +1,55 @@
+[package]
+name = "ai-desktop-assistant"
+version = "0.1.0"
+description = "Local-first AI desktop assistant (Rust + Tauri v2)"
+authors = ["omar"]
+license = "MIT"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5", features = [] }
+tauri-plugin-log = "2"
+sysinfo = "0.32"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures = "0.3"
+sha2 = "0.10"
+dirs-next = "2.0"
+# llama.cpp GGUF runtime
+llama_cpp_rs = "0.3.0"
+# indexer (milestone 5)
+tantivy = "0.27.0"
+tantivy-stemmers = "0.4.0"
+sled = "0.34"
+lmdb = "0.8"
+notify = "6"
+# embeddings
+candle-core = "0.8"
+candle-transformers = "0.8"
+candle-nn = "0.8"
+# voice
+rodio = "0.23"
+whisper-rs = { version = "0.16", optional = true }
+piper-rs = { version = "0.2", optional = true }
+hound = { version = "3", optional = true }
+
+[features]
+default = []
+voice = ["whisper-rs", "piper-rs", "hound"]
+
+
+[patch.crates-io]
+llama_cpp_rs = { path = "../vendor/llama_cpp_rs" }

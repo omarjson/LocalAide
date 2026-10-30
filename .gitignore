@@ -1,0 +1,17 @@
+# Tauri
+src-tauri/target
+src-tauri/gen
+dist
+node_modules
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+~/.aiassistant/
+*.log
+
+# IDE
+.vscode/
+.idea/
