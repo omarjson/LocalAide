@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::app::error::AppError;
+use std::path::{Path, PathBuf};
 
 pub fn app_dir() -> PathBuf {
     dirs_next::home_dir()
@@ -33,7 +33,10 @@ pub fn config_path() -> PathBuf {
 
 /// Validate that a path is securely contained within one of the allowed roots
 /// without symlink escapes or directory traversal.
-pub fn validate_sandboxed_path(target: &Path, allowed_roots: &[PathBuf]) -> Result<PathBuf, AppError> {
+pub fn validate_sandboxed_path(
+    target: &Path,
+    allowed_roots: &[PathBuf],
+) -> Result<PathBuf, AppError> {
     let canonical = target.canonicalize().map_err(|e| {
         AppError::sandbox_denied(
             &target.to_string_lossy(),

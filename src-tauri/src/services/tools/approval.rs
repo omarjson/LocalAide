@@ -1,6 +1,6 @@
+use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
 use std::collections::HashSet;
 use std::sync::Mutex;
-use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
 
 #[derive(Debug)]
 pub struct ApprovalManager {

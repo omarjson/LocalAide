@@ -1,16 +1,16 @@
 pub mod notes;
 pub mod rag;
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use self::notes::NotesManager;
+use self::rag::{RagEngine, RagRecallResult};
 use crate::app::error::AppError;
 use crate::domain::document::SearchResultDoc;
 use crate::domain::memory::MemoryNote;
+use crate::services::library::LibraryService;
 use crate::services::library::db::LibraryDb;
 use crate::services::library::search::SearchMode;
-use crate::services::library::LibraryService;
-use self::notes::NotesManager;
-use self::rag::{RagEngine, RagRecallResult};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct MemoryService {
     notes: NotesManager,
@@ -63,7 +63,11 @@ impl MemoryService {
         self.notes.forget_all()
     }
 
-    pub fn recall(&self, query: &str, max_tokens: Option<usize>) -> Result<RagRecallResult, AppError> {
+    pub fn recall(
+        &self,
+        query: &str,
+        max_tokens: Option<usize>,
+    ) -> Result<RagRecallResult, AppError> {
         self.rag.recall(query, max_tokens)
     }
 

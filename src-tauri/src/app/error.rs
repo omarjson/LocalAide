@@ -31,22 +31,34 @@ impl AppError {
     }
 
     pub fn model_not_installed(id: &str) -> Self {
-        Self::new("MODEL_NOT_INSTALLED", format!("Model '{id}' is not installed."))
+        Self::new(
+            "MODEL_NOT_INSTALLED",
+            format!("Model '{id}' is not installed."),
+        )
     }
 
     pub fn model_load_failed(id: &str, reason: &str) -> Self {
-        Self::new("MODEL_LOAD_FAILED", format!("Failed to load model '{id}': {reason}"))
-            .with_detail(reason)
+        Self::new(
+            "MODEL_LOAD_FAILED",
+            format!("Failed to load model '{id}': {reason}"),
+        )
+        .with_detail(reason)
     }
 
     pub fn checksum_mismatch(expected: &str, actual: &str) -> Self {
-        Self::new("CHECKSUM_MISMATCH", "Cryptographic integrity verification failed.")
-            .with_detail(format!("Expected {expected}, got {actual}"))
+        Self::new(
+            "CHECKSUM_MISMATCH",
+            "Cryptographic integrity verification failed.",
+        )
+        .with_detail(format!("Expected {expected}, got {actual}"))
     }
 
     pub fn sandbox_denied(path: &str, reason: &str) -> Self {
-        Self::new("SANDBOX_DENIED", format!("Filesystem access denied for '{path}'"))
-            .with_detail(reason)
+        Self::new(
+            "SANDBOX_DENIED",
+            format!("Filesystem access denied for '{path}'"),
+        )
+        .with_detail(reason)
     }
 
     pub fn db_busy(reason: &str) -> Self {

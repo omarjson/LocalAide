@@ -55,7 +55,12 @@ impl LlamaState {
         guard.clone()
     }
 
-    pub fn load_model(&self, app: &AppHandle, mgr: &ModelManager, id: &str) -> Result<String, String> {
+    pub fn load_model(
+        &self,
+        app: &AppHandle,
+        mgr: &ModelManager,
+        id: &str,
+    ) -> Result<String, String> {
         let entry = mgr
             .list_models()
             .into_iter()

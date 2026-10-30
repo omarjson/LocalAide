@@ -1,13 +1,13 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use sha2::Digest;
 use app_lib::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
 use app_lib::services::library::db::LibraryDb;
 use app_lib::services::models::catalog::CatalogManifest;
 use app_lib::services::models::verify::verify_file_checksum;
-use app_lib::services::tools::sandbox::WorkspaceJail;
 use app_lib::services::tools::ToolService;
+use app_lib::services::tools::sandbox::WorkspaceJail;
+use sha2::Digest;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 struct TempTestDir {
     path: PathBuf,
@@ -81,7 +81,10 @@ fn test_workspace_jail_blocks_symlinks_pointing_outside() {
         let jail = WorkspaceJail::new(jail_dir.path()).expect("jail init");
 
         let res = jail.read_file("leak_link.txt");
-        assert!(res.is_err(), "Symlink pointing outside jail must be blocked");
+        assert!(
+            res.is_err(),
+            "Symlink pointing outside jail must be blocked"
+        );
         let err = res.unwrap_err();
         assert_eq!(err.code, "SANDBOX_DENIED");
     }
@@ -117,7 +120,7 @@ fn test_workspace_jail_permits_valid_read_and_atomic_write() {
 
     let (content, truncated) = jail.read_file("sub/note.txt").expect("read file");
     assert_eq!(content, "Hello secure sandbox");
-    assert_eq!(truncated, false);
+    assert!(!truncated);
 
     let list = jail.list_dir(Some("sub")).expect("list dir");
     assert_eq!(list.len(), 1);
@@ -145,8 +148,8 @@ fn test_tool_execution_approval_workflow_and_audit_logging() {
     };
 
     let res_unapproved = service.execute(req_unapproved).expect("execute");
-    assert_eq!(res_unapproved.requires_approval, true);
-    assert_eq!(res_unapproved.success, false);
+    assert!(res_unapproved.requires_approval);
+    assert!(!res_unapproved.success);
 
     // 2. Approved write file -> succeeds and writes file
     let req_approved = ToolExecutionRequest {
@@ -162,8 +165,8 @@ fn test_tool_execution_approval_workflow_and_audit_logging() {
     };
 
     let res_approved = service.execute(req_approved).expect("execute");
-    assert_eq!(res_approved.requires_approval, false);
-    assert_eq!(res_approved.success, true);
+    assert!(!res_approved.requires_approval);
+    assert!(res_approved.success);
 
     // 3. Read file -> safe and auto-approved
     let req_read = ToolExecutionRequest {
@@ -179,7 +182,7 @@ fn test_tool_execution_approval_workflow_and_audit_logging() {
     };
 
     let res_read = service.execute(req_read).expect("read execute");
-    assert_eq!(res_read.success, true);
+    assert!(res_read.success);
     assert!(res_read.output.contains("Approved write content"));
 
     // 4. Verify audit entries in SQLite

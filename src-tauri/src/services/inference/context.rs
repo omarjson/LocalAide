@@ -43,7 +43,9 @@ impl ContextBudget {
         history: &[ChatMessage],
         latest_message: &str,
     ) -> BudgetResult {
-        let budget_available = self.max_context_tokens.saturating_sub(self.generation_tokens);
+        let budget_available = self
+            .max_context_tokens
+            .saturating_sub(self.generation_tokens);
 
         let sys = system_prompt.unwrap_or("You are a helpful local AI assistant.");
         let sys_tokens = Self::estimate_tokens(sys);

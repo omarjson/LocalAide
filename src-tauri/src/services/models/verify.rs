@@ -1,8 +1,8 @@
+use crate::app::error::AppError;
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use sha2::{Digest, Sha256};
-use crate::app::error::AppError;
 
 /// Verify file SHA-256 digest streaming in 64 KB chunks.
 /// Uses bounded constant RAM (<100 KB) regardless of file size (multi-GB models).
@@ -15,7 +15,10 @@ pub fn compute_sha256_streaming(path: &Path) -> Result<String, AppError> {
     }
 
     let mut file = File::open(path).map_err(|e| {
-        AppError::storage(format!("Failed to open file for hashing {}: {e}", path.display()))
+        AppError::storage(format!(
+            "Failed to open file for hashing {}: {e}",
+            path.display()
+        ))
     })?;
 
     let mut hasher = Sha256::new();

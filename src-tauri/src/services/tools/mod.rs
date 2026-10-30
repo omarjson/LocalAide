@@ -1,7 +1,6 @@
 pub mod approval;
 pub mod sandbox;
 
-use std::sync::Arc;
 use crate::app::error::AppError;
 use crate::domain::tool::{
     ToolActionType, ToolAuditEntry, ToolExecutionRequest, ToolExecutionResponse,
@@ -9,6 +8,7 @@ use crate::domain::tool::{
 use crate::services::library::db::LibraryDb;
 use approval::ApprovalManager;
 use sandbox::WorkspaceJail;
+use std::sync::Arc;
 
 pub struct ToolService {
     jail: Arc<WorkspaceJail>,
@@ -78,7 +78,10 @@ impl ToolService {
                 let mut out = format!("Found {} entries:\n", entries.len());
                 for e in entries {
                     let kind = if e.is_dir { "DIR " } else { "FILE" };
-                    out.push_str(&format!("  [{kind}] {:<30} ({} bytes)\n", e.path, e.size_bytes));
+                    out.push_str(&format!(
+                        "  [{kind}] {:<30} ({} bytes)\n",
+                        e.path, e.size_bytes
+                    ));
                 }
                 Ok((out, false))
             }
@@ -89,7 +92,10 @@ impl ToolService {
             ToolActionType::WriteFile => {
                 let content = req.action.content.as_deref().unwrap_or("");
                 let bytes = self.jail.write_file(&req.action.path, content)?;
-                Ok((format!("Successfully wrote {bytes} bytes to {}", req.action.path), false))
+                Ok((
+                    format!("Successfully wrote {bytes} bytes to {}", req.action.path),
+                    false,
+                ))
             }
             ToolActionType::SearchFiles => {
                 let query = req.action.query.as_deref().unwrap_or("");

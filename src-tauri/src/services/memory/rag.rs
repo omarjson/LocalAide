@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::app::error::AppError;
 use crate::domain::memory::Citation;
-use crate::services::library::search::SearchMode;
 use crate::services::library::LibraryService;
+use crate::services::library::search::SearchMode;
+use std::sync::Arc;
 
 pub const MIN_RELEVANCE_SCORE: f32 = 0.010; // Calibrated relevance gate threshold for RRF scores
 pub const DEFAULT_RAG_BUDGET: usize = 1024; // Maximum tokens reserved for RAG context

@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use llama_cpp_rs::options::{ModelOptions, PredictOptions};
 use llama_cpp_rs::LLama;
+use llama_cpp_rs::options::{ModelOptions, PredictOptions};
 
-use crate::app::error::AppError;
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken};
+use crate::app::error::AppError;
 
 enum WorkerCommand {
     Load {
@@ -71,15 +71,17 @@ impl LlamaWorkerEngine {
                     opts.n_batch = 512;
                     opts.embeddings = false;
 
-                    let res = LLama::new(path.to_string_lossy().to_string(), &opts)
-                        .map_err(|e| AppError::model_load_failed(&path.to_string_lossy(), &e.to_string()));
+                    let res = LLama::new(path.to_string_lossy().to_string(), &opts).map_err(|e| {
+                        AppError::model_load_failed(&path.to_string_lossy(), &e.to_string())
+                    });
 
                     match res {
                         Ok(llm) => {
                             loaded_model = Some(llm);
                             loaded_path = Some(path.clone());
                             active_context_size = context_size;
-                            let _ = reply.send(Ok(format!("Successfully loaded {}", path.display())));
+                            let _ =
+                                reply.send(Ok(format!("Successfully loaded {}", path.display())));
                         }
                         Err(err) => {
                             let _ = reply.send(Err(err));
@@ -100,7 +102,9 @@ impl LlamaWorkerEngine {
                     reply,
                 } => {
                     let Some(ref llm) = loaded_model else {
-                        let _ = reply.send(Err(AppError::model_not_installed("No model loaded in inference engine")));
+                        let _ = reply.send(Err(AppError::model_not_installed(
+                            "No model loaded in inference engine",
+                        )));
                         continue;
                     };
 
@@ -179,7 +183,9 @@ impl LlamaWorkerEngine {
                 WorkerCommand::Status { reply } => {
                     let status = EngineStatus {
                         loaded: loaded_model.is_some(),
-                        active_model: loaded_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                        active_model: loaded_path
+                            .as_ref()
+                            .map(|p| p.to_string_lossy().to_string()),
                         context_size: active_context_size,
                     };
                     let _ = reply.send(status);
@@ -197,16 +203,26 @@ impl InferenceEngine for LlamaWorkerEngine {
             context_size,
             reply: tx,
         };
-        let guard = self.cmd_tx.lock().map_err(|e| AppError::internal(e.to_string()))?;
-        guard.send(cmd).map_err(|e| AppError::internal(e.to_string()))?;
+        let guard = self
+            .cmd_tx
+            .lock()
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        guard
+            .send(cmd)
+            .map_err(|e| AppError::internal(e.to_string()))?;
         rx.recv().map_err(|e| AppError::internal(e.to_string()))?
     }
 
     fn unload(&self) -> Result<(), AppError> {
         let (tx, rx) = channel();
         let cmd = WorkerCommand::Unload { reply: tx };
-        let guard = self.cmd_tx.lock().map_err(|e| AppError::internal(e.to_string()))?;
-        guard.send(cmd).map_err(|e| AppError::internal(e.to_string()))?;
+        let guard = self
+            .cmd_tx
+            .lock()
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        guard
+            .send(cmd)
+            .map_err(|e| AppError::internal(e.to_string()))?;
         rx.recv().map_err(|e| AppError::internal(e.to_string()))?
     }
 
@@ -231,8 +247,13 @@ impl InferenceEngine for LlamaWorkerEngine {
         };
 
         {
-            let guard = self.cmd_tx.lock().map_err(|e| AppError::internal(e.to_string()))?;
-            guard.send(cmd).map_err(|e| AppError::internal(e.to_string()))?;
+            let guard = self
+                .cmd_tx
+                .lock()
+                .map_err(|e| AppError::internal(e.to_string()))?;
+            guard
+                .send(cmd)
+                .map_err(|e| AppError::internal(e.to_string()))?;
         }
 
         // Receive tokens in real time on calling thread until generation completes
@@ -252,7 +273,9 @@ impl InferenceEngine for LlamaWorkerEngine {
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     // Worker disconnected or finished, wait for reply
-                    return reply_rx.recv().map_err(|e| AppError::internal(e.to_string()))?;
+                    return reply_rx
+                        .recv()
+                        .map_err(|e| AppError::internal(e.to_string()))?;
                 }
             }
         }

@@ -1,6 +1,6 @@
+use crate::app::error::AppError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use crate::app::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CatalogEntry {

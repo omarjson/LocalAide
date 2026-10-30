@@ -1,6 +1,6 @@
-use sysinfo::System;
 use crate::app::error::AppError;
 use crate::domain::system::SystemProbeResult;
+use sysinfo::System;
 
 const OS_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GB
 const BUDGET_SHARE: f64 = 0.7; // 70% of usable RAM

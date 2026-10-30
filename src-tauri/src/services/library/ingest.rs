@@ -1,10 +1,10 @@
+use crate::app::error::AppError;
+use crate::services::library::db::{DbChunk, DbDocument};
+use flate2::read::ZlibDecoder;
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use sha2::{Digest, Sha256};
-use flate2::read::ZlibDecoder;
-use crate::app::error::AppError;
-use crate::services::library::db::{DbChunk, DbDocument};
 
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024; // 5 MB ceiling per file
 pub const TARGET_CHUNK_CHARS: usize = 1500;
@@ -20,11 +20,17 @@ pub struct FileIngester;
 
 impl FileIngester {
     pub fn is_supported_extension(path: &Path) -> bool {
-        match path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()).as_deref() {
+        match path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+            .as_deref()
+        {
             Some("md") | Some("markdown") | Some("txt") | Some("text") | Some("log") => true,
             Some("rs") | Some("py") | Some("js") | Some("ts") | Some("svelte") => true,
             Some("html") | Some("css") | Some("json") | Some("csv") | Some("toml") => true,
-            Some("yaml") | Some("yml") | Some("sh") | Some("sql") | Some("c") | Some("cpp") | Some("h") | Some("go") => true,
+            Some("yaml") | Some("yml") | Some("sh") | Some("sql") | Some("c") | Some("cpp")
+            | Some("h") | Some("go") => true,
             Some("pdf") => true,
             _ => false,
         }
@@ -34,7 +40,12 @@ impl FileIngester {
         for component in path.components() {
             if let std::path::Component::Normal(os_str) = component {
                 let name = os_str.to_string_lossy();
-                if name.starts_with('.') || name == "node_modules" || name == "target" || name == "dist" || name == "vendor" {
+                if name.starts_with('.')
+                    || name == "node_modules"
+                    || name == "target"
+                    || name == "dist"
+                    || name == "vendor"
+                {
                     return true;
                 }
             }
@@ -43,21 +54,30 @@ impl FileIngester {
     }
 
     pub fn ingest_file(path: &Path) -> Result<IngestedFile, AppError> {
-        let metadata = std::fs::metadata(path)
-            .map_err(|e| AppError::storage(format!("Cannot read metadata for {}: {e}", path.display())))?;
+        let metadata = std::fs::metadata(path).map_err(|e| {
+            AppError::storage(format!("Cannot read metadata for {}: {e}", path.display()))
+        })?;
 
         if !metadata.is_file() {
-            return Err(AppError::invalid_input(format!("{} is not a regular file", path.display())));
+            return Err(AppError::invalid_input(format!(
+                "{} is not a regular file",
+                path.display()
+            )));
         }
 
         let size = metadata.len();
         if size == 0 {
-            return Err(AppError::invalid_input(format!("File {} is empty", path.display())));
+            return Err(AppError::invalid_input(format!(
+                "File {} is empty",
+                path.display()
+            )));
         }
         if size > MAX_FILE_BYTES {
             return Err(AppError::invalid_input(format!(
                 "File {} exceeds maximum indexing size ({} > {} bytes)",
-                path.display(), size, MAX_FILE_BYTES
+                path.display(),
+                size,
+                MAX_FILE_BYTES
             )));
         }
 
@@ -68,18 +88,27 @@ impl FileIngester {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
         let is_pdf = ext == "pdf";
 
-        let mut file = File::open(path)
-            .map_err(|e| AppError::storage(format!("Failed to open file {}: {e}", path.display())))?;
+        let mut file = File::open(path).map_err(|e| {
+            AppError::storage(format!("Failed to open file {}: {e}", path.display()))
+        })?;
         let mut raw_bytes = Vec::with_capacity(size as usize);
-        file.read_to_end(&mut raw_bytes)
-            .map_err(|e| AppError::storage(format!("Failed to read file {}: {e}", path.display())))?;
+        file.read_to_end(&mut raw_bytes).map_err(|e| {
+            AppError::storage(format!("Failed to read file {}: {e}", path.display()))
+        })?;
 
         // Guard against non-PDF binary files
         if !is_pdf && Self::is_binary(&raw_bytes) {
-            return Err(AppError::invalid_input(format!("File {} is a binary file", path.display())));
+            return Err(AppError::invalid_input(format!(
+                "File {} is a binary file",
+                path.display()
+            )));
         }
 
         // Extract text
@@ -90,7 +119,10 @@ impl FileIngester {
         };
 
         if text_content.trim().is_empty() {
-            return Err(AppError::invalid_input(format!("File {} contains no extractable text", path.display())));
+            return Err(AppError::invalid_input(format!(
+                "File {} contains no extractable text",
+                path.display()
+            )));
         }
 
         // Content hash
@@ -99,7 +131,8 @@ impl FileIngester {
         let content_hash = format!("{:x}", hasher.finalize());
 
         let doc_id = format!("doc_{}", &content_hash[..16]);
-        let title = path.file_name()
+        let title = path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "Untitled".to_string());
 
@@ -107,11 +140,15 @@ impl FileIngester {
             "pdf"
         } else if ext == "md" || ext == "markdown" {
             "markdown"
-        } else if matches!(ext.as_str(), "rs" | "py" | "js" | "ts" | "c" | "cpp" | "go" | "html" | "css") {
+        } else if matches!(
+            ext.as_str(),
+            "rs" | "py" | "js" | "ts" | "c" | "cpp" | "go" | "html" | "css"
+        ) {
             "code"
         } else {
             "text"
-        }.to_string();
+        }
+        .to_string();
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -298,7 +335,8 @@ impl FileIngester {
             // Fallback: collect any ASCII runs of length >= 4
             let mut run = Vec::new();
             for &b in bytes {
-                if b.is_ascii_alphanumeric() || b.is_ascii_whitespace() || b.is_ascii_punctuation() {
+                if b.is_ascii_alphanumeric() || b.is_ascii_whitespace() || b.is_ascii_punctuation()
+                {
                     run.push(b);
                 } else {
                     if run.len() >= 6 {
@@ -369,5 +407,7 @@ impl FileIngester {
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }

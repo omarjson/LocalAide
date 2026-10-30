@@ -1,8 +1,8 @@
+use crate::app::error::AppError;
+use crate::domain::tool::FileInfo;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use crate::app::error::AppError;
-use crate::domain::tool::FileInfo;
 
 pub const MAX_READ_BYTES: u64 = 1024 * 1024; // 1 MB
 pub const MAX_WRITE_BYTES: usize = 4 * 1024 * 1024; // 4 MB
@@ -95,7 +95,10 @@ impl WorkspaceJail {
                                 || e.to_string().to_lowercase().contains("too many")
                                 || e.to_string().to_lowercase().contains("loop");
                             if is_loop {
-                                return Err(AppError::sandbox_denied(input, "Symlink loop detected"));
+                                return Err(AppError::sandbox_denied(
+                                    input,
+                                    "Symlink loop detected",
+                                ));
                             }
                             let err_msg = format!("Symlink resolution failed: {e}");
                             return Err(AppError::sandbox_denied(input, &err_msg));
@@ -179,7 +182,10 @@ impl WorkspaceJail {
         }
 
         let entries = fs::read_dir(&target_dir).map_err(|e| {
-            AppError::storage(format!("Failed to read directory {}: {e}", target_dir.display()))
+            AppError::storage(format!(
+                "Failed to read directory {}: {e}",
+                target_dir.display()
+            ))
         })?;
 
         let mut results = Vec::new();
@@ -256,14 +262,12 @@ impl WorkspaceJail {
             meta.len() as usize
         };
 
-        let mut file = fs::File::open(&path).map_err(|e| {
-            AppError::storage(format!("Failed to open file {rel_path}: {e}"))
-        })?;
+        let mut file = fs::File::open(&path)
+            .map_err(|e| AppError::storage(format!("Failed to open file {rel_path}: {e}")))?;
 
         let mut buffer = vec![0u8; read_len];
-        file.read_exact(&mut buffer).map_err(|e| {
-            AppError::storage(format!("Failed to read file {rel_path}: {e}"))
-        })?;
+        file.read_exact(&mut buffer)
+            .map_err(|e| AppError::storage(format!("Failed to read file {rel_path}: {e}")))?;
 
         // Guard against binary files: inspect initial 1024 bytes for null bytes
         let sample_len = buffer.len().min(1024);
@@ -318,9 +322,7 @@ impl WorkspaceJail {
                 .create_new(true)
                 .write(true)
                 .open(&temp_path)
-                .map_err(|e| {
-                    AppError::storage(format!("Failed to create temporary file: {e}"))
-                })?;
+                .map_err(|e| AppError::storage(format!("Failed to create temporary file: {e}")))?;
 
             file.write_all(content.as_bytes()).map_err(|e| {
                 let _ = fs::remove_file(&temp_path);
@@ -343,7 +345,11 @@ impl WorkspaceJail {
         Ok(content.len())
     }
 
-    pub fn search_files(&self, query: &str, rel_path: Option<&str>) -> Result<Vec<String>, AppError> {
+    pub fn search_files(
+        &self,
+        query: &str,
+        rel_path: Option<&str>,
+    ) -> Result<Vec<String>, AppError> {
         let base_dir = match rel_path {
             Some(p) if !p.trim().is_empty() => self.resolve_path(p)?,
             _ => self.canonical_root.clone(),

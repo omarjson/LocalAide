@@ -22,7 +22,7 @@ fn test_app_error_serialization() {
 
     let roundtrip: AppError = serde_json::from_str(&json).expect("Deserialization must succeed");
     assert_eq!(roundtrip.code, "MODEL_NOT_INSTALLED");
-    assert_eq!(roundtrip.retryable, true);
+    assert!(roundtrip.retryable);
 }
 
 #[test]
@@ -71,7 +71,8 @@ fn test_document_and_preset_serialization() {
         ram_gb: 4.3,
     };
     let json_preset = serde_json::to_string(&preset).expect("Serialization");
-    let roundtrip_preset: ModelPreset = serde_json::from_str(&json_preset).expect("Deserialization");
+    let roundtrip_preset: ModelPreset =
+        serde_json::from_str(&json_preset).expect("Deserialization");
     assert_eq!(roundtrip_preset, preset);
 
     let doc = SearchResultDoc {
@@ -92,14 +93,16 @@ fn test_document_and_preset_serialization() {
         storage_path: "/tmp/index".to_string(),
     };
     let json_stats = serde_json::to_string(&stats).expect("Serialization");
-    let roundtrip_stats: IndexerStatsResponse = serde_json::from_str(&json_stats).expect("Deserialization");
+    let roundtrip_stats: IndexerStatsResponse =
+        serde_json::from_str(&json_stats).expect("Deserialization");
     assert_eq!(roundtrip_stats.doc_count, 10);
 
     let sum = SummarizeResponse {
         summary: "This is a summary".to_string(),
     };
     let json_sum = serde_json::to_string(&sum).expect("Serialization");
-    let roundtrip_sum: SummarizeResponse = serde_json::from_str(&json_sum).expect("Deserialization");
+    let roundtrip_sum: SummarizeResponse =
+        serde_json::from_str(&json_sum).expect("Deserialization");
     assert_eq!(roundtrip_sum.summary, sum.summary);
 
     let ifr = IndexFolderResponse {
@@ -107,7 +110,8 @@ fn test_document_and_preset_serialization() {
         skipped: 1,
     };
     let json_ifr = serde_json::to_string(&ifr).expect("Serialization");
-    let roundtrip_ifr: IndexFolderResponse = serde_json::from_str(&json_ifr).expect("Deserialization");
+    let roundtrip_ifr: IndexFolderResponse =
+        serde_json::from_str(&json_ifr).expect("Deserialization");
     assert_eq!(roundtrip_ifr.indexed, 5);
 }
 
@@ -134,7 +138,7 @@ fn test_job_registry_cancellation_and_progress() {
     let registry = JobRegistry::new();
     let (id, cancel_flag) = registry.create_job("download_test");
 
-    assert_eq!(cancel_flag.load(std::sync::atomic::Ordering::Relaxed), false);
+    assert!(!cancel_flag.load(std::sync::atomic::Ordering::Relaxed));
     let job = registry.get_job(&id).expect("Job should exist");
     assert_eq!(job.state, JobState::Running);
     assert_eq!(job.progress, 0.0);
@@ -145,8 +149,8 @@ fn test_job_registry_cancellation_and_progress() {
     assert_eq!(job_updated.message.as_deref(), Some("Downloading..."));
 
     assert!(registry.cancel_job(&id));
-    assert_eq!(cancel_flag.load(std::sync::atomic::Ordering::Relaxed), true);
-    assert_eq!(registry.is_cancelled(&id), true);
+    assert!(cancel_flag.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(registry.is_cancelled(&id));
 
     let cancelled_job = registry.get_job(&id).unwrap();
     assert_eq!(cancelled_job.state, JobState::Cancelled);
@@ -164,6 +168,7 @@ fn test_chat_thread_serialization() {
     };
 
     let json = serde_json::to_string(&thread).expect("Serialization must succeed");
-    let roundtrip: app_lib::domain::chat::ChatThread = serde_json::from_str(&json).expect("Deserialization");
+    let roundtrip: app_lib::domain::chat::ChatThread =
+        serde_json::from_str(&json).expect("Deserialization");
     assert_eq!(roundtrip, thread);
 }

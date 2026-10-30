@@ -1,6 +1,3 @@
-use std::fs;
-use std::path::Path;
-use tauri::State;
 use crate::app::error::AppError;
 use crate::app::events::ChatStreamEvent;
 use crate::app::paths::conversations_dir;
@@ -10,6 +7,9 @@ use crate::domain::chat::{
     ThreadExportRequest, ThreadExportResponse,
 };
 use crate::services::inference::context::ContextBudget;
+use std::fs;
+use std::path::Path;
+use tauri::State;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct StoredThread {
@@ -22,10 +22,7 @@ struct StoredThread {
 }
 
 #[tauri::command]
-pub async fn inference_load(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<String, AppError> {
+pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<String, AppError> {
     let entry = state
         .model_manager
         .list_models()
@@ -71,13 +68,14 @@ pub async fn chat_stream(
     let temperature = req.temperature.unwrap_or(0.7);
 
     // RAG Recall: Retrieve context from MemoryService / LibraryService
-    let rag_res = state.memory.recall(&req.message, Some(512)).unwrap_or_else(|_| {
-        crate::services::memory::rag::RagRecallResult {
+    let rag_res = state
+        .memory
+        .recall(&req.message, Some(512))
+        .unwrap_or_else(|_| crate::services::memory::rag::RagRecallResult {
             citations: Vec::new(),
             context_prompt: String::new(),
             total_tokens: 0,
-        }
-    });
+        });
 
     // Send citation events to frontend channel before generation
     for cit in &rag_res.citations {
@@ -95,9 +93,7 @@ pub async fn chat_stream(
         Some(sys) if !rag_res.context_prompt.is_empty() => {
             Some(format!("{sys}\n{}", rag_res.context_prompt))
         }
-        None if !rag_res.context_prompt.is_empty() => {
-            Some(rag_res.context_prompt)
-        }
+        None if !rag_res.context_prompt.is_empty() => Some(rag_res.context_prompt),
         Some(sys) => Some(sys.to_string()),
         None => None,
     };
@@ -185,7 +181,10 @@ pub async fn summarize(
         }),
     )?;
 
-    let summary = accumulated.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let summary = accumulated
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     Ok(SummarizeResponse { summary })
 }
 
@@ -304,7 +303,11 @@ pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportRespon
             }
         }
         for msg in stored.messages {
-            let role_label = if msg.role == "user" { "User" } else { "Assistant" };
+            let role_label = if msg.role == "user" {
+                "User"
+            } else {
+                "Assistant"
+            };
             md.push_str(&format!("### {}\n\n{}\n\n", role_label, msg.content));
         }
         Ok(ThreadExportResponse {

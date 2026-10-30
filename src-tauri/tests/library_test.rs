@@ -1,11 +1,11 @@
+use app_lib::services::library::LibraryService;
+use app_lib::services::library::db::{DbChunk, DbDocument, LibraryDb};
+use app_lib::services::library::ingest::FileIngester;
+use app_lib::services::library::search::{HybridSearcher, SearchMode};
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use app_lib::services::library::db::{DbChunk, DbDocument, LibraryDb};
-use app_lib::services::library::ingest::FileIngester;
-use app_lib::services::library::search::{HybridSearcher, SearchMode};
-use app_lib::services::library::LibraryService;
 
 struct TempTestDir {
     path: PathBuf,
@@ -53,7 +53,9 @@ fn test_sqlite_library_db_crud_and_fts() {
             id: "doc_test_1_chunk_0".to_string(),
             document_id: "doc_test_1".to_string(),
             chunk_index: 0,
-            text: "Rust is a systems programming language focused on safety, speed, and concurrency.".to_string(),
+            text:
+                "Rust is a systems programming language focused on safety, speed, and concurrency."
+                    .to_string(),
             token_count: 12,
             start_char: 0,
             end_char: 81,
@@ -63,7 +65,8 @@ fn test_sqlite_library_db_crud_and_fts() {
             id: "doc_test_1_chunk_1".to_string(),
             document_id: "doc_test_1".to_string(),
             chunk_index: 1,
-            text: "Ownership and borrowing guarantee memory safety without garbage collection.".to_string(),
+            text: "Ownership and borrowing guarantee memory safety without garbage collection."
+                .to_string(),
             token_count: 9,
             start_char: 82,
             end_char: 157,
@@ -71,7 +74,8 @@ fn test_sqlite_library_db_crud_and_fts() {
         },
     ];
 
-    db.insert_or_replace_document(&doc, &chunks).expect("Insert should succeed");
+    db.insert_or_replace_document(&doc, &chunks)
+        .expect("Insert should succeed");
 
     // Verify stats
     let stats = db.get_stats().expect("Stats should succeed");
@@ -80,13 +84,17 @@ fn test_sqlite_library_db_crud_and_fts() {
     assert_eq!(stats.total_bytes, 1024);
 
     // Verify FTS search
-    let hits = db.fts_search("ownership", 10).expect("FTS search should succeed");
+    let hits = db
+        .fts_search("ownership", 10)
+        .expect("FTS search should succeed");
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].title, "Rust Guide");
     assert!(hits[0].snippet.to_lowercase().contains("ownership"));
 
     // Verify delete
-    let deleted = db.delete_document_by_path("/tmp/sample.md").expect("Delete should succeed");
+    let deleted = db
+        .delete_document_by_path("/tmp/sample.md")
+        .expect("Delete should succeed");
     assert!(deleted);
     let stats_after = db.get_stats().expect("Stats after delete should succeed");
     assert_eq!(stats_after.doc_count, 0);
@@ -95,7 +103,8 @@ fn test_sqlite_library_db_crud_and_fts() {
 
 #[test]
 fn test_text_chunking_with_overlap_and_boundaries() {
-    let paragraph_1 = "First paragraph discussing system architectures and local-first computing principles.";
+    let paragraph_1 =
+        "First paragraph discussing system architectures and local-first computing principles.";
     let paragraph_2 = "Second paragraph elaborating on transactional storage engines, WAL mode, and fast retrieval.";
     let full_text = format!("{paragraph_1}\n\n{paragraph_2}");
 
@@ -118,9 +127,14 @@ fn test_robustness_against_empty_and_binary_files() {
     // Binary file
     let binary_path = temp_dir.path().join("binary.dat");
     let mut bin_file = File::create(&binary_path).expect("Create binary file");
-    bin_file.write_all(&[0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01, 0x01, 0x00]).expect("Write binary bytes");
+    bin_file
+        .write_all(&[0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01, 0x01, 0x00])
+        .expect("Write binary bytes");
     let err_bin = FileIngester::ingest_file(&binary_path);
-    assert!(err_bin.is_err(), "Binary file with null bytes must be rejected");
+    assert!(
+        err_bin.is_err(),
+        "Binary file with null bytes must be rejected"
+    );
 }
 
 #[test]
@@ -151,7 +165,8 @@ fn test_hybrid_search_reciprocal_rank_fusion() {
         embedding: Some(emb),
     }];
 
-    db.insert_or_replace_document(&doc, &chunks).expect("Insert doc");
+    db.insert_or_replace_document(&doc, &chunks)
+        .expect("Insert doc");
 
     let searcher = HybridSearcher::new(db);
 
@@ -177,7 +192,10 @@ fn test_hybrid_search_reciprocal_rank_fusion() {
         .expect("Hybrid search");
     let latency = start_time.elapsed();
     assert_eq!(hybrid_results.len(), 1);
-    assert!(latency.as_millis() < 50, "Search latency must be under 50ms");
+    assert!(
+        latency.as_millis() < 50,
+        "Search latency must be under 50ms"
+    );
 }
 
 #[test]
@@ -207,9 +225,11 @@ fn test_folder_recursive_crawler_and_ignore_patterns() {
     let (indexed, _skipped) = service.index_folder(base_path, None).expect("index folder");
 
     assert_eq!(indexed, 2, "Must index exactly doc1.txt and code.rs");
-    
+
     // Search index
-    let search_res = service.search("databases", SearchMode::Keyword, 10).expect("search");
+    let search_res = service
+        .search("databases", SearchMode::Keyword, 10)
+        .expect("search");
     assert_eq!(search_res.len(), 1);
     assert_eq!(search_res[0].title, "doc1.txt");
 }

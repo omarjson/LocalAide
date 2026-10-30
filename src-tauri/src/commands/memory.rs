@@ -1,8 +1,8 @@
-use tauri::State;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::document::SearchResultDoc;
 use crate::domain::memory::{ForgetAllResponse, MemoryCreateResponse, MemoryNote};
+use tauri::State;
 
 #[tauri::command]
 pub fn memory_create(

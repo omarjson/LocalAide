@@ -1,9 +1,9 @@
 #![allow(clippy::all, unused)]
 
-use std::path::PathBuf;
-use std::sync::Arc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::State;
 
 pub mod app;
@@ -61,22 +61,28 @@ pub fn run() {
         memory_dir(),
     ));
 
-    let model_service = Arc::new(crate::services::models::ModelService::new(models_dir()).unwrap_or_else(|e| {
-        log::error!("Failed to init ModelService at standard path: {e}; falling back to temp dir");
-        let fallback = std::env::temp_dir().join("localaide_models_fallback");
-        crate::services::models::ModelService::new(fallback).expect("Fallback model service must initialize")
-    }));
+    let model_service = Arc::new(
+        crate::services::models::ModelService::new(models_dir()).unwrap_or_else(|e| {
+            log::error!(
+                "Failed to init ModelService at standard path: {e}; falling back to temp dir"
+            );
+            let fallback = std::env::temp_dir().join("localaide_models_fallback");
+            crate::services::models::ModelService::new(fallback)
+                .expect("Fallback model service must initialize")
+        }),
+    );
 
-    let jail = Arc::new(crate::services::tools::sandbox::WorkspaceJail::new(crate::app::paths::workspace_dir()).unwrap_or_else(|e| {
-        log::error!("Failed to init WorkspaceJail: {e}; falling back to temp dir");
-        let fallback = std::env::temp_dir().join("localaide_workspace_fallback");
-        crate::services::tools::sandbox::WorkspaceJail::new(fallback).expect("Fallback workspace jail must initialize")
-    }));
+    let jail = Arc::new(
+        crate::services::tools::sandbox::WorkspaceJail::new(crate::app::paths::workspace_dir())
+            .unwrap_or_else(|e| {
+                log::error!("Failed to init WorkspaceJail: {e}; falling back to temp dir");
+                let fallback = std::env::temp_dir().join("localaide_workspace_fallback");
+                crate::services::tools::sandbox::WorkspaceJail::new(fallback)
+                    .expect("Fallback workspace jail must initialize")
+            }),
+    );
 
-    let tools = Arc::new(crate::services::tools::ToolService::new(
-        jail,
-        library.db(),
-    ));
+    let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
     let llama_state = Arc::new(LlamaState::new());
     let voice_manager = Arc::new(VoiceManager::new());
@@ -97,7 +103,10 @@ pub fn run() {
         if let Ok(cfg) = store.load() {
             if let Some(active_id) = cfg.selected_models.last() {
                 let models = app_state.model_manager.list_models();
-                if let Some(entry) = models.into_iter().find(|m| m.id == *active_id && m.installed) {
+                if let Some(entry) = models
+                    .into_iter()
+                    .find(|m| m.id == *active_id && m.installed)
+                {
                     let path = app_state.model_manager.primary_path(active_id);
                     if path.exists() {
                         match app_state.inference_engine.load(&path, 2048) {

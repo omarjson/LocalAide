@@ -1,10 +1,10 @@
+use crate::app::error::AppError;
+use crate::services::library::ingest::FileIngester;
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use crate::app::error::AppError;
-use crate::services::library::ingest::FileIngester;
 
 pub trait LibraryUpdater: Send + Sync + 'static {
     fn update_file(&self, path: &Path) -> Result<(), AppError>;
@@ -22,9 +22,16 @@ impl LibraryWatcher {
         }
     }
 
-    pub fn start_watch<U: LibraryUpdater>(&self, folder: &Path, updater: Arc<U>) -> Result<(), AppError> {
+    pub fn start_watch<U: LibraryUpdater>(
+        &self,
+        folder: &Path,
+        updater: Arc<U>,
+    ) -> Result<(), AppError> {
         if !folder.exists() || !folder.is_dir() {
-            return Err(AppError::invalid_input(format!("Directory does not exist: {}", folder.display())));
+            return Err(AppError::invalid_input(format!(
+                "Directory does not exist: {}",
+                folder.display()
+            )));
         }
 
         let (tx, rx) = std::sync::mpsc::channel();
@@ -35,10 +42,17 @@ impl LibraryWatcher {
                 }
             },
             Config::default().with_poll_interval(Duration::from_millis(500)),
-        ).map_err(|e| AppError::internal(format!("Failed to initialize file watcher: {e}")))?;
+        )
+        .map_err(|e| AppError::internal(format!("Failed to initialize file watcher: {e}")))?;
 
-        watcher.watch(folder, RecursiveMode::Recursive)
-            .map_err(|e| AppError::storage(format!("Failed to watch directory {}: {e}", folder.display())))?;
+        watcher
+            .watch(folder, RecursiveMode::Recursive)
+            .map_err(|e| {
+                AppError::storage(format!(
+                    "Failed to watch directory {}: {e}",
+                    folder.display()
+                ))
+            })?;
 
         // Background debouncer thread
         std::thread::spawn(move || {
@@ -88,7 +102,9 @@ impl LibraryWatcher {
             }
         });
 
-        let mut lock = self.watcher.lock()
+        let mut lock = self
+            .watcher
+            .lock()
             .map_err(|_| AppError::internal("Watcher lock poisoned"))?;
         *lock = Some(watcher);
 

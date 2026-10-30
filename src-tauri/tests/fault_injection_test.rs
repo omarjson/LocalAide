@@ -1,10 +1,10 @@
-use std::fs;
-use std::path::{Path, PathBuf};
 use app_lib::domain::chat::ChatMessage;
 use app_lib::services::inference::context::ContextBudget;
 use app_lib::services::library::db::LibraryDb;
 use app_lib::services::models::verify::verify_file_checksum;
 use app_lib::services::tools::sandbox::WorkspaceJail;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 struct TempTestDir {
     path: PathBuf,
@@ -43,12 +43,19 @@ fn test_fault_corrupt_gguf_fails_cleanly() {
     let corrupt_model = temp.path().join("qwen-corrupt.gguf");
 
     // Write corrupted GGUF content (invalid magic bytes and truncated payload)
-    fs::write(&corrupt_model, b"NOT_GGUF_MAGIC_HEADER_GARBAGE_BYTES_1234567890").expect("write corrupt file");
+    fs::write(
+        &corrupt_model,
+        b"NOT_GGUF_MAGIC_HEADER_GARBAGE_BYTES_1234567890",
+    )
+    .expect("write corrupt file");
 
     let expected_valid_sha256 = "b9c3f0a5d4e12e8790b83e6024e0310fb176e7ef42d2a138da64c05295c52b71";
     let verify_res = verify_file_checksum(&corrupt_model, expected_valid_sha256);
 
-    assert!(verify_res.is_err(), "Corrupt model must fail checksum verification");
+    assert!(
+        verify_res.is_err(),
+        "Corrupt model must fail checksum verification"
+    );
     let err = verify_res.unwrap_err();
     assert_eq!(err.code, "CHECKSUM_MISMATCH");
     assert!(err.detail.is_some());
@@ -113,7 +120,9 @@ fn test_benchmark_bounded_memory_and_turn_budget() {
     for i in 0..100 {
         history.push(ChatMessage {
             role: "user".to_string(),
-            content: format!("Question turn {i}: What are the key architectural tenets of local-first computing?"),
+            content: format!(
+                "Question turn {i}: What are the key architectural tenets of local-first computing?"
+            ),
             ts: Some(i as u64),
             citations: None,
         });
@@ -134,10 +143,14 @@ fn test_benchmark_bounded_memory_and_turn_budget() {
     let elapsed = start.elapsed();
 
     // Enforce prompt assembly performance (< 10 ms for 200 turns)
-    assert!(elapsed.as_millis() < 10, "Context budgeting took too long: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() < 10,
+        "Context budgeting took too long: {:?}",
+        elapsed
+    );
 
     // Enforce bounded prompt context budget (dropped oldest turns)
-    assert_eq!(result.was_truncated, true);
+    assert!(result.was_truncated);
     assert!(result.dropped_turns > 0);
     assert!(result.estimated_tokens <= 1536);
 }

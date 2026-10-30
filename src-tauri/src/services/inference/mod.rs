@@ -2,11 +2,11 @@ pub mod context;
 pub mod llama;
 pub mod prompt;
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::time::Duration;
 use crate::app::error::AppError;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct InferenceToken {

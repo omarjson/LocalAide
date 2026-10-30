@@ -1,12 +1,15 @@
-use tauri::State;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::config::{AppConfig, UserPreset};
 use crate::domain::settings::{AppConfigDto, RamComputationResponse, UserPresetDto};
+use tauri::State;
 
 #[tauri::command]
 pub fn config_load(state: State<'_, AppState>) -> Result<AppConfigDto, AppError> {
-    let store = state.config_store.lock().map_err(|e| AppError::internal(e.to_string()))?;
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
     let cfg = store.load().map_err(AppError::internal)?;
 
     let presets = cfg
@@ -30,7 +33,10 @@ pub fn config_load(state: State<'_, AppState>) -> Result<AppConfigDto, AppError>
 
 #[tauri::command]
 pub fn config_save(state: State<'_, AppState>, cfg: AppConfigDto) -> Result<(), AppError> {
-    let store = state.config_store.lock().map_err(|e| AppError::internal(e.to_string()))?;
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
     let presets = cfg
         .presets
         .into_iter()
@@ -58,7 +64,10 @@ pub fn config_compute_ram(
     model_ids: Vec<String>,
 ) -> Result<RamComputationResponse, AppError> {
     let catalog = state.model_manager.list_models();
-    let store = state.config_store.lock().map_err(|e| AppError::internal(e.to_string()))?;
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
     let total = store.compute_total_ram_gb(&model_ids, &catalog);
     Ok(RamComputationResponse {
         total_ram_gb: total as f64,

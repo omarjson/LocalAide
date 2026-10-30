@@ -1,13 +1,13 @@
+use super::verify::verify_file_checksum;
+use crate::app::error::AppError;
+use futures::StreamExt;
+use reqwest::header::RANGE;
 use std::fs;
 use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use futures::StreamExt;
-use reqwest::header::RANGE;
-use crate::app::error::AppError;
-use super::verify::verify_file_checksum;
 
 pub struct DownloadProgress {
     pub bytes_downloaded: u64,
@@ -52,7 +52,10 @@ impl ModelDownloader {
         if let Some(parent) = dest.parent() {
             if !parent.exists() {
                 fs::create_dir_all(parent).map_err(|e| {
-                    AppError::storage(format!("Failed to create model directory {}: {e}", parent.display()))
+                    AppError::storage(format!(
+                        "Failed to create model directory {}: {e}",
+                        parent.display()
+                    ))
                 })?;
             }
         }
@@ -72,9 +75,10 @@ impl ModelDownloader {
             request = request.header(RANGE, format!("bytes={offset}-"));
         }
 
-        let response = request.send().await.map_err(|e| {
-            AppError::internal(format!("Network request to {url} failed: {e}"))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("Network request to {url} failed: {e}")))?;
 
         let status = response.status();
         let total_size = match response.content_length() {
@@ -103,13 +107,15 @@ impl ModelDownloader {
             .truncate(offset == 0)
             .open(&part_file)
             .map_err(|e| {
-                AppError::storage(format!("Failed to open part file {}: {e}", part_file.display()))
+                AppError::storage(format!(
+                    "Failed to open part file {}: {e}",
+                    part_file.display()
+                ))
             })?;
 
         if offset > 0 {
-            file.seek(std::io::SeekFrom::Start(offset)).map_err(|e| {
-                AppError::storage(format!("Failed to seek part file: {e}"))
-            })?;
+            file.seek(std::io::SeekFrom::Start(offset))
+                .map_err(|e| AppError::storage(format!("Failed to seek part file: {e}")))?;
         }
 
         let mut downloaded = offset;
@@ -127,9 +133,8 @@ impl ModelDownloader {
                 AppError::internal(format!("Network stream error during download: {e}"))
             })?;
 
-            file.write_all(&chunk).map_err(|e| {
-                AppError::storage(format!("Failed writing chunk to disk: {e}"))
-            })?;
+            file.write_all(&chunk)
+                .map_err(|e| AppError::storage(format!("Failed writing chunk to disk: {e}")))?;
 
             downloaded += chunk.len() as u64;
             bytes_since_last_progress += chunk.len() as u64;
@@ -156,9 +161,8 @@ impl ModelDownloader {
             }
         }
 
-        file.flush().map_err(|e| {
-            AppError::storage(format!("Failed to flush part file: {e}"))
-        })?;
+        file.flush()
+            .map_err(|e| AppError::storage(format!("Failed to flush part file: {e}")))?;
         drop(file);
 
         // Verify SHA-256 before atomic rename

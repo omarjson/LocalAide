@@ -1,16 +1,16 @@
-use std::sync::{Arc, Mutex};
 use crate::app::jobs::JobRegistry;
 use crate::config::ConfigStore;
 use crate::indexer::Indexer;
 use crate::inference::LlamaState;
 use crate::model_manager::ModelManager;
-use crate::services::inference::llama::LlamaWorkerEngine;
 use crate::services::inference::InferenceEngine;
+use crate::services::inference::llama::LlamaWorkerEngine;
 use crate::services::library::LibraryService;
 use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
 use crate::services::tools::ToolService;
 use crate::voice::VoiceManager;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct AppState {

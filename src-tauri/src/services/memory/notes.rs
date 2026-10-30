@@ -1,11 +1,11 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use crate::app::error::AppError;
 use crate::domain::memory::MemoryNote;
-use crate::services::library::db::{DbNote, LibraryDb};
 use crate::services::library::LibraryService;
+use crate::services::library::db::{DbNote, LibraryDb};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static NOTE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -36,14 +36,23 @@ impl NotesManager {
         let safe_title: String = title
             .chars()
             .take(64)
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
 
         let filename = if safe_title.trim().is_empty() {
-            format!("note_{}.md", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs())
+            format!(
+                "note_{}.md",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            )
         } else {
             format!("{safe_title}.md")
         };
@@ -57,8 +66,12 @@ impl NotesManager {
         };
 
         let markdown = format!("# {title}\n{tags_header}\n{content}\n");
-        fs::write(&path, &markdown)
-            .map_err(|e| AppError::storage(format!("Failed to write memory note to {}: {e}", path.display())))?;
+        fs::write(&path, &markdown).map_err(|e| {
+            AppError::storage(format!(
+                "Failed to write memory note to {}: {e}",
+                path.display()
+            ))
+        })?;
 
         let meta = fs::metadata(&path)
             .map_err(|e| AppError::storage(format!("Failed to read note metadata: {e}")))?;
@@ -113,16 +126,27 @@ impl NotesManager {
     ) -> Result<(), AppError> {
         let p = Path::new(path_str);
         if !p.exists() {
-            return Err(AppError::invalid_input(format!("Memory note not found: {path_str}")));
+            return Err(AppError::invalid_input(format!(
+                "Memory note not found: {path_str}"
+            )));
         }
 
         let existing = self.db.get_note_by_path(path_str)?;
         let title = existing
             .as_ref()
             .map(|n| n.title.clone())
-            .unwrap_or_else(|| p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()));
+            .unwrap_or_else(|| {
+                p.file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Untitled".to_string())
+            });
 
-        let tags_vec = tags.unwrap_or_else(|| existing.as_ref().map(|n| n.tags.clone()).unwrap_or_default());
+        let tags_vec = tags.unwrap_or_else(|| {
+            existing
+                .as_ref()
+                .map(|n| n.tags.clone())
+                .unwrap_or_default()
+        });
         let tags_header = if !tags_vec.is_empty() {
             format!("<!-- tags: {} -->\n", tags_vec.join(", "))
         } else {
@@ -148,7 +172,10 @@ impl NotesManager {
             .as_secs();
 
         let db_note = DbNote {
-            id: existing.as_ref().map(|n| n.id.clone()).unwrap_or_else(|| format!("note_{now}")),
+            id: existing
+                .as_ref()
+                .map(|n| n.id.clone())
+                .unwrap_or_else(|| format!("note_{now}")),
             path: path_str.to_string(),
             title,
             content: content.to_string(),
@@ -167,9 +194,12 @@ impl NotesManager {
     pub fn read_note(&self, path_str: &str) -> Result<String, AppError> {
         let p = Path::new(path_str);
         if !p.exists() {
-            return Err(AppError::invalid_input(format!("Memory note not found: {path_str}")));
+            return Err(AppError::invalid_input(format!(
+                "Memory note not found: {path_str}"
+            )));
         }
-        fs::read_to_string(p).map_err(|e| AppError::storage(format!("Failed to read note {path_str}: {e}")))
+        fs::read_to_string(p)
+            .map_err(|e| AppError::storage(format!("Failed to read note {path_str}: {e}")))
     }
 
     pub fn delete_note(&self, path_str: &str) -> Result<bool, AppError> {

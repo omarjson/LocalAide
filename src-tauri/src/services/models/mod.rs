@@ -2,12 +2,12 @@ pub mod catalog;
 pub mod download;
 pub mod verify;
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use crate::app::error::AppError;
 use catalog::{CatalogEntry, CatalogManifest};
 use download::{DownloadProgress, ModelDownloader};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use verify::{compute_sha256_streaming, verify_file_checksum};
 
 pub struct ModelService {

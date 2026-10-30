@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -59,10 +59,13 @@ impl JobRegistry {
         };
 
         let mut lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-        lock.insert(id.clone(), JobEntry {
-            info,
-            cancel_flag: cancel_flag.clone(),
-        });
+        lock.insert(
+            id.clone(),
+            JobEntry {
+                info,
+                cancel_flag: cancel_flag.clone(),
+            },
+        );
 
         (id, cancel_flag)
     }

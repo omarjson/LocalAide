@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use crate::app::error::AppError;
 use crate::domain::document::SearchResultDoc;
 use crate::services::library::db::{FtsHit, LibraryDb};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchMode {
@@ -49,7 +49,11 @@ impl HybridSearcher {
                     return Ok(Self::map_fts_to_docs(keyword_hits, limit));
                 }
 
-                Ok(Self::reciprocal_rank_fusion(keyword_hits, vector_hits, limit))
+                Ok(Self::reciprocal_rank_fusion(
+                    keyword_hits,
+                    vector_hits,
+                    limit,
+                ))
             }
         }
     }
@@ -59,7 +63,11 @@ impl HybridSearcher {
         Ok(Self::map_fts_to_docs(hits, limit))
     }
 
-    fn search_vector(&self, query_vec: &[f32], limit: usize) -> Result<Vec<SearchResultDoc>, AppError> {
+    fn search_vector(
+        &self,
+        query_vec: &[f32],
+        limit: usize,
+    ) -> Result<Vec<SearchResultDoc>, AppError> {
         let hits = self.search_vector_raw(query_vec, limit)?;
         let docs = hits
             .into_iter()
@@ -101,7 +109,11 @@ impl HybridSearcher {
             .collect();
 
         // Sort descending by cosine similarity
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(limit);
         Ok(scored)
     }
@@ -218,9 +230,5 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         norm_b += y * y;
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom > 1e-6 {
-        dot / denom
-    } else {
-        0.0
-    }
+    if denom > 1e-6 { dot / denom } else { 0.0 }
 }

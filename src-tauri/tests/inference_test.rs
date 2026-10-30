@@ -26,7 +26,7 @@ fn test_context_budget_within_limits() {
         "What is the capital of France?",
     );
 
-    assert_eq!(result.was_truncated, false);
+    assert!(!result.was_truncated);
     assert_eq!(result.dropped_turns, 0);
     assert!(result.prompt.contains("You are a helpful assistant."));
     assert!(result.prompt.contains("Hello assistant"));
@@ -39,7 +39,7 @@ fn test_context_budget_truncates_oldest_turns() {
     let budget = ContextBudget::new(100, 40);
 
     let long_old_msg = "A".repeat(160); // ~40 tokens
-    let medium_msg = "B".repeat(80);   // ~20 tokens
+    let medium_msg = "B".repeat(80); // ~20 tokens
 
     let history = vec![
         ChatMessage {
@@ -56,14 +56,10 @@ fn test_context_budget_truncates_oldest_turns() {
         },
     ];
 
-    let result = budget.build_prompt(
-        Some("System prompt"),
-        &history,
-        "Latest question",
-    );
+    let result = budget.build_prompt(Some("System prompt"), &history, "Latest question");
 
     // Oldest turn must be dropped, not latest message or system prompt
-    assert_eq!(result.was_truncated, true);
+    assert!(result.was_truncated);
     assert!(result.dropped_turns >= 1);
     assert!(result.prompt.contains("System prompt"));
     assert!(result.prompt.contains("Latest question"));
@@ -75,7 +71,10 @@ fn test_prompt_builder_rag_citations() {
     let builder = PromptBuilder::new(PromptFormat::Standard);
     let base_prompt = "user: What is our vacation policy?\nassistant:";
     let citations = [
-        ("handbook.md", "Employees receive 20 days of paid time off per calendar year."),
+        (
+            "handbook.md",
+            "Employees receive 20 days of paid time off per calendar year.",
+        ),
         ("benefits.md", "Sick leave is separate from PTO."),
     ];
 

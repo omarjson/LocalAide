@@ -1,9 +1,9 @@
-use tauri::State;
 use crate::app::error::AppError;
 use crate::app::events::DownloadProgressEvent;
 use crate::app::state::AppState;
 use crate::domain::model::{ModelInfo, ModelPreset, ModelSizeResult, ModelVerifyResult};
 use crate::services::models::verify::compute_sha256_streaming;
+use tauri::State;
 
 #[tauri::command]
 pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError> {
@@ -74,10 +74,7 @@ pub fn model_remove(state: State<'_, AppState>, id: String) -> Result<(), AppErr
         let _ = std::fs::remove_file(&part);
     }
 
-    state
-        .model_manager
-        .remove(&id)
-        .map_err(AppError::internal)
+    state.model_manager.remove(&id).map_err(AppError::internal)
 }
 
 #[tauri::command]
@@ -163,20 +160,16 @@ pub async fn model_download(
 
     let res = state
         .model_service
-        .download_model(
-            &id,
-            cancel_flag.clone(),
-            move |progress| {
-                let _ = channel_clone.send(DownloadProgressEvent {
-                    model_id: model_id_clone.clone(),
-                    downloaded_bytes: progress.bytes_downloaded,
-                    total_bytes: progress.bytes_total,
-                    percent: progress.percent,
-                    speed_bps: progress.speed_bps,
-                    status: "downloading".to_string(),
-                });
-            },
-        )
+        .download_model(&id, cancel_flag.clone(), move |progress| {
+            let _ = channel_clone.send(DownloadProgressEvent {
+                model_id: model_id_clone.clone(),
+                downloaded_bytes: progress.bytes_downloaded,
+                total_bytes: progress.bytes_total,
+                percent: progress.percent,
+                speed_bps: progress.speed_bps,
+                status: "downloading".to_string(),
+            });
+        })
         .await;
 
     match res {
@@ -223,7 +216,10 @@ pub async fn model_download_preset(
 
     for model_id in preset.models {
         let (job_id, _cancel) = state.jobs.create_job(format!("preset_{model_id}"));
-        let _ = state.model_manager.download(app.clone(), model_id.clone()).await;
+        let _ = state
+            .model_manager
+            .download(app.clone(), model_id.clone())
+            .await;
         state.jobs.complete_job(&job_id);
     }
     Ok(())

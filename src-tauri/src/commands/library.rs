@@ -1,5 +1,3 @@
-use std::path::Path;
-use tauri::State;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::document::{
@@ -7,6 +5,8 @@ use crate::domain::document::{
     WatchFolderResponse,
 };
 use crate::services::library::search::SearchMode;
+use std::path::Path;
+use tauri::State;
 
 #[tauri::command]
 pub fn index_file(state: State<'_, AppState>, path: String) -> Result<SearchResultDoc, AppError> {
@@ -18,13 +18,8 @@ pub fn index_folder(
     state: State<'_, AppState>,
     folder: String,
 ) -> Result<IndexFolderResponse, AppError> {
-    let (indexed, skipped) = state
-        .library
-        .index_folder(Path::new(&folder), None)?;
-    Ok(IndexFolderResponse {
-        indexed,
-        skipped,
-    })
+    let (indexed, skipped) = state.library.index_folder(Path::new(&folder), None)?;
+    Ok(IndexFolderResponse { indexed, skipped })
 }
 
 #[tauri::command]

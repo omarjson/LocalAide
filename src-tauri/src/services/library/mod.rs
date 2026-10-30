@@ -3,15 +3,15 @@ pub mod ingest;
 pub mod search;
 pub mod watch;
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use crate::app::error::AppError;
-use crate::domain::document::{IndexerStatsResponse, SearchResultDoc};
 use self::db::{DbDocument, LibraryDb};
 use self::ingest::{FileIngester, IngestedFile};
 use self::search::{HybridSearcher, SearchMode};
 use self::watch::{LibraryUpdater, LibraryWatcher};
+use crate::app::error::AppError;
+use crate::domain::document::{IndexerStatsResponse, SearchResultDoc};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct LibraryService {
     db: Arc<LibraryDb>,
@@ -33,8 +33,9 @@ impl LibraryService {
     pub fn open_default(storage_dir: &Path) -> Result<Self, AppError> {
         let db_path = storage_dir.join("library.db");
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| AppError::storage(format!("Failed to create library directory: {e}")))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                AppError::storage(format!("Failed to create library directory: {e}"))
+            })?;
         }
         let db = Arc::new(LibraryDb::open(&db_path)?);
         Ok(Self::new(db))
@@ -51,11 +52,15 @@ impl LibraryService {
 
     pub fn index_file(&self, path: &Path) -> Result<SearchResultDoc, AppError> {
         let ingested = FileIngester::ingest_file(path)?;
-        self.db.insert_or_replace_document(&ingested.document, &ingested.chunks)?;
+        self.db
+            .insert_or_replace_document(&ingested.document, &ingested.chunks)?;
 
         let snippet = if let Some(first_chunk) = ingested.chunks.first() {
             if first_chunk.text.chars().count() > 200 {
-                format!("{}...", first_chunk.text.chars().take(200).collect::<String>())
+                format!(
+                    "{}...",
+                    first_chunk.text.chars().take(200).collect::<String>()
+                )
             } else {
                 first_chunk.text.clone()
             }
@@ -79,7 +84,10 @@ impl LibraryService {
         cancel_flag: Option<Arc<AtomicBool>>,
     ) -> Result<(usize, usize), AppError> {
         if !folder.exists() || !folder.is_dir() {
-            return Err(AppError::invalid_input(format!("Directory does not exist: {}", folder.display())));
+            return Err(AppError::invalid_input(format!(
+                "Directory does not exist: {}",
+                folder.display()
+            )));
         }
 
         let mut indexed = 0;
