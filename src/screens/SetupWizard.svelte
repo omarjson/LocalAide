@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { formatBytes } from "../lib/format";
 
   type Step = "detect" | "preset" | "confirm" | "download" | "done";
 
@@ -27,11 +28,6 @@
   let selected = $state<Preset | null>(null);
   let progress = $state(0);
   let status = $state("Detecting system memory...");
-
-  const formatBytes = (bytes: number) => {
-    const gb = bytes / 1024 / 1024 / 1024;
-    return gb.toFixed(1) + " GB";
-  };
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));

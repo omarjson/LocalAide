@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { formatBytes } from "./lib/format";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
@@ -20,11 +21,6 @@
   let toast = $state<string | null>(null);
   let mobileNav = $state(false);
   let showHelp = $state(false);
-
-  const formatBytes = (bytes: number) => {
-    const gb = bytes / 1024 / 1024 / 1024;
-    return gb.toFixed(1) + " GB";
-  };
 
   const navigate = (s: Screen) => {
     screen = s;
