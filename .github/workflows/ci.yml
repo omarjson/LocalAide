@@ -6,17 +6,36 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Node
+        uses: actions/setup-node@v4
         with:
-          toolchain: stable
-      - run: rustup target add x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc
-      - run: cd src-tauri && cargo check
-      - run: npm ci && npm run build
+          node-version: 20
+          cache: 'npm'
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Add Rust targets
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+      - name: Install npm deps
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Cargo check
+        run: cd src-tauri && cargo check --all-targets
 
   build-macos:
     runs-on: macos-latest
@@ -25,13 +44,30 @@ jobs:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-      - run: npm ci && npm run build
-      - run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+          targets: ${{ matrix.target }}
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install npm deps
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Build Tauri
+        run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
@@ -43,13 +79,30 @@ jobs:
         target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-      - run: npm ci && npm run build
-      - run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+          targets: ${{ matrix.target }}
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runner\.cargo\registry
+            C:\Users\runner\.cargo\git
+            src-tauri\target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install npm deps
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Build Tauri
+        run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
