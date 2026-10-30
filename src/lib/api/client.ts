@@ -1,0 +1,240 @@
+import { invoke, Channel } from "@tauri-apps/api/core";
+import type {
+  AppConfigDto,
+  AppError,
+  ChatMessage,
+  ChatStreamEvent,
+  ChatStreamRequest,
+  ChatThread,
+  DownloadProgressEvent,
+  EmbeddingStatusResponse,
+  ForgetAllResponse,
+  IndexFolderResponse,
+  IndexerStatsResponse,
+  MemoryCreateRequest,
+  MemoryCreateResponse,
+  MemoryNote,
+  MemoryUpdateRequest,
+  ModelInfo,
+  ModelPreset,
+  ModelSizeResult,
+  ModelVerifyResult,
+  RamComputationResponse,
+  SearchIndexRequest,
+  SearchResultDoc,
+  SummarizeRequest,
+  SummarizeResponse,
+  SystemProbeResult,
+  ThreadExportRequest,
+  ThreadExportResponse,
+  ToolAuditEntry,
+  ToolExecutionRequest,
+  ToolExecutionResponse,
+  WatchFolderResponse,
+} from "./bindings";
+
+export class ApiClient {
+  // System
+  async systemProbe(): Promise<SystemProbeResult> {
+    return invoke<SystemProbeResult>("system_probe");
+  }
+
+  // Models
+  async listModels(): Promise<ModelInfo[]> {
+    return invoke<ModelInfo[]>("model_list");
+  }
+
+  async activateModel(id: string): Promise<void> {
+    return invoke<void>("model_activate", { id });
+  }
+
+  async removeModel(id: string): Promise<void> {
+    return invoke<void>("model_remove", { id });
+  }
+
+  async verifyModel(id: string): Promise<ModelVerifyResult> {
+    return invoke<ModelVerifyResult>("model_verify", { id });
+  }
+
+  async getModelExistingSize(id: string): Promise<ModelSizeResult> {
+    return invoke<ModelSizeResult>("model_existing_size", { id });
+  }
+
+  async getModelPresets(): Promise<ModelPreset[]> {
+    return invoke<ModelPreset[]>("model_presets");
+  }
+
+  async downloadModelPreset(id: string): Promise<void> {
+    return invoke<void>("model_download_preset", { id });
+  }
+
+  async cancelModelDownload(id: string): Promise<void> {
+    return invoke<void>("model_download_cancel", { id });
+  }
+
+  async downloadModel(
+    id: string,
+    onProgress?: (event: DownloadProgressEvent) => void
+  ): Promise<void> {
+    const channel = new Channel<DownloadProgressEvent>();
+    if (onProgress) {
+      channel.onmessage = onProgress;
+    }
+    return invoke<void>("model_download", { id, channel });
+  }
+
+  // Chat & Inference
+  async loadInferenceModel(id: string): Promise<string> {
+    return invoke<string>("inference_load", { id });
+  }
+
+  async streamChat(
+    req: ChatStreamRequest,
+    onEvent: (event: ChatStreamEvent) => void
+  ): Promise<string> {
+    const channel = new Channel<ChatStreamEvent>();
+    channel.onmessage = onEvent;
+    return invoke<string>("chat_stream", { req, channel });
+  }
+
+  async summarize(req: SummarizeRequest): Promise<SummarizeResponse> {
+    return invoke<SummarizeResponse>("summarize", { req });
+  }
+
+  async cancelChat(jobId: string): Promise<void> {
+    return invoke<void>("chat_cancel", { jobId });
+  }
+
+  async listChatThreads(): Promise<ChatThread[]> {
+    return invoke<ChatThread[]>("chat_thread_list");
+  }
+
+  async saveChatThread(
+    threadId: string,
+    title: string,
+    systemPrompt: string | undefined | null,
+    messages: ChatMessage[]
+  ): Promise<void> {
+    return invoke<void>("chat_thread_save", {
+      threadId,
+      title,
+      systemPrompt,
+      messages,
+    });
+  }
+
+  async loadChatThread(threadId: string): Promise<ChatMessage[]> {
+    return invoke<ChatMessage[]>("chat_thread_load", { threadId });
+  }
+
+  async deleteChatThread(threadId: string): Promise<void> {
+    return invoke<void>("chat_thread_delete", { threadId });
+  }
+
+  async exportChatThread(req: ThreadExportRequest): Promise<ThreadExportResponse> {
+    return invoke<ThreadExportResponse>("chat_thread_export", { req });
+  }
+
+  // Library & Search
+  async indexFile(path: string): Promise<SearchResultDoc> {
+    return invoke<SearchResultDoc>("index_file", { path });
+  }
+
+  async indexFolder(folder: string): Promise<IndexFolderResponse> {
+    return invoke<IndexFolderResponse>("index_folder", { folder });
+  }
+
+  async searchIndex(req: SearchIndexRequest): Promise<SearchResultDoc[]> {
+    return invoke<SearchResultDoc[]>("search_index", {
+      query: req.query,
+      mode: req.mode,
+      limit: req.limit,
+    });
+  }
+
+  async listIndex(): Promise<SearchResultDoc[]> {
+    return invoke<SearchResultDoc[]>("list_index");
+  }
+
+  async getIndexerStats(): Promise<IndexerStatsResponse> {
+    return invoke<IndexerStatsResponse>("indexer_stats");
+  }
+
+  async removeIndexedDoc(path: string): Promise<void> {
+    return invoke<void>("index_remove", { path });
+  }
+
+  async watchFolder(folder: string): Promise<WatchFolderResponse> {
+    return invoke<WatchFolderResponse>("index_watch_start", { folder });
+  }
+
+  // Memory
+  async createMemory(req: MemoryCreateRequest): Promise<MemoryCreateResponse> {
+    return invoke<MemoryCreateResponse>("memory_create", {
+      title: req.title,
+      content: req.content,
+    });
+  }
+
+  async updateMemory(req: MemoryUpdateRequest): Promise<void> {
+    return invoke<void>("memory_update", {
+      path: req.path,
+      content: req.content,
+    });
+  }
+
+  async listMemories(): Promise<MemoryNote[]> {
+    return invoke<MemoryNote[]>("memory_list");
+  }
+
+  async readMemory(path: string): Promise<string> {
+    return invoke<string>("memory_read", { path });
+  }
+
+  async deleteMemory(path: string): Promise<void> {
+    return invoke<void>("memory_delete", { path });
+  }
+
+  async forgetAllMemories(): Promise<ForgetAllResponse> {
+    return invoke<ForgetAllResponse>("memory_forget_all");
+  }
+
+  async searchMemories(query: string): Promise<SearchResultDoc[]> {
+    return invoke<SearchResultDoc[]>("memory_search", { query });
+  }
+
+  // Safe Tools & Sandbox
+  async executeTool(req: ToolExecutionRequest): Promise<ToolExecutionResponse> {
+    return invoke<ToolExecutionResponse>("tool_execute", { req });
+  }
+
+  async listToolAudits(limit?: number): Promise<ToolAuditEntry[]> {
+    return invoke<ToolAuditEntry[]>("tool_audits_list", { limit });
+  }
+
+  async clearToolAudits(): Promise<void> {
+    return invoke<void>("tool_audits_clear");
+  }
+
+  // Config & Settings
+  async loadConfig(): Promise<AppConfigDto> {
+    return invoke<AppConfigDto>("config_load");
+  }
+
+  async saveConfig(cfg: AppConfigDto): Promise<void> {
+    return invoke<void>("config_save", { cfg });
+  }
+
+  async computeRam(modelIds: string[]): Promise<RamComputationResponse> {
+    return invoke<RamComputationResponse>("config_compute_ram", {
+      model_ids: modelIds,
+    });
+  }
+
+  async getEmbeddingStatus(): Promise<EmbeddingStatusResponse> {
+    return invoke<EmbeddingStatusResponse>("embedding_status");
+  }
+}
+
+export const api = new ApiClient();
+export default api;

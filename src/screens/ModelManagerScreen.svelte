@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
+  import { api } from "../lib/api/client";
+  import type { ModelInfo, ModelPreset } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   type Model = {
@@ -18,24 +18,39 @@
   let models = $state<Model[]>([]);
   let loading = $state(true);
   let query = $state("");
-  let presets = $state<any[]>([]);
+  let presets = $state<ModelPreset[]>([]);
   let activePreset = $state<string | null>(null);
   let presetInstalling = $state(false);
+  let verifying = $state<string | null>(null);
+  let verifyStatus = $state<Record<string, boolean>>({});
 
-  let listeners: Array<() => void> = [];
+  const verifyModel = async (id: string) => {
+    verifying = id;
+    try {
+      const res = await api.verifyModel(id);
+      verifyStatus = { ...verifyStatus, [id]: res.verified };
+      if (!res.verified) {
+        alert(`Checksum verification failed for ${id}: ${res.error ?? "mismatched hash"}`);
+      }
+    } catch (e: any) {
+      alert(`Verification error: ${e?.message ?? String(e)}`);
+    } finally {
+      verifying = null;
+    }
+  };
 
   const refresh = async () => {
     try {
-      const list = await invoke<any[]>("model_list");
-      models = list.map(m => ({
+      const list = await api.listModels();
+      models = list.map((m: ModelInfo) => ({
         id: m.id,
         name: m.name,
-        size: m.file_size ? `${(m.file_size/1024/1024).toFixed(0)} MB` : "?",
+        size: m.size_bytes ? `${(m.size_bytes / 1024 / 1024).toFixed(0)} MB` : "?",
         ram: `${m.ram_estimate_gb} GB`,
         status: m.installed ? "installed" : "available",
-        quant: m.quant ?? "—",
+        quant: "—",
         active: m.active ?? false,
-        kind: m.kind ?? "llm"
+        kind: "llm"
       }));
     } catch {
       models = [];
@@ -44,55 +59,48 @@
     }
   };
 
-  onMount(async () => {
-    await refresh();
-    try {
-      presets = await invoke<any[]>("model_presets");
-    } catch {}
+  onMount(() => {
+    let active = true;
+    void (async () => {
+      await refresh();
+      if (!active) return;
+      try {
+        presets = await api.getModelPresets();
+      } catch {}
+    })();
 
-    // Live download progress straight from the backend.
-    listeners.push(await listen<any>("model_download_progress", (event) => {
-      const p = event.payload;
-      if (!p?.id) return;
-      models = models.map(m => m.id === p.id
-        ? { ...m, status: "installing", progress: Math.round(p.percent ?? 0) }
-        : m);
-    }));
-
-    listeners.push(await listen<any>("model_download_done", async (event) => {
-      const p = event.payload;
-      if (!p?.id) return;
-      if (p.ok) {
-        await refresh();
-      } else {
-        models = models.map(m => m.id === p.id ? { ...m, status: "available", progress: undefined } : m);
-      }
-    }));
-
-    return () => listeners.forEach(u => u());
+    return () => {
+      active = false;
+    };
   });
 
   const startInstall = async (id: string) => {
     models = models.map(m => m.id === id ? { ...m, status: "installing", progress: 0 } : m);
     try {
-      await invoke("model_download", { id });
-    } catch (e) {
+      await api.downloadModel(id, (evt) => {
+        models = models.map(m => m.id === id
+          ? { ...m, status: "installing", progress: Math.round(evt.percent) }
+          : m);
+      });
+      await refresh();
+    } catch (e: any) {
       models = models.map(m => m.id === id
         ? { ...m, status: "available", progress: undefined }
         : m);
-      alert(String(e));
+      alert(e?.message ?? String(e));
     }
   };
 
   const cancelInstall = async (id: string) => {
-    try { await invoke("model_download_cancel", { id }); } catch {}
+    try { await api.cancelModelDownload(id); } catch {}
+    models = models.map(m => m.id === id ? { ...m, status: "available", progress: undefined } : m);
   };
 
   const installPreset = async (id: string) => {
     activePreset = id;
     presetInstalling = true;
     try {
-      await invoke("model_download_preset", { id });
+      await api.downloadModelPreset(id);
       await refresh();
     } catch {}
     presetInstalling = false;
@@ -101,16 +109,15 @@
 
   const activateModel = async (id: string) => {
     try {
-      await invoke("model_activate", { id });
+      await api.activateModel(id);
       models = models.map(m => ({ ...m, active: m.id === id }));
     } catch {}
   };
 
   const removeModel = async (id: string) => {
-    if (!confirm("Remove model?")) return;
     try {
-      await invoke("model_remove", { id });
-      models = models.filter(m => m.id !== id);
+      await api.removeModel(id);
+      await refresh();
     } catch {}
   };
 
@@ -123,113 +130,137 @@
       case "stt": return "STT";
       case "tts": return "TTS";
       case "vision": return "Vision";
-      default: return "—";
+      default: return k?.toUpperCase() ?? "MODEL";
     }
   };
 </script>
 
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-5xl mx-auto space-y-8">
   <div class="flex items-center justify-between">
     <div>
-      <h2 class="text-lg font-semibold tracking-tight">Model manager</h2>
-      <p class="text-xs text-zinc-500">Catalog · Hugging Face GGUF · SHA256 verified</p>
+      <h2 class="text-lg font-semibold tracking-tight">Models</h2>
+      <p class="text-xs text-zinc-500">Catalog of local GGUF models. Download once, run 100% offline.</p>
     </div>
-    <button class="px-4 py-2 rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-sm font-medium flex items-center gap-2">
-      <span class="text-base">+</span> Add model
-    </button>
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <input
+          type="text"
+          placeholder="Filter models…"
+          bind:value={query}
+          class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 w-56 font-mono"
+        />
+      </div>
+    </div>
   </div>
 
   {#if presets.length > 0}
-    <div class="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/60">
-      <div class="text-sm font-medium text-zinc-100 mb-3">Quick install presets</div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <div class="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/40">
+      <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-3">Hardware presets</div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
         {#each presets as p}
-          <button
-            onclick={() => installPreset(p.id)}
-            disabled={presetInstalling}
-            class="text-left px-3 py-2 rounded-xl border border-zinc-800 hover:border-fuchsia-500/40 bg-zinc-950 disabled:opacity-50">
-            <div class="text-xs font-medium text-zinc-100">{p.name}</div>
-            <div class="text-[10px] text-zinc-500 mt-0.5">{p.total_ram_gb} GB · {p.fits_ram_gb}</div>
-            {#if activePreset === p.id && presetInstalling}
-              <div class="text-[10px] text-fuchsia-300 mt-1">Installing…</div>
-            {/if}
-          </button>
+          <div class="border border-zinc-800 rounded-xl p-3 bg-zinc-950/60 flex flex-col justify-between">
+            <div>
+              <div class="font-medium text-sm text-zinc-100">{p.name}</div>
+              <div class="text-xs text-zinc-500 mt-0.5">{p.description}</div>
+              <div class="text-[11px] font-mono text-fuchsia-400 mt-2">~{p.ram_gb} GB RAM</div>
+            </div>
+            <button
+              onclick={() => installPreset(p.id)}
+              disabled={presetInstalling}
+              class="mt-3 w-full py-1.5 px-3 text-xs font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 transition-colors"
+            >
+              {activePreset === p.id ? "Installing…" : "Install preset"}
+            </button>
+          </div>
         {/each}
       </div>
     </div>
   {/if}
 
-  <div class="flex items-center gap-3">
-    <input bind:value={query} placeholder="Search models…" class="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500"/>
-    <div class="text-xs text-zinc-500 font-mono">{filtered.length} models</div>
-  </div>
-
-  <div class="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/60">
-    {#if loading}
-      <div class="py-16 text-center text-zinc-500">Loading catalog…</div>
-    {:else}
-      <div class="overflow-x-auto">
-        <table class="w-full text-left">
-          <thead class="border-b border-zinc-800 bg-zinc-900/80">
-            <tr class="text-[11px] uppercase tracking-widest text-zinc-500">
-              <th class="px-4 py-3 font-medium">Model</th>
-              <th class="px-4 py-3 font-medium">Type</th>
-              <th class="px-4 py-3 font-medium">File size</th>
-              <th class="px-4 py-3 font-medium">RAM est.</th>
-              <th class="px-4 py-3 font-medium">Quant</th>
-              <th class="px-4 py-3 font-medium">Status</th>
-              <th class="px-4 py-3 font-medium">Action</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-zinc-800">
-            {#each filtered as m, i}
-              <tr class="hover:bg-white/[0.02] transition">
-                <td class="px-4 py-3 text-sm text-zinc-100 font-medium">
-                  {m.name}
-                  {#if m.active}
-                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/25">active</span>
-                  {/if}
-                </td>
-                <td class="px-4 py-3 text-sm text-zinc-400">{kindLabel(m.kind)}</td>
-                <td class="px-4 py-3 text-sm text-zinc-400 font-mono">{m.size}</td>
-                <td class="px-4 py-3 text-sm text-zinc-400 font-mono">{m.ram}</td>
-                <td class="px-4 py-3 text-sm text-zinc-400">{m.quant}</td>
-                <td class="px-4 py-3">
-                  {#if m.status === "installing"}
-                    <div class="w-32">
-                      <div class="text-[11px] text-zinc-400 mb-1">Downloading… {m.progress ?? 0}%</div>
-                      <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div class="h-full bg-fuchsia-500 transition-all" style="width:{m.progress ?? 0}%"></div>
-                      </div>
-                    </div>
-                  {:else}
-                    <span class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${m.status === 'installed' ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
-                      <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
-                      {m.status === 'installed' ? 'Installed' : 'Available'}
-                    </span>
-                  {/if}
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-2">
-                    {#if m.status === 'installing'}
-                      <button onclick={() => cancelInstall(m.id)} class="px-2.5 py-1 rounded-lg border border-red-500/30 text-[11px] text-red-300 hover:bg-red-500/10">Cancel</button>
-                    {:else if m.status === 'installed'}
-                      <button onclick={() => activateModel(m.id)} class="px-2.5 py-1 rounded-lg border text-[11px] {m.active ? 'bg-fuchsia-500/20 border-fuchsia-500/30 text-fuchsia-200' : 'border-zinc-700 text-zinc-300 hover:bg-white/5'}">{m.active ? 'Active' : 'Activate'}</button>
-                      <button onclick={() => removeModel(m.id)} class="px-2.5 py-1 rounded-lg border border-zinc-700 text-[11px] text-zinc-300 hover:bg-white/5">Remove</button>
-                    {:else}
-                      <button onclick={() => startInstall(m.id)} class="px-3 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-white/5">Download</button>
-                    {/if}
+  {#if loading}
+    <div class="py-12 text-center text-xs text-zinc-500 font-mono">Loading model catalog…</div>
+  {:else}
+    <div class="grid grid-cols-1 gap-3">
+      {#each filtered as m}
+        <div class="border border-zinc-800 rounded-xl p-4 bg-zinc-900/40 flex items-center justify-between hover:border-zinc-700 transition-colors">
+          <div class="flex items-start gap-3">
+            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 mt-0.5">
+              {kindLabel(m.kind)}
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-sm text-zinc-100">{m.name}</span>
+                {#if m.active}
+                  <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active</span>
+                {/if}
+              </div>
+              <div class="flex items-center gap-4 text-xs text-zinc-500 font-mono mt-1">
+                <span>Size: {m.size}</span>
+                <span>RAM: {m.ram}</span>
+                <span>Quant: {m.quant}</span>
+              </div>
+              {#if m.status === "installing"}
+                <div class="mt-2 w-64">
+                  <div class="flex justify-between text-[10px] font-mono text-zinc-400 mb-1">
+                    <span>Downloading…</span>
+                    <span>{m.progress ?? 0}%</span>
                   </div>
-                </td>
-              </tr>
+                  <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-fuchsia-500 transition-all duration-300" style="width: {m.progress ?? 0}%"></div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {#if m.status === "installed"}
+              {#if verifyStatus[m.id]}
+                <span class="text-[10px] font-mono px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  ✓ Verified
+                </span>
+              {:else}
+                <button
+                  onclick={() => verifyModel(m.id)}
+                  disabled={verifying === m.id}
+                  class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
+                  title="Verify cryptographic SHA-256 integrity"
+                >
+                  {verifying === m.id ? "Checking…" : "Verify"}
+                </button>
+              {/if}
+              {#if !m.active}
+                <button
+                  onclick={() => activateModel(m.id)}
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                >
+                  Activate
+                </button>
+              {/if}
+              <button
+                onclick={() => removeModel(m.id)}
+                class="px-3 py-1.5 text-xs font-medium rounded-lg text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-colors"
+              >
+                Delete
+              </button>
+            {:else if m.status === "installing"}
+              <button
+                onclick={() => cancelInstall(m.id)}
+                class="px-3 py-1.5 text-xs font-medium rounded-lg text-amber-400 hover:bg-amber-500/10 border border-amber-500/20 transition-colors"
+              >
+                Cancel
+              </button>
             {:else}
-              <tr>
-                <td colspan="7" class="px-4 py-12 text-center text-zinc-500">No models match your search</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
-  </div>
+              <button
+                onclick={() => startInstall(m.id)}
+                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white transition-colors"
+              >
+                Download
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>

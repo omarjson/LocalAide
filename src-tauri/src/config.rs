@@ -37,7 +37,9 @@ pub struct ConfigStore {
 
 impl ConfigStore {
     pub fn new() -> Self {
-        Self { path: config_path() }
+        Self {
+            path: config_path(),
+        }
     }
 
     pub fn load(&self) -> Result<AppConfig, String> {
@@ -56,9 +58,19 @@ impl ConfigStore {
         fs::write(&self.path, data).map_err(|e| e.to_string())
     }
 
-    pub fn compute_total_ram_gb(&self, model_ids: &[String], catalog: &[crate::model_manager::ModelEntry]) -> f32 {
-        model_ids.iter().filter_map(|id| {
-            catalog.iter().find(|m| &m.id == id).map(|m| m.ram_estimate_gb)
-        }).sum()
+    pub fn compute_total_ram_gb(
+        &self,
+        model_ids: &[String],
+        catalog: &[crate::model_manager::ModelEntry],
+    ) -> f32 {
+        model_ids
+            .iter()
+            .filter_map(|id| {
+                catalog
+                    .iter()
+                    .find(|m| &m.id == id)
+                    .map(|m| m.ram_estimate_gb)
+            })
+            .sum()
     }
 }

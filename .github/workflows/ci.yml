@@ -6,53 +6,90 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
-  check:
+  quality-gate:
+    name: Quality Gate (Lint, Typecheck, Test, Smoke)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install Node
+
+      - name: Install Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-      - name: Cache cargo
+
+      - name: Install Linux Build & WebKitGTK Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Cache Cargo Dependencies
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Add Rust targets
-        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc
-      - name: Install npm deps
+          key: ${{ runner.os }}-cargo-quality-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-quality-
+
+      - name: Install npm dependencies
         run: npm ci
-      - name: Build frontend
+
+      - name: Svelte & TypeScript Check
+        run: npm run check
+
+      - name: Frontend Build
         run: npm run build
-      - name: Cargo check
-        run: cd src-tauri && cargo check --all-targets
+
+      - name: Smoke Test
+        run: npm run smoke
+
+      - name: Rust Formatting Check
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Rust Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 
   build-macos:
+    name: Build macOS (${{ matrix.target }})
+    needs: quality-gate
     runs-on: macos-latest
     strategy:
       matrix:
-        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install Node
+
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-      - name: Cache cargo
+
+      - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -60,34 +97,46 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
       - name: Install npm deps
         run: npm ci
+
       - name: Build frontend
         run: npm run build
-      - name: Build Tauri
-        run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
-      - name: Upload artifacts
+
+      - name: Build Tauri Package
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
 
   build-windows:
+    name: Build Windows (${{ matrix.target }})
+    needs: quality-gate
     runs-on: windows-latest
     strategy:
       matrix:
-        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+        target: [x86_64-pc-windows-msvc]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install Node
+
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-      - name: Cache cargo
+
+      - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -95,13 +144,19 @@ jobs:
             C:\Users\runner\.cargo\git
             src-tauri\target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
       - name: Install npm deps
         run: npm ci
+
       - name: Build frontend
         run: npm run build
-      - name: Build Tauri
-        run: cd src-tauri && cargo tauri build --target ${{ matrix.target }}
-      - name: Upload artifacts
+
+      - name: Build Tauri Package
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.target }}

@@ -21,7 +21,7 @@ fn next_stream_id() -> String {
 /// llama.cpp contexts are only touched from one thread at a time (guarded by a
 /// `Mutex`), so it is sound to declare the handle `Send + Sync` for Tauri
 /// state even though the underlying raw pointer is not `Sync`.
-pub(crate) struct LlamaHandle(LLama);
+pub(crate) struct LlamaHandle(pub LLama);
 
 // SAFETY: LlamaHandle contains a llama_cpp_rs::LLama context whose raw pointer is not Sync.
 // All access to the inner LLama is guarded by LlamaState.model Mutex, which provides
@@ -31,9 +31,9 @@ unsafe impl Send for LlamaHandle {}
 unsafe impl Sync for LlamaHandle {}
 
 /// Holds the currently loaded GGUF model instance.
-pub(crate) struct LlamaState {
-    model: Mutex<Option<LlamaHandle>>,
-    model_path: Mutex<Option<std::path::PathBuf>>,
+pub struct LlamaState {
+    pub(crate) model: Mutex<Option<LlamaHandle>>,
+    pub(crate) model_path: Mutex<Option<std::path::PathBuf>>,
 }
 
 impl Default for LlamaState {
@@ -50,9 +50,48 @@ impl LlamaState {
         }
     }
 
-    pub(crate) fn active_model_path(&self) -> Option<std::path::PathBuf> {
+    pub fn active_model_path(&self) -> Option<std::path::PathBuf> {
         let guard = self.model_path.lock().ok()?;
         guard.clone()
+    }
+
+    pub fn load_model(&self, app: &AppHandle, mgr: &ModelManager, id: &str) -> Result<String, String> {
+        let entry = mgr
+            .list_models()
+            .into_iter()
+            .find(|m| m.id == id)
+            .ok_or_else(|| format!("model {id} not in catalog"))?;
+        if !entry.installed {
+            return Err(format!("model {id} is not installed"));
+        }
+        let path = mgr.primary_path(id);
+
+        let mut opts = ModelOptions::default();
+        opts.context_size = 2048;
+        opts.n_batch = 512;
+        opts.embeddings = false;
+
+        let llm = LLama::new(path.to_string_lossy().to_string(), &opts)
+            .map_err(|e| format!("failed to load model: {e}"))?;
+
+        {
+            let mut m = self
+                .model
+                .lock()
+                .map_err(|e| format!("model mutex poisoned: {e}"))?;
+            *m = Some(LlamaHandle(llm));
+        }
+        {
+            let mut p = self
+                .model_path
+                .lock()
+                .map_err(|e| format!("model path mutex poisoned: {e}"))?;
+            *p = Some(path.clone());
+        }
+        mgr.activate(id)?;
+
+        let _ = app.emit("model_activated", serde_json::json!({ "id": id }));
+        Ok(format!("loaded {id}"))
     }
 }
 
@@ -72,49 +111,17 @@ pub struct SummarizeRequest {
 }
 
 /// Load + activate a GGUF model into the llama.cpp runtime.
-#[tauri::command]
 pub async fn inference_load(
     app: AppHandle,
     state: State<'_, Arc<LlamaState>>,
     mgr: State<'_, ModelManager>,
     id: String,
 ) -> Result<String, String> {
-    let entry = mgr
-        .inner()
-        .list_models()
-        .into_iter()
-        .find(|m| m.id == id)
-        .ok_or_else(|| format!("model {id} not in catalog"))?;
-    if !entry.installed {
-        return Err(format!("model {id} is not installed"));
-    }
-    let path = mgr.primary_path(&id);
-
-    let mut opts = ModelOptions::default();
-    opts.context_size = 2048;
-    opts.n_batch = 512;
-    opts.embeddings = false;
-
-    let llm = LLama::new(path.to_string_lossy().to_string(), &opts)
-        .map_err(|e| format!("failed to load model: {e}"))?;
-
-    {
-        let mut m = state.model.lock().map_err(|e| format!("model mutex poisoned: {e}"))?;
-        *m = Some(LlamaHandle(llm));
-    }
-    {
-        let mut p = state.model_path.lock().map_err(|e| format!("model path mutex poisoned: {e}"))?;
-        *p = Some(path.clone());
-    }
-    mgr.inner().activate(&id)?;
-
-    let _ = app.emit("model_activated", serde_json::json!({ "id": id }));
-    Ok(format!("loaded {id}"))
+    state.load_model(&app, &mgr, &id)
 }
 
 /// Stream chat completion. Tokens are emitted as `llm_stream` events carrying a
 /// `stream_id`; `llm_done` / `llm_error` signal the terminal state.
-#[tauri::command]
 pub async fn chat_stream(
     app: AppHandle,
     state: State<'_, Arc<LlamaState>>,
@@ -197,10 +204,6 @@ pub async fn chat_stream(
 }
 
 /// Summarize text using the loaded model.
-///
-/// Mirrors `chat_stream`: tokens arrive as `summarize_stream` events carrying a
-/// `stream_id`, and the run ends with `summarize_done` / `summarize_error`.
-#[tauri::command]
 pub async fn summarize(
     app: AppHandle,
     state: State<'_, Arc<LlamaState>>,

@@ -1,5 +1,5 @@
 {
-  "name": "ai-desktop-assistant",
+  "name": "localaide",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "smoke": "node scripts/smoke-test.mjs",
+    "test": "node scripts/smoke-test.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

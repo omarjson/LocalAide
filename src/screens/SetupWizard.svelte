@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
+  import { api } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
 
   type Step = "detect" | "preset" | "confirm" | "download" | "done";
@@ -10,6 +9,7 @@
     id: string;
     name: string;
     ram: string;
+    ramGb: number;
     fits: string;
     models: string[];
   };
@@ -35,14 +35,14 @@
 
   const detect = async () => {
     try {
-      const probe = await invoke("system_probe") as any;
-      ramTotal = probe.total_ram;
-      ramUsable = probe.usable_ram;
-      budget = probe.budget_ram;
+      const probe = await api.systemProbe();
+      ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
+      ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
+      budget = probe.budget_gb * 1024 * 1024 * 1024;
       step = "preset";
-      status = `Recommended: ${recommended.name} preset fits your ${budgetGb.toFixed(1)} GB budget.`;
-    } catch (e) {
-      status = "System probe unavailable: " + String(e);
+      status = `Recommended: ${recommended.name} preset fits your ${probe.budget_gb.toFixed(1)} GB budget.`;
+    } catch (e: any) {
+      status = "System probe unavailable: " + (e?.message ?? String(e));
     }
   };
 
@@ -51,15 +51,10 @@
     if (!selected) return;
     step = "download"; status = `Downloading ${selected.name} models...`;
     try {
-      const unsub = await listen("model_download_progress", (event: any) => {
-        const p = event.payload;
-        progress = Math.round(p?.percent ?? 0);
-      });
-      await invoke("model_download_preset", { id: selected.id });
-      await unsub();
-      step = "done"; status = `${selected.name} preset installed. Health check passed.`;
-    } catch (e) {
-      status = `Install failed: ${String(e)}`;
+      await api.downloadModelPreset(selected.id);
+      step = "done"; status = `${selected.name} preset installed.`;
+    } catch (e: any) {
+      status = `Install failed: ${e?.message ?? String(e)}`;
       step = "confirm";
     }
   };

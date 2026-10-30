@@ -4,13 +4,21 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 /// Refuse to read more than this much into memory (the UI truncates anyway).
-const MAX_READ_BYTES: u64 = 1 * 1024 * 1024;
+const MAX_READ_BYTES: u64 = 1024 * 1024;
 
 /// Refuse to write payloads larger than this.
 const MAX_WRITE_BYTES: usize = 4 * 1024 * 1024;
 
 /// Directories the sandbox will never touch, even when the path resolves into one.
-const FORBIDDEN_ROOTS: &[&str] = &["/System", "/usr", "/bin", "/sbin", "/etc", "/private/etc", "/Library"];
+const FORBIDDEN_ROOTS: &[&str] = &[
+    "/System",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/private/etc",
+    "/Library",
+];
 
 #[derive(Debug, Deserialize)]
 pub struct ToolCall {
@@ -30,10 +38,20 @@ pub struct ToolResult {
 
 impl ToolResult {
     fn ok(output: String) -> Self {
-        Self { ok: true, output, error: None, truncated: None }
+        Self {
+            ok: true,
+            output,
+            error: None,
+            truncated: None,
+        }
     }
     fn err(error: String) -> Self {
-        Self { ok: false, output: String::new(), error: Some(error), truncated: None }
+        Self {
+            ok: false,
+            output: String::new(),
+            error: Some(error),
+            truncated: None,
+        }
     }
 }
 
@@ -62,7 +80,9 @@ fn sandbox_path(raw: &str) -> Result<PathBuf, String> {
         }
     }
 
-    let forbidden = FORBIDDEN_ROOTS.iter().any(|root| normalized.starts_with(root));
+    let forbidden = FORBIDDEN_ROOTS
+        .iter()
+        .any(|root| normalized.starts_with(root));
     if forbidden {
         return Err(format!("path is outside the sandbox: {raw}"));
     }
@@ -82,7 +102,9 @@ fn read_capped(path: &Path) -> Result<(String, bool), String> {
         let mut read = 0usize;
         while read < buf.len() {
             let n = f.read(&mut buf[read..]).map_err(|e| e.to_string())?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             read += n;
         }
         buf.truncate(read);
@@ -119,11 +141,13 @@ pub fn execute_tool(call: ToolCall) -> ToolResult {
                 Some(p) => p,
                 None => return ToolResult::err("missing path".into()),
             };
-            let content = call.args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let content = call
+                .args
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if content.len() > MAX_WRITE_BYTES {
-                return ToolResult::err(format!(
-                    "payload exceeds {MAX_WRITE_BYTES} byte limit"
-                ));
+                return ToolResult::err(format!("payload exceeds {MAX_WRITE_BYTES} byte limit"));
             }
             let p = Path::new(path);
             // New writes stay inside an existing directory, never in system roots.

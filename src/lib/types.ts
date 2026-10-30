@@ -18,6 +18,7 @@ export interface Model {
 export interface Preset {
   id: string;
   name: string;
+  ram?: string;
   ramGb: number;
   fits: string;
   models: string[];

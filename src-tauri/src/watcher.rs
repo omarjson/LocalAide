@@ -1,6 +1,6 @@
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -52,25 +52,23 @@ impl IndexWatcher {
                 let start = std::time::Instant::now();
                 while start.elapsed() < Duration::from_millis(500) {
                     match rx.recv_timeout(Duration::from_millis(50)) {
-                        Ok(event) => {
-                            match event.kind {
-                                EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any => {
-                                    for path in event.paths {
-                                        if path.is_file() {
-                                            pending.insert(path);
-                                        }
+                        Ok(event) => match event.kind {
+                            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any => {
+                                for path in event.paths {
+                                    if path.is_file() {
+                                        pending.insert(path);
                                     }
                                 }
-                                EventKind::Remove(_) => {
-                                    for path in event.paths {
-                                        if path.is_file() {
-                                            to_remove.insert(path);
-                                        }
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
+                            EventKind::Remove(_) => {
+                                for path in event.paths {
+                                    if path.is_file() {
+                                        to_remove.insert(path);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        },
                         Err(_) => break,
                     }
                 }
@@ -99,9 +97,11 @@ impl IndexWatcher {
             }
         });
 
-        let mut lock = self.watcher.lock().map_err(|e| format!("watcher mutex poisoned: {e}"))?;
+        let mut lock = self
+            .watcher
+            .lock()
+            .map_err(|e| format!("watcher mutex poisoned: {e}"))?;
         *lock = Some(watcher);
         Ok(())
     }
 }
-

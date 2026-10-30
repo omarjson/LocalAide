@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "../lib/api/client";
+  import type { EmbeddingStatusResponse } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   let ramTotal = $state(16);
@@ -9,20 +10,20 @@
   let overBudget = $state(false);
   let loading = $state(true);
   let presetName = $state("");
-  let embeddingStatus = $state<{exists: boolean; model_path: string; dim: number} | null>(null);
+  let embeddingStatus = $state<EmbeddingStatusResponse | null>(null);
 
   let presets = $state<any[]>([]);
 
   onMount(async () => {
     try {
-      const list = await invoke<any[]>("model_list");
+      const list = await api.listModels();
       models = list.map(m => ({
         id: m.id,
         name: m.name,
         ram: Number(m.ram_estimate_gb),
-        size: m.file_size ? `${(m.file_size/1024/1024).toFixed(0)} MB` : "?"
+        size: m.size_bytes ? `${(m.size_bytes/1024/1024).toFixed(0)} MB` : "?"
       }));
-      const cfg = await invoke<any>("config_load");
+      const cfg = await api.loadConfig();
       ramTotal = cfg.ram_budget_mb ? Math.round(cfg.ram_budget_mb/1024) : ramTotal;
       if (cfg.selected_models?.length) selected = new Set(cfg.selected_models);
       recalc();
@@ -30,7 +31,7 @@
     finally { loading = false; }
     try { presets = JSON.parse(localStorage.getItem("dev-presets") || "[]"); } catch {}
     try {
-      embeddingStatus = await invoke<any>("embedding_status");
+      embeddingStatus = await api.getEmbeddingStatus();
     } catch {}
   });
 
@@ -38,7 +39,7 @@
     if (models.length === 0) return;
     const ids = Array.from(selected);
     try {
-      const res = await invoke<any>("config_compute_ram", { modelIds: ids });
+      const res = await api.computeRam(ids);
       totalRam = res.total_ram_gb;
     } catch {
       totalRam = Array.from(selected).reduce((sum, id) => sum + (models.find(m=>m.id===id)?.ram||0), 0);
@@ -72,11 +73,11 @@
   {#if embeddingStatus}
     <div class="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/60 flex items-center justify-between">
       <div>
-        <div class="text-sm font-medium text-zinc-100">EmbeddingGemma engine</div>
-        <div class="text-xs text-zinc-500 font-mono">{embeddingStatus.model_path}</div>
+        <div class="text-sm font-medium text-zinc-100">{embeddingStatus.engine} ({embeddingStatus.dimension}-dim)</div>
+        <div class="text-xs text-zinc-500 font-mono">Cosine Vector Search Ready</div>
       </div>
-      <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.exists ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
-        {embeddingStatus.exists ? 'Model ready' : 'Fallback deterministic'}
+      <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.ready ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+        {embeddingStatus.ready ? 'Vector Engine Ready' : 'Initializing'}
       </div>
     </div>
   {/if}

@@ -1,26 +1,37 @@
-# Packaging
+# Packaging Guide
 
-## Windows (NSIS) Intel/x64
-```bash
-cd src-tauri
-cargo tauri build --target x86_64-pc-windows-msvc
-```
-Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/...` and `nsis/...`
-
-## macOS Intel
-```bash
-cd src-tauri
-cargo tauri build --target x86_64-apple-darwin
-```
-Output: `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/...`
+LocalAide packages native desktop bundles using Tauri v2 CLI.
 
 ## Prerequisites
-- Rust 1.90+
-- Node 18+
-- Xcode Command Line Tools (macOS)
-- Rust targets installed: `rustup target add x86_64-pc-windows-msvc x86_64-apple-darwin`
+- Rust stable 1.90+
+- Node.js 20+
+- Platform build dependencies:
+  - **macOS**: Xcode Command Line Tools
+  - **Windows**: Visual Studio C++ Build Tools (MSVC)
+  - **Linux**: `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
 
-## Notes
-- Bundle config in `src-tauri/tauri.conf.json` sets `bundle.active = true`, `targets = "all"`.
-- Icons are placeholders in `src-tauri/icons/`.
-- Frontend is built via `npm run build` before Tauri build (`beforeBuildCommand`).
+## Local Packaging Commands
+
+### macOS
+```bash
+# Build native macOS DMG / App Bundle
+npm run build
+npx tauri build
+```
+Output bundles: `src-tauri/target/release/bundle/dmg/`
+
+### Windows
+```bash
+# Build native Windows NSIS / MSI installers
+npm run build
+npx tauri build
+```
+Output bundles: `src-tauri/target/release/bundle/nsis/` and `msi/`
+
+### Linux
+```bash
+# Build native Linux AppImage / Deb
+npm run build
+npx tauri build
+```
+Output bundles: `src-tauri/target/release/bundle/appimage/` and `deb/`

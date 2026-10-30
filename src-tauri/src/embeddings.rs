@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
-use serde::{Deserialize, Serialize};
 
 use crate::models_dir;
 
@@ -71,7 +71,10 @@ impl EmbeddingEngine {
             let mut hasher = Sha256::new();
             hasher.update(word.as_bytes());
             let digest = hasher.finalize();
-            let h = u64::from_le_bytes([digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7]]);
+            let h = u64::from_le_bytes([
+                digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6],
+                digest[7],
+            ]);
             let mut v = h;
             for _ in 0..3 {
                 let pos = (v as usize) % dim;
@@ -79,9 +82,11 @@ impl EmbeddingEngine {
                 v = v.wrapping_mul(31).wrapping_add(v >> 5);
             }
         }
-        let norm: f32 = vec.iter().map(|v| v*v).sum::<f32>().sqrt();
+        let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
         if norm > 0.0 {
-            for v in vec.iter_mut() { *v /= norm; }
+            for v in vec.iter_mut() {
+                *v /= norm;
+            }
         }
         vec
     }

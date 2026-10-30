@@ -11,15 +11,15 @@
   "app": {
     "windows": [
       {
-        "title": "Tauri",
-        "width": 800,
-        "height": 600,
+        "title": "LocalAide",
+        "width": 1024,
+        "height": 720,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
     }
   },
   "bundle": {

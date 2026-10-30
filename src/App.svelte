@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "./lib/api/client";
   import { formatBytes } from "./lib/format";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
@@ -21,6 +21,7 @@
   let toast = $state<string | null>(null);
   let mobileNav = $state(false);
   let showHelp = $state(false);
+  let fatalError = $state<string | null>(null);
 
   const navigate = (s: Screen) => {
     screen = s;
@@ -40,26 +41,77 @@
     { id: "dev", label: "Dev", emoji: "🧪" },
   ] as const;
 
-  onMount(async () => {
-    try {
-      const probe = await invoke("system_probe") as any;
-      ramTotal = probe.total_ram;
-      ramUsable = probe.usable_ram;
-      budget = probe.budget_ram;
-    } catch {}
+  onMount(() => {
+    void (async () => {
+      try {
+        const probe = await api.systemProbe();
+        ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
+        ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
+        budget = probe.budget_gb * 1024 * 1024 * 1024;
+      } catch {}
+    })();
+
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         cmdOpen = !cmdOpen;
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        navigate("chat");
+        showToast("New chat ready");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        navigate("settings");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "1") {
+        e.preventDefault();
+        navigate("chat");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
+        e.preventDefault();
+        navigate("search");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
+        e.preventDefault();
+        navigate("memory");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "4") {
+        e.preventDefault();
+        navigate("models");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "5") {
+        e.preventDefault();
+        navigate("settings");
+      } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
+        e.preventDefault();
+        navigate("search");
       }
-      if (e.key === "Escape") { cmdOpen = false; showHelp = false; }
-      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+
+      if (e.key === "Escape") {
+        cmdOpen = false;
+        showHelp = false;
+      }
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
         e.preventDefault();
         showHelp = !showHelp;
       }
     };
+
+    const onError = (e: ErrorEvent) => {
+      fatalError = e.message || "An unhandled error occurred";
+    };
+
+    const onRejection = (e: PromiseRejectionEvent) => {
+      fatalError = String(e.reason) || "An unhandled async failure occurred";
+    };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
   });
 </script>
 
@@ -69,11 +121,11 @@
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-zinc-800">✕</button>
       <div class="size-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 grid place-items-center shadow-[0_0_30px_rgba(217,70,239,0.35)]">
         <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
       <div>
-        <span class="font-[700] tracking-tight text-[15px]">ai-assistant</span>
+        <span class="font-[700] tracking-tight text-[15px]">LocalAide</span>
         <div class="text-[10px] uppercase tracking-widest text-zinc-500">local-first</div>
       </div>
     </div>
@@ -124,7 +176,7 @@
       {/if}
     </nav>
     <div class="p-4 border-t border-zinc-800 shrink-0 space-y-2">
-      <div class="text-[10px] uppercase tracking-widest text-zinc-500">RAM</div>
+      <div class="text-[10px] uppercase tracking-widest text-zinc-500">RAM Budget</div>
       <div class="grid grid-cols-3 gap-2 text-[11px] font-mono">
         <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-500">total</div><div class="text-zinc-200">{formatBytes(ramTotal)}</div></div>
         <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-500">usable</div><div class="text-zinc-200">{formatBytes(ramUsable)}</div></div>
@@ -136,10 +188,20 @@
   <section class="flex-1 overflow-y-auto">
     <div class="lg:hidden sticky top-0 z-30 bg-[#0a0a0b]/80 backdrop-blur p-3 border-b border-zinc-800 flex items-center gap-3">
       <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-zinc-800">☰</button>
-      <span class="font-semibold">ai-assistant</span>
+      <span class="font-semibold">LocalAide</span>
     </div>
     <div class="min-h-full p-6 md:p-10">
-      {#if screen === "setup"}
+      {#if fatalError}
+        <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-red-500/30 bg-red-950/20 text-center">
+          <div class="text-3xl mb-3">⚠️</div>
+          <h2 class="text-lg font-semibold text-red-200 mb-2">LocalAide recovered from an unexpected error</h2>
+          <p class="text-sm text-zinc-400 mb-6 font-mono text-left bg-black/40 p-4 rounded-xl border border-zinc-800 break-words">{fatalError}</p>
+          <div class="flex justify-center gap-3">
+            <button onclick={() => fatalError = null} class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm font-medium">Dismiss and Continue</button>
+            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-white/5 text-sm text-zinc-300">Copy Diagnostics</button>
+          </div>
+        </div>
+      {:else if screen === "setup"}
         <SetupWizard />
       {:else if screen === "chat"}
         <ChatScreen />
@@ -158,11 +220,11 @@
   </section>
 
   {#if cmdOpen}
-    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false}>
-      <div role="dialog" aria-modal="true" aria-label="Command palette" class="w-full max-w-lg mx-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()}>
+    <div role="presentation" class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" class="w-full max-w-lg mx-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
           <span>🔍</span>
-          <input aria-label="Jump to screen" bind:value={cmdQuery} autofocus placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-zinc-600"/>
+          <input aria-label="Jump to screen" bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-zinc-600"/>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">ESC</span>
         </div>
         <div class="p-2 max-h-80 overflow-auto">
@@ -186,19 +248,21 @@
   {/if}
 
   {#if showHelp}
-    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false}>
-      <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()}>
-        <h3 class="text-lg font-semibold mb-4">Keyboard shortcuts</h3>
-        <div class="space-y-3 text-sm">
-          <div class="flex justify-between"><span class="text-zinc-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs">⌘K</kbd></div>
-          <div class="flex justify-between"><span class="text-zinc-400">Help</span><kbd class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs">?</kbd></div>
-          <div class="flex justify-between"><span class="text-zinc-400">Close dialog</span><kbd class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs">Esc</kbd></div>
-          <div class="flex justify-between"><span class="text-zinc-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs">Enter</kbd></div>
+    <div role="presentation" class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+        <h3 class="text-lg font-semibold mb-4 text-zinc-100">Keyboard shortcuts</h3>
+        <div class="space-y-2.5 text-xs font-mono">
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">⌘K / Ctrl+K</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">New conversation</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">⌘N / Ctrl+N</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Focus search</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">/</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Settings</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">⌘, / Ctrl+,</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Switch tabs (1: Chat, 2: Search, ...)</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">⌘1 – ⌘5</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Cancel generation / Dismiss dialog</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">Esc</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">Enter</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-zinc-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200">?</kbd></div>
         </div>
         <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-xl bg-white/5 border border-zinc-800 text-sm hover:bg-white/10">Close</button>
       </div>
     </div>
   {/if}
 </main>
-
-<!-- Svelte 5 module context reserved for shared state if needed later -->

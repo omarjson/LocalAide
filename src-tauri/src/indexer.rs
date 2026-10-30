@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::document::Value as DocValue;
-use tantivy::schema::{STORED, STRING, TEXT, Field, IndexRecordOption, Schema, SchemaBuilder};use tantivy::{doc, Index, IndexReader, ReloadPolicy};
+use tantivy::schema::{Field, STORED, STRING, Schema, TEXT};
+use tantivy::{Index, IndexReader, ReloadPolicy, doc};
 
 use crate::index_dir;
 
@@ -150,7 +151,9 @@ fn read_text(path: &Path) -> Option<String> {
         let mut read = 0usize;
         while read < buf.len() {
             let n = f.read(&mut buf[read..]).ok()?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             read += n;
         }
         buf.truncate(read);
@@ -193,8 +196,10 @@ impl IndexInner {
         let path_field = schema_builder.add_text_field("path", STRING | STORED);
         let schema = schema_builder.build();
 
-        let tantivy = Index::create_in_dir(index_dir, schema.clone())
-            .map_err(|e| format!("tantivy index dir: {e}"))?;
+        let dir = tantivy::directory::MmapDirectory::open(index_dir)
+            .map_err(|e| format!("tantivy mmap dir: {e}"))?;
+        let tantivy = Index::open_or_create(dir, schema.clone())
+            .map_err(|e| format!("tantivy open_or_create: {e}"))?;
         let writer = tantivy
             .writer(50_000_000)
             .map_err(|e| format!("tantivy writer: {e}"))?;
@@ -231,7 +236,10 @@ impl IndexInner {
             return Ok(());
         }
         {
-            let mut writer = self.writer.lock().map_err(|e| format!("writer mutex poisoned: {e}"))?;
+            let mut writer = self
+                .writer
+                .lock()
+                .map_err(|e| format!("writer mutex poisoned: {e}"))?;
             for doc in &docs {
                 writer
                     .add_document(doc!(
@@ -241,7 +249,9 @@ impl IndexInner {
                     ))
                     .map_err(|e| format!("tantivy add: {e}"))?;
             }
-            writer.commit().map_err(|e| format!("tantivy commit: {e}"))?;
+            writer
+                .commit()
+                .map_err(|e| format!("tantivy commit: {e}"))?;
             drop(writer);
             // Make the new segment visible to search immediately.
             let _ = self.reader.reload();
@@ -271,15 +281,25 @@ impl IndexInner {
     }
 
     fn remove_doc(&self, path: &str) -> Result<(), String> {
-        let existed = self.sled.remove(path.as_bytes()).map_err(|e| e.to_string())?.is_some();
+        let existed = self
+            .sled
+            .remove(path.as_bytes())
+            .map_err(|e| e.to_string())?
+            .is_some();
         if existed {
-            self.doc_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            self.doc_count
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         }
         {
-            let mut writer = self.writer.lock().map_err(|e| format!("writer mutex poisoned: {e}"))?;
+            let mut writer = self
+                .writer
+                .lock()
+                .map_err(|e| format!("writer mutex poisoned: {e}"))?;
             let term = tantivy::Term::from_field_text(self.path_field, path);
             writer.delete_term(term);
-            writer.commit().map_err(|e| format!("tantivy delete: {e}"))?;
+            writer
+                .commit()
+                .map_err(|e| format!("tantivy delete: {e}"))?;
             drop(writer);
             let _ = self.reader.reload();
         }
@@ -301,24 +321,29 @@ impl IndexInner {
         let escaped = query
             .chars()
             .flat_map(|c| match c {
-                '+' | '-' | '<' | '>' | '!' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '"' | '~' | '*' | '?' | ':' | '\\' | '/' => vec!['\\', c],
+                '+' | '-' | '<' | '>' | '!' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '"'
+                | '~' | '*' | '?' | ':' | '\\' | '/' => vec!['\\', c],
                 _ => vec![c],
             })
             .collect::<String>();
 
-        let query_parser = QueryParser::for_index(
-            &self.tantivy,
-            vec![self.title_field, self.body_field],
-        );
+        let query_parser =
+            QueryParser::for_index(&self.tantivy, vec![self.title_field, self.body_field]);
         let query = match query_parser.parse_query(&escaped) {
             Ok(q) => q,
             Err(_) => {
                 // Fall back to the raw text (a bare term never fails to parse).
-                let token = query.trim().split_whitespace().collect::<Vec<_>>().join(" ");
+                let token = query
+                    .trim()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 if token.is_empty() {
                     return Ok(vec![]);
                 }
-                query_parser.parse_query(&token).map_err(|e| format!("query parse: {e}"))?
+                query_parser
+                    .parse_query(&token)
+                    .map_err(|e| format!("query parse: {e}"))?
             }
         };
 
@@ -335,7 +360,11 @@ impl IndexInner {
                 .map_err(|e| format!("tantivy doc: {e}"))?;
             let path = retrieved
                 .get_first(self.path_field)
-                .and_then(|v| DocValue::as_value(&v).as_leaf().and_then(|leaf| leaf.as_str()))
+                .and_then(|v| {
+                    DocValue::as_value(&v)
+                        .as_leaf()
+                        .and_then(|leaf| leaf.as_str())
+                })
                 .unwrap_or_default()
                 .to_string();
             if path.is_empty() {
@@ -349,9 +378,8 @@ impl IndexInner {
     }
 
     fn list_docs(&self) -> Vec<IndexedDoc> {
-        let mut out = Vec::with_capacity(
-            self.doc_count.load(std::sync::atomic::Ordering::Relaxed) as usize,
-        );
+        let mut out =
+            Vec::with_capacity(self.doc_count.load(std::sync::atomic::Ordering::Relaxed) as usize);
         for result in self.sled.scan_prefix(b"") {
             if let Ok((_key, value)) = result {
                 if let Ok(doc) = serde_json::from_slice::<IndexedDoc>(&value) {
@@ -390,13 +418,27 @@ pub struct Indexer {
 impl Indexer {
     pub fn open() -> Result<Self, String> {
         let dir = index_dir();
-        let inner = Arc::new(IndexInner::open(&dir)?);
+        Self::open_at(&dir)
+    }
+
+    pub fn open_at(dir: &Path) -> Result<Self, String> {
+        let inner = Arc::new(IndexInner::open(dir)?);
         Ok(Self { inner })
     }
 
     /// Index a single file. Returns the doc.
     pub fn index_file(&self, path: &str) -> Result<IndexedDoc, String> {
-        self.index_files(&[path.to_string()]).map(|mut v| v.remove(0))
+        let p = Path::new(path);
+        if !p.exists() || !p.is_file() {
+            return Err(format!("File not found or not a regular file: {path}"));
+        }
+        let mut docs = self.index_files(&[path.to_string()])?;
+        if docs.is_empty() {
+            return Err(format!(
+                "File could not be indexed (unsupported format or empty): {path}"
+            ));
+        }
+        Ok(docs.remove(0))
     }
 
     /// Index several files in one commit (used for folder crawls and the watcher).
@@ -415,7 +457,11 @@ impl Indexer {
             let size = metadata.len();
             let modified = metadata
                 .modified()
-                .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+                .map(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                })
                 .unwrap_or(0);
             let title = p
                 .file_name()
@@ -424,19 +470,18 @@ impl Indexer {
                 .to_string();
             let kind = DocKind::from_path(p);
 
-            let (content, embedding) =
-                if matches!(kind, DocKind::Image) {
-                    let content = format!("[image] {}", title);
-                    (content, engine.embed_image(path))
+            let (content, embedding) = if matches!(kind, DocKind::Image) {
+                let content = format!("[image] {}", title);
+                (content, engine.embed_image(path))
+            } else {
+                let raw = read_text(p).unwrap_or_default();
+                if raw.is_empty() {
+                    (raw, vec![0.0f32; dim])
                 } else {
-                    let raw = read_text(p).unwrap_or_default();
-                    if raw.is_empty() {
-                        (raw, vec![0.0f32; dim])
-                    } else {
-                        let emb = engine.embed_text(&raw);
-                        (raw, emb)
-                    }
-                };
+                    let emb = engine.embed_text(&raw);
+                    (raw, emb)
+                }
+            };
 
             let doc = IndexedDoc {
                 path: path.to_string(),
@@ -510,7 +555,9 @@ impl Indexer {
                     let modified = metadata
                         .modified()
                         .map(|t| {
-                            t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+                            t.duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs()
                         })
                         .unwrap_or(0);
                     let path_str = path.to_string_lossy().to_string();
@@ -617,7 +664,8 @@ impl Indexer {
 
         // Semantic: cosine against stored embeddings.
         // We keep paths + embeddings only, then hydrate full docs once at the end.
-        if matches!(mode, SearchMode::Semantic | SearchMode::Hybrid) && !query_embedding.is_empty() {
+        if matches!(mode, SearchMode::Semantic | SearchMode::Hybrid) && !query_embedding.is_empty()
+        {
             let semantic_threshold = 0.05f32;
             let mut best: HashMap<String, f32> = HashMap::new();
             for (path, embedding) in self.inner.list_doc_paths_and_embeddings() {
@@ -645,7 +693,11 @@ impl Indexer {
         // Keyword: BM25 over the tantivy inverted index.
         if matches!(mode, SearchMode::Keyword | SearchMode::Hybrid) {
             for (doc, score) in self.inner.keyword_search(query, limit.max(20))? {
-                let norm_score = if score > 0.0 { 0.5 + score.min(3.0) / 6.0 } else { 0.0 };
+                let norm_score = if score > 0.0 {
+                    0.5 + score.min(3.0) / 6.0
+                } else {
+                    0.0
+                };
                 match results.get_mut(&doc.path) {
                     Some(existing) => {
                         // Reciprocal-rank-ish blend so neither strand dominates.
@@ -668,7 +720,11 @@ impl Indexer {
         }
 
         let mut out: Vec<SearchResult> = results.into_values().collect();
-        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         out.truncate(limit);
         Ok(out)
     }
@@ -682,7 +738,13 @@ impl Indexer {
     }
 
     pub fn stats(&self) -> IndexerStats {
-        let total_bytes: usize = self.inner.sled.iter().filter_map(|r| r.ok()).map(|(_, v)| v.len()).sum();
+        let total_bytes: usize = self
+            .inner
+            .sled
+            .iter()
+            .filter_map(|r| r.ok())
+            .map(|(_, v)| v.len())
+            .sum();
         IndexerStats {
             doc_count: self.inner.count(),
             total_bytes: total_bytes as u64,
@@ -696,4 +758,67 @@ pub struct IndexerStats {
     pub doc_count: u64,
     pub total_bytes: u64,
     pub storage_path: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consecutive_index_opens() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "localaide_test_idx_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // First launch: initialize index
+        {
+            let indexer = Indexer::open_at(&temp_dir).expect("First indexer open should succeed");
+            let file_path = temp_dir.join("test.txt");
+            fs::write(&file_path, "Hello LocalAide consecutive launch test").unwrap();
+            let doc = indexer
+                .index_file(file_path.to_str().unwrap())
+                .expect("Indexing should succeed");
+            assert_eq!(doc.title, "test.txt");
+            assert_eq!(indexer.count(), 1);
+        }
+
+        // Second launch: must open existing index without panicking (Index::open_or_create)
+        {
+            let indexer = Indexer::open_at(&temp_dir)
+                .expect("Second indexer open must succeed on existing directory");
+            assert_eq!(indexer.count(), 1);
+        }
+
+        // Third launch: must open existing index cleanly
+        {
+            let indexer = Indexer::open_at(&temp_dir).expect("Third indexer open must succeed");
+            assert_eq!(indexer.count(), 1);
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_index_file_missing_returns_err_instead_of_panic() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "localaide_test_missing_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&temp_dir);
+        let indexer = Indexer::open_at(&temp_dir).expect("Indexer should initialize");
+
+        let missing_path = temp_dir.join("does_not_exist_file.txt");
+        let result = indexer.index_file(missing_path.to_str().unwrap());
+        assert!(result.is_err(), "Missing file should return Err, not panic");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

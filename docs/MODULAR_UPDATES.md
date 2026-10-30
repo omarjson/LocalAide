@@ -1,26 +1,13 @@
-# Modular Updates
+# Modular Updates (Deferred Specification)
 
-LocalAide is designed for independent updates of models and runtime components.
+> [!NOTE]
+> Per [ADR-0006](file:///Users/omar/Documents/new/docs/adr/0006-optional-features.md), modular in-app hot-swapping is deferred to post-v1.0. This document preserves the architectural requirements and gate criteria for when the feature is reintroduced.
 
-## Components
+## Overview
+In the initial v1.0 release, application updates occur through whole-package releases signed with the official release key. 
 
-* `models/` - GGUF, safetensors, ONNX models. Managed by `model_manager` with SHA256 verification, resume, cancel.
-* `components/` - Optional native binaries or crates that can be hot-swapped, e.g. `llama_cpp_rs` custom build, `whisper-rs`, `piper-rs`.
-* `tools/` - Sandboxed tool binaries.
-
-## Update Flow
-
-1. App checks `https://updates.localaide.dev/manifest.json` for component versions.
-2. User approves updates in Settings → Updates.
-3. Downloads are streamed with progress, SHA256 verified, written to `~/.aiassistant/components/<id>/`.
-4. On next restart, the component is loaded from the new path.
-
-No full package reinstall required.
-
-## Adding a New Module
-
-Add entry to `src-tauri/src/components/catalog.rs` with:
-* name, version, url, sha256, platform matrix
-* install path
-
-The updater handles the rest.
+## Re-introduction Gate Criteria
+Before modular component replacement is exposed to users:
+1. **Cryptographic Manifest Verification**: Component packages must be signed via Ed25519 manifests.
+2. **Atomic Swap & Rollback**: Component replacement must be transactional with automated rollback on health check failure.
+3. **Automated Verification**: Integration tests must verify hot-swap failure scenarios without corrupting the running application state.

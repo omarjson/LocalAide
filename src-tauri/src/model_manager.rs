@@ -39,6 +39,7 @@ pub struct ModelEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum ModelKind {
     LLM,
     Embedding,
@@ -309,9 +310,19 @@ pub struct ModelManager {
 impl ModelManager {
     pub fn new() -> Result<Self, String> {
         let dir = models_dir();
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        Self::with_dir(dir)
+    }
+
+    pub fn with_dir(dir: PathBuf) -> Result<Self, String> {
+        let _ = fs::create_dir_all(&dir);
         let catalog = default_catalog();
-        let state = Self::load_state(&dir)?;
+        let state = Self::load_state(&dir).unwrap_or_else(|e| {
+            log::warn!(
+                "Could not load model state from {}, initializing empty: {e}",
+                dir.display()
+            );
+            InstalledState::new()
+        });
         Ok(Self {
             models_dir: dir,
             catalog,
@@ -335,7 +346,10 @@ impl ModelManager {
 
     fn save_state(&self) -> Result<(), String> {
         let path = Self::state_path(&self.models_dir);
-        let state_guard = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
+        let state_guard = self
+            .state
+            .lock()
+            .map_err(|e| format!("state mutex poisoned: {e}"))?;
         let data = serde_json::to_string_pretty(&*state_guard).map_err(|e| e.to_string())?;
         fs::write(path, data).map_err(|e| e.to_string())
     }
@@ -410,7 +424,10 @@ impl ModelManager {
 
     /// Mark a model active. Deactivates any previously active model.
     pub fn activate(&self, id: &str) -> Result<(), String> {
-        let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| format!("state mutex poisoned: {e}"))?;
         if !state.installed.contains_key(id) {
             return Err(format!("model {id} not installed"));
         }
@@ -422,7 +439,10 @@ impl ModelManager {
 
     /// Remove an installed model file and its state entry.
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| format!("state mutex poisoned: {e}"))?;
         if state.active_model.as_deref() == Some(id) {
             state.active_model = None;
         }
@@ -504,14 +524,20 @@ impl ModelManager {
         // Mark in-flight and install a fresh cancellation flag.
         let cancel = Arc::new(AtomicBool::new(false));
         {
-            let mut cancels = self.cancels.lock().map_err(|e| format!("cancels mutex poisoned: {e}"))?;
+            let mut cancels = self
+                .cancels
+                .lock()
+                .map_err(|e| format!("cancels mutex poisoned: {e}"))?;
             cancels.insert(id.clone(), cancel.clone());
         }
 
         let result = self.download_inner(&app, &entry, &cancel).await;
 
         {
-            let mut cancels = self.cancels.lock().map_err(|e| format!("cancels mutex poisoned: {e}"))?;
+            let mut cancels = self
+                .cancels
+                .lock()
+                .map_err(|e| format!("cancels mutex poisoned: {e}"))?;
             cancels.remove(&id);
         }
 
@@ -519,7 +545,10 @@ impl ModelManager {
             Ok(digest) => {
                 let started = now_iso();
                 {
-                    let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
+                    let mut state = self
+                        .state
+                        .lock()
+                        .map_err(|e| format!("state mutex poisoned: {e}"))?;
                     state.installed.insert(
                         id.clone(),
                         InstalledModel {
@@ -617,6 +646,7 @@ impl ModelManager {
         Ok(final_digest)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn write_stream(
         &self,
         app: &tauri::AppHandle,
@@ -640,6 +670,7 @@ impl ModelManager {
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(false)
             .open(dest)
             .map_err(|e| e.to_string())?;
         file.seek(std::io::SeekFrom::Start(offset))
@@ -685,7 +716,8 @@ impl ModelManager {
         let mut hasher = Sha256::new();
         let mut f = std::fs::File::open(dest).map_err(|e| e.to_string())?;
         let mut buf = Vec::new();
-        std::io::Read::read_to_end(&mut std::io::BufReader::new(&mut f), &mut buf).map_err(|e| e.to_string())?;
+        std::io::Read::read_to_end(&mut std::io::BufReader::new(&mut f), &mut buf)
+            .map_err(|e| e.to_string())?;
         hasher.update(&buf);
         let digest = format!("{:x}", hasher.finalize());
         if let Some(expected) = expected {
