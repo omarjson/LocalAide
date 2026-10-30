@@ -66,7 +66,7 @@
 <main class="h-screen flex overflow-hidden bg-[#0a0a0b] text-zinc-100 selection:bg-fuchsia-500/30">
   <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-[280px] shrink-0 bg-[#0f0f12]/95 lg:bg-[#0f0f12]/80 backdrop-blur-xl border-r border-zinc-800 flex flex-col transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
     <div class="h-[72px] border-b border-zinc-800 flex items-center gap-3 px-5 shrink-0">
-      <button onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-zinc-800">✕</button>
+      <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-zinc-800">✕</button>
       <div class="size-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 grid place-items-center shadow-[0_0_30px_rgba(217,70,239,0.35)]">
         <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -135,7 +135,7 @@
 
   <section class="flex-1 overflow-y-auto">
     <div class="lg:hidden sticky top-0 z-30 bg-[#0a0a0b]/80 backdrop-blur p-3 border-b border-zinc-800 flex items-center gap-3">
-      <button onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-zinc-800">☰</button>
+      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-zinc-800">☰</button>
       <span class="font-semibold">ai-assistant</span>
     </div>
     <div class="min-h-full p-6 md:p-10">
