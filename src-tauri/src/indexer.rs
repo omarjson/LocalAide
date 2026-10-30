@@ -231,7 +231,7 @@ impl IndexInner {
             return Ok(());
         }
         {
-            let mut writer = self.writer.lock().unwrap();
+            let mut writer = self.writer.lock().map_err(|e| format!("writer mutex poisoned: {e}"))?;
             for doc in &docs {
                 writer
                     .add_document(doc!(
@@ -276,7 +276,7 @@ impl IndexInner {
             self.doc_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         }
         {
-            let mut writer = self.writer.lock().unwrap();
+            let mut writer = self.writer.lock().map_err(|e| format!("writer mutex poisoned: {e}"))?;
             let term = tantivy::Term::from_field_text(self.path_field, path);
             writer.delete_term(term);
             writer.commit().map_err(|e| format!("tantivy delete: {e}"))?;

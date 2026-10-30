@@ -23,6 +23,10 @@ fn next_stream_id() -> String {
 /// state even though the underlying raw pointer is not `Sync`.
 pub(crate) struct LlamaHandle(LLama);
 
+// SAFETY: LlamaHandle contains a llama_cpp_rs::LLama context whose raw pointer is not Sync.
+// All access to the inner LLama is guarded by LlamaState.model Mutex, which provides
+// exclusive mutable access for eval operations and makes sharing the handle via Arc safe.
+// No interior mutability or data races exist outside the Mutex guard.
 unsafe impl Send for LlamaHandle {}
 unsafe impl Sync for LlamaHandle {}
 
@@ -47,7 +51,8 @@ impl LlamaState {
     }
 
     pub(crate) fn active_model_path(&self) -> Option<std::path::PathBuf> {
-        self.model_path.lock().unwrap().clone()
+        let guard = self.model_path.lock().ok()?;
+        Some(guard.clone())
     }
 }
 
@@ -94,11 +99,11 @@ pub async fn inference_load(
         .map_err(|e| format!("failed to load model: {e}"))?;
 
     {
-        let mut m = state.model.lock().unwrap();
+        let mut m = state.model.lock().map_err(|e| format!("model mutex poisoned: {e}"))?;
         *m = Some(LlamaHandle(llm));
     }
     {
-        let mut p = state.model_path.lock().unwrap();
+        let mut p = state.model_path.lock().map_err(|e| format!("model path mutex poisoned: {e}"))?;
         *p = Some(path.clone());
     }
     mgr.inner().activate(&id)?;
@@ -154,7 +159,17 @@ pub async fn chat_stream(
         })));
 
         let result = {
-            let guard = state_arc.model.lock().unwrap();
+            let guard = match state_arc.model.lock() {
+                Ok(g) => g,
+                Err(e) => {
+                    log::error!("model mutex poisoned in chat_stream: {e}");
+                    let _ = app_send.emit(
+                        "llm_error",
+                        serde_json::json!({ "stream_id": sid, "error": "model mutex poisoned" }),
+                    );
+                    return;
+                }
+            };
             let Some(ref llm) = *guard else {
                 let _ = app_send.emit(
                     "llm_error",
@@ -225,7 +240,17 @@ pub async fn summarize(
         })));
 
         let result = {
-            let guard = state_arc.model.lock().unwrap();
+            let guard = match state_arc.model.lock() {
+                Ok(g) => g,
+                Err(e) => {
+                    log::error!("model mutex poisoned in summarize: {e}");
+                    let _ = app_send.emit(
+                        "summarize_error",
+                        serde_json::json!({ "stream_id": sid, "error": "model mutex poisoned" }),
+                    );
+                    return;
+                }
+            };
             let Some(ref llm) = *guard else {
                 let _ = app_send.emit(
                     "summarize_error",

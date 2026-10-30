@@ -2,6 +2,8 @@
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import MessageBubble from "../components/MessageBubble.svelte";
+  import ChatInput from "../components/ChatInput.svelte";
 
   type Msg = { role: string; content: string; ts?: number };
   let messages = $state<Msg[]>([]);
@@ -156,39 +158,19 @@
 
   <div bind:this={scrollEl} class="flex-1 overflow-y-auto p-6 space-y-5">
     {#each messages as m}
-      <div class={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-        <div class={`max-w-[78%] px-4 py-3 rounded-[18px] text-sm leading-relaxed whitespace-pre-wrap relative ${m.role === "user" ? "bg-gradient-to-br from-fuchsia-600 to-cyan-500 text-white shadow-[0_0_30px_rgba(217,70,239,0.25)]" : "bg-zinc-900 border border-zinc-800 text-zinc-100"}`}>
-          <div class="pr-6">{m.content}</div>
-          <div class="mt-1 text-[10px] opacity-60 absolute bottom-1 right-2">{new Date(m.ts ?? 0).toLocaleTimeString()}</div>
-          {#if streaming && m.role === "assistant" && m.content.length > 0}
-            <span class="font-mono animate-pulse ml-1">▋</span>
-          {/if}
-        </div>
-      </div>
+      <MessageBubble role={m.role} content={m.content} ts={m.ts} streaming={streaming} />
     {/each}
   </div>
 
-  <div class="border-t border-zinc-800 p-4">
-    <div class="flex items-center justify-between mb-2">
-      <button type="button" onclick={() => showTools = !showTools} class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200">{showTools ? 'Hide tools' : 'Show tools'}</button>
-      <div class="text-[10px] text-zinc-600">Enter to send • Shift+Enter for new line</div>
-    </div>
-    {#if showTools}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-        <div class="flex gap-2">
-          <input bind:value={toolPath} placeholder="File path to read…" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500"/>
-          <button type="button" onclick={readFile} class="px-3 rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-xs text-zinc-300">Read</button>
-        </div>
-        <div class="flex gap-2">
-          <input bind:value={imagePath} placeholder="Image path to identify…" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500"/>
-          <button type="button" onclick={identifyImage} class="px-3 rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-xs text-zinc-300">Identify</button>
-        </div>
-      </div>
-    {/if}
-    <form onsubmit={(e) => { e.preventDefault(); send(); }} class="flex gap-2">
-      <textarea bind:value={input} placeholder="Message…" disabled={streaming} rows="1" onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500 resize-none"/>
-      <button type="button" disabled={streaming} onclick={() => { input += " [voice input stub]"; }} class="size-11 grid place-items-center rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-zinc-300" title="Push-to-talk">🎙️</button>
-      <button type="submit" disabled={streaming || !input.trim()} class="px-5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-40">Send</button>
-    </form>
-  </div>
+  <ChatInput
+    bind:input
+    bind:toolPath
+    bind:imagePath
+    bind:showTools
+    streaming={streaming}
+    onSend={send}
+    onReadFile={readFile}
+    onIdentifyImage={identifyImage}
+    onVoice={() => { input += " [voice input stub]"; }}
+  />
 </div>

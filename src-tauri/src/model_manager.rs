@@ -334,10 +334,9 @@ impl ModelManager {
     }
 
     fn save_state(&self) -> Result<(), String> {
-        let state = self.state.lock().unwrap();
         let path = Self::state_path(&self.models_dir);
-        drop(state);
-        let data = serde_json::to_string_pretty(&*self.state.lock().unwrap()).map_err(|e| e.to_string())?;
+        let state_guard = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
+        let data = serde_json::to_string_pretty(&*state_guard).map_err(|e| e.to_string())?;
         fs::write(path, data).map_err(|e| e.to_string())
     }
 
@@ -383,7 +382,13 @@ impl ModelManager {
 
     /// List catalog entries with installed/active flags merged from persisted state.
     pub fn list_models(&self) -> Vec<ModelEntry> {
-        let state = self.state.lock().unwrap();
+        let state = match self.state.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                log::error!("state mutex poisoned in list_models: {e}");
+                return vec![];
+            }
+        };
         self.catalog
             .iter()
             .map(|m| {
@@ -405,7 +410,7 @@ impl ModelManager {
 
     /// Mark a model active. Deactivates any previously active model.
     pub fn activate(&self, id: &str) -> Result<(), String> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
         if !state.installed.contains_key(id) {
             return Err(format!("model {id} not installed"));
         }
@@ -417,7 +422,7 @@ impl ModelManager {
 
     /// Remove an installed model file and its state entry.
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
         if state.active_model.as_deref() == Some(id) {
             state.active_model = None;
         }
@@ -438,7 +443,13 @@ impl ModelManager {
 
     /// Check whether a model file is already present on disk.
     pub fn is_installed(&self, id: &str) -> bool {
-        self.state.lock().unwrap().installed.contains_key(id)
+        match self.state.lock() {
+            Ok(state) => state.installed.contains_key(id),
+            Err(e) => {
+                log::error!("state mutex poisoned in is_installed: {e}");
+                false
+            }
+        }
     }
 
     /// Compute local file size of an in-progress download for resume support.
@@ -454,7 +465,13 @@ impl ModelManager {
 
     /// Request cancellation of an in-flight download.
     pub fn cancel_download(&self, id: &str) {
-        let cancels = self.cancels.lock().unwrap();
+        let cancels = match self.cancels.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                log::error!("cancels mutex poisoned in cancel_download: {e}");
+                return;
+            }
+        };
         if let Some(flag) = cancels.get(id) {
             flag.store(true, Ordering::SeqCst);
         }
@@ -462,7 +479,13 @@ impl ModelManager {
 
     /// Whether a download is currently running for this model.
     pub fn is_downloading(&self, id: &str) -> bool {
-        self.cancels.lock().unwrap().contains_key(id)
+        match self.cancels.lock() {
+            Ok(cancels) => cancels.contains_key(id),
+            Err(e) => {
+                log::error!("cancels mutex poisoned in is_downloading: {e}");
+                false
+            }
+        }
     }
 
     fn entry(&self, id: &str) -> Result<ModelEntry, String> {
@@ -481,14 +504,14 @@ impl ModelManager {
         // Mark in-flight and install a fresh cancellation flag.
         let cancel = Arc::new(AtomicBool::new(false));
         {
-            let mut cancels = self.cancels.lock().unwrap();
+            let mut cancels = self.cancels.lock().map_err(|e| format!("cancels mutex poisoned: {e}"))?;
             cancels.insert(id.clone(), cancel.clone());
         }
 
         let result = self.download_inner(&app, &entry, &cancel).await;
 
         {
-            let mut cancels = self.cancels.lock().unwrap();
+            let mut cancels = self.cancels.lock().map_err(|e| format!("cancels mutex poisoned: {e}"))?;
             cancels.remove(&id);
         }
 
@@ -496,7 +519,7 @@ impl ModelManager {
             Ok(digest) => {
                 let started = now_iso();
                 {
-                    let mut state = self.state.lock().unwrap();
+                    let mut state = self.state.lock().map_err(|e| format!("state mutex poisoned: {e}"))?;
                     state.installed.insert(
                         id.clone(),
                         InstalledModel {
