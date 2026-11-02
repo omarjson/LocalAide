@@ -264,7 +264,7 @@
       >
         <span class="text-sm">💬</span>
         <span class="max-w-[140px] truncate">{activeThreadTitle}</span>
-        <span class="text-[10px] text-zinc-500 font-mono">({threads.length})</span>
+        <span class="text-xs text-zinc-400 font-mono">({threads.length})</span>
       </button>
 
       <div class="hidden sm:flex items-center gap-2">
@@ -312,7 +312,7 @@
         <button onclick={newChat} class="text-[11px] text-fuchsia-400 hover:underline">+ New</button>
       </div>
       {#if threads.length === 0}
-        <div class="text-[11px] text-zinc-500 py-3 text-center">No saved chats yet.</div>
+        <div class="text-[11px] text-zinc-400 py-3 text-center">No saved chats yet.</div>
       {:else}
         {#each threads as t}
           <div
@@ -324,11 +324,11 @@
           >
             <div class="truncate pr-2">
               <div class="font-medium truncate">{t.title}</div>
-              <div class="text-[10px] text-zinc-500 font-mono">{t.message_count} messages</div>
+              <div class="text-xs text-zinc-400 font-mono">{t.message_count} messages</div>
             </div>
             <button
               onclick={(e) => deleteThread(t.id, e)}
-              class="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-rose-400 transition-opacity"
+              class="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-rose-400 transition-opacity"
               title="Delete thread"
             >
               ×
@@ -376,7 +376,7 @@
         <div class="space-y-2">
           <div class="text-3xl">✨</div>
           <h3 class="text-base font-semibold text-zinc-200">How can I help you today?</h3>
-          <p class="text-xs text-zinc-500 max-w-sm">
+          <p class="text-xs text-zinc-400 max-w-sm">
             Everything runs 100% locally on your machine with zero telemetry or network calls.
           </p>
         </div>

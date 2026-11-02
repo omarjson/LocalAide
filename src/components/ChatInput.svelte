@@ -29,7 +29,7 @@
     >
       {showTools ? 'Hide tool panel' : 'File tool'}
     </button>
-    <div class="text-[10px] text-zinc-600">Enter to send • Shift+Enter for newline • Esc to cancel</div>
+    <div class="text-xs text-zinc-400">Enter to send • Shift+Enter for newline • Esc to cancel</div>
   </div>
 
   {#if showTools}
@@ -82,7 +82,7 @@
       <button
         type="submit"
         disabled={!input.trim()}
-        class="px-5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-40 transition-opacity"
+        class="px-5 rounded-xl bg-fuchsia-600 text-white text-sm font-medium disabled:opacity-40 transition-opacity"
       >
         Send
       </button>

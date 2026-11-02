@@ -308,7 +308,7 @@
       <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div>
           <h3 class="font-semibold text-zinc-100 text-sm">{selectedNote.title}</h3>
-          <p class="text-[11px] font-mono text-zinc-500 truncate max-w-md">{selectedNote.path}</p>
+          <p class="text-[11px] font-mono text-zinc-400 truncate max-w-md">{selectedNote.path}</p>
         </div>
         <div class="flex items-center gap-2">
           {#if editing}
@@ -338,7 +338,7 @@
         {#if selectedNote.tags.length > 0}
           <div class="flex flex-wrap gap-1.5">
             {#each selectedNote.tags as tag}
-              <span class="px-2 py-0.5 rounded bg-zinc-800 text-[10px] font-mono text-fuchsia-300 border border-zinc-700">
+              <span class="px-2 py-0.5 rounded bg-zinc-800 text-xs font-mono text-fuchsia-300 border border-zinc-700">
                 #{tag}
               </span>
             {/each}
@@ -384,13 +384,13 @@
 
   <!-- Note List -->
   {#if loading}
-    <div class="py-12 text-center text-xs text-zinc-500 font-mono">Loading notes…</div>
+    <div class="py-12 text-center text-xs text-zinc-400 font-mono">Loading notes…</div>
   {:else if searching}
-    <div class="py-12 text-center text-xs text-zinc-500 font-mono">Searching knowledge notes…</div>
+    <div class="py-12 text-center text-xs text-zinc-400 font-mono">Searching knowledge notes…</div>
   {:else if filteredNotes.length === 0}
     <div class="border border-dashed border-zinc-800 rounded-2xl p-12 text-center space-y-2">
       <div class="text-xs text-zinc-400">No memory notes found</div>
-      <div class="text-[11px] text-zinc-600">Create one above to enable automatic context recall and citations in chat.</div>
+      <div class="text-[11px] text-zinc-400">Create one above to enable automatic context recall and citations in chat.</div>
     </div>
   {:else}
     <div class="space-y-3">
@@ -401,7 +401,7 @@
               <button onclick={() => openNote(n)} class="font-medium text-sm text-zinc-100 hover:text-fuchsia-400 transition-colors text-left truncate">
                 {n.title}
               </button>
-              <span class="text-[10px] font-mono text-zinc-500 flex-shrink-0">{n.updated}</span>
+              <span class="text-xs font-mono text-zinc-400 flex-shrink-0">{n.updated}</span>
             </div>
             <p class="text-xs text-zinc-400 line-clamp-2 leading-relaxed">{n.preview}</p>
             {#if n.tags.length > 0}
@@ -409,7 +409,7 @@
                 {#each n.tags as tag}
                   <button
                     onclick={() => selectedTag = tag}
-                    class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-800/80 text-fuchsia-300 hover:bg-zinc-700"
+                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-zinc-800/80 text-fuchsia-300 hover:bg-zinc-700"
                   >
                     #{tag}
                   </button>
@@ -421,7 +421,7 @@
             <button onclick={() => openNote(n)} class="px-2.5 py-1 text-xs font-mono bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors">
               Open
             </button>
-            <button onclick={() => deleteNote(n.path)} class="px-2 py-1 text-xs text-zinc-500 hover:text-rose-400 transition-colors" title="Delete note">
+            <button onclick={() => deleteNote(n.path)} class="px-2 py-1 text-xs text-zinc-400 hover:text-rose-400 transition-colors" title="Delete note">
               ✕
             </button>
           </div>

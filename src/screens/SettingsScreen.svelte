@@ -74,7 +74,7 @@
   <div class="border-b border-zinc-800 pb-4 flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold tracking-tight text-zinc-100">Settings & Security</h2>
-      <p class="text-xs text-zinc-500">Resource quotas, capability sandbox, and audit verification</p>
+      <p class="text-xs text-zinc-400">Resource quotas, capability sandbox, and audit verification</p>
     </div>
     <div class="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-xl text-xs">
       <button
@@ -104,20 +104,20 @@
         <div class="flex items-center justify-between mb-4">
           <div>
             <div class="font-medium text-zinc-100">RAM Budget</div>
-            <div class="text-xs text-zinc-500">Memory quota allocated to local models</div>
+            <div class="text-xs text-zinc-400">Memory quota allocated to local models</div>
           </div>
           <span class="text-sm font-mono font-semibold text-fuchsia-300">{ramBudget}%</span>
         </div>
         <input type="range" min={20} max={90} bind:value={ramBudget} class="w-full accent-fuchsia-600"/>
         <div class="mt-3 h-2 rounded-full bg-zinc-800 overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-fuchsia-600 to-cyan-500 transition-all" style={`width:${ramBudget}%`}></div>
+          <div class="h-full bg-fuchsia-600 transition-all" style={`width:${ramBudget}%`}></div>
         </div>
-        <div class="mt-2 text-[11px] text-zinc-500 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
+        <div class="mt-2 text-[11px] text-zinc-400 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
       </div>
 
       <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
         <div class="font-medium text-zinc-100 mb-2">Model Execution Priority</div>
-        <p class="text-xs text-zinc-500 mb-3">All inference executes exclusively on local device silicon.</p>
+        <p class="text-xs text-zinc-400 mb-3">All inference executes exclusively on local device silicon.</p>
         <div class="space-y-2">
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="radio" name="priority" bind:group={modelPriority} value="local" class="accent-fuchsia-600" checked/>
@@ -129,21 +129,21 @@
       <div class="border border-zinc-800/80 rounded-2xl p-5 bg-zinc-950/60 flex items-center justify-between">
         <div>
           <div class="font-medium text-xs text-zinc-400">External Cloud Services</div>
-          <div class="text-[11px] text-zinc-600 mt-0.5">Cloud LLM APIs are out-of-scope for v1.0 (frozen per ADR-0006).</div>
+          <div class="text-[11px] text-zinc-400 mt-0.5">Cloud LLM APIs are out-of-scope for v1.0 (frozen per ADR-0006).</div>
         </div>
-        <span class="px-2 py-0.5 text-[10px] uppercase font-mono rounded bg-zinc-900 text-zinc-500 border border-zinc-800">
+        <span class="px-2 py-0.5 text-xs uppercase font-mono rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
           Disabled in v1.0
         </span>
       </div>
 
       <div class="pt-2 flex items-center gap-3">
-        <span class="text-xs text-zinc-500">Settings Status:</span>
+        <span class="text-xs text-zinc-400">Settings Status:</span>
         {#if saving}
           <span class="text-xs text-fuchsia-300">Persisting changes…</span>
         {:else if saved}
           <span class="text-xs text-emerald-400 font-mono">Saved to config.json</span>
         {:else}
-          <span class="text-xs text-zinc-600 font-mono">Synchronized</span>
+          <span class="text-xs text-zinc-400 font-mono">Synchronized</span>
         {/if}
       </div>
     </div>
@@ -162,19 +162,19 @@
 
         <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2 text-xs">
           <div class="flex justify-between">
-            <span class="text-zinc-500">Root Directory:</span>
+            <span class="text-zinc-400">Root Directory:</span>
             <span class="font-mono text-cyan-300">~/.aiassistant/workspace</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-500">Directory Traversal:</span>
+            <span class="text-zinc-400">Directory Traversal:</span>
             <span class="text-emerald-400 font-mono">Blocked (.. escapes rejected)</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-500">Symlink Policy:</span>
+            <span class="text-zinc-400">Symlink Policy:</span>
             <span class="text-emerald-400 font-mono">Enforced (external links & loops trapped)</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-500">File Write Approval:</span>
+            <span class="text-zinc-400">File Write Approval:</span>
             <span class="text-amber-400 font-mono">Explicit confirmation required</span>
           </div>
         </div>
@@ -207,7 +207,7 @@
       <div class="flex items-center justify-between">
         <div>
           <h3 class="text-sm font-semibold text-zinc-100">Tool Execution Audit Log</h3>
-          <p class="text-xs text-zinc-500">Immutable record of all tool calls stored in SQLite</p>
+          <p class="text-xs text-zinc-400">Immutable record of all tool calls stored in SQLite</p>
         </div>
         <div class="flex items-center gap-2">
           <button
@@ -228,7 +228,7 @@
       </div>
 
       {#if audits.length === 0}
-        <div class="border border-zinc-800 rounded-2xl p-8 text-center text-xs text-zinc-500 bg-zinc-900/30">
+        <div class="border border-zinc-800 rounded-2xl p-8 text-center text-xs text-zinc-400 bg-zinc-900/30">
           No tool executions recorded yet.
         </div>
       {:else}
@@ -247,7 +247,7 @@
               <tbody class="divide-y divide-zinc-800/60 font-mono">
                 {#each audits as a}
                   <tr class="hover:bg-zinc-800/30 transition-colors">
-                    <td class="p-2.5 text-zinc-500 whitespace-nowrap">
+                    <td class="p-2.5 text-zinc-400 whitespace-nowrap">
                       {new Date(a.timestamp * 1000).toLocaleTimeString()}
                     </td>
                     <td class="p-2.5 text-fuchsia-400 font-semibold">{a.action}</td>
@@ -256,7 +256,7 @@
                       {#if a.approved}
                         <span class="text-emerald-400">Yes</span>
                       {:else}
-                        <span class="text-zinc-500">Auto/No</span>
+                        <span class="text-zinc-400">Auto/No</span>
                       {/if}
                     </td>
                     <td class="p-2.5">

@@ -43,15 +43,15 @@
       </div>
 
       <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2 text-xs font-mono">
-        <div class="flex justify-between text-zinc-500">
+        <div class="flex justify-between text-zinc-400">
           <span>Tool:</span>
           <span class="text-zinc-300 font-semibold">{toolName}</span>
         </div>
-        <div class="flex justify-between text-zinc-500">
+        <div class="flex justify-between text-zinc-400">
           <span>Operation:</span>
           <span class="text-amber-400 uppercase font-semibold">{action.action_type}</span>
         </div>
-        <div class="flex justify-between text-zinc-500">
+        <div class="flex justify-between text-zinc-400">
           <span>Target Path:</span>
           <span class="text-cyan-300 truncate max-w-xs">{action.path}</span>
         </div>
@@ -64,7 +64,7 @@
         </div>
       {/if}
 
-      <div class="text-[11px] text-zinc-500">
+      <div class="text-[11px] text-zinc-400">
         Workspace sandbox enforces boundary limits. Files outside the workspace cannot be touched.
       </div>
 

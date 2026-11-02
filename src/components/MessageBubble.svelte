@@ -86,11 +86,11 @@
 <div class={role === "user" ? "flex justify-end group mb-4" : "flex justify-start group mb-4"}>
   <div class="max-w-[85%] flex flex-col {role === 'user' ? 'items-end' : 'items-start'}">
     <div class="flex items-center gap-2 mb-1 px-1">
-      <span class="text-[10px] font-mono uppercase tracking-wider text-zinc-500 font-medium">
+      <span class="text-xs font-mono uppercase tracking-wider text-zinc-400 font-medium">
         {role === "user" ? "You" : "LocalAide"}
       </span>
       {#if ts}
-        <span class="text-[10px] text-zinc-600 font-mono">
+        <span class="text-xs text-zinc-400 font-mono">
           {new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       {/if}
@@ -116,7 +116,7 @@
       <div
         class={`px-4 py-3 rounded-2xl text-sm leading-relaxed relative ${
           role === "user"
-            ? "bg-gradient-to-br from-fuchsia-600 to-cyan-600 text-white shadow-md shadow-fuchsia-500/10"
+            ? "bg-fuchsia-600 text-white shadow-md shadow-fuchsia-500/10"
             : "bg-zinc-900 border border-zinc-800 text-zinc-100"
         }`}
       >
@@ -147,7 +147,7 @@
 
         {#if citations && citations.length > 0}
           <div class="mt-3 pt-2.5 border-t border-zinc-800/80 flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Sources:</span>
+            <span class="text-xs font-mono uppercase tracking-wider text-zinc-400">Sources:</span>
             {#each citations as cit}
               <button
                 type="button"
@@ -163,7 +163,7 @@
       </div>
 
       <!-- Action buttons -->
-      <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1.5 mt-1 text-[11px] text-zinc-500">
+      <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1.5 mt-1 text-[11px] text-zinc-400">
         <button
           type="button"
           onclick={copyMessage}
@@ -209,17 +209,17 @@
           </span>
           <span class="font-medium text-sm text-zinc-200">{activeCitation.title}</span>
         </div>
-        <button onclick={() => activeCitation = null} class="text-zinc-500 hover:text-zinc-300 text-xs px-2 py-1">
+        <button onclick={() => activeCitation = null} class="text-zinc-400 hover:text-zinc-300 text-xs px-2 py-1">
           ✕
         </button>
       </div>
-      <div class="text-[11px] font-mono text-zinc-500 break-all">
+      <div class="text-[11px] font-mono text-zinc-400 break-all">
         {activeCitation.source}
       </div>
       <div class="bg-zinc-950 border border-zinc-800/80 rounded-xl p-3 max-h-60 overflow-y-auto">
         <pre class="text-xs font-mono text-zinc-300 whitespace-pre-wrap leading-relaxed">{activeCitation.snippet}</pre>
       </div>
-      <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500 pt-1">
+      <div class="flex justify-between items-center text-xs font-mono text-zinc-400 pt-1">
         <span>Score: {activeCitation.score.toFixed(3)}</span>
         <button onclick={() => activeCitation = null} class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs">
           Close

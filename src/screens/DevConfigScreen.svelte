@@ -67,14 +67,14 @@
 <div class="max-w-6xl mx-auto space-y-6">
   <div>
     <h2 class="text-lg font-semibold tracking-tight">Dev configurator</h2>
-    <p class="text-xs text-zinc-500">Manual model picker with live RAM calculator</p>
+    <p class="text-xs text-zinc-400">Manual model picker with live RAM calculator</p>
   </div>
 
   {#if embeddingStatus}
     <div class="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/60 flex items-center justify-between">
       <div>
         <div class="text-sm font-medium text-zinc-100">{embeddingStatus.engine} ({embeddingStatus.dimension}-dim)</div>
-        <div class="text-xs text-zinc-500 font-mono">Cosine Vector Search Ready</div>
+        <div class="text-xs text-zinc-400 font-mono">Cosine Vector Search Ready</div>
       </div>
       <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.ready ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
         {embeddingStatus.ready ? 'Vector Engine Ready' : 'Initializing'}
@@ -89,10 +89,10 @@
           <div class="font-medium text-zinc-100">Available RAM</div>
           <div class="flex items-center gap-2">
             <input bind:value={ramTotal} type="number" class="w-24 bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-sm font-mono text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
-            <span class="text-xs text-zinc-500">GB</span>
+            <span class="text-xs text-zinc-400">GB</span>
           </div>
         </div>
-        <div class="text-xs text-zinc-500 mb-3">Budget = 70% of usable RAM</div>
+        <div class="text-xs text-zinc-400 mb-3">Budget = 70% of usable RAM</div>
         <div class="w-full bg-zinc-800 rounded-full h-2 mb-3">
           <div class={`h-2 rounded-full transition-all ${!overBudget ? 'bg-emerald-500' : 'bg-red-500'}`} style="width: {Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%"></div>
         </div>
@@ -108,7 +108,7 @@
             <input type="checkbox" bind:group={selected} value={m.id} class="accent-fuchsia-600"/>
             <div class="flex-1">
               <div class="text-sm font-medium text-zinc-100">{m.name}</div>
-              <div class="text-xs text-zinc-500 font-mono">{m.size} · ~{m.ram.toFixed(2)} GB RAM</div>
+              <div class="text-xs text-zinc-400 font-mono">{m.size} · ~{m.ram.toFixed(2)} GB RAM</div>
             </div>
           </label>
         {/each}
@@ -118,8 +118,8 @@
     <div class="space-y-4">
       <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
         <div class="font-medium text-zinc-100 mb-2">Download</div>
-        <p class="text-xs text-zinc-500 mb-4">Parallel download with resume. Override system limits with warning.</p>
-        <button class="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-50" disabled={overBudget}>
+        <p class="text-xs text-zinc-400 mb-4">Parallel download with resume. Override system limits with warning.</p>
+        <button class="w-full py-2.5 rounded-xl bg-fuchsia-600 text-white text-sm font-medium disabled:opacity-50" disabled={overBudget}>
           {overBudget ? 'Exceeds RAM budget' : 'Download selected'}
         </button>
       </div>
@@ -133,7 +133,7 @@
           {#each presets as p}
             <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-zinc-800 text-xs text-zinc-300 hover:bg-white/10">{p.name}</button>
           {:else}
-            <div class="text-xs text-zinc-600">No saved presets</div>
+            <div class="text-xs text-zinc-400">No saved presets</div>
           {/each}
         </div>
       </div>

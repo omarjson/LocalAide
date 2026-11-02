@@ -177,7 +177,7 @@
         {#if query}
           <button
             onclick={() => { query = ""; loadInitialLibrary(); }}
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-300"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-zinc-300"
           >
             ✕
           </button>
@@ -193,7 +193,7 @@
       </button>
     </div>
 
-    <div class="flex items-center justify-between text-[11px] font-mono text-zinc-500 px-1">
+    <div class="flex items-center justify-between text-[11px] font-mono text-zinc-400 px-1">
       <span>{results.length} {results.length === 1 ? "document" : "documents"} {query ? "found" : "in library"}</span>
       {#if searchDurationMs !== null}
         <span class="text-emerald-400">Query completed in {searchDurationMs}ms</span>
@@ -201,9 +201,9 @@
     </div>
 
     {#if loading}
-      <div class="py-12 text-center text-xs text-zinc-500 font-mono">Searching library index…</div>
+      <div class="py-12 text-center text-xs text-zinc-400 font-mono">Searching library index…</div>
     {:else if results.length === 0}
-      <div class="py-12 text-center text-xs text-zinc-500 font-mono">
+      <div class="py-12 text-center text-xs text-zinc-400 font-mono">
         {query ? "No matching documents found in library." : "Library is empty. Index a folder above to get started."}
       </div>
     {:else}
@@ -213,7 +213,7 @@
             <div class="space-y-1.5 flex-1 min-w-0">
               <div class="font-medium text-sm text-zinc-200 truncate">{doc.title}</div>
               <p class="text-xs text-zinc-400 line-clamp-2 font-mono leading-relaxed">{doc.snippet}</p>
-              <div class="flex flex-wrap items-center gap-3 text-[10px] font-mono text-zinc-500">
+              <div class="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400">
                 <span>Score: {doc.score.toFixed(3)}</span>
                 <span class="truncate">Path: {doc.path}</span>
                 <span>{(doc.size / 1024).toFixed(1)} KB</span>
@@ -221,7 +221,7 @@
             </div>
             <button
               onclick={() => removeDoc(doc.path)}
-              class="text-xs text-zinc-500 hover:text-rose-400 px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors flex-shrink-0"
+              class="text-xs text-zinc-400 hover:text-rose-400 px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors flex-shrink-0"
               title="Remove from index"
             >
               Remove

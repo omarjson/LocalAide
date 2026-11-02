@@ -119,14 +119,14 @@
   <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-[280px] shrink-0 bg-[#0f0f12]/95 lg:bg-[#0f0f12]/80 backdrop-blur-xl border-r border-zinc-800 flex flex-col transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
     <div class="h-[72px] border-b border-zinc-800 flex items-center gap-3 px-5 shrink-0">
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-zinc-800">✕</button>
-      <div class="size-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 grid place-items-center shadow-[0_0_30px_rgba(217,70,239,0.35)]">
+      <div class="size-8 rounded-lg bg-fuchsia-600 grid place-items-center">
         <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
       <div>
         <span class="font-[700] tracking-tight text-[15px]">LocalAide</span>
-        <div class="text-[10px] uppercase tracking-widest text-zinc-500">local-first</div>
+        <div class="text-xs uppercase tracking-widest text-zinc-400">local-first</div>
       </div>
     </div>
     <nav class="flex-1 overflow-y-auto p-4 space-y-1">
@@ -176,10 +176,10 @@
       {/if}
     </nav>
     <div class="p-4 border-t border-zinc-800 shrink-0 space-y-2">
-      <div class="text-[10px] uppercase tracking-widest text-zinc-500">RAM Budget</div>
+      <div class="text-xs uppercase tracking-widest text-zinc-400">RAM Budget</div>
       <div class="grid grid-cols-3 gap-2 text-[11px] font-mono">
-        <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-500">total</div><div class="text-zinc-200">{formatBytes(ramTotal)}</div></div>
-        <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-500">usable</div><div class="text-zinc-200">{formatBytes(ramUsable)}</div></div>
+        <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-400">total</div><div class="text-zinc-200">{formatBytes(ramTotal)}</div></div>
+        <div class="rounded-lg bg-white/5 p-2"><div class="text-zinc-400">usable</div><div class="text-zinc-200">{formatBytes(ramUsable)}</div></div>
         <div class="rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30 p-2"><div class="text-fuchsia-300">budget</div><div class="text-fuchsia-200 font-semibold">{formatBytes(budget)}</div></div>
       </div>
     </div>
@@ -225,7 +225,7 @@
         <div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
           <span>🔍</span>
           <input aria-label="Jump to screen" bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-zinc-600"/>
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">ESC</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">ESC</span>
         </div>
         <div class="p-2 max-h-80 overflow-auto">
           {#each screens.filter(s => s.label.toLowerCase().includes(cmdQuery.toLowerCase())) as s}
@@ -234,7 +234,7 @@
               <span class="text-sm">{s.label}</span>
             </button>
           {:else}
-            <div class="px-3 py-6 text-center text-sm text-zinc-500">No matches</div>
+            <div class="px-3 py-6 text-center text-sm text-zinc-400">No matches</div>
           {/each}
         </div>
       </div>
