@@ -3,9 +3,32 @@
   import { api } from "../lib/api/client";
   import type { ChatMessage, ChatThread } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
+  import Icon from "../components/Icon.svelte";
   import ChatInput from "../components/ChatInput.svelte";
 
   let messages = $state<ChatMessage[]>([]);
+  let pendingImages = $state<string[]>([]);
+  const MAX_IMAGES = 4;
+
+  // Read picked files as data URLs. The backend accepts PNG, JPEG, WEBP and GIF only.
+  const addImages = async (files: FileList | null) => {
+    if (!files) return;
+    const room = MAX_IMAGES - pendingImages.length;
+    for (const file of Array.from(files).slice(0, Math.max(room, 0))) {
+      if (!file.type.startsWith("image/")) continue;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      pendingImages.push(dataUrl);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    pendingImages.splice(index, 1);
+  };
   let threads = $state<ChatThread[]>([]);
   let activeThreadId = $state<string | null>(null);
   let activeThreadTitle = $state<string>("New Conversation");
@@ -14,7 +37,24 @@
   let streaming = $state(false);
   let activeJobId = $state<string | null>(null);
 
-  let model = $state("Qwen3.5-0.8B Q4 (local)");
+  let model = $state("Local model");
+
+  // Shown in the empty state: which model is active, or none yet.
+  let activeModelName = $state<string | null>(null);
+  let modelsChecked = $state(false);
+
+  let { onOpenModels }: { onOpenModels?: () => void } = $props();
+
+  onMount(async () => {
+    try {
+      const models = await api.listModels();
+      activeModelName = models.find((m) => m.active)?.name ?? null;
+    } catch {
+      activeModelName = null;
+    } finally {
+      modelsChecked = true;
+    }
+  });
   let systemPrompt = $state("You are a helpful local AI assistant.");
   let showSystem = $state(false);
   let showTools = $state(false);
@@ -131,11 +171,18 @@
   };
 
   const send = async () => {
-    if (!input.trim() || streaming) return;
+    if ((!input.trim() && pendingImages.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
 
-    messages.push({ role: "user", content: userMsg, ts: Date.now() });
+    // Earlier turns only. The new message is sent separately as `message`.
+    const history = messages
+      .filter(m => m.content.trim() && !m.content.startsWith("[Chat Error"))
+      .map(m => ({ role: m.role, content: m.content }));
+
+    const images = $state.snapshot(pendingImages);
+    pendingImages = [];
+    messages.push({ role: "user", content: userMsg, ts: Date.now(), images });
     streaming = true;
     userScrolledUp = false;
 
@@ -147,6 +194,8 @@
       activeJobId = await api.streamChat(
         {
           message: userMsg,
+          history,
+          images,
           model,
           system_prompt: systemPrompt,
           temperature: 0.7,
@@ -256,40 +305,40 @@
 
 <div class="max-w-4xl mx-auto h-full flex flex-col relative">
   <!-- Header Bar -->
-  <div class="flex items-center justify-between px-2 py-3 border-b border-zinc-800">
+  <div class="flex items-center justify-between px-2 py-3 border-b border-ink-800">
     <div class="flex items-center gap-3">
       <button
         onclick={() => showThreads = !showThreads}
-        class="flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border border-zinc-800 hover:bg-zinc-800/60 text-zinc-300 font-medium transition-colors"
+        class="flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 text-ink-300 font-medium transition-colors"
       >
-        <span class="text-sm">💬</span>
+        <span class="text-ink-400 inline-flex"><Icon name="chat" class="w-4 h-4" /></span>
         <span class="max-w-[140px] truncate">{activeThreadTitle}</span>
-        <span class="text-xs text-zinc-400 font-mono">({threads.length})</span>
+        <span class="text-xs text-ink-400 font-mono">({threads.length})</span>
       </button>
 
       <div class="hidden sm:flex items-center gap-2">
         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-        <span class="text-xs font-mono text-zinc-400">{model}</span>
+        <span class="text-xs font-mono text-ink-400">{model}</span>
       </div>
     </div>
 
     <div class="flex items-center gap-2">
       <button
         onclick={newChat}
-        class="px-2.5 py-1 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 text-ink-200 font-medium transition-colors"
       >
         + New chat
       </button>
       <button
         onclick={() => showSystem = !showSystem}
-        class="px-2.5 py-1 text-xs rounded-lg border border-zinc-800 hover:bg-zinc-800/60 text-zinc-300 transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 text-ink-300 transition-colors"
       >
         Persona
       </button>
       <button
         onclick={() => exportCurrentThread("markdown")}
         disabled={messages.length === 0}
-        class="px-2.5 py-1 text-xs rounded-lg border border-zinc-800 hover:bg-zinc-800/60 disabled:opacity-30 text-zinc-400 transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 disabled:opacity-30 text-ink-400 transition-colors"
         title="Export conversation as Markdown"
       >
         Export
@@ -297,7 +346,7 @@
       <button
         onclick={summarizeLast}
         disabled={streaming || messages.length < 2}
-        class="px-2.5 py-1 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 disabled:opacity-40 text-ink-300 transition-colors"
       >
         Summarize
       </button>
@@ -306,13 +355,13 @@
 
   <!-- Threads Drawer -->
   {#if showThreads}
-    <div class="absolute top-14 left-2 z-20 w-72 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto">
-      <div class="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-semibold text-zinc-300">
+    <div class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-ink-800 rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto">
+      <div class="flex items-center justify-between pb-2 border-b border-ink-800 text-xs font-semibold text-ink-300">
         <span>Saved Conversations</span>
-        <button onclick={newChat} class="text-[11px] text-fuchsia-400 hover:underline">+ New</button>
+        <button onclick={newChat} class="text-[11px] text-ember-400 hover:underline">+ New</button>
       </div>
       {#if threads.length === 0}
-        <div class="text-[11px] text-zinc-400 py-3 text-center">No saved chats yet.</div>
+        <div class="text-[11px] text-ink-400 py-3 text-center">No saved chats yet.</div>
       {:else}
         {#each threads as t}
           <div
@@ -320,15 +369,15 @@
             tabindex="0"
             onclick={() => selectThread(t)}
             onkeydown={(e) => { if (e.key === 'Enter') selectThread(t); }}
-            class={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between group transition-colors cursor-pointer ${t.id === activeThreadId ? 'bg-fuchsia-500/10 border border-fuchsia-500/30 text-zinc-100' : 'hover:bg-zinc-800/50 text-zinc-300'}`}
+            class={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between group transition-colors cursor-pointer ${t.id === activeThreadId ? 'bg-ember-500/10 border border-ember-500/30 text-ink-100' : 'hover:bg-ink-800/50 text-ink-300'}`}
           >
             <div class="truncate pr-2">
               <div class="font-medium truncate">{t.title}</div>
-              <div class="text-xs text-zinc-400 font-mono">{t.message_count} messages</div>
+              <div class="text-xs text-ink-400 font-mono">{t.message_count} messages</div>
             </div>
             <button
               onclick={(e) => deleteThread(t.id, e)}
-              class="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-rose-400 transition-opacity"
+              class="opacity-0 group-hover:opacity-100 p-1 text-ink-400 hover:text-rose-400 transition-opacity"
               title="Delete thread"
             >
               ×
@@ -341,13 +390,13 @@
 
   <!-- Persona / System Prompt Selector -->
   {#if showSystem}
-    <div class="p-3 bg-zinc-900/60 border-b border-zinc-800 text-xs space-y-2">
+    <div class="p-3 bg-ink-900/60 border-b border-ink-800 text-xs space-y-2">
       <div class="flex items-center gap-2">
-        <span class="text-zinc-400">Presets:</span>
+        <span class="text-ink-400">Presets:</span>
         {#each systemPresets as p}
           <button
             onclick={() => systemPrompt = p.prompt}
-            class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-fuchsia-600 text-white font-medium' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+            class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-ink-950 font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
           >
             {p.label}
           </button>
@@ -356,7 +405,7 @@
       <textarea
         bind:value={systemPrompt}
         rows={2}
-        class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-600"
+        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-ink-200 font-mono text-xs focus:outline-none focus:border-ink-600"
       ></textarea>
     </div>
   {/if}
@@ -371,32 +420,49 @@
     class="flex-1 overflow-y-auto p-4 space-y-2 relative"
   >
     {#if messages.length === 0}
-      <!-- Empty State with Starters -->
+      <!-- Empty state: says what to do next, based on whether a model is active -->
       <div class="h-full flex flex-col justify-center items-center text-center p-6 space-y-6">
-        <div class="space-y-2">
-          <div class="text-3xl">✨</div>
-          <h3 class="text-base font-semibold text-zinc-200">How can I help you today?</h3>
-          <p class="text-xs text-zinc-400 max-w-sm">
-            Everything runs 100% locally on your machine with zero telemetry or network calls.
-          </p>
+        <div class="space-y-2 max-w-sm">
+          <img src="/logo.svg" alt="" aria-hidden="true" class="w-12 h-12 mx-auto" />
+          {#if !modelsChecked}
+            <h3 class="text-sm font-medium text-ink-200">Checking for a model…</h3>
+          {:else if !activeModelName}
+            <h3 class="text-sm font-medium text-ink-200">Pick a model to start chatting.</h3>
+            <p class="text-xs text-ink-400">Models run on this computer. Download one in Models, then come back here.</p>
+            {#if onOpenModels}
+              <button
+                type="button"
+                onclick={onOpenModels}
+                class="mt-2 px-4 py-2 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950"
+              >
+                Open Models
+              </button>
+            {/if}
+          {:else}
+            <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
+            <p class="text-xs text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
+          {/if}
         </div>
 
+        {#if activeModelName}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full">
           {#each starterPrompts as sp}
             <button
               onclick={() => { input = sp; send(); }}
-              class="text-left p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-900 hover:border-zinc-700 text-xs text-zinc-300 transition-all"
+              class="text-left p-3 rounded-xl border border-ink-800/80 bg-ink-900/40 hover:bg-ink-900 hover:border-ink-700 text-xs text-ink-300 transition-all"
             >
               "{sp}"
             </button>
           {/each}
         </div>
+        {/if}
       </div>
     {:else}
       {#each messages as msg, idx}
         <MessageBubble
           role={msg.role}
           content={msg.content}
+          images={msg.images}
           ts={msg.ts}
           streaming={streaming && idx === messages.length - 1}
           citations={msg.citations}
@@ -410,7 +476,7 @@
     {#if userScrolledUp}
       <button
         onclick={() => scrollToBottom(true)}
-        class="fixed bottom-28 right-8 z-10 px-3 py-1.5 rounded-full bg-zinc-800/90 border border-zinc-700 text-xs text-zinc-200 shadow-xl hover:bg-zinc-700 transition-all flex items-center gap-1.5"
+        class="fixed bottom-28 right-8 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-ink-700 text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-all flex items-center gap-1.5"
       >
         <span>↓</span>
         <span>Scroll to bottom</span>
@@ -427,5 +493,8 @@
     onSend={send}
     onCancel={stopGenerating}
     onReadFile={readFile}
+    pendingImages={pendingImages}
+    onPickImages={addImages}
+    onRemoveImage={removeImage}
   />
 </div>

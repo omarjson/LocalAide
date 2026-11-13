@@ -7,6 +7,9 @@
     onSend: () => void;
     onReadFile: () => void;
     onCancel?: () => void;
+    pendingImages?: string[];
+    onPickImages?: (files: FileList | null) => void;
+    onRemoveImage?: (index: number) => void;
   }
 
   let {
@@ -17,19 +20,22 @@
     onSend,
     onReadFile,
     onCancel,
+    pendingImages = [],
+    onPickImages,
+    onRemoveImage,
   }: Props = $props();
 </script>
 
-<div class="border-t border-zinc-800 p-4">
+<div class="border-t border-ink-800 p-4">
   <div class="flex items-center justify-between mb-2">
     <button
       type="button"
       onclick={() => showTools = !showTools}
-      class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-zinc-800 text-zinc-400 hover:text-zinc-200"
+      class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-ink-800 text-ink-400 hover:text-ink-200"
     >
       {showTools ? 'Hide tool panel' : 'File tool'}
     </button>
-    <div class="text-xs text-zinc-400">Enter to send • Shift+Enter for newline • Esc to cancel</div>
+    <div class="text-xs text-ink-400">Enter to send • Shift+Enter for newline • Esc to cancel</div>
   </div>
 
   {#if showTools}
@@ -38,19 +44,49 @@
         aria-label="File path to read"
         bind:value={toolPath}
         placeholder="Workspace file path to inspect…"
-        class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500"
+        class="flex-1 bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
       />
       <button
         type="button"
         onclick={onReadFile}
-        class="px-3 rounded-xl bg-white/5 border border-zinc-800 hover:bg-white/10 text-xs text-zinc-300"
+        class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300"
       >
         Read
       </button>
     </div>
   {/if}
 
+  {#if pendingImages.length > 0}
+    <div class="flex flex-wrap gap-2 mb-3">
+      {#each pendingImages as src, i (i)}
+        <div class="relative">
+          <img src={src} alt="Attached image {i + 1}" class="h-16 rounded-lg border border-ink-700" />
+          <button
+            type="button"
+            onclick={() => onRemoveImage?.(i)}
+            aria-label="Remove image {i + 1}"
+            class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink-800 text-ink-200 text-xs leading-none"
+          >×</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <form onsubmit={(e) => { e.preventDefault(); if (streaming) onCancel?.(); else onSend(); }} class="flex gap-2">
+    <label
+      class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
+      title="Attach an image. Needs a vision model."
+    >
+      Image
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        class="sr-only"
+        disabled={streaming}
+        onchange={(e) => onPickImages?.((e.currentTarget as HTMLInputElement).files)}
+      />
+    </label>
     <textarea
       aria-label="Chat message"
       bind:value={input}
@@ -66,7 +102,7 @@
           onCancel?.();
         }
       }}
-      class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500 resize-none"
+      class="flex-1 bg-ink-900 border border-ink-800 rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
     ></textarea>
 
     {#if streaming}
@@ -81,8 +117,8 @@
     {:else}
       <button
         type="submit"
-        disabled={!input.trim()}
-        class="px-5 rounded-xl bg-fuchsia-600 text-white text-sm font-medium disabled:opacity-40 transition-opacity"
+        disabled={!input.trim() && pendingImages.length === 0}
+        class="px-5 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium disabled:opacity-40 transition-opacity"
       >
         Send
       </button>

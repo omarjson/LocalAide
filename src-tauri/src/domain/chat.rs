@@ -26,6 +26,12 @@ pub struct ChatStreamRequest {
     pub system_prompt: Option<String>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<i32>,
+    /// Earlier turns of this conversation, oldest first. Excludes `message`.
+    #[serde(default)]
+    pub history: Vec<ChatMessage>,
+    /// Images attached to `message`, as `data:image/...;base64,` URLs.
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

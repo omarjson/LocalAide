@@ -12,18 +12,14 @@ pub mod config;
 pub mod domain;
 pub mod embeddings;
 pub mod indexer;
-pub mod inference;
 pub mod model_manager;
 pub mod services;
 pub mod tools;
-pub mod voice;
 pub mod watcher;
 
 use app::AppState;
 use indexer::Indexer;
-use inference::LlamaState;
 use model_manager::ModelManager;
-use voice::VoiceManager;
 
 pub use app::paths::{config_path, index_dir, memory_dir, models_dir};
 
@@ -84,8 +80,6 @@ pub fn run() {
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
-    let llama_state = Arc::new(LlamaState::new());
-    let voice_manager = Arc::new(VoiceManager::new());
 
     let app_state = AppState::new(
         model_manager.clone(),
@@ -94,8 +88,6 @@ pub fn run() {
         library.clone(),
         memory.clone(),
         tools.clone(),
-        llama_state.clone(),
-        voice_manager.clone(),
     );
 
     // Auto-reload previously active model from config if installed on disk

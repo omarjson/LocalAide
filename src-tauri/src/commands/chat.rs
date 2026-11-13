@@ -7,6 +7,7 @@ use crate::domain::chat::{
     ThreadExportRequest, ThreadExportResponse,
 };
 use crate::services::inference::context::ContextBudget;
+use crate::services::inference::PromptMessage;
 use std::fs;
 use std::path::Path;
 use tauri::State;
@@ -19,6 +20,39 @@ struct StoredThread {
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<ChatMessage>,
+}
+
+const MAX_IMAGES: usize = 4;
+const MAX_IMAGES_BYTES: usize = 20 * 1024 * 1024;
+
+/// Reject unsupported or oversized attachments before any model work starts.
+fn validate_images(images: &[String]) -> Result<(), AppError> {
+    if images.len() > MAX_IMAGES {
+        return Err(AppError::invalid_input(format!(
+            "Attach at most {MAX_IMAGES} images."
+        )));
+    }
+    const PREFIXES: [&str; 4] = [
+        "data:image/png;base64,",
+        "data:image/jpeg;base64,",
+        "data:image/webp;base64,",
+        "data:image/gif;base64,",
+    ];
+    let mut total = 0usize;
+    for img in images {
+        if !PREFIXES.iter().any(|p| img.starts_with(p)) {
+            return Err(AppError::invalid_input(
+                "Only PNG, JPEG, WEBP and GIF images are supported.",
+            ));
+        }
+        total += img.len();
+    }
+    if total > MAX_IMAGES_BYTES {
+        return Err(AppError::invalid_input(
+            "The attached images are too large. Keep them under 20 MB in total.",
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -34,8 +68,16 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
         return Err(AppError::model_not_installed(&id));
     }
     let path = state.model_manager.primary_path(&id);
-
-    let res = state.inference_engine.load(&path, 2048)?;
+    // The engine uses a blocking HTTP client. Run it on a plain thread, not the async runtime.
+    let engine = state.inference_engine.clone();
+    let load_path = path.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(engine.load(&load_path, 2048));
+    });
+    let res = rx
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))??;
     let _ = state.model_manager.activate(&id);
 
     // Persist active model in config for auto-reload
@@ -66,6 +108,8 @@ pub async fn chat_stream(
 
     let max_tokens = req.max_tokens.unwrap_or(512);
     let temperature = req.temperature.unwrap_or(0.7);
+
+    validate_images(&req.images)?;
 
     // RAG Recall: Retrieve context from MemoryService / LibraryService
     let rag_res = state
@@ -100,18 +144,22 @@ pub async fn chat_stream(
 
     // Apply context budget
     let budget = ContextBudget::new(status.context_size as usize, max_tokens as usize);
-    let budget_res = budget.build_prompt(effective_system_prompt.as_deref(), &[], &req.message);
+    let messages = budget.build_messages(
+        effective_system_prompt.as_deref(),
+        &req.history,
+        &req.message,
+        &req.images,
+    );
 
     let (job_id, cancel_flag) = state.jobs.create_job("inference_chat");
     let engine = state.inference_engine.clone();
     let jobs = state.jobs.clone();
-    let prompt = budget_res.prompt;
     let jid = job_id.clone();
 
     std::thread::spawn(move || {
         let ch_tok = channel.clone();
         let eval_res = engine.generate(
-            &prompt,
+            &messages,
             max_tokens,
             temperature,
             cancel_flag,
@@ -162,24 +210,43 @@ pub async fn summarize(
 
     let system_prompt =
         "You are a concise summarizer. Summarize the following text in a few clear sentences:";
-    let prompt = format!("{}\n\n{}", system_prompt, req.text);
+    let messages = vec![
+        PromptMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+            images: Vec::new(),
+        },
+        PromptMessage {
+            role: "user".to_string(),
+            content: req.text.clone(),
+            images: Vec::new(),
+        },
+    ];
     let max_tokens = req.max_words.unwrap_or(256) as i32;
 
     let (_job_id, cancel_flag) = state.jobs.create_job("summarize");
     let accumulated = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let acc_cb = accumulated.clone();
 
-    let _metrics = state.inference_engine.generate(
-        &prompt,
-        max_tokens,
-        0.3,
-        cancel_flag,
-        Box::new(move |tok| {
-            if let Ok(mut lock) = acc_cb.lock() {
-                lock.push_str(&tok.token);
-            }
-        }),
-    )?;
+    // Run on a plain thread: the engine uses a blocking HTTP client.
+    let engine = state.inference_engine.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        let result = engine.generate(
+            &messages,
+            max_tokens,
+            0.3,
+            cancel_flag,
+            Box::new(move |tok| {
+                if let Ok(mut lock) = acc_cb.lock() {
+                    lock.push_str(&tok.token);
+                }
+            }),
+        );
+        let _ = tx.send(result.map(|_| ()));
+    });
+    rx.await
+        .map_err(|e| AppError::internal(e.to_string()))??;
 
     let summary = accumulated
         .lock()

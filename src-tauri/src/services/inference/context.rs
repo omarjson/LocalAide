@@ -92,3 +92,60 @@ impl ContextBudget {
         }
     }
 }
+
+impl ContextBudget {
+    /// Build the chat as a message list, so the server can apply the model's chat template.
+    ///
+    /// The system prompt and the latest user message always fit. Older turns are kept
+    /// newest first until the budget runs out, then dropped. Kept turns stay in order.
+    pub fn build_messages(
+        &self,
+        system_prompt: Option<&str>,
+        history: &[crate::domain::chat::ChatMessage],
+        latest_message: &str,
+        images: &[String],
+    ) -> Vec<super::PromptMessage> {
+        let budget_available = self
+            .max_context_tokens
+            .saturating_sub(self.generation_tokens);
+
+        let sys = system_prompt.unwrap_or("You are a helpful local AI assistant.");
+        let sys_tokens = Self::estimate_tokens(sys);
+        let latest_tokens = Self::estimate_tokens(latest_message);
+        let mut remaining = budget_available.saturating_sub(sys_tokens + latest_tokens);
+
+        let mut kept: Vec<super::PromptMessage> = Vec::new();
+        for msg in history.iter().rev() {
+            if msg.role != "user" && msg.role != "assistant" {
+                continue;
+            }
+            let cost = Self::estimate_tokens(&msg.content) + 4;
+            if cost > remaining {
+                break;
+            }
+            remaining -= cost;
+            kept.push(super::PromptMessage {
+                role: msg.role.clone(),
+                content: msg.content.clone(),
+                images: Vec::new(),
+            });
+        }
+        kept.reverse();
+
+        let mut out = Vec::with_capacity(kept.len() + 2);
+        if !sys.trim().is_empty() {
+            out.push(super::PromptMessage {
+                role: "system".to_string(),
+                content: sys.to_string(),
+                images: Vec::new(),
+            });
+        }
+        out.extend(kept);
+        out.push(super::PromptMessage {
+            role: "user".to_string(),
+            content: latest_message.to_string(),
+            images: images.to_vec(),
+        });
+        out
+    }
+}

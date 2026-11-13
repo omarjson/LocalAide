@@ -76,9 +76,16 @@ jobs:
       - name: Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 
+  llama-server:
+    name: llama-server sidecar
+    needs: quality-gate
+    uses: ./.github/workflows/llama-server.yml
+    with:
+      llama_cpp_tag: v0.9.0
+
   build-macos:
     name: Build macOS (${{ matrix.target }})
-    needs: quality-gate
+    needs: [quality-gate, llama-server]
     runs-on: macos-latest
     strategy:
       matrix:
@@ -114,8 +121,18 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Download llama-server sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-server-${{ matrix.target }}
+          path: sidecar
+
+      - name: Place llama-server sidecar
+        shell: bash
+        run: scripts/prepare-sidecar.sh sidecar ${{ matrix.target }}
+
       - name: Build Tauri Package
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -125,7 +142,7 @@ jobs:
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
-    needs: quality-gate
+    needs: [quality-gate, llama-server]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -161,8 +178,18 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Download llama-server sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-server-${{ matrix.target }}
+          path: sidecar
+
+      - name: Place llama-server sidecar
+        shell: bash
+        run: scripts/prepare-sidecar.sh sidecar ${{ matrix.target }}
+
       - name: Build Tauri Package
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -172,7 +199,7 @@ jobs:
 
   build-linux:
     name: Build Linux (x86_64)
-    needs: quality-gate
+    needs: [quality-gate, llama-server]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -208,8 +235,17 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Download llama-server sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-server-x86_64-unknown-linux-gnu
+          path: sidecar
+
+      - name: Place llama-server sidecar
+        run: scripts/prepare-sidecar.sh sidecar x86_64-unknown-linux-gnu
+
       - name: Build Tauri Package
-        run: npx tauri build
+        run: npx tauri build --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

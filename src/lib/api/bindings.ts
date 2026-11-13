@@ -24,6 +24,8 @@ export interface ModelInfo {
   filename: string;
   size_bytes: number;
   ram_estimate_gb: number;
+  quant: string;
+  license: string;
   sha256: string;
   download_url: string;
   installed: boolean;
@@ -59,6 +61,8 @@ export interface ChatMessage {
   content: string;
   ts?: number;
   citations?: Citation[];
+  /** Attached images as data URLs. Kept in the session only, not saved with the thread. */
+  images?: string[];
 }
 
 export interface ChatThread {
@@ -76,6 +80,8 @@ export interface ChatStreamRequest {
   system_prompt?: string;
   temperature?: number;
   max_tokens?: number;
+  history?: ChatMessage[];
+  images?: string[];
 }
 
 export type ChatStreamEvent =
