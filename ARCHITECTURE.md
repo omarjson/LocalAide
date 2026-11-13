@@ -10,7 +10,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
                   │   Tailwind 4 • High-Contrast WCAG 2.2   │
                   └────────────────────┬────────────────────┘
                                        │ Generated TypeScript Bindings
-                                       │ (Strictly Typed IPC, No 'any')
+                                       │ (Typed DTOs; dynamic JSON only for tool args & events)
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │              Tauri Core                 │
@@ -22,15 +22,15 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │   ChatService    │         │   LibraryService  │         │   ToolService    │
 │  SidecarEngine   │         │   SQLite (WAL)    │         │  Workspace Jail  │
-│  Token Budgeting │         │   FTS5 + Cosine   │         │  User Approval   │
-│  RAG Citations   │         │   Hybrid RRF      │         │  Audit Log       │
+│  Token Budgeting │         │   FTS5 BM25       │         │  User Approval   │
+│  RAG Citations   │         │   Keyword Search  │         │  Audit Log       │
 └────────┬─────────┘         └─────────┬─────────┘         └────────┬─────────┘
          │                             │                            │
          ▼                             ▼                            ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │  InferenceEngine │         │  Embedded Storage │         │ Host Filesystem  │
 │  llama-server    │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
-│  Sub-100ms Abort │         │  library.db       │         │ workspace/       │
+│  Next-token Stop │         │  index/library.db │         │ workspace/       │
 └──────────────────┘         └───────────────────┘         └──────────────────┘
 ```
 
@@ -45,7 +45,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 
 ### 2. Inference & Model Lifecycle (`src-tauri/src/services/inference/`)
 - `SidecarEngine`: runs `llama-server` (llama.cpp v0.9.0) as a child process on 127.0.0.1 with a random API key. Chat streams from `/v1/chat/completions`. See ADR-0007.
-- Thread-safe cancellation flag checked every generation turn (< 100 ms cancellation latency).
+- Cancellation flag checked per streamed token; generation stops at the next token after Stop or `Esc`.
 - `ContextBudget`: strict token budgeting preserving system persona while truncating oldest turns.
 
 ### 3. Document Library & Retrieval Engine (`src-tauri/src/services/library/`)
@@ -64,7 +64,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 - Blocks lexical `..` traversal escapes and canonical target escapes.
 - Blocks external symlinks and detects symlink loops.
 - Explicit approval flow: mutating operations (`write_file`) require interactive approval with preview.
-- Immutable SQLite audit log (`tool_audit` table) tracking every execution.
+- SQLite audit log (`tool_audit` table) tracking every execution; user-visible and clearable from Settings.
 
 ---
 
@@ -73,7 +73,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 | Threat | Mitigation Mechanism |
 |---|---|
 | **Prompt Injection Exfiltration** | Filesystem tools constrained to `WorkspaceJail`; absolute paths and external symlinks blocked with `SANDBOX_DENIED`. |
-| **Model Weight Tampering** | Signed catalog manifest (`CatalogManifest`); streaming SHA-256 integrity verification before atomic rename. |
+| **Model Weight Tampering** | Catalog integrity digest (`CatalogManifest.signature`) over ids, sizes, and hashes; streaming SHA-256 integrity verification before atomic rename. |
 | **Cross-Site Scripting (XSS)** | Hardened CSP (`default-src 'self' ...`); no remote CDN scripts; IPC channel isolation. |
 | **Data Exfiltration / Snooping** | Zero telemetry stance; zero network requests in chat/search paths; 100% offline local inference. |
 | **Memory Exhaustion (OOM)** | Streaming hashing via 64 KB buffers (< 100 KB RAM); strict turn budgeting in context engine. |

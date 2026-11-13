@@ -19,8 +19,8 @@ LocalAide is designed with a defense-in-depth security model to ensure safe loca
    - Destructive or mutating operations (`write_file`) require interactive approval in the frontend modal.
    - Non-destructive reads (`read_file`, `list_dir`, `search_files`) within the jail are logged to SQLite audit logs.
 
-4. **Immutable Audit Log**:
-   - Every tool call, whether approved, denied, or errored, is written to the SQLite `tool_audit` table with a timestamp, action, target path, and outcome.
+4. **Audit Log**:
+   - Every tool call, whether approved, denied, or errored, is written to the SQLite `tool_audit` table with a timestamp, action, target path, and outcome. The log is user-visible and can be cleared from Settings.
 
 ---
 
@@ -37,9 +37,9 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
 
 ## 3. Supply Chain & Model Integrity
 
-- **Signed Catalog Manifest**: Model definitions are cryptographically hashed and verified before presentation.
+- **Catalog Integrity Digest**: The bundled catalog carries a digest over every entry's id, size, and hash, verified before presentation. A mismatched catalog aborts before any download starts.
 - **Streaming Verification**: Downloads are written to `.part` files; SHA-256 digests are computed incrementally during download.
-- **Atomic Rename**: Files are renamed to `.gguf` only after full SHA-256 integrity verification matches the signed manifest. Corrupted downloads are purged immediately.
+- **Atomic Rename**: Files are renamed to `.gguf` only after the SHA-256 digest matches the catalog entry. Corrupted downloads are purged immediately.
 
 ---
 

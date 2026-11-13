@@ -1,19 +1,18 @@
 # LocalAide for Kiroween 2026: plan
 
-Status: proposal. Nothing below is built yet. Decisions marked **Decide** need your answer before work starts.
+Status: active. Decisions below were made by Omar on 2026-11-13. Work continues on branch `kiroween/engine-and-design`.
+
+## 0. Decisions (2026-11-13)
+
+- **Category: Costume Contest.** Judged on a polished, memorable UI. The design pass, DESIGN.md and the patched-ghost brand carry it; the Frankenstein story still shows through the branding.
+- **Online mode: build it in.** OpenAI-compatible cloud providers as an explicit opt-in, disabled by default, user-supplied key. The local-first default and its zero-data-exfiltration guarantee do not change. Docs describe it as in development until it ships.
+- **Speech: defer.** Stubs are already removed; v1.0 stays chat-only. Revisit after the contest (see `engine-upgrade` Phase 5 findings).
 
 ## 1. Eligibility (checked)
 
 - Kiroween 2026 accepts only projects started in the submission window, October 30 to December 4, 2026. Source: the Kiroween 2026 announcement and rules, found by web search.
 - This repo's first commit is dated 2026-10-30, so it qualifies. Keep the history as it is. Do not squash or rewrite it.
-- Judges also look for real use of Kiro: specs, steering and hooks. This repo has `.kiro/steering/` and this spec. Keep adding real spec-driven work, and keep a short log of how Kiro shaped each change.
-
-## 2. Category (Decide)
-
-- **Costume Contest.** Judged on a polished, memorable UI. Fits the design work you asked for. **Recommended.**
-- **Frankenstein.** Judged on stitching unlike parts into one product. LocalAide already fits this story: Tauri, Rust, Svelte, SQLite and a local model.
-
-We can enter one category per project. The design can still carry the Frankenstein story.
+- Judges also look for real use of Kiro: specs, steering and hooks. This repo has `.kiro/steering/` and this spec. Keep adding real spec-driven work, and keep a short log of how Kiro shaped each change in `kiro-log.md`.
 
 ## 3. What the audit found (must fix before a demo)
 
@@ -35,15 +34,15 @@ Keep the core that works, and make it excellent:
 - Library: add a folder, see it indexed, search it.
 - Memory notes: create, edit, delete, with recall.
 - Workspace files: read and list, with an approval prompt before any write.
+- Online mode (approved 2026-11-13): opt-in OpenAI-compatible providers, off by default, user-supplied key, clearly labeled as cloud so the local promise stays clean.
 
 Cut or defer:
 
-- Voice (speech and TTS): defer. Remove the stub controls.
+- Voice (speech and TTS): defer. Stubs removed.
 - Vision: defer. Not built.
-- Online mode: **Decide.** It adds a privacy-sensitive feature and needs a provider key from you. My recommendation is to skip it for the contest and keep the "local-first" promise clean.
 - Dev Config screen: move it out of the main navigation, or remove it.
 
-**Decide:** approve this scope, or name features to add back.
+Status: scope approved 2026-11-13 with online mode included (reversing the earlier skip recommendation).
 
 ## 5. Model catalog
 
@@ -81,10 +80,11 @@ UX rules:
 
 Tracks that can run in parallel, each as a sub-agent with its own files:
 
-- **A. Backend fixes:** folder ignore logic, catalog hashes and presets, hybrid-search honesty, removing voice stubs.
-- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup.
-- **C. Docs:** README, ARCHITECTURE, scope and SECURITY rewritten to match the code.
-- **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped.
+- **A. Backend fixes:** folder ignore logic, catalog hashes and presets, hybrid-search honesty, removing voice stubs. — **Done in commits `07ed24c` and `aa5daf6` (written, not yet compiled).**
+- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Design pass and icons landed in `aa5daf6`; Dev Config screen still in the nav.**
+- **C. Docs:** README, ARCHITECTURE, scope, SECURITY and scorecard rewritten to match the code. — **Done 2026-11-13 (truth pass): rubric scores replaced with CI-gate evidence, false claims fixed, broken evidence links repaired.**
+- **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped. — **In progress: `kiro-log.md` added; hook still pending.**
+- **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage.
 
 Each track ends with a written summary. Testing happens on your machine, not here. For each track I will list the exact commands for you to run.
 
