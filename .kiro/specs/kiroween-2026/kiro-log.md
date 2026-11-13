@@ -44,10 +44,17 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - Online mode: **build it in** as opt-in (plan §0).
 - Speech: **defer** (plan §0, engine-upgrade Phase 5).
 
+## 2026-11-14 — Inline markdown, lightbox, and the clippy gate made real
+
+- **Kiro artifact:** this entry; `docs/evidence/project-map.html` board updated.
+- **What changed:** chat bubbles render inline markdown (inline code, bold, italic, bare links) via a token pass through `{#each}` — never `{@html}` — so the strict CSP holds by construction. Image attachments open in a fullscreen lightbox (Esc/backdrop closes).
+- **The clippy gate is now real:** `#![allow(clippy::all, unused)]` removed from `lib.rs`. The first unshielded clippy run reported 38 findings (6 unused imports; a dead method and struct field orphaned by the dead-code rounds; 18 collapsible-if converted to Rust 2024 let-chains; 3 missing `Default` impls; `sort_by_key`; `div_ceil`; `matches!`; `as_chunks`) plus 3 svelte a11y warnings on the lightbox dialog. All fixed across `0c85b7f`, `8c66e14`, `65bda98`.
+- **CI:** Quality Gate GREEN on `65bda98` with `clippy -D warnings` earned, not suppressed. Windows + Linux sidecar builds green; macOS cancelled again by operator decision.
+
 ## Still open
 
 - A real-model chat and demo run on each platform (plan §8 test list, `demo-checklist.md`).
 - macOS/package bundling in CI (see the status line in README.md).
 - Image input exercised against a real vision model end to end.
-- Inline markdown rendering in chat bubbles (fenced code blocks only today).
-- Image lightbox; model catalog refresh mechanism.
+- Model catalog refresh mechanism (compile-time list today).
+- Binary code signing / notarization (ADR-0005).
