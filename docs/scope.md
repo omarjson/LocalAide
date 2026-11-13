@@ -18,12 +18,12 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
    - Curated catalog of GGUF chat models (Qwen 2.5/3.5 quantized series).
    - Atomic streaming downloads with `.part` files, pause/resume, cancel without losing progress, and preflight disk checks.
    - Mandatory SHA-256 integrity verification against the signed catalog before installation.
-   - Dedicated inference worker thread with clean load, unload, and model switching without memory leaks.
+   - Inference runs in a `llama-server` child process, with clean load, unload, and model switching.
 3. **Document Library & Indexing**:
    - User-specified folder indexing into embedded SQLite with WAL mode.
    - Content hashing, deduplication, incremental scanning skipping unchanged files by mtime/size.
    - Bounded file reading (preventing memory exhaustion on large files) and token-based chunking.
-   - Hybrid search combining SQLite FTS5 (BM25 keyword search) and vector similarity.
+   - Keyword search over SQLite FTS5 (BM25). Vector search is deferred until embeddings are wired.
 4. **Memory & RAG**:
    - Personal markdown memory notes under user-approved memory root.
    - Full atomic CRUD operations (create, read, update, delete) with slug management.
@@ -42,7 +42,7 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
 
 ## 2. Explicit Non-Goals (Out of Scope for v1.0)
 The following capabilities are explicitly deferred to Phase 12 or post-v1.0. All UI controls, commands, dependencies, and doc claims for these features are disabled or removed until fully implemented end-to-end:
-- **Voice (STT / TTS)**: Whisper STT and Piper TTS require dedicated model lifecycles, platform audio permissions, and resamplers. They will not ship in v1.0.
+- **Speech (STT / TTS)**: Needs a second runtime. Deferred until verified on the target platforms.
 - **Vision / Multimodal SLM**: Image comprehension models (e.g. Qwen2.5-VL / mtmd) are excluded from the v1.0 core.
 - **Cloud LLM APIs**: No OpenAI / Anthropic proxying; LocalAide v1.0 is strictly offline and local.
 - **Modular Component Hot-swapping**: In-app binary component replacement is deferred; all updates happen via verified whole-app updates.

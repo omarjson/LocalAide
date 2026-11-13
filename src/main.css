@@ -1,6 +1,36 @@
 @import "tailwindcss";
 
+/*
+ * LocalAide design tokens. See DESIGN.md at the repo root.
+ * Neutrals are plum-tinted "ink". The accent is "ember". Bone is the body text.
+ * Text on ember must use ink-950, not white: white on ember fails 4.5:1.
+ */
 @theme {
+  --color-ink-50: #fbf7f0;
+  --color-ink-100: #f3ead8;
+  --color-ink-200: #d9d3e0;
+  --color-ink-300: #bdb6c9;
+  --color-ink-400: #aaa2b8;
+  --color-ink-500: #8a819c;
+  --color-ink-600: #5f5673;
+  --color-ink-700: #463d58;
+  --color-ink-800: #241c33;
+  --color-ink-900: #1a1424;
+  --color-ink-950: #120d1a;
+
+  --color-ember-50: #fff5ec;
+  --color-ember-100: #ffe7d1;
+  --color-ember-200: #ffd0a3;
+  --color-ember-300: #ffb173;
+  --color-ember-400: #ff9248;
+  --color-ember-500: #ff7a1a;
+  --color-ember-600: #e8680c;
+  --color-ember-700: #b9520a;
+  --color-ember-800: #8a3d0b;
+  --color-ember-900: #5e2a0a;
+  --color-ember-950: #331505;
+
+  --color-ghost: #7cff6b;
   --color-brand: oklch(0.65 0.2 260);
   --color-brand-dark: oklch(0.55 0.24 260);
   --radius-card: 0.75rem;
@@ -9,8 +39,22 @@
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #09090b;
-  color: #f4f4f5;
+  background: #120d1a;
+  color: #f3ead8;
+}
+
+::selection {
+  background: rgb(255 122 26 / 0.35);
+  color: #fbf7f0;
+}
+
+textarea,
+input {
+  caret-color: #ff7a1a;
+}
+
+html {
+  scrollbar-color: #463d58 #120d1a;
 }
 
 :focus-visible {

@@ -21,7 +21,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
          ▼                             ▼                             ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │   ChatService    │         │   LibraryService  │         │   ToolService    │
-│  LlamaWorker     │         │   SQLite (WAL)    │         │  Workspace Jail  │
+│  SidecarEngine   │         │   SQLite (WAL)    │         │  Workspace Jail  │
 │  Token Budgeting │         │   FTS5 + Cosine   │         │  User Approval   │
 │  RAG Citations   │         │   Hybrid RRF      │         │  Audit Log       │
 └────────┬─────────┘         └─────────┬─────────┘         └────────┬─────────┘
@@ -29,7 +29,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
          ▼                             ▼                            ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │  InferenceEngine │         │  Embedded Storage │         │ Host Filesystem  │
-│  llama.cpp GGUF  │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
+│  llama-server    │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
 │  Sub-100ms Abort │         │  library.db       │         │ workspace/       │
 └──────────────────┘         └───────────────────┘         └──────────────────┘
 ```
@@ -44,14 +44,14 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 - Holds `JobRegistry` for concurrent lifecycle tracking, cancel tokens, and progress monitoring.
 
 ### 2. Inference & Model Lifecycle (`src-tauri/src/services/inference/`)
-- `LlamaWorkerEngine`: executes inference on dedicated OS thread to guarantee zero UI stuttering.
+- `SidecarEngine`: runs `llama-server` (llama.cpp v0.9.0) as a child process on 127.0.0.1 with a random API key. Chat streams from `/v1/chat/completions`. See ADR-0007.
 - Thread-safe cancellation flag checked every generation turn (< 100 ms cancellation latency).
 - `ContextBudget`: strict token budgeting preserving system persona while truncating oldest turns.
 
 ### 3. Document Library & Retrieval Engine (`src-tauri/src/services/library/`)
 - Single transactional ACID store: `library.db` running SQLite in WAL mode (`journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 5000`).
 - Multi-format parser: natural paragraph/sentence chunker (1500 chars, 250 overlap), pure PDF stream extractor via `flate2`.
-- Hybrid Search: Reciprocal Rank Fusion (RRF $k=60$) combining BM25 full-text rank with cosine vector similarity.
+- Search: keyword (BM25) over FTS5 only. Vector search and RRF fusion are not wired in v1.0.
 
 ### 4. Memory & RAG Pipeline (`src-tauri/src/services/memory/`)
 - Plaintext Markdown files in `~/.aiassistant/memory/` synchronized with SQLite `notes` index.

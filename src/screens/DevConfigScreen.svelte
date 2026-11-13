@@ -4,7 +4,7 @@
   import { onMount } from "svelte";
 
   let ramTotal = $state(16);
-  let selected = $state<Set<string>>(new Set(["embeddinggemma-2-300m"]));
+  let selected = $state<Set<string>>(new Set(["qwen3-embedding-0.6b-q8"]));
   let models = $state<{ id: string; name: string; ram: number; size: string }[]>([]);
   let totalRam = $state(0);
   let overBudget = $state(false);
@@ -67,16 +67,16 @@
 <div class="max-w-6xl mx-auto space-y-6">
   <div>
     <h2 class="text-lg font-semibold tracking-tight">Dev configurator</h2>
-    <p class="text-xs text-zinc-400">Manual model picker with live RAM calculator</p>
+    <p class="text-xs text-ink-400">Manual model picker with live RAM calculator</p>
   </div>
 
   {#if embeddingStatus}
-    <div class="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/60 flex items-center justify-between">
+    <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/60 flex items-center justify-between">
       <div>
-        <div class="text-sm font-medium text-zinc-100">{embeddingStatus.engine} ({embeddingStatus.dimension}-dim)</div>
-        <div class="text-xs text-zinc-400 font-mono">Cosine Vector Search Ready</div>
+        <div class="text-sm font-medium text-ink-100">{embeddingStatus.engine} ({embeddingStatus.dimension}-dim)</div>
+        <div class="text-xs text-ink-400 font-mono">Cosine Vector Search Ready</div>
       </div>
-      <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.ready ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+      <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.ready ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-ink-800 text-ink-400 border-ink-700'}`}>
         {embeddingStatus.ready ? 'Vector Engine Ready' : 'Initializing'}
       </div>
     </div>
@@ -84,31 +84,31 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div class="space-y-4">
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
         <div class="flex items-center justify-between mb-4">
-          <div class="font-medium text-zinc-100">Available RAM</div>
+          <div class="font-medium text-ink-100">Available RAM</div>
           <div class="flex items-center gap-2">
-            <input bind:value={ramTotal} type="number" class="w-24 bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-sm font-mono text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
-            <span class="text-xs text-zinc-400">GB</span>
+            <input bind:value={ramTotal} type="number" class="w-24 bg-ink-950 border border-ink-700 rounded-lg px-2 py-1 text-sm font-mono text-ink-200 focus:outline-none focus:border-ember-500"/>
+            <span class="text-xs text-ink-400">GB</span>
           </div>
         </div>
-        <div class="text-xs text-zinc-400 mb-3">Budget = 70% of usable RAM</div>
-        <div class="w-full bg-zinc-800 rounded-full h-2 mb-3">
+        <div class="text-xs text-ink-400 mb-3">Budget = 70% of usable RAM</div>
+        <div class="w-full bg-ink-800 rounded-full h-2 mb-3">
           <div class={`h-2 rounded-full transition-all ${!overBudget ? 'bg-emerald-500' : 'bg-red-500'}`} style="width: {Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%"></div>
         </div>
-        <div class="text-sm font-mono text-zinc-300">
+        <div class="text-sm font-mono text-ink-300">
           Selected: {totalRam.toFixed(2)} GB · budget: {(ramTotal * 0.7).toFixed(2)} GB
           <span class={`${overBudget ? 'text-red-400' : 'text-emerald-400'}`}> · {overBudget ? 'over budget' : 'fits'}</span>
         </div>
       </div>
 
-      <div class="border border-zinc-800 rounded-2xl bg-zinc-900/60 divide-y divide-zinc-800 overflow-hidden">
+      <div class="border border-ink-800 rounded-2xl bg-ink-900/60 divide-y divide-ink-800 overflow-hidden">
         {#each models as m}
           <label class="flex items-center gap-3 p-4 hover:bg-white/[0.02] cursor-pointer transition">
-            <input type="checkbox" bind:group={selected} value={m.id} class="accent-fuchsia-600"/>
+            <input type="checkbox" bind:group={selected} value={m.id} class="accent-ember-600"/>
             <div class="flex-1">
-              <div class="text-sm font-medium text-zinc-100">{m.name}</div>
-              <div class="text-xs text-zinc-400 font-mono">{m.size} · ~{m.ram.toFixed(2)} GB RAM</div>
+              <div class="text-sm font-medium text-ink-100">{m.name}</div>
+              <div class="text-xs text-ink-400 font-mono">{m.size} · ~{m.ram.toFixed(2)} GB RAM</div>
             </div>
           </label>
         {/each}
@@ -116,24 +116,24 @@
     </div>
 
     <div class="space-y-4">
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
-        <div class="font-medium text-zinc-100 mb-2">Download</div>
-        <p class="text-xs text-zinc-400 mb-4">Parallel download with resume. Override system limits with warning.</p>
-        <button class="w-full py-2.5 rounded-xl bg-fuchsia-600 text-white text-sm font-medium disabled:opacity-50" disabled={overBudget}>
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+        <div class="font-medium text-ink-100 mb-2">Download</div>
+        <p class="text-xs text-ink-400 mb-4">Parallel download with resume. Override system limits with warning.</p>
+        <button class="w-full py-2.5 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium disabled:opacity-50" disabled={overBudget}>
           {overBudget ? 'Exceeds RAM budget' : 'Download selected'}
         </button>
       </div>
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
-        <div class="font-medium text-zinc-100 mb-2">Preset actions</div>
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+        <div class="font-medium text-ink-100 mb-2">Preset actions</div>
         <div class="flex gap-2 mb-3">
-          <input bind:value={presetName} placeholder="Preset name" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500"/>
-          <button onclick={savePreset} class="px-3 py-1.5 rounded-lg bg-white/5 border border-zinc-800 text-xs text-zinc-300 hover:bg-white/10">Save</button>
+          <input bind:value={presetName} placeholder="Preset name" class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-2 py-1.5 text-xs text-ink-200 focus:outline-none focus:border-ember-500"/>
+          <button onclick={savePreset} class="px-3 py-1.5 rounded-lg bg-white/5 border border-ink-800 text-xs text-ink-300 hover:bg-white/10">Save</button>
         </div>
         <div class="space-y-1 max-h-32 overflow-auto">
           {#each presets as p}
-            <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-zinc-800 text-xs text-zinc-300 hover:bg-white/10">{p.name}</button>
+            <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-ink-800 text-xs text-ink-300 hover:bg-white/10">{p.name}</button>
           {:else}
-            <div class="text-xs text-zinc-400">No saved presets</div>
+            <div class="text-xs text-ink-400">No saved presets</div>
           {/each}
         </div>
       </div>

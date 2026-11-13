@@ -71,27 +71,27 @@
 </script>
 
 <div class="max-w-3xl mx-auto space-y-6">
-  <div class="border-b border-zinc-800 pb-4 flex items-center justify-between">
+  <div class="border-b border-ink-800 pb-4 flex items-center justify-between">
     <div>
-      <h2 class="text-lg font-semibold tracking-tight text-zinc-100">Settings & Security</h2>
-      <p class="text-xs text-zinc-400">Resource quotas, capability sandbox, and audit verification</p>
+      <h2 class="text-lg font-semibold tracking-tight text-ink-100">Settings & Security</h2>
+      <p class="text-xs text-ink-400">Resource quotas, capability sandbox, and audit verification</p>
     </div>
-    <div class="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-xl text-xs">
+    <div class="flex items-center gap-1 bg-ink-900 border border-ink-800 p-1 rounded-xl text-xs">
       <button
         onclick={() => activeTab = "general"}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "general" ? "bg-fuchsia-600 text-white font-medium" : "text-zinc-400 hover:text-zinc-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "general" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         General
       </button>
       <button
         onclick={() => activeTab = "security"}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "security" ? "bg-fuchsia-600 text-white font-medium" : "text-zinc-400 hover:text-zinc-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "security" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Security Jail
       </button>
       <button
         onclick={() => { activeTab = "audit"; loadAudits(); }}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "audit" ? "bg-fuchsia-600 text-white font-medium" : "text-zinc-400 hover:text-zinc-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "audit" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Audit Log
       </button>
@@ -100,103 +100,103 @@
 
   {#if activeTab === "general"}
     <div class="space-y-6">
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="font-medium text-zinc-100">RAM Budget</div>
-            <div class="text-xs text-zinc-400">Memory quota allocated to local models</div>
+            <div class="font-medium text-ink-100">RAM Budget</div>
+            <div class="text-xs text-ink-400">Memory quota allocated to local models</div>
           </div>
-          <span class="text-sm font-mono font-semibold text-fuchsia-300">{ramBudget}%</span>
+          <span class="text-sm font-mono font-semibold text-ember-300">{ramBudget}%</span>
         </div>
-        <input type="range" min={20} max={90} bind:value={ramBudget} class="w-full accent-fuchsia-600"/>
-        <div class="mt-3 h-2 rounded-full bg-zinc-800 overflow-hidden">
-          <div class="h-full bg-fuchsia-600 transition-all" style={`width:${ramBudget}%`}></div>
+        <input type="range" min={20} max={90} bind:value={ramBudget} class="w-full accent-ember-600"/>
+        <div class="mt-3 h-2 rounded-full bg-ink-800 overflow-hidden">
+          <div class="h-full bg-ember-600 transition-all" style={`width:${ramBudget}%`}></div>
         </div>
-        <div class="mt-2 text-[11px] text-zinc-400 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
+        <div class="mt-2 text-[11px] text-ink-400 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
       </div>
 
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60">
-        <div class="font-medium text-zinc-100 mb-2">Model Execution Priority</div>
-        <p class="text-xs text-zinc-400 mb-3">All inference executes exclusively on local device silicon.</p>
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+        <div class="font-medium text-ink-100 mb-2">Model Execution Priority</div>
+        <p class="text-xs text-ink-400 mb-3">All inference executes exclusively on local device silicon.</p>
         <div class="space-y-2">
           <label class="flex items-center gap-3 cursor-pointer">
-            <input type="radio" name="priority" bind:group={modelPriority} value="local" class="accent-fuchsia-600" checked/>
-            <span class="text-sm text-zinc-300">Local-only (100% offline, zero network telemetry)</span>
+            <input type="radio" name="priority" bind:group={modelPriority} value="local" class="accent-ember-600" checked/>
+            <span class="text-sm text-ink-300">Local-only (100% offline, zero network telemetry)</span>
           </label>
         </div>
       </div>
 
-      <div class="border border-zinc-800/80 rounded-2xl p-5 bg-zinc-950/60 flex items-center justify-between">
+      <div class="border border-ink-800/80 rounded-2xl p-5 bg-ink-950/60 flex items-center justify-between">
         <div>
-          <div class="font-medium text-xs text-zinc-400">External Cloud Services</div>
-          <div class="text-[11px] text-zinc-400 mt-0.5">Cloud LLM APIs are out-of-scope for v1.0 (frozen per ADR-0006).</div>
+          <div class="font-medium text-xs text-ink-400">External Cloud Services</div>
+          <div class="text-[11px] text-ink-400 mt-0.5">Cloud LLM APIs are out-of-scope for v1.0 (frozen per ADR-0006).</div>
         </div>
-        <span class="px-2 py-0.5 text-xs uppercase font-mono rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+        <span class="px-2 py-0.5 text-xs uppercase font-mono rounded bg-ink-900 text-ink-400 border border-ink-800">
           Disabled in v1.0
         </span>
       </div>
 
       <div class="pt-2 flex items-center gap-3">
-        <span class="text-xs text-zinc-400">Settings Status:</span>
+        <span class="text-xs text-ink-400">Settings Status:</span>
         {#if saving}
-          <span class="text-xs text-fuchsia-300">Persisting changes…</span>
+          <span class="text-xs text-ember-300">Persisting changes…</span>
         {:else if saved}
           <span class="text-xs text-emerald-400 font-mono">Saved to config.json</span>
         {:else}
-          <span class="text-xs text-zinc-400 font-mono">Synchronized</span>
+          <span class="text-xs text-ink-400 font-mono">Synchronized</span>
         {/if}
       </div>
     </div>
   {:else if activeTab === "security"}
     <div class="space-y-4">
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60 space-y-4">
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
         <div class="flex items-center gap-3">
           <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm">
             🔒
           </div>
           <div>
-            <h3 class="text-sm font-semibold text-zinc-100">Capability-Rooted Workspace Jail</h3>
-            <p class="text-xs text-zinc-400">Restricts all filesystem tool execution to designated workspace</p>
+            <h3 class="text-sm font-semibold text-ink-100">Capability-Rooted Workspace Jail</h3>
+            <p class="text-xs text-ink-400">Restricts all filesystem tool execution to designated workspace</p>
           </div>
         </div>
 
-        <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2 text-xs">
+        <div class="bg-ink-950 border border-ink-800 rounded-xl p-3 space-y-2 text-xs">
           <div class="flex justify-between">
-            <span class="text-zinc-400">Root Directory:</span>
+            <span class="text-ink-400">Root Directory:</span>
             <span class="font-mono text-cyan-300">~/.aiassistant/workspace</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-400">Directory Traversal:</span>
+            <span class="text-ink-400">Directory Traversal:</span>
             <span class="text-emerald-400 font-mono">Blocked (.. escapes rejected)</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-400">Symlink Policy:</span>
+            <span class="text-ink-400">Symlink Policy:</span>
             <span class="text-emerald-400 font-mono">Enforced (external links & loops trapped)</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-400">File Write Approval:</span>
+            <span class="text-ink-400">File Write Approval:</span>
             <span class="text-amber-400 font-mono">Explicit confirmation required</span>
           </div>
         </div>
       </div>
 
-      <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60 space-y-3">
-        <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Cryptographic Security</h4>
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+        <h4 class="text-xs font-semibold text-ink-200 uppercase tracking-wider">Cryptographic Security</h4>
         <div class="grid grid-cols-2 gap-3 text-xs">
-          <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-            <div class="text-zinc-400 font-medium">Model Catalog Integrity</div>
+          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+            <div class="text-ink-400 font-medium">Model Catalog Integrity</div>
             <div class="text-emerald-400 font-mono mt-1">✓ SHA-256 Manifest Verified</div>
           </div>
-          <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-            <div class="text-zinc-400 font-medium">Content Security Policy</div>
+          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+            <div class="text-ink-400 font-medium">Content Security Policy</div>
             <div class="text-emerald-400 font-mono mt-1">✓ Strict CSP Active</div>
           </div>
-          <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-            <div class="text-zinc-400 font-medium">Network Telemetry</div>
+          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+            <div class="text-ink-400 font-medium">Network Telemetry</div>
             <div class="text-emerald-400 font-mono mt-1">✓ Zero Telemetry / None</div>
           </div>
-          <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-            <div class="text-zinc-400 font-medium">Download Resumption</div>
+          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+            <div class="text-ink-400 font-medium">Download Resumption</div>
             <div class="text-emerald-400 font-mono mt-1">✓ Atomic .part + Checksums</div>
           </div>
         </div>
@@ -206,14 +206,14 @@
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-sm font-semibold text-zinc-100">Tool Execution Audit Log</h3>
-          <p class="text-xs text-zinc-400">Immutable record of all tool calls stored in SQLite</p>
+          <h3 class="text-sm font-semibold text-ink-100">Tool Execution Audit Log</h3>
+          <p class="text-xs text-ink-400">Immutable record of all tool calls stored in SQLite</p>
         </div>
         <div class="flex items-center gap-2">
           <button
             onclick={loadAudits}
             disabled={loadingAudits}
-            class="px-2.5 py-1 text-xs rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+            class="px-2.5 py-1 text-xs rounded-xl bg-ink-800 hover:bg-ink-700 text-ink-300 transition-colors"
           >
             {loadingAudits ? "Refreshing…" : "Refresh"}
           </button>
@@ -228,14 +228,14 @@
       </div>
 
       {#if audits.length === 0}
-        <div class="border border-zinc-800 rounded-2xl p-8 text-center text-xs text-zinc-400 bg-zinc-900/30">
+        <div class="border border-ink-800 rounded-2xl p-8 text-center text-xs text-ink-400 bg-ink-900/30">
           No tool executions recorded yet.
         </div>
       {:else}
-        <div class="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/40">
+        <div class="border border-ink-800 rounded-2xl overflow-hidden bg-ink-900/40">
           <div class="max-h-96 overflow-y-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono sticky top-0">
+              <thead class="bg-ink-950 border-b border-ink-800 text-ink-400 font-mono sticky top-0">
                 <tr>
                   <th class="p-2.5">Time</th>
                   <th class="p-2.5">Action</th>
@@ -244,19 +244,19 @@
                   <th class="p-2.5">Status</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-zinc-800/60 font-mono">
+              <tbody class="divide-y divide-ink-800/60 font-mono">
                 {#each audits as a}
-                  <tr class="hover:bg-zinc-800/30 transition-colors">
-                    <td class="p-2.5 text-zinc-400 whitespace-nowrap">
+                  <tr class="hover:bg-ink-800/30 transition-colors">
+                    <td class="p-2.5 text-ink-400 whitespace-nowrap">
                       {new Date(a.timestamp * 1000).toLocaleTimeString()}
                     </td>
-                    <td class="p-2.5 text-fuchsia-400 font-semibold">{a.action}</td>
-                    <td class="p-2.5 text-zinc-300 truncate max-w-xs">{a.path}</td>
+                    <td class="p-2.5 text-ember-400 font-semibold">{a.action}</td>
+                    <td class="p-2.5 text-ink-300 truncate max-w-xs">{a.path}</td>
                     <td class="p-2.5">
                       {#if a.approved}
                         <span class="text-emerald-400">Yes</span>
                       {:else}
-                        <span class="text-zinc-400">Auto/No</span>
+                        <span class="text-ink-400">Auto/No</span>
                       {/if}
                     </td>
                     <td class="p-2.5">

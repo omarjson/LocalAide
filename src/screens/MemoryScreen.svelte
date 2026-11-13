@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "../components/Icon.svelte";
   import { api } from "../lib/api/client";
   import type { MemoryNote } from "../lib/api/bindings";
   import { onMount } from "svelte";
@@ -211,10 +212,10 @@
 
 <div class="max-w-4xl mx-auto space-y-6">
   <!-- Header -->
-  <div class="flex items-center justify-between pb-4 border-b border-zinc-800">
+  <div class="flex items-center justify-between pb-4 border-b border-ink-800">
     <div>
-      <h2 class="text-lg font-semibold tracking-tight text-zinc-100">Knowledge & Memory</h2>
-      <p class="text-xs text-zinc-400">Curated notes stored in SQLite WAL and on disk. Automatically recalled with citations in chat.</p>
+      <h2 class="text-lg font-semibold tracking-tight text-ink-100">Knowledge & Memory</h2>
+      <p class="text-xs text-ink-400">Curated notes stored in SQLite WAL and on disk. Automatically recalled with citations in chat.</p>
     </div>
     <div class="flex items-center gap-2">
       <button
@@ -226,7 +227,7 @@
       </button>
       <button
         onclick={() => showNew = !showNew}
-        class="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 rounded-lg text-xs font-medium text-white transition-colors"
+        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950 transition-colors"
       >
         + New note
       </button>
@@ -236,25 +237,25 @@
   {#if errorMsg}
     <div class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex justify-between items-center">
       <span>{errorMsg}</span>
-      <button onclick={() => errorMsg = null} class="text-rose-400 hover:text-rose-200">✕</button>
+      <button onclick={() => errorMsg = null} class="text-rose-400 hover:text-rose-200"><Icon name="close" class="w-3.5 h-3.5" /></button>
     </div>
   {/if}
 
   <!-- Forget All Confirmation Modal -->
   {#if showForgetAllConfirm}
     <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-zinc-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="bg-ink-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
         <div class="flex items-center gap-3 text-rose-400">
           <span class="text-xl">⚠️</span>
-          <h3 class="font-semibold text-base text-zinc-100">Forget All Memory?</h3>
+          <h3 class="font-semibold text-base text-ink-100">Forget All Memory?</h3>
         </div>
-        <p class="text-xs text-zinc-300 leading-relaxed">
+        <p class="text-xs text-ink-300 leading-relaxed">
           This will permanently delete all {notes.length} curated notes from SQLite and unlink all files from disk. Zero traces will remain. This action cannot be undone.
         </p>
         <div class="flex justify-end gap-2.5 pt-2">
           <button
             onclick={() => showForgetAllConfirm = false}
-            class="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200"
+            class="px-3 py-1.5 rounded-lg text-xs text-ink-400 hover:text-ink-200"
           >
             Cancel
           </button>
@@ -271,31 +272,31 @@
 
   <!-- Create Note Drawer -->
   {#if showNew}
-    <div class="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/60 space-y-3">
-      <div class="font-medium text-sm text-zinc-100">Create New Knowledge Note</div>
+    <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+      <div class="font-medium text-sm text-ink-100">Create New Knowledge Note</div>
       <input
         type="text"
         placeholder="Title (e.g. Project Venus Architecture)…"
         bind:value={newTitle}
-        class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-sans"
+        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2.5 text-xs text-ink-200 focus:outline-none focus:border-ink-700 font-sans"
       />
       <input
         type="text"
         placeholder="Tags (comma separated, e.g. architecture, database)…"
         bind:value={newTags}
-        class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono text-[11px]"
+        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 focus:outline-none focus:border-ink-700 font-mono text-[11px]"
       />
       <textarea
         rows={6}
         placeholder="Content in Markdown format…"
         bind:value={newContent}
-        class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-700 leading-relaxed"
+        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2.5 text-xs text-ink-200 font-mono focus:outline-none focus:border-ink-700 leading-relaxed"
       ></textarea>
       <div class="flex justify-end gap-2">
-        <button onclick={() => showNew = false} class="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200">
+        <button onclick={() => showNew = false} class="px-3 py-1.5 text-xs text-ink-400 hover:text-ink-200">
           Cancel
         </button>
-        <button onclick={createNote} class="px-4 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 rounded-lg text-xs font-medium text-white transition-colors">
+        <button onclick={createNote} class="px-4 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950 transition-colors">
           Save Note
         </button>
       </div>
@@ -304,20 +305,20 @@
 
   <!-- View / Edit Modal/Card -->
   {#if viewing && selectedNote}
-    <div class="border border-zinc-800 rounded-2xl p-6 bg-zinc-900/70 space-y-4">
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+    <div class="border border-ink-800 rounded-2xl p-6 bg-ink-900/70 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-ink-800">
         <div>
-          <h3 class="font-semibold text-zinc-100 text-sm">{selectedNote.title}</h3>
-          <p class="text-[11px] font-mono text-zinc-400 truncate max-w-md">{selectedNote.path}</p>
+          <h3 class="font-semibold text-ink-100 text-sm">{selectedNote.title}</h3>
+          <p class="text-[11px] font-mono text-ink-400 truncate max-w-md">{selectedNote.path}</p>
         </div>
         <div class="flex items-center gap-2">
           {#if editing}
-            <button onclick={saveNote} class="px-3 py-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded text-xs font-medium">Save</button>
-            <button onclick={() => editing = false} class="px-2 py-1 text-zinc-400 hover:text-zinc-200 text-xs">Cancel</button>
+            <button onclick={saveNote} class="px-3 py-1 bg-ember-600 hover:bg-ember-500 text-ink-950 rounded text-xs font-medium">Save</button>
+            <button onclick={() => editing = false} class="px-2 py-1 text-ink-400 hover:text-ink-200 text-xs">Cancel</button>
           {:else}
-            <button onclick={() => editing = true} class="px-2.5 py-1 text-xs border border-zinc-800 hover:bg-zinc-800 rounded text-zinc-300">Edit</button>
+            <button onclick={() => editing = true} class="px-2.5 py-1 text-xs border border-ink-800 hover:bg-ink-800 rounded text-ink-300">Edit</button>
             <button onclick={() => deleteNote(selectedNote!.path)} class="px-2.5 py-1 text-xs border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 rounded">Delete</button>
-            <button onclick={() => viewing = false} class="px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200">Close</button>
+            <button onclick={() => viewing = false} class="px-2.5 py-1 text-xs text-ink-400 hover:text-ink-200">Close</button>
           {/if}
         </div>
       </div>
@@ -327,25 +328,25 @@
           type="text"
           placeholder="Tags (comma separated)…"
           bind:value={selectedTagsEdit}
-          class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 font-mono text-[11px]"
+          class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 font-mono text-[11px]"
         />
         <textarea
           rows={12}
           bind:value={selectedContent}
-          class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-700 leading-relaxed"
+          class="w-full bg-ink-950 border border-ink-800 rounded-lg p-3 text-xs text-ink-200 font-mono focus:outline-none focus:border-ink-700 leading-relaxed"
         ></textarea>
       {:else}
         {#if selectedNote.tags.length > 0}
           <div class="flex flex-wrap gap-1.5">
             {#each selectedNote.tags as tag}
-              <span class="px-2 py-0.5 rounded bg-zinc-800 text-xs font-mono text-fuchsia-300 border border-zinc-700">
+              <span class="px-2 py-0.5 rounded bg-ink-800 text-xs font-mono text-ember-300 border border-ink-700">
                 #{tag}
               </span>
             {/each}
           </div>
         {/if}
-        <div class="bg-zinc-950 border border-zinc-800/80 rounded-xl p-4 max-h-96 overflow-y-auto">
-          <pre class="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">{selectedContent}</pre>
+        <div class="bg-ink-950 border border-ink-800/80 rounded-xl p-4 max-h-96 overflow-y-auto">
+          <pre class="text-xs text-ink-300 font-mono whitespace-pre-wrap leading-relaxed">{selectedContent}</pre>
         </div>
       {/if}
     </div>
@@ -356,12 +357,12 @@
     <div class="flex gap-2">
       <input
         type="text"
-        placeholder="Search notes with hybrid recall (Enter to search)…"
+        placeholder="Search notes (Enter to search)…"
         bind:value={query}
-        class="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 font-mono"
+        class="flex-1 bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
       />
       {#if query}
-        <button onclick={() => { query = ""; load(); }} class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-300">
+        <button onclick={() => { query = ""; load(); }} class="px-3 py-2 bg-ink-800 hover:bg-ink-700 rounded-lg text-xs text-ink-300">
           Clear
         </button>
       {/if}
@@ -373,7 +374,7 @@
         {#each allTags as tag}
           <button
             onclick={() => selectedTag = tag}
-            class={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${selectedTag === tag ? 'bg-fuchsia-600 text-white font-medium' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+            class={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${selectedTag === tag ? 'bg-ember-600 text-ink-950 font-medium' : 'bg-ink-900 border border-ink-800 text-ink-400 hover:text-ink-200'}`}
           >
             {tag === "All" ? "All notes" : `#${tag}`}
           </button>
@@ -384,32 +385,32 @@
 
   <!-- Note List -->
   {#if loading}
-    <div class="py-12 text-center text-xs text-zinc-400 font-mono">Loading notes…</div>
+    <div class="py-12 text-center text-xs text-ink-400 font-mono">Loading notes…</div>
   {:else if searching}
-    <div class="py-12 text-center text-xs text-zinc-400 font-mono">Searching knowledge notes…</div>
+    <div class="py-12 text-center text-xs text-ink-400 font-mono">Searching knowledge notes…</div>
   {:else if filteredNotes.length === 0}
-    <div class="border border-dashed border-zinc-800 rounded-2xl p-12 text-center space-y-2">
-      <div class="text-xs text-zinc-400">No memory notes found</div>
-      <div class="text-[11px] text-zinc-400">Create one above to enable automatic context recall and citations in chat.</div>
+    <div class="border border-dashed border-ink-800 rounded-2xl p-12 text-center space-y-2">
+      <div class="text-xs text-ink-400">No memory notes found</div>
+      <div class="text-[11px] text-ink-400">Create one above to enable automatic context recall and citations in chat.</div>
     </div>
   {:else}
     <div class="space-y-3">
       {#each filteredNotes as n}
-        <div class="border border-zinc-800 rounded-xl p-4 bg-zinc-900/40 hover:border-zinc-700 transition-colors flex justify-between items-start gap-4">
+        <div class="border border-ink-800 rounded-xl p-4 bg-ink-900/40 hover:border-ink-700 transition-colors flex justify-between items-start gap-4">
           <div class="space-y-1.5 flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <button onclick={() => openNote(n)} class="font-medium text-sm text-zinc-100 hover:text-fuchsia-400 transition-colors text-left truncate">
+              <button onclick={() => openNote(n)} class="font-medium text-sm text-ink-100 hover:text-ember-400 transition-colors text-left truncate">
                 {n.title}
               </button>
-              <span class="text-xs font-mono text-zinc-400 flex-shrink-0">{n.updated}</span>
+              <span class="text-xs font-mono text-ink-400 flex-shrink-0">{n.updated}</span>
             </div>
-            <p class="text-xs text-zinc-400 line-clamp-2 leading-relaxed">{n.preview}</p>
+            <p class="text-xs text-ink-400 line-clamp-2 leading-relaxed">{n.preview}</p>
             {#if n.tags.length > 0}
               <div class="flex flex-wrap gap-1 pt-1">
                 {#each n.tags as tag}
                   <button
                     onclick={() => selectedTag = tag}
-                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-zinc-800/80 text-fuchsia-300 hover:bg-zinc-700"
+                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-ink-800/80 text-ember-300 hover:bg-ink-700"
                   >
                     #{tag}
                   </button>
@@ -418,11 +419,11 @@
             {/if}
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
-            <button onclick={() => openNote(n)} class="px-2.5 py-1 text-xs font-mono bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors">
+            <button onclick={() => openNote(n)} class="px-2.5 py-1 text-xs font-mono bg-ink-800 hover:bg-ink-700 text-ink-300 rounded transition-colors">
               Open
             </button>
-            <button onclick={() => deleteNote(n.path)} class="px-2 py-1 text-xs text-zinc-400 hover:text-rose-400 transition-colors" title="Delete note">
-              ✕
+            <button onclick={() => deleteNote(n.path)} class="px-2 py-1 text-xs text-ink-400 hover:text-rose-400 transition-colors" title="Delete note">
+              <Icon name="close" class="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

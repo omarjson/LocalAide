@@ -117,7 +117,10 @@ impl LibraryService {
                 }
 
                 let p = entry.path();
-                if FileIngester::should_ignore_path(&p) {
+                // Ignore rules apply inside the chosen folder only. Ancestors such as
+                // `~/.notes` or `~/target/...` must not hide the whole folder.
+                let inside = p.strip_prefix(folder).unwrap_or(p.as_path());
+                if FileIngester::should_ignore_path(inside) {
                     continue;
                 }
 
