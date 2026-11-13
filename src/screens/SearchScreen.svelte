@@ -17,6 +17,7 @@
   let searchDurationMs = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
+  let singleFile = $state("");
 
   onMount(async () => {
     await refreshStats();
@@ -91,6 +92,34 @@
     }
   };
 
+  const stopWatch = async () => {
+    errorMessage = null;
+    try {
+      await api.stopWatchingFolder();
+    } catch (e: any) {
+      errorMessage = e?.message || "Failed to stop the folder watcher";
+      return;
+    }
+    watching = false;
+  };
+
+  const indexSingleFile = async () => {
+    if (!singleFile.trim()) return;
+    loading = true;
+    errorMessage = null;
+    try {
+      await api.indexFile(singleFile.trim());
+      singleFile = "";
+      await refreshStats();
+      query = "";
+      await loadInitialLibrary();
+    } catch (e: any) {
+      errorMessage = e?.message || "File indexing failed";
+    } finally {
+      loading = false;
+    }
+  };
+
   const removeDoc = async (path: string) => {
     try {
       await api.removeIndexedDoc(path);
@@ -143,10 +172,14 @@
     <div class="flex items-center justify-between">
       <div class="text-xs font-semibold text-ink-300">Index Local Directory</div>
       {#if watching}
-        <span class="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
+        <button
+          onclick={stopWatch}
+          class="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50 rounded-full px-2.5 py-1 transition-colors"
+          title="Stop watching this directory"
+        >
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          Watching directory
-        </span>
+          Watching — click to stop
+        </button>
       {/if}
     </div>
     <div class="flex gap-2">
@@ -162,6 +195,17 @@
       </button>
       <button onclick={startWatch} disabled={watching || !folder.trim()} class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
         {watching ? "Watching" : "Watch"}
+      </button>
+    </div>
+    <div class="flex gap-2">
+      <input
+        type="text"
+        placeholder="…or index a single file: C:\Users\you\Documents\note.md"
+        bind:value={singleFile}
+        class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+      />
+      <button onclick={indexSingleFile} disabled={loading || !singleFile.trim()} class="px-4 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
+        Index File
       </button>
     </div>
   </div>

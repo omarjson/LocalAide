@@ -2,10 +2,13 @@
   import { api, errorMessage } from "../lib/api/client";
   import { dur } from "../lib/motion";
   import type { CloudConfigStatus, ToolAuditEntry } from "../lib/api/bindings";
+  import { getVersion } from "@tauri-apps/api/app";
   import { slide } from "svelte/transition";
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
+
+  let appVersion = $state("");
 
   let activeTab = $state<"general" | "security" | "audit">("general");
 
@@ -152,6 +155,11 @@
       ramBudget = cfg.ram_budget_mb ? Math.round((cfg.ram_budget_mb / 1024) / 0.7) : 70;
       modelPriority = cfg.selected_models?.length ? "local" : modelPriority;
     } catch {}
+    try {
+      appVersion = await getVersion();
+    } catch {
+      appVersion = "";
+    }
     loadAudits();
     loadCloud();
   });
@@ -399,6 +407,8 @@
       </div>
 
       <div class="pt-2 flex items-center gap-3">
+        <span class="text-xs text-ink-400">Version:</span>
+        <span class="text-xs font-mono text-ink-300">{appVersion || "unknown"}</span>
         <span class="text-xs text-ink-400">Settings Status:</span>
         {#if saving}
           <span class="text-xs text-ember-300">Persisting changes…</span>

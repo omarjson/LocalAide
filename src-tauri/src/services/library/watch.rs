@@ -112,4 +112,15 @@ impl LibraryWatcher {
 
         Ok(())
     }
+
+    /// Stop an active watch, if any. Dropping the `RecommendedWatcher` also
+    /// drops the event sender inside it, which disconnects the debouncer
+    /// thread's channel and lets the thread exit on its own.
+    pub fn stop_watch(&self) {
+        let mut lock = match self.watcher.lock() {
+            Ok(l) => l,
+            Err(_) => return,
+        };
+        *lock = None;
+    }
 }

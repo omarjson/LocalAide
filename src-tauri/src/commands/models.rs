@@ -149,6 +149,22 @@ pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<(
     Ok(())
 }
 
+/// Cancel every in-flight download of a preset. Each per-model job's cancel
+/// flag makes `download_model` return a cancelled error, which stops the
+/// preset loop on the first remaining model.
+#[tauri::command]
+pub fn model_preset_cancel(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    let presets = model_presets();
+    let preset = presets
+        .into_iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| AppError::invalid_input(format!("Unknown preset: {id}")))?;
+    for model_id in preset.models {
+        state.jobs.cancel_job(&format!("preset_{model_id}"));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn model_download(
     _app: tauri::AppHandle,

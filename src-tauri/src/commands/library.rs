@@ -65,3 +65,9 @@ pub fn index_watch_start(
         status: "watching".to_string(),
     })
 }
+
+#[tauri::command]
+pub fn index_watch_stop(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.library.stop_watch();
+    Ok(())
+}

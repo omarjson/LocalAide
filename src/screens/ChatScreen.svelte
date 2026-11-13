@@ -3,7 +3,8 @@
   import { fade, fly } from "svelte/transition";
   import { api } from "../lib/api/client";
   import { dur } from "../lib/motion";
-  import type { ChatMessage, ChatThread } from "../lib/api/bindings";
+  import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
+  import type { ChatMessage, ChatThread, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
@@ -75,6 +76,12 @@
   let showThreads = $state(false);
   let scrollEl = $state<HTMLDivElement>();
   let toolPath = $state("");
+  let toolContent = $state("");
+  // A pending write_file waiting for the user's approval decision, and a
+  // stable token the backend's ApprovalManager remembers for this chat visit.
+  let pendingTool = $state<{ tool_name: string; action: ToolAction } | null>(null);
+  let showApproval = $state(false);
+  const sessionToken = `sess_${Date.now().toString(36)}`;
   let userScrolledUp = $state(false);
 
   const systemPresets = [
@@ -323,6 +330,59 @@
     toolPath = "";
   };
 
+  const writeFile = async () => {
+    if (!toolPath.trim()) return;
+    const action: ToolAction = {
+      action_type: "write_file",
+      path: toolPath,
+      content: toolContent,
+    };
+    messages.push({ role: "user", content: `Write file: ${action.path}`, ts: Date.now() });
+    toolPath = "";
+    toolContent = "";
+    try {
+      const res = await api.executeTool({ tool_name: "fs_tool", action });
+      if (res.requires_approval) {
+        pendingTool = { tool_name: "fs_tool", action };
+        showApproval = true;
+        return;
+      }
+      pushToolResponse(res, "executed");
+    } catch (e: any) {
+      messages.push({ role: "assistant", content: `[tool error: ${e?.message ?? String(e)}]`, ts: Date.now() });
+    }
+  };
+
+  const runApprovedTool = async (approved: boolean, token?: string) => {
+    const pending = pendingTool;
+    showApproval = false;
+    pendingTool = null;
+    if (!pending) return;
+    try {
+      const res = await api.executeTool({
+        tool_name: pending.tool_name,
+        action: pending.action,
+        approved,
+        session_token: token,
+      });
+      pushToolResponse(res, approved ? "approved" : "denied");
+    } catch (e: any) {
+      messages.push({ role: "assistant", content: `[tool error: ${e?.message ?? String(e)}]`, ts: Date.now() });
+    }
+  };
+
+  const pushToolResponse = (res: ToolExecutionResponse, outcome: string) => {
+    const out = res.success
+      ? `${res.output}${res.truncated ? "\n... [truncated at 1MB]" : ""}`
+      : `${res.error ?? "no output"}`;
+    messages.push({
+      role: "assistant",
+      content: `[tool ${outcome}] ${out}`.slice(0, 4200),
+      ts: Date.now(),
+    });
+    persistCurrentThread();
+  };
+
   onMount(() => {
     activeThreadId = `t_${Date.now()}`;
     loadThreads();
@@ -527,13 +587,24 @@
   <ChatInput
     bind:input={input}
     bind:toolPath={toolPath}
+    bind:toolContent={toolContent}
     bind:showTools={showTools}
     streaming={streaming}
     onSend={send}
     onCancel={stopGenerating}
     onReadFile={readFile}
+    onWriteFile={writeFile}
     pendingImages={pendingImages}
     onPickImages={addImages}
     onRemoveImage={removeImage}
+  />
+
+  <ToolApprovalModal
+    show={showApproval}
+    toolName={pendingTool?.tool_name ?? ""}
+    action={pendingTool?.action ?? null}
+    onApproveOnce={() => runApprovedTool(true)}
+    onApproveSession={() => runApprovedTool(true, sessionToken)}
+    onDeny={() => runApprovedTool(false)}
   />
 </div>

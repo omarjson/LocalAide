@@ -76,6 +76,10 @@ export class ApiClient {
     return invoke<void>("model_download_cancel", { id });
   }
 
+  async cancelPresetDownload(id: string): Promise<void> {
+    return invoke<void>("model_preset_cancel", { id });
+  }
+
   async downloadModel(
     id: string,
     onProgress?: (event: DownloadProgressEvent) => void
@@ -168,8 +172,16 @@ export class ApiClient {
     return invoke<void>("index_remove", { path });
   }
 
+  async indexFile(path: string): Promise<SearchResultDoc> {
+    return invoke<SearchResultDoc>("index_file", { path });
+  }
+
   async watchFolder(folder: string): Promise<WatchFolderResponse> {
     return invoke<WatchFolderResponse>("index_watch_start", { folder });
+  }
+
+  async stopWatchingFolder(): Promise<void> {
+    return invoke<void>("index_watch_stop");
   }
 
   // Memory

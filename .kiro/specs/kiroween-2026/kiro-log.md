@@ -33,6 +33,11 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Kiro artifact:** this spec (plan Status), the steering docs, and `.kiro/specs/engine-upgrade/tasks.md`.
 - **What changed:** `kiroween/engine-and-design` merged into `main` as commit `bb0d0aa` and the branch deleted; `main` is the branch of record. A final documentation coherence pass aligned README, ARCHITECTURE, SECURITY, scope, backlog, ADRs, evidence files, and the steering docs into one voice with no contradictions; the CHANGELOG folded `[Unreleased]` into a 0.1.0 section dated 2026-11-13 and recorded that the `v0.0.1` release and its tag were deleted the same day as superseded.
 
+## 2026-11-13 — Open-gap round (after the polish round)
+
+- **Kiro artifact:** this entry; `docs/evidence/project-map.html` feature board updated to match.
+- **What changed:** watch stop (`index_watch_stop` drops the notify watcher, disconnecting the debouncer channel and ending the thread — the Search chip is now a stop button); preset cancel (`model_preset_cancel` sets every per-model job's cancel flag, with Cancel controls in the wizard and Models screen; cancelled installs are shown as cancelled, not failed); the previously-unwired `ToolApprovalModal` is now reachable — the Chat tool panel gained a write_file mode, a write that requires approval opens the modal, and Allow Once / Allow for Session (session token) / Deny all execute against the jail and write audit rows; Settings shows the app version (Tauri `getVersion`); Search can index a single file, not just folders.
+
 ## Decisions recorded (2026-11-13)
 
 - Kiroween category: **Costume Contest**.
@@ -44,3 +49,5 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - A real-model chat and demo run on each platform (plan §8 test list, `demo-checklist.md`).
 - macOS/package bundling in CI (see the status line in README.md).
 - Image input exercised against a real vision model end to end.
+- Inline markdown rendering in chat bubbles (fenced code blocks only today).
+- Image lightbox; model catalog refresh mechanism.

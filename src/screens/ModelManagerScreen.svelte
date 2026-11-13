@@ -119,10 +119,18 @@
       await api.downloadModelPreset(id);
       await refresh();
     } catch (e) {
-      actionError = errorMessage(e);
+      if (!/cancel/i.test(errorMessage(e))) {
+        actionError = errorMessage(e);
+      }
     }
     presetInstalling = false;
     activePreset = null;
+  };
+
+  const cancelPresetInstall = async (id: string) => {
+    try {
+      await api.cancelPresetDownload(id);
+    } catch {}
   };
 
   const activateModel = async (id: string) => {
@@ -204,6 +212,14 @@
             >
               {activePreset === p.id ? "Installing…" : "Install preset"}
             </button>
+            {#if activePreset === p.id}
+              <button
+                onclick={() => cancelPresetInstall(p.id)}
+                class="mt-2 w-full py-1.5 px-3 text-xs font-medium rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-colors"
+              >
+                Cancel
+              </button>
+            {/if}
           </div>
         {/each}
       </div>

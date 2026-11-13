@@ -187,6 +187,10 @@ impl LibraryService {
     pub fn start_watch(self: &Arc<Self>, folder: &Path) -> Result<(), AppError> {
         self.watcher.start_watch(folder, self.clone())
     }
+
+    pub fn stop_watch(&self) {
+        self.watcher.stop_watch();
+    }
 }
 
 impl LibraryUpdater for LibraryService {

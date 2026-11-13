@@ -6,9 +6,11 @@
     input: string;
     streaming?: boolean;
     toolPath: string;
+    toolContent: string;
     showTools: boolean;
     onSend: () => void;
     onReadFile: () => void;
+    onWriteFile?: () => void;
     onCancel?: () => void;
     pendingImages?: string[];
     onPickImages?: (files: FileList | null) => void;
@@ -19,9 +21,11 @@
     input = $bindable(""),
     streaming = false,
     toolPath = $bindable(""),
+    toolContent = $bindable(""),
     showTools = $bindable(false),
     onSend,
     onReadFile,
+    onWriteFile,
     onCancel,
     pendingImages = [],
     onPickImages,
@@ -45,20 +49,38 @@
   </div>
 
   {#if showTools}
-    <div class="flex gap-2 mb-3">
-      <input
-        aria-label="File path to read"
-        bind:value={toolPath}
-        placeholder="Workspace file path to inspect…"
-        class="flex-1 bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
-      />
-      <button
-        type="button"
-        onclick={onReadFile}
-        class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300"
-      >
-        Read
-      </button>
+    <div class="space-y-2 mb-3">
+      <div class="flex gap-2">
+        <input
+          aria-label="Workspace file path"
+          bind:value={toolPath}
+          placeholder="Workspace file path to inspect or write…"
+          class="flex-1 bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
+        />
+        <button
+          type="button"
+          onclick={onReadFile}
+          class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300"
+        >
+          Read
+        </button>
+        <button
+          type="button"
+          onclick={onWriteFile}
+          disabled={!toolContent.trim()}
+          title="write_file always requires explicit approval in the sandbox"
+          class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300 disabled:opacity-40"
+        >
+          Write
+        </button>
+      </div>
+      <textarea
+        aria-label="File content to write"
+        bind:value={toolContent}
+        rows={3}
+        placeholder="Content to write into the file above. Writes are jailed to the workspace and need your approval."
+        class="w-full bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500 font-mono resize-none"
+      ></textarea>
     </div>
   {/if}
 

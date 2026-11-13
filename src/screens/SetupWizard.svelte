@@ -66,9 +66,17 @@
       });
       step = "done"; status = `${preset.name} preset installed.`;
     } catch (e: any) {
-      status = `Install failed: ${e?.message ?? String(e)}`;
+      const msg = String(e?.message ?? e);
+      status = /cancel/i.test(msg) ? "Install cancelled." : `Install failed: ${msg}`;
       step = "confirm";
     }
+  };
+
+  const cancelInstall = async () => {
+    if (!selected) return;
+    try {
+      await api.cancelPresetDownload(selected.id);
+    } catch {}
   };
 
   onMount(detect);
@@ -145,7 +153,13 @@
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
       <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>
-      <div class="text-xs font-mono text-ink-400">{progress}%</div>
+      <div class="text-xs font-mono text-ink-400 mb-4">{progress}%</div>
+      <button
+        onclick={cancelInstall}
+        class="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
+      >
+        Cancel install
+      </button>
     {:else if step === "done"}
       <div class="flex items-start gap-3 mb-6">
         <span class="size-6 grid place-items-center rounded-full bg-emerald-500/20 text-emerald-300"><Icon name="check" class="w-3.5 h-3.5" /></span>
