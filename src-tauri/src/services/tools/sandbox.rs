@@ -96,10 +96,7 @@ impl WorkspaceJail {
                             || e.to_string().to_lowercase().contains("too many")
                             || e.to_string().to_lowercase().contains("loop");
                         if is_loop {
-                            return Err(AppError::sandbox_denied(
-                                input,
-                                "Symlink loop detected",
-                            ));
+                            return Err(AppError::sandbox_denied(input, "Symlink loop detected"));
                         }
                         let err_msg = format!("Symlink resolution failed: {e}");
                         return Err(AppError::sandbox_denied(input, &err_msg));

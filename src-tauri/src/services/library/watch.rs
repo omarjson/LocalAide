@@ -30,7 +30,6 @@ impl Default for LibraryWatcher {
 }
 
 impl LibraryWatcher {
-
     pub fn start_watch<U: LibraryUpdater>(
         &self,
         folder: &Path,
