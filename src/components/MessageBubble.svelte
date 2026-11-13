@@ -23,6 +23,7 @@
   let editDraft = $state("");
   let editEl = $state<HTMLTextAreaElement>();
   let activeCitation = $state<Citation | null>(null);
+  let lightbox = $state<string | null>(null);
 
   $effect(() => {
     if (isEditing) {
@@ -92,6 +93,43 @@
 
     return parts.length > 0 ? parts : [{ type: "text", text: content }];
   });
+
+  // Inline markdown: `code`, **bold**, *italic*, and bare links. Rendered as
+  // tokens through {#each} — never {@html} — so nothing is ever injected.
+  type InlineToken =
+    | { t: "text"; v: string }
+    | { t: "code"; v: string }
+    | { t: "bold"; v: string }
+    | { t: "italic"; v: string }
+    | { t: "link"; v: string; href: string };
+
+  const inlineRegex = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|(https?:\/\/[^\s<>()[\]]+)/g;
+
+  function parseInline(text: string): InlineToken[] {
+    const tokens: InlineToken[] = [];
+    let last = 0;
+    let m: RegExpExecArray | null;
+    inlineRegex.lastIndex = 0;
+    while ((m = inlineRegex.exec(text)) !== null) {
+      if (m.index > last) {
+        tokens.push({ t: "text", v: text.slice(last, m.index) });
+      }
+      if (m[1] !== undefined) {
+        tokens.push({ t: "code", v: m[1] });
+      } else if (m[2] !== undefined) {
+        tokens.push({ t: "bold", v: m[2] });
+      } else if (m[3] !== undefined) {
+        tokens.push({ t: "italic", v: m[3] });
+      } else if (m[4] !== undefined) {
+        tokens.push({ t: "link", v: m[4], href: m[4] });
+      }
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) {
+      tokens.push({ t: "text", v: text.slice(last) });
+    }
+    return tokens.length > 0 ? tokens : [{ t: "text", v: text }];
+  }
 </script>
 
 <div class={role === "user" ? "flex justify-end group mb-4" : "flex justify-start group mb-4"}>
@@ -135,7 +173,14 @@
         {#if images.length > 0}
           <div class="flex flex-wrap gap-2 mb-2">
             {#each images as src, i (i)}
-              <img src={src} alt="Attached image {i + 1}" class="max-h-48 rounded-lg border border-white/20" />
+              <button
+                type="button"
+                onclick={() => (lightbox = src)}
+                aria-label="View image {i + 1} fullscreen"
+                class="block cursor-zoom-in"
+              >
+                <img src={src} alt="Attached image {i + 1}" class="max-h-48 rounded-lg border border-white/20" />
+              </button>
             {/each}
           </div>
         {/if}
@@ -145,7 +190,11 @@
           {/if}
           {#each segments as seg, idx}
             {#if seg.type === "text"}
-              <div class="whitespace-pre-wrap">{seg.text}</div>
+              <div class="whitespace-pre-wrap">
+                {#each parseInline(seg.text) as tok, ti (ti)}
+                  {#if tok.t === "code"}<code class="px-1 py-0.5 rounded bg-ink-950 border border-ink-700/60 text-[0.85em] font-mono text-ember-200">{tok.v}</code>{:else if tok.t === "bold"}<strong class="font-semibold text-ink-50">{tok.v}</strong>{:else if tok.t === "italic"}<em class="italic">{tok.v}</em>{:else if tok.t === "link"}<a href={tok.href} target="_blank" rel="noopener noreferrer" class="underline decoration-ember-500/50 hover:decoration-ember-400 text-ember-300 break-all">{tok.v}</a>{:else}{tok.v}{/if}
+                {/each}
+              </div>
             {:else}
               <div class="rounded-xl overflow-hidden border border-ink-700/60 bg-ink-950 my-2">
                 <div class="flex items-center justify-between px-3 py-1.5 bg-ink-900/90 border-b border-ink-800 text-[11px] font-mono text-ink-400">
@@ -220,6 +269,32 @@
     {/if}
   </div>
 </div>
+
+{#if lightbox}
+  <div
+    class="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-6"
+    role="presentation"
+    in:fade={{ duration: dur(100) }}
+    out:fade={{ duration: dur(80) }}
+    onclick={() => (lightbox = null)}
+    onkeydown={(e) => { if (e.key === 'Escape') lightbox = null; }}
+  >
+    <img
+      src={lightbox}
+      alt="Attached image fullscreen"
+      class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700"
+      onclick={(e) => e.stopPropagation()}
+    />
+    <button
+      type="button"
+      onclick={() => (lightbox = null)}
+      aria-label="Close fullscreen image"
+      class="absolute top-5 right-5 p-2 rounded-xl bg-ink-900 border border-ink-700 text-ink-300 hover:text-ink-100 transition-colors"
+    >
+      <Icon name="close" class="w-4 h-4" />
+    </button>
+  </div>
+{/if}
 
 {#if activeCitation}
   <div
