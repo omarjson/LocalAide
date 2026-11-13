@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::models_dir;
+use crate::services::models::catalog::{CatalogEntry, CatalogManifest};
+use crate::services::models::verify::compute_sha256_streaming;
 use tauri::Emitter;
 
 /// A downloadable companion file (config, tokenizer, sidecar json…).
@@ -63,7 +65,7 @@ impl Preset {
         Self {
             id: "tiny".into(),
             name: "Tiny".into(),
-            fits_ram_gb: "4-8 GB".into(),
+            fits_ram_gb: "4 GB+".into(),
             total_ram_gb: 1.0,
             models: vec!["qwen3.5-0.8b-q4".into()],
         }
@@ -72,178 +74,67 @@ impl Preset {
         Self {
             id: "small".into(),
             name: "Small".into(),
-            fits_ram_gb: "8-12 GB".into(),
-            total_ram_gb: 1.8,
-            models: vec!["gemma3-1b-it-q4".into(), "qwen3.5-2b-q4".into()],
+            fits_ram_gb: "8 GB+".into(),
+            total_ram_gb: 4.0,
+            models: vec!["qwen3.5-2b-q4".into(), "gemma4-e2b-qat-q4".into()],
         }
     }
     pub fn balanced() -> Self {
         Self {
             id: "balanced".into(),
             name: "Balanced".into(),
-            fits_ram_gb: "8-12 GB".into(),
-            total_ram_gb: 3.0,
-            models: vec!["llama4-3b-q4".into(), "qwen3.5-4b-q4".into()],
+            fits_ram_gb: "16 GB+".into(),
+            total_ram_gb: 9.5,
+            models: vec!["qwen3.5-9b-q4".into(), "gemma4-e4b-qat-q4".into()],
         }
     }
     pub fn advanced() -> Self {
         Self {
             id: "advanced".into(),
             name: "Advanced".into(),
-            fits_ram_gb: "12 GB+".into(),
-            total_ram_gb: 6.8,
-            models: vec!["deepseek-r2-8b-q4".into(), "qwen3.5-9b-q4".into()],
+            fits_ram_gb: "32 GB".into(),
+            total_ram_gb: 20.0,
+            models: vec!["gemma4-26b-a4b-q4".into(), "qwen3.8-27b-q4".into()],
         }
     }
 }
 
-/// Default model catalog (JSON-serializable, can be overridden by user config).
+/// Built-in catalog. The single source is `services::models::catalog`.
 pub fn default_catalog() -> Vec<ModelEntry> {
-    vec![
-        ModelEntry {
-            id: "qwen3.5-0.8b-q4".into(),
-            name: "Qwen3.5-0.8B Q4_K_M".into(),
-            kind: ModelKind::LLM,
-            params: "0.8B".into(),
-            file_size: 500 * 1024 * 1024,
-            ram_estimate_gb: 1.0,
-            url: "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf".into(),
-            sha256: None,
-            quant: Some("Q4_K_M".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "qwen3.5-2b-q4".into(),
-            name: "Qwen3.5-2B Q4_K_M".into(),
-            kind: ModelKind::LLM,
-            params: "2B".into(),
-            file_size: 1_200 * 1024 * 1024,
-            ram_estimate_gb: 1.6,
-            url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf".into(),
-            sha256: None,
-            quant: Some("Q4_K_M".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "qwen3.5-4b-q4".into(),
-            name: "Qwen3.5-4B Q4_K_M".into(),
-            kind: ModelKind::LLM,
-            params: "4B".into(),
-            file_size: 2_400 * 1024 * 1024,
-            ram_estimate_gb: 2.8,
-            url: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf".into(),
-            sha256: None,
-            quant: Some("Q4_K_M".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "qwen3.5-9b-q4".into(),
-            name: "Qwen3.5-9B Q4_K_M".into(),
-            kind: ModelKind::LLM,
-            params: "9B".into(),
-            file_size: 5_600 * 1024 * 1024,
-            ram_estimate_gb: 6.2,
-            url: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf".into(),
-            sha256: None,
-            quant: Some("Q4_K_M".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "embeddinggemma-2-300m".into(),
-            name: "EmbeddingGemma 2 300M".into(),
-            kind: ModelKind::Embedding,
-            params: "300M".into(),
-            file_size: 439 * 1024 * 1024,
-            ram_estimate_gb: 0.567,
-            url: "https://huggingface.co/google/embeddinggemma-2-300m/resolve/main/model.safetensors".into(),
-            sha256: None,
-            quant: None,
-            installed: false,
-            active: false,
-            files: vec![
-                ModelFile {
-                    url: "https://huggingface.co/google/embeddinggemma-2-300m/resolve/main/config.json".into(),
-                    sha256: None,
-                    dest: "config.json".into(),
-                },
-                ModelFile {
-                    url: "https://huggingface.co/google/embeddinggemma-2-300m/resolve/main/tokenizer.json".into(),
-                    sha256: None,
-                    dest: "tokenizer.json".into(),
-                },
-            ],
-        },
-        ModelEntry {
-            id: "whisper-tiny-q5".into(),
-            name: "Whisper Tiny Q5".into(),
-            kind: ModelKind::STT,
-            params: "39M".into(),
-            file_size: 75 * 1024 * 1024,
-            ram_estimate_gb: 0.1,
-            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin".into(),
-            sha256: None,
-            quant: Some("Q5".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "whisper-base-q5".into(),
-            name: "Whisper Base Q5".into(),
-            kind: ModelKind::STT,
-            params: "74M".into(),
-            file_size: 150 * 1024 * 1024,
-            ram_estimate_gb: 0.25,
-            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin".into(),
-            sha256: None,
-            quant: Some("Q5".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-        ModelEntry {
-            id: "piper-small".into(),
-            name: "Piper small TTS".into(),
-            kind: ModelKind::TTS,
-            params: "~30M".into(),
-            file_size: 80 * 1024 * 1024,
-            ram_estimate_gb: 0.1,
-            url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx".into(),
-            sha256: None,
-            quant: None,
-            installed: false,
-            active: false,
-            files: vec![
-                ModelFile {
-                    url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json".into(),
-                    sha256: None,
-                    dest: "en_US-lessac-medium.onnx.json".into(),
-                },
-            ],
-        },
-        ModelEntry {
-            id: "qwen25-vl-3b-q4".into(),
-            name: "Qwen2.5-VL 3B Q4".into(),
-            kind: ModelKind::Vision,
-            params: "3B".into(),
-            file_size: 1_800 * 1024 * 1024,
-            ram_estimate_gb: 1.8,
-            url: "https://huggingface.co/Qwen/Qwen2.5-VL-3B-GGUF/resolve/main/qwen2.5-vl-3b-Q4_K_M.gguf".into(),
-            sha256: None,
-            quant: Some("Q4_K_M".into()),
-            installed: false,
-            active: false,
-            files: vec![],
-        },
-    ]
+    CatalogManifest::default_manifest()
+        .models
+        .into_iter()
+        .map(catalog_entry_to_model_entry)
+        .collect()
+}
+
+fn catalog_entry_to_model_entry(e: CatalogEntry) -> ModelEntry {
+    let kind = match e.kind.as_str() {
+        "embedding" | "reranker" => ModelKind::Embedding,
+        _ => ModelKind::LLM,
+    };
+    ModelEntry {
+        id: e.id,
+        name: e.name,
+        kind,
+        params: e.params,
+        file_size: e.file_size,
+        ram_estimate_gb: e.ram_estimate_gb,
+        url: e.url,
+        sha256: Some(e.sha256),
+        quant: Some(e.quant),
+        installed: false,
+        active: false,
+        files: e
+            .companions
+            .into_iter()
+            .map(|c| ModelFile {
+                url: c.url,
+                sha256: Some(c.sha256),
+                dest: c.dest,
+            })
+            .collect(),
+    }
 }
 
 /// Download progress payload emitted via Tauri event.
@@ -337,43 +228,21 @@ impl ModelManager {
     }
 
     pub(crate) fn model_path(&self, id: &str) -> PathBuf {
-        self.models_dir.join(format!("{}.bin", id))
+        self.models_dir.join(format!("{id}.gguf"))
     }
 
-    /// Directory that owns a model and its companion files.
-    /// Single-file GGUF/ONNX models keep a flat `{id}.bin` path for backwards
-    /// compatibility; multi-file models (safetensors + config + tokenizer) live
-    /// inside `{id}/`.
-    pub(crate) fn model_dir(&self, id: &str) -> PathBuf {
-        let entry = self.catalog.iter().find(|m| m.id == id);
-        if let Some(e) = entry {
-            if !e.files.is_empty() {
-                return self.models_dir.join(id);
-            }
-        }
+    /// Directory that holds model files. All models share the flat models folder.
+    pub(crate) fn model_dir(&self, _id: &str) -> PathBuf {
         self.models_dir.clone()
     }
 
     /// Resolve the destination path for a model's primary file.
     pub(crate) fn primary_path(&self, id: &str) -> PathBuf {
-        let entry = self.catalog.iter().find(|m| m.id == id);
-        match entry {
-            Some(e) if !e.files.is_empty() => {
-                // Primary file keeps its source file name inside the model dir.
-                let name = e
-                    .url
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or("model.safetensors")
-                    .to_string();
-                self.model_dir(id).join(name)
-            }
-            _ => self.model_path(id),
-        }
+        self.model_path(id)
     }
 
-    pub(crate) fn companion_path(&self, id: &str, f: &ModelFile) -> PathBuf {
-        self.model_dir(id).join(&f.dest)
+    pub(crate) fn companion_path(&self, _id: &str, f: &ModelFile) -> PathBuf {
+        self.models_dir.join(&f.dest)
     }
 
     /// List catalog entries with installed/active flags merged from persisted state.
@@ -640,7 +509,6 @@ impl ModelManager {
         cancel: &AtomicBool,
     ) -> Result<String, String> {
         use futures::StreamExt;
-        use sha2::{Digest, Sha256};
         use std::io::{Seek, Write};
 
         let file_name = dest
@@ -694,14 +562,8 @@ impl ModelManager {
         file.flush().map_err(|e| e.to_string())?;
         drop(file);
 
-        // Verify full file hash after download completes
-        let mut hasher = Sha256::new();
-        let mut f = std::fs::File::open(dest).map_err(|e| e.to_string())?;
-        let mut buf = Vec::new();
-        std::io::Read::read_to_end(&mut std::io::BufReader::new(&mut f), &mut buf)
-            .map_err(|e| e.to_string())?;
-        hasher.update(&buf);
-        let digest = format!("{:x}", hasher.finalize());
+        // Hash the finished file in streamed chunks so large models never load into RAM.
+        let digest = compute_sha256_streaming(dest).map_err(|e| e.to_string())?;
         if let Some(expected) = expected {
             let expected = expected.trim();
             if !expected.eq_ignore_ascii_case(&digest) {

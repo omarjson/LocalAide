@@ -23,6 +23,8 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 filename,
                 size_bytes: e.file_size,
                 ram_estimate_gb: e.ram_estimate_gb as f64,
+                quant: e.quant.clone(),
+                license: e.license.clone(),
                 sha256: e.sha256.clone(),
                 download_url: e.url.clone(),
                 installed,

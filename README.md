@@ -76,7 +76,7 @@ The majority of contemporary AI tools rely on centralized cloud infrastructure. 
 - **Private Local Chat**: Real-time token streaming with sub-100ms cancellation via atomic token flags. Pre-configured presets for **General Chat**, **Code Assistant**, **Research Analyst**, and **Minimalist**.
 - **Sliding-Window Context Budget**: Intelligently packs conversational history, dynamically truncates older turns while preserving the system prompt, and guarantees memory headroom for model responses.
 - **Natural Boundary Document Chunker**: Ingests Markdown, plain text, and PDF files. Chunks text along natural paragraph and sentence boundaries with configurable sliding overlap.
-- **Hybrid Search Engine (< 50ms Retrieval)**: Embedded SQLite WAL engine executing full-text BM25 search via FTS5 alongside Cosine Vector similarity, fused via **Reciprocal Rank Fusion (RRF, $k=60$)**.
+- **Keyword Search (FTS5 BM25)**: Embedded SQLite WAL engine running full-text BM25 search over FTS5. Vector search and RRF fusion are not wired in v1.0.
 - **Associative Memory with Verifiable Citations**: Bidirectional disk synchronization (`~/.aiassistant/memory/`) with SQLite. Automatically recalls relevant knowledge above a strict relevance gate (`0.010`) and displays clickable citation pills in the chat UI.
 - **Capability-Rooted Workspace Jail**: Sandboxed tool execution environment confined to `~/.aiassistant/workspace/`. Traps directory traversal escapes (`..`), external symlinks, and recursive symlink loops (`ELOOP`).
 - **Interactive Tool Consent**: Non-destructive operations (file reads, directory listings) are safe by default; state-modifying operations (file writes, executions) trigger an explicit approval modal with audit logging in SQLite.
@@ -135,7 +135,7 @@ LocalAide is built from the ground up with a modern, high-performance systems an
 LocalAide adheres to strict architectural boundaries:
 1. **Single State Owner**: All mutable domain state is encapsulated in `AppState` managed by Tauri's dependency container.
 2. **Typed IPC Edges**: Zero `serde_json::Value` or `any` at the boundary. Every command takes a concrete DTO struct and returns a strongly-typed `Result<T, AppError>`.
-3. **Dedicated Inference Worker**: Inference runs on an isolated background OS thread, communicating over crossbeam channels and atomic cancellation flags. The GUI and Tauri main thread are never blocked.
+3. **Separate Inference Process**: Chat runs in a `llama-server` child process bound to 127.0.0.1 with a random API key. The GUI never waits on the model.
 4. **Isolated Capability Jail**: File operations are confined to a designated directory with strict validation of lexical depth and canonical ancestry.
 
 ---
@@ -143,7 +143,7 @@ LocalAide adheres to strict architectural boundaries:
 ## How Each Subsystem Works
 
 ### 1. Inference Engine & Token Budgeting
-- **Worker Thread Execution**: When a prompt is submitted, the request is delegated to `LlamaWorkerEngine`. A dedicated OS thread loads the GGUF model tensors and streams generated tokens via Tauri Channels.
+- **Model Loading**: Loading a GGUF file starts `llama-server` with the model and its vision projector, if one is present. Switching or stopping models ends the process.
 - **Sub-100ms Cancellation**: An `Arc<AtomicBool>` cancellation token is checked on every token generation step. Pressing `Esc` or the Stop button halts generation in under 100 milliseconds without corrupting the model state.
 - **Dynamic Context Budgeting**: The `ContextBudget` subsystem calculates the model's token limits. If the conversation history exceeds the budget, older turns are pruned while preserving the system instructions, the RAG context block, and the user's latest query.
 
@@ -174,20 +174,18 @@ LocalAide adheres to strict architectural boundaries:
 
 ---
 
-## Hardware Requirements & Recommended Models (2025/06+ Only)
+## Hardware Requirements & Recommended Models
 
-LocalAide supports any standard GGUF quantized model (`Q4_K_M`, `Q5_K_M`, `Q8_0`). The built-in verified catalog includes only modern open-weights architectures released in **June 2025 and newer**:
+LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 models, including vision, embedding, reranking and coding models. Each entry was checked against Hugging Face. Each file's size and SHA-256 match the hub, and each license is shown in the Model Manager.
 
-| Model | Release Date | Parameter Size | Quantization | RAM / VRAM Req. | Recommended Use Case |
-|---|:---:|---|---|---|---|
-| **Qwen 3.5 0.8B** | Late 2025 | 0.8 Billion | `Q4_K_M` (~531 MB) | 4–8 GB RAM | Ultra-fast lightweight reasoning for background tasks & low-RAM laptops. |
-| **Gemma 3 1B IT** | July 2025 | 1.2 Billion | `Q4_K_M` (~840 MB) | 4–8 GB RAM | Google DeepMind's compact next-gen model with strict instruction following. |
-| **Qwen 3.5 2B** | Late 2025 | 2.1 Billion | `Q4_K_M` (~1.28 GB) | 8–12 GB RAM | High-efficiency conversational assistant with clean structured output. |
-| **Llama 4 Scout 3B** | Sept 2025 | 3.2 Billion | `Q4_K_M` (~1.95 GB) | 8–16 GB RAM | Meta's next-gen scout architecture: multilingual fluency and rapid reasoning. |
-| **Gemma 3 4B IT** | July 2025 | 4.1 Billion | `Q4_K_M` (~2.58 GB) | 8–16 GB RAM | Google DeepMind instruction model; superior multi-turn extraction & coding. |
-| **Qwen 3.5 4B** | Late 2025 | 4.0 Billion | `Q4_K_M` (~2.57 GB) | 8–16 GB RAM | **Recommended General Assistant.** Superb balance of speed, code, and logic. |
-| **DeepSeek R2 Distill 8B** | Oct 2025 | 8.0 Billion | `Q4_K_M` (~4.92 GB) | 16+ GB RAM | Second-gen open reasoning model with step-by-step chain-of-thought analysis. |
-| **Qwen 3.5 9B** | Late 2025 | 9.1 Billion | `Q4_K_M` (~5.92 GB) | 16+ GB RAM | Flagship local intelligence; near-frontier performance in code and synthesis. |
+| Preset | RAM needed | Models |
+|---|---|---|
+| Tiny | about 1 GB | Qwen3.5 0.8B |
+| Small | about 4 GB | Qwen3.5 2B, Gemma 4 E2B (QAT) |
+| Balanced | about 9.5 GB | Qwen3.5 9B, Gemma 4 E4B (QAT) |
+| Advanced | about 20 GB | Gemma 4 26B-A4B (MoE), Qwen3.8 27B |
+
+Full list, sources and rejected models: [docs/evidence/models-2026-11.md](docs/evidence/models-2026-11.md).
 
 ### Minimum Hardware
 - **Processor**: Intel/AMD x86_64 CPU (with AVX2 support) or Apple Silicon (M1/M2/M3/M4).
@@ -293,7 +291,8 @@ LocalAide was constructed under a non-negotiable **10/10 Quality Contract**. The
 ### Architectural Decision Records (ADRs)
 - [ADR-0001: Typed IPC Boundaries](docs/adr/0001-typed-ipc.md)
 - [ADR-0002: Storage Engine Migration to SQLite WAL](docs/adr/0002-storage.md)
-- [ADR-0003: Isolated llama.cpp Worker Engine](docs/adr/0003-inference.md)
+- [ADR-0003: Isolated llama.cpp Worker Engine (superseded by ADR-0007)](docs/adr/0003-inference.md)
+- [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
 - [ADR-0004: Capability Workspace Jail](docs/adr/0004-sandbox.md)
 - [ADR-0005: Atomic Updates & Verification](docs/adr/0005-updates.md)
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
@@ -304,9 +303,9 @@ LocalAide was constructed under a non-negotiable **10/10 Quality Contract**. The
 
 To guarantee stability and quality, LocalAide follows a strict scope discipline:
 
-- **Shipped in v1.0**: Local GGUF chat, model catalog & manager, SQLite WAL document library & hybrid search (FTS5 + Cosine RRF), markdown memory notes with RAG citations, and capability-rooted safe file tools.
+- **Shipped in v1.0**: Local GGUF chat via llama-server, model catalog & manager, SQLite WAL document library with keyword search (FTS5 BM25), markdown memory notes with RAG citations, and capability-rooted safe file tools.
 - **Explicit Non-Goals for v1.0 (Deferred per ADR-0006)**:
-  - *Voice (Whisper STT / Piper TTS)*: Deferred until local speech models can meet zero-crash, bounded memory standards across all OS targets.
+  - *Speech (STT / TTS)*: Deferred. The speech path needs a second runtime. See `.kiro/specs/engine-upgrade/tasks.md`.
   - *Vision (Candle SLM / Qwen-VL)*: Deferred until multimodal tensor graph integration is stabilized in the worker engine.
   - *Cloud LLM API Fallbacks*: Not included in v1.0 to preserve the strict privacy and zero-data-exfiltration guarantee.
   - *Modular In-App Hot-Swapping*: Replaced with standard signed app updates.
