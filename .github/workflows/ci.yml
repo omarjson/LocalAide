@@ -68,7 +68,17 @@ jobs:
         run: npm run smoke
 
       - name: Rust Formatting Check
-        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+        run: |
+          if ! cargo fmt --check --manifest-path src-tauri/Cargo.toml; then
+            {
+              echo '### rustfmt diff'
+              echo '```diff'
+              cargo fmt --manifest-path src-tauri/Cargo.toml
+              git diff -- src-tauri | head -500
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Rust Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
