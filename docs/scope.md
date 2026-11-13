@@ -84,6 +84,6 @@ By this definition, macOS packages are not yet supported: their CI stage has nev
 
 ## 5. Privacy and Security Stance
 - **Zero telemetry**: no tracking pixels, analytics SDKs, crash beacons, or remote logging.
-- **Network boundaries**: network access happens only for explicit user actions — model downloads from verified catalog URLs and, when cloud mode is switched on, chat requests to the provider the user configured. No update check is wired yet (ADR-0005).
+- **Network boundaries**: network access happens only for explicit user actions — model downloads from verified catalog URLs, the explicit catalog refresh from this repository's pinned URL (ADR-0008), and, when cloud mode is switched on, chat requests to the provider the user configured. No update check is wired yet (ADR-0005).
 - **Filesystem isolation**: tool file access is jailed to the workspace directory. Path traversal, symlink escapes, and system roots are hard-rejected.
 - **Integrity**: models are verified via SHA-256 checksums before entering active status. Provider base URLs must be HTTPS unless they point at the user's own machine.

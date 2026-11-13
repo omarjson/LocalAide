@@ -1,7 +1,10 @@
 use crate::app::error::AppError;
 use crate::app::events::DownloadProgressEvent;
 use crate::app::state::AppState;
-use crate::domain::model::{ModelInfo, ModelPreset, ModelSizeResult, ModelVerifyResult};
+use crate::domain::model::{
+    CatalogStatus, ModelInfo, ModelPreset, ModelSizeResult, ModelVerifyResult,
+};
+use crate::services::models::refresh::CATALOG_URL;
 use crate::services::models::verify::compute_sha256_streaming;
 use tauri::State;
 
@@ -11,6 +14,7 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
     let active_id = state.model_manager.active_model().map(|m| m.id);
 
     let infos = catalog
+        .models
         .iter()
         .map(|e| {
             let path = state.model_service.model_file_path(&e.id);
@@ -21,6 +25,7 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 id: e.id.clone(),
                 name: e.name.clone(),
                 filename,
+                kind: e.kind.clone(),
                 size_bytes: e.file_size,
                 ram_estimate_gb: e.ram_estimate_gb as f64,
                 quant: e.quant.clone(),
@@ -35,6 +40,36 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
         })
         .collect();
     Ok(infos)
+}
+
+#[tauri::command]
+pub fn model_catalog_status(state: State<'_, AppState>) -> CatalogStatus {
+    let manifest = state.model_service.manifest();
+    let refreshed = state.model_service.fetched_at().is_some();
+    CatalogStatus {
+        version: manifest.version,
+        updated_at: manifest.updated_at,
+        model_count: manifest.models.len(),
+        source: if refreshed { "refreshed" } else { "built-in" }.to_string(),
+        fetched_at: state.model_service.fetched_at(),
+        url: CATALOG_URL.to_string(),
+    }
+}
+
+/// Fetch the manifest from the project repository over HTTPS, validate it,
+/// cache it, and swap the active catalog. Fails closed: on any validation
+/// problem the previously active catalog stays in place.
+#[tauri::command]
+pub async fn model_catalog_refresh(state: State<'_, AppState>) -> Result<CatalogStatus, AppError> {
+    state.model_service.refresh_catalog().await?;
+    Ok(model_catalog_status(state))
+}
+
+/// Delete the cached catalog and restore the list compiled into the app.
+#[tauri::command]
+pub fn model_catalog_reset(state: State<'_, AppState>) -> Result<CatalogStatus, AppError> {
+    state.model_service.reset_catalog()?;
+    Ok(model_catalog_status(state))
 }
 
 #[tauri::command]

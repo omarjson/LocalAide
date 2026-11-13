@@ -11,7 +11,7 @@ use app::AppState;
 use model_manager::ModelManager;
 use services::inference::InferenceEngine;
 
-pub use app::paths::{config_path, index_dir, memory_dir, models_dir};
+pub use app::paths::{catalog_cache_path, config_path, index_dir, memory_dir, models_dir};
 
 pub fn run() {
     let model_manager = Arc::new(ModelManager::new().unwrap_or_else(|e| {
@@ -36,14 +36,15 @@ pub fn run() {
     ));
 
     let model_service = Arc::new(
-        crate::services::models::ModelService::new(models_dir()).unwrap_or_else(|e| {
-            log::error!(
-                "Failed to init ModelService at standard path: {e}; falling back to temp dir"
-            );
-            let fallback = std::env::temp_dir().join("localaide_models_fallback");
-            crate::services::models::ModelService::new(fallback)
-                .expect("Fallback model service must initialize")
-        }),
+        crate::services::models::ModelService::new(models_dir(), catalog_cache_path())
+            .unwrap_or_else(|e| {
+                log::error!(
+                    "Failed to init ModelService at standard path: {e}; falling back to temp dir"
+                );
+                let fallback = std::env::temp_dir().join("localaide_models_fallback");
+                crate::services::models::ModelService::new(fallback, catalog_cache_path())
+                    .expect("Fallback model service must initialize")
+            }),
     );
 
     let jail = Arc::new(
@@ -133,6 +134,9 @@ pub fn run() {
             commands::model_download_cancel,
             commands::model_download_preset,
             commands::model_preset_cancel,
+            commands::model_catalog_status,
+            commands::model_catalog_refresh,
+            commands::model_catalog_reset,
             commands::inference_load,
             commands::inference_unload,
             commands::chat_stream,

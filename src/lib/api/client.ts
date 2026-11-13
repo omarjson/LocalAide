@@ -2,6 +2,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
   AppConfigDto,
   AppError,
+  CatalogStatus,
   ChatMessage,
   ChatStreamEvent,
   ChatStreamRequest,
@@ -43,6 +44,18 @@ export class ApiClient {
   // Models
   async listModels(): Promise<ModelInfo[]> {
     return invoke<ModelInfo[]>("model_list");
+  }
+
+  async getCatalogStatus(): Promise<CatalogStatus> {
+    return invoke<CatalogStatus>("model_catalog_status");
+  }
+
+  async refreshCatalog(): Promise<CatalogStatus> {
+    return invoke<CatalogStatus>("model_catalog_refresh");
+  }
+
+  async resetCatalog(): Promise<CatalogStatus> {
+    return invoke<CatalogStatus>("model_catalog_reset");
   }
 
   async activateModel(id: string): Promise<void> {

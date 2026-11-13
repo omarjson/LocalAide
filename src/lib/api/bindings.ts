@@ -22,6 +22,8 @@ export interface ModelInfo {
   id: string;
   name: string;
   filename: string;
+  /** One of: "chat", "code", "embedding", "reranker". */
+  kind: string;
   size_bytes: number;
   ram_estimate_gb: number;
   quant: string;
@@ -32,6 +34,17 @@ export interface ModelInfo {
   verified: boolean;
   active: boolean;
   download_progress?: number | null;
+}
+
+/** Where the active model catalog came from (built-in or refreshed). */
+export interface CatalogStatus {
+  version: number;
+  updated_at: number;
+  model_count: number;
+  /** "built-in" or "refreshed". */
+  source: string;
+  fetched_at: number | null;
+  url: string;
 }
 
 export interface ModelPreset {

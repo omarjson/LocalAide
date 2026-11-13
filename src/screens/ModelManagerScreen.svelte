@@ -1,8 +1,7 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api/client";
-  import type { ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import type { CatalogStatus, ModelInfo, ModelPreset } from "../lib/api/bindings";
   import { onMount } from "svelte";
-  import Icon from "../components/Icon.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
 
   type Model = {
@@ -30,6 +29,10 @@
   let actionError = $state<string | null>(null);
   // From the system probe: models above this estimated RAM get a warning.
   let budgetGb = $state(0);
+  // Catalog provenance: built-in (compiled in) or refreshed (fetched from
+  // the project repo). Null until the first status call lands.
+  let catalog = $state<CatalogStatus | null>(null);
+  let catalogBusy = $state(false);
 
   const verifyModel = async (id: string) => {
     verifying = id;
@@ -60,7 +63,7 @@
         quant: m.quant,
         license: m.license,
         active: m.active ?? false,
-        kind: "llm"
+        kind: m.kind
       }));
     } catch {
       models = [];
@@ -68,6 +71,43 @@
       loading = false;
     }
   };
+
+  // Fetch the latest manifest from the project repository and swap the
+  // active catalog. Fails closed: the backend keeps the old list on any
+  // validation problem.
+  const refreshCatalogData = async () => {
+    catalogBusy = true;
+    actionError = null;
+    try {
+      catalog = await api.refreshCatalog();
+      await refresh();
+    } catch (e) {
+      actionError = errorMessage(e);
+    } finally {
+      catalogBusy = false;
+    }
+  };
+
+  // Delete the cached catalog and restore the list compiled into the app.
+  const resetCatalogData = async () => {
+    catalogBusy = true;
+    actionError = null;
+    try {
+      catalog = await api.resetCatalog();
+      await refresh();
+    } catch (e) {
+      actionError = errorMessage(e);
+    } finally {
+      catalogBusy = false;
+    }
+  };
+
+  const formatDate = (unixSeconds: number) =>
+    new Date(unixSeconds * 1000).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
 
   onMount(() => {
     let active = true;
@@ -80,6 +120,9 @@
       } catch {}
       try {
         presets = await api.getModelPresets();
+      } catch {}
+      try {
+        catalog = await api.getCatalogStatus();
       } catch {}
     })();
 
@@ -166,8 +209,10 @@
 
   const kindLabel = (k?: string) => {
     switch (k) {
-      case "llm": return "LLM";
+      case "chat": return "Chat";
+      case "code": return "Code";
       case "embedding": return "Embedding";
+      case "reranker": return "Reranker";
       default: return k?.toUpperCase() ?? "MODEL";
     }
   };
@@ -193,6 +238,47 @@
       </div>
     </div>
   </div>
+
+  {#if catalog}
+    <div class="border border-ink-800 rounded-2xl px-4 py-3 bg-ink-900/40 flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <div class="text-sm font-medium text-ink-200 flex items-center gap-2">
+          Catalog v{catalog.version}
+          <span
+            class="text-xs font-mono px-1.5 py-0.5 rounded border {catalog.source === 'refreshed'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : 'border-ink-700 text-ink-400'}"
+            title={catalog.source === 'refreshed' ? 'Fetched from the project repository' : 'Compiled into this build'}
+          >
+            {catalog.source}
+          </span>
+        </div>
+        <div class="text-xs text-ink-400 font-mono mt-0.5">
+          {catalog.model_count} models · checked {formatDate(catalog.updated_at)}{#if catalog.fetched_at} · refreshed {formatDate(catalog.fetched_at)}{/if}
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if catalog.source === "refreshed"}
+          <button
+            onclick={resetCatalogData}
+            disabled={catalogBusy}
+            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
+            title="Delete the cached catalog and restore the list built into this app"
+          >
+            Reset
+          </button>
+        {/if}
+        <button
+          onclick={refreshCatalogData}
+          disabled={catalogBusy}
+          class="px-3 py-1.5 text-xs font-medium rounded-lg bg-ink-800 hover:bg-ink-700 disabled:opacity-40 text-ink-200 transition-colors"
+          title="Fetch the newest catalog from the project repository over HTTPS"
+        >
+          {catalogBusy ? "Working…" : "Refresh catalog"}
+        </button>
+      </div>
+    </div>
+  {/if}
 
   {#if presets.length > 0}
     <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40">

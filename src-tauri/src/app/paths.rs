@@ -29,3 +29,9 @@ pub fn conversations_dir() -> PathBuf {
 pub fn config_path() -> PathBuf {
     app_dir().join("config.json")
 }
+
+/// Cached copy of a refreshed model catalog (ADR-0008), kept next to
+/// config.json so it lives and dies with the rest of the app's local state.
+pub fn catalog_cache_path() -> PathBuf {
+    app_dir().join("catalog-cache.json")
+}

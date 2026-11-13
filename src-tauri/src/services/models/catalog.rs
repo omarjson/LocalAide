@@ -2,6 +2,42 @@ use crate::app::error::AppError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+/// Hard limits applied to any manifest entering the app. A fetched body is
+/// rejected before parsing once it exceeds MAX_MANIFEST_BYTES, so a hostile
+/// or broken server cannot stream unbounded data into memory.
+pub const MAX_MANIFEST_BYTES: usize = 512 * 1024;
+pub const MAX_MODELS: usize = 200;
+const MAX_COMPANIONS_PER_MODEL: usize = 8;
+const KNOWN_KINDS: [&str; 4] = ["chat", "code", "embedding", "reranker"];
+
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Catalog download URLs come from the model list, never from the user, and
+/// must always be HTTPS — the models themselves are additionally pinned by
+/// SHA-256, so a compromised host cannot swap weights silently.
+fn require_https(url: &str, what: &str) -> Result<(), AppError> {
+    let parsed = url::Url::parse(url)
+        .map_err(|_| AppError::invalid_input(format!("Catalog {what} URL is not valid: {url}")))?;
+    if parsed.scheme() != "https" {
+        return Err(AppError::invalid_input(format!(
+            "Catalog {what} URL must use HTTPS: {url}"
+        )));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(AppError::invalid_input(format!(
+            "Catalog {what} URL must not embed credentials: {url}"
+        )));
+    }
+    if parsed.host_str().is_none() {
+        return Err(AppError::invalid_input(format!(
+            "Catalog {what} URL has no host: {url}"
+        )));
+    }
+    Ok(())
+}
+
 /// A file downloaded with a model, such as a vision projector (`mmproj`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CatalogCompanion {
@@ -31,7 +67,7 @@ pub struct CatalogEntry {
     pub companions: Vec<CatalogCompanion>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CatalogManifest {
     pub version: u32,
     pub updated_at: u64,
@@ -63,6 +99,100 @@ impl CatalogManifest {
                 "CATALOG_UNVERIFIED",
                 "Model catalog integrity signature mismatch",
             ));
+        }
+        Ok(())
+    }
+
+    /// Structural validation for any manifest entering the app, fetched or
+    /// loaded from cache. `min_version` is the version of the currently
+    /// active catalog: rejecting anything older makes catalog rollback
+    /// impossible after an app update ships a newer list (see ADR-0008).
+    pub fn validate(&self, min_version: u32) -> Result<(), AppError> {
+        if self.version < min_version {
+            return Err(AppError::invalid_input(format!(
+                "Catalog version {} is older than the active version {min_version}; refusing rollback",
+                self.version
+            )));
+        }
+        if self.models.is_empty() {
+            return Err(AppError::invalid_input("Catalog has no models"));
+        }
+        if self.models.len() > MAX_MODELS {
+            return Err(AppError::invalid_input(format!(
+                "Catalog lists {} models; the limit is {MAX_MODELS}",
+                self.models.len()
+            )));
+        }
+
+        let mut seen_ids = std::collections::HashSet::new();
+        for m in &self.models {
+            if m.id.is_empty() || !seen_ids.insert(m.id.as_str()) {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model id '{}' is empty or duplicated",
+                    m.id
+                )));
+            }
+            if m.name.is_empty() || m.params.is_empty() || m.quant.is_empty() {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has an empty name, params, or quant label",
+                    m.id
+                )));
+            }
+            if !KNOWN_KINDS.contains(&m.kind.as_str()) {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has unknown kind '{}'",
+                    m.id, m.kind
+                )));
+            }
+            if !is_sha256_hex(&m.sha256) {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has a malformed SHA-256",
+                    m.id
+                )));
+            }
+            if m.file_size == 0 {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' reports zero file size",
+                    m.id
+                )));
+            }
+            if !(0.1..=512.0).contains(&m.ram_estimate_gb) {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has an implausible RAM estimate ({})",
+                    m.id, m.ram_estimate_gb
+                )));
+            }
+            require_https(&m.url, "model download")?;
+            if m.companions.len() > MAX_COMPANIONS_PER_MODEL {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' lists {} companions; the limit is {MAX_COMPANIONS_PER_MODEL}",
+                    m.id,
+                    m.companions.len()
+                )));
+            }
+
+            let mut seen_dests = std::collections::HashSet::new();
+            for c in &m.companions {
+                require_https(&c.url, "companion download")?;
+                if !is_sha256_hex(&c.sha256) {
+                    return Err(AppError::invalid_input(format!(
+                        "Companion of '{}' has a malformed SHA-256",
+                        m.id
+                    )));
+                }
+                if c.file_size == 0 {
+                    return Err(AppError::invalid_input(format!(
+                        "Companion of '{}' reports zero file size",
+                        m.id
+                    )));
+                }
+                if c.dest.is_empty() || !seen_dests.insert(c.dest.as_str()) {
+                    return Err(AppError::invalid_input(format!(
+                        "Companion of '{}' has an empty or duplicated destination name",
+                        m.id
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -429,5 +559,123 @@ fn companion(url: &str, sha256: &str, file_size: u64, dest: &str) -> CatalogComp
         sha256: sha256.into(),
         file_size,
         dest: dest.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_entry(id: &str) -> CatalogEntry {
+        CatalogEntry {
+            id: id.into(),
+            name: "Test".into(),
+            params: "1B".into(),
+            kind: "chat".into(),
+            license: "Apache-2.0".into(),
+            file_size: 1_000_000,
+            ram_estimate_gb: 1.0,
+            url: "https://huggingface.co/example/test/resolve/main/test.gguf".into(),
+            sha256: "aa".repeat(32),
+            quant: "Q4_K_M".into(),
+            description: "test".into(),
+            companions: vec![],
+        }
+    }
+
+    fn sample_manifest(version: u32) -> CatalogManifest {
+        CatalogManifest {
+            version,
+            updated_at: 1_794_499_200,
+            signature: String::new(),
+            models: vec![sample_entry("test-1b")],
+        }
+    }
+
+    #[test]
+    fn embedded_manifest_passes_validation() {
+        let m = CatalogManifest::default_manifest();
+        m.verify().unwrap();
+        m.validate(m.version).unwrap();
+    }
+
+    #[test]
+    fn validation_rejects_catalog_rollback() {
+        let embedded_version = CatalogManifest::default_manifest().version;
+        assert!(sample_manifest(embedded_version - 1).validate(embedded_version).is_err());
+        assert!(sample_manifest(embedded_version).validate(embedded_version).is_ok());
+        assert!(sample_manifest(embedded_version + 1).validate(embedded_version).is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_bad_entries() {
+        let embedded_version = CatalogManifest::default_manifest().version;
+
+        // Duplicate model id
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models.push(sample_entry("test-1b"));
+        assert!(m.validate(0).is_err());
+
+        // Plain-HTTP download URL
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].url = "http://huggingface.co/example/test.gguf".into();
+        assert!(m.validate(0).is_err());
+
+        // Credentials embedded in the URL
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].url = "https://user:pass@huggingface.co/example/test.gguf".into();
+        assert!(m.validate(0).is_err());
+
+        // Malformed SHA-256
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].sha256 = "zz".repeat(32);
+        assert!(m.validate(0).is_err());
+
+        // Zero file size
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].file_size = 0;
+        assert!(m.validate(0).is_err());
+
+        // Unknown kind
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].kind = "agent".into();
+        assert!(m.validate(0).is_err());
+
+        // Implausible RAM estimate
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].ram_estimate_gb = 900.0;
+        assert!(m.validate(0).is_err());
+
+        // Companion with a duplicate destination name
+        let mut m = sample_manifest(embedded_version + 1);
+        m.models[0].companions = vec![
+            CatalogCompanion {
+                url: m.models[0].url.clone(),
+                sha256: m.models[0].sha256.clone(),
+                file_size: 100,
+                dest: "mmproj.gguf".into(),
+            },
+            CatalogCompanion {
+                url: m.models[0].url.clone(),
+                sha256: m.models[0].sha256.clone(),
+                file_size: 100,
+                dest: "mmproj.gguf".into(),
+            },
+        ];
+        assert!(m.validate(0).is_err());
+    }
+
+    /// Parity guard: the JSON that `model_catalog_refresh` fetches from the
+    /// project repository and the list compiled into the app must stay
+    /// identical. Regenerate `catalog/models.json` whenever
+    /// `default_manifest()` changes (version bump included), otherwise this
+    /// test fails and refreshed installs would diverge from built-in ones.
+    #[test]
+    fn catalog_json_matches_embedded_manifest() {
+        let raw = include_str!("../../../../catalog/models.json");
+        let parsed: CatalogManifest = serde_json::from_str(raw).expect("catalog/models.json parses");
+        assert_eq!(parsed, CatalogManifest::default_manifest());
+        parsed.verify().unwrap();
+        parsed.validate(parsed.version).unwrap();
     }
 }

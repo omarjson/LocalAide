@@ -3,6 +3,11 @@
 All notable changes to LocalAide are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Model catalog refresh (ADR-0008): an explicit "Refresh catalog" action fetches `catalog/models.json` from this repository over a pinned HTTPS URL, validates it (integrity digest, structural checks, version anti-rollback) before swapping it in, caches it next to `config.json`, and offers a Reset that restores the built-in list. A parity test keeps the JSON and the compile-time list identical.
+
 ## [0.1.0] - 2026-11-13
 
 First release on `main`, the branch of record. The earlier `v0.0.1` GitHub release and its tag were deleted on 2026-11-13 as superseded by this version. macOS/package bundling is the one CI stage not yet verified: the macOS sidecar builds were cancelled twice to save runner cost (a cancelled job, not a failed one).

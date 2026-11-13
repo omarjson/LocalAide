@@ -55,12 +55,13 @@ Search is BM25 keyword search over SQLite FTS5. Vector search and rank fusion ar
 - **Capability-rooted workspace jail**: file tools are confined to `~/.aiassistant/workspace/`. Paths are checked lexically and canonically; traversal escapes, outside symlinks, and symlink loops are rejected with `SANDBOX_DENIED`.
 - **Explicit tool consent**: reads, listings, and searches run without prompts; file writes require an approval modal ("Allow Once", "Allow for Session", "Deny"). Every tool call lands in a SQLite audit log you can view and clear in Settings.
 - **Verified model downloads**: a 36-model catalog with an integrity digest over ids, sizes, and hashes; resumable HTTP downloads to `.part` files; SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
+- **Catalog refresh, fail-closed**: the Models screen can fetch the newest catalog from this repository over HTTPS ([ADR-0008](docs/adr/0008-catalog-refresh.md)). Refreshes are explicit, validated structurally, checked against the integrity digest, and blocked from rolling back to an older version; Reset restores the list compiled into the app.
 - **Keyboard-complete navigation**: see the matrix below.
 - **Accessibility**: WCAG 2.2 AA is the target. Text contrast is audited against the design tokens ([docs/evidence/a11y.md](docs/evidence/a11y.md)); one open finding remains (border contrast), and focus rings, `aria-live` streaming, and reduced-motion support are in place.
 
 ## Hardware Requirements & Recommended Models
 
-LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 models, including vision, embedding, reranking, and coding models. Each entry was checked against Hugging Face; file sizes and SHA-256 values come from the hub's metadata, and each license is shown in the Model Manager.
+LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 models, including vision, embedding, reranking, and coding models. Each entry was checked against Hugging Face; file sizes and SHA-256 values come from the hub's metadata, and each license is shown in the Model Manager. The catalog can also be refreshed from this repository without updating the app — see the Models screen and [ADR-0008](docs/adr/0008-catalog-refresh.md).
 
 | Preset | RAM needed | Models |
 |---|---|---|
@@ -135,7 +136,7 @@ Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md
 - Border contrast fails the 3:1 non-text threshold ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
 - The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)).
 - macOS/package bundling is unverified in CI (see the status line).
-- Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest ([ADR-0005](docs/adr/0005-updates.md)).
+- Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest, and refreshed catalogs are validated structurally with anti-rollback ([ADR-0005](docs/adr/0005-updates.md), [ADR-0008](docs/adr/0008-catalog-refresh.md)).
 
 ## Scope & Non-Goals
 

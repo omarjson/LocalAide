@@ -51,10 +51,14 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **The clippy gate is now real:** `#![allow(clippy::all, unused)]` removed from `lib.rs`. The first unshielded clippy run reported 38 findings (6 unused imports; a dead method and struct field orphaned by the dead-code rounds; 18 collapsible-if converted to Rust 2024 let-chains; 3 missing `Default` impls; `sort_by_key`; `div_ceil`; `matches!`; `as_chunks`) plus 3 svelte a11y warnings on the lightbox dialog. All fixed across `0c85b7f`, `8c66e14`, `65bda98`.
 - **CI:** Quality Gate GREEN on `65bda98` with `clippy -D warnings` earned, not suppressed. Windows + Linux sidecar builds green; macOS cancelled again by operator decision.
 
+## 2026-11-14 — Model catalog refresh (ADR-0008)
+
+- **Kiro artifact:** the open-gap list this log tracks; ADR-0008 records the trust model.
+- **What changed:** the Models screen can now refresh the catalog without an app update. The manifest lives at a pinned URL in this repository (`catalog/models.json`, generated from `default_manifest()` and kept identical by a CI parity test). A refresh is explicit, streamed under a 512 KB cap, verified against the integrity digest, structurally validated (known kinds, unique ids, hex SHA-256 pins, HTTPS-only URLs, bounded counts), and rejected if older than the active version. Accepted manifests persist to `catalog-cache.json` (atomic temp+rename) and load at startup; Reset restores the built-in list. New commands: `model_catalog_status`, `model_catalog_refresh`, `model_catalog_reset`. The Models screen shows catalog version/source with Refresh and Reset controls, and model cards now carry their real kind (chat/code/embedding/reranker) instead of a hardcoded "LLM" label.
+
 ## Still open
 
 - A real-model chat and demo run on each platform (plan §8 test list, `demo-checklist.md`).
 - macOS/package bundling in CI (see the status line in README.md).
 - Image input exercised against a real vision model end to end.
-- Model catalog refresh mechanism (compile-time list today).
 - Binary code signing / notarization (ADR-0005).
