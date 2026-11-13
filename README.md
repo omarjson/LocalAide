@@ -15,7 +15,7 @@
 [![SQLite: WAL](https://img.shields.io/badge/SQLite-WAL%20Mode-003B57.svg)](https://www.sqlite.org/)
 [![Accessibility: WCAG 2.2 AA target](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20target-purple.svg)](docs/evidence/a11y.md)
 
-[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Packaging Guide](PACKAGING.md) • [Evidence Index](docs/evidence/scorecard.md)
+[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Packaging Guide](PACKAGING.md) • [Project Map](docs/evidence/project-map.html) • [Evidence Index](docs/evidence/scorecard.md)
 
 </div>
 
