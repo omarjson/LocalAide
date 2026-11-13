@@ -302,7 +302,6 @@ impl WorkspaceJail {
                 ))
             })?;
         }
-        }
 
         // Atomic write: write to temp file then rename
         let temp_filename = format!(
