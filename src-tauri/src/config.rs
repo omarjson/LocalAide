@@ -117,7 +117,10 @@ pub fn validate_base_url(url: &str) -> Result<(), String> {
                 Err("Plain HTTP is only allowed for addresses on this machine (127.0.0.1 or localhost). Use HTTPS for any remote provider.".to_string())
             }
         }
-        _ => Err("The base URL must start with https:// (or http:// for a proxy on this machine).".to_string()),
+        _ => Err(
+            "The base URL must start with https:// (or http:// for a proxy on this machine)."
+                .to_string(),
+        ),
     }
 }
 
@@ -145,7 +148,8 @@ mod tests {
 
     #[test]
     fn config_from_older_version_defaults_new_fields() {
-        let old = r#"{"selected_models":[],"presets":[],"ram_budget_mb":4096,"cloud_llm_enabled":false}"#;
+        let old =
+            r#"{"selected_models":[],"presets":[],"ram_budget_mb":4096,"cloud_llm_enabled":false}"#;
         let cfg: AppConfig = serde_json::from_str(old).unwrap();
         assert!(cfg.cloud_providers.is_empty());
         assert!(cfg.active_cloud_provider.is_none());

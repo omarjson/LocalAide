@@ -49,7 +49,10 @@ fn load_config(state: &State<'_, AppState>) -> Result<crate::config::AppConfig, 
     store.load().map_err(AppError::internal)
 }
 
-fn save_config(state: &State<'_, AppState>, cfg: &crate::config::AppConfig) -> Result<(), AppError> {
+fn save_config(
+    state: &State<'_, AppState>,
+    cfg: &crate::config::AppConfig,
+) -> Result<(), AppError> {
     let store = state
         .config_store
         .lock()
@@ -122,14 +125,26 @@ pub fn cloud_provider_save(
             provider.label = label;
             provider.base_url = base_url;
             provider.model = model;
-            if let Some(key) = req.api_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
+            if let Some(key) = req
+                .api_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|k| !k.is_empty())
+            {
                 provider.api_key = key.to_string();
             }
             provider.id.clone()
         }
         None => {
-            let Some(key) = req.api_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) else {
-                return Err(AppError::invalid_input("An API key is required for a new provider."));
+            let Some(key) = req
+                .api_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|k| !k.is_empty())
+            else {
+                return Err(AppError::invalid_input(
+                    "An API key is required for a new provider.",
+                ));
             };
             let id = format!("cp-{}", uuid_v4());
             cfg.cloud_providers.push(CloudProvider {

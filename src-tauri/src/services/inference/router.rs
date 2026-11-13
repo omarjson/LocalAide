@@ -7,8 +7,8 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
-use super::sidecar::SidecarEngine;
 use super::remote::{RemoteEngine, RemoteTarget};
+use super::sidecar::SidecarEngine;
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken, PromptMessage};
 use crate::app::error::AppError;
 
@@ -83,12 +83,14 @@ impl InferenceEngine for RouterEngine {
         on_token: Box<dyn FnMut(InferenceToken) + Send>,
     ) -> Result<GenerationMetrics, AppError> {
         match self.mode() {
-            EngineMode::Cloud => self
-                .remote
-                .generate(messages, max_tokens, temperature, cancel_flag, on_token),
-            EngineMode::Local => self
-                .local
-                .generate(messages, max_tokens, temperature, cancel_flag, on_token),
+            EngineMode::Cloud => {
+                self.remote
+                    .generate(messages, max_tokens, temperature, cancel_flag, on_token)
+            }
+            EngineMode::Local => {
+                self.local
+                    .generate(messages, max_tokens, temperature, cancel_flag, on_token)
+            }
         }
     }
 
