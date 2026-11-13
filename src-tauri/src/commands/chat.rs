@@ -10,7 +10,6 @@ use crate::services::inference::InferenceEngine;
 use crate::services::inference::PromptMessage;
 use crate::services::inference::context::ContextBudget;
 use std::fs;
-use std::path::Path;
 use tauri::State;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -80,13 +79,13 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
     let _ = state.model_manager.activate(&id);
 
     // Persist active model in config for auto-reload
-    if let Ok(store) = state.config_store.lock() {
-        if let Ok(mut cfg) = store.load() {
-            if !cfg.selected_models.contains(&id) {
-                cfg.selected_models.push(id.clone());
-            }
-            let _ = store.save(&cfg);
+    if let Ok(store) = state.config_store.lock()
+        && let Ok(mut cfg) = store.load()
+    {
+        if !cfg.selected_models.contains(&id) {
+            cfg.selected_models.push(id.clone());
         }
+        let _ = store.save(&cfg);
     }
 
     Ok(res)
@@ -271,22 +270,21 @@ pub fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
     for entry in fs::read_dir(&dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("json") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(stored) = serde_json::from_str::<StoredThread>(&content) {
-                    list.push(ChatThread {
-                        id: stored.id,
-                        title: stored.title,
-                        system_prompt: stored.system_prompt,
-                        created_at: stored.created_at,
-                        updated_at: stored.updated_at,
-                        message_count: stored.messages.len(),
-                    });
-                }
-            }
+        if path.extension().and_then(|e| e.to_str()) == Some("json")
+            && let Ok(content) = fs::read_to_string(&path)
+            && let Ok(stored) = serde_json::from_str::<StoredThread>(&content)
+        {
+            list.push(ChatThread {
+                id: stored.id,
+                title: stored.title,
+                system_prompt: stored.system_prompt,
+                created_at: stored.created_at,
+                updated_at: stored.updated_at,
+                message_count: stored.messages.len(),
+            });
         }
     }
-    list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    list.sort_by_key(|t| std::cmp::Reverse(t.updated_at));
     Ok(list)
 }
 
@@ -369,10 +367,10 @@ pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportRespon
     } else {
         // Markdown format
         let mut md = format!("# {}\n\n", stored.title);
-        if let Some(sys) = stored.system_prompt {
-            if !sys.trim().is_empty() {
-                md.push_str(&format!("**System Prompt:** {}\n\n---\n\n", sys));
-            }
+        if let Some(sys) = stored.system_prompt
+            && !sys.trim().is_empty()
+        {
+            md.push_str(&format!("**System Prompt:** {}\n\n---\n\n", sys));
         }
         for msg in stored.messages {
             let role_label = if msg.role == "user" {

@@ -7,7 +7,7 @@ pub mod sidecar;
 pub use router::RouterEngine;
 
 use crate::app::error::AppError;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;

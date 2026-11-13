@@ -20,20 +20,18 @@ pub struct FileIngester;
 
 impl FileIngester {
     pub fn is_supported_extension(path: &Path) -> bool {
-        match path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|s| s.to_lowercase())
-            .as_deref()
-        {
-            Some("md") | Some("markdown") | Some("txt") | Some("text") | Some("log") => true,
-            Some("rs") | Some("py") | Some("js") | Some("ts") | Some("svelte") => true,
-            Some("html") | Some("css") | Some("json") | Some("csv") | Some("toml") => true,
-            Some("yaml") | Some("yml") | Some("sh") | Some("sql") | Some("c") | Some("cpp")
-            | Some("h") | Some("go") => true,
-            Some("pdf") => true,
-            _ => false,
-        }
+        matches!(
+            path.extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase())
+                .as_deref(),
+            Some("md") | Some("markdown") | Some("txt") | Some("text") | Some("log")
+                | Some("rs") | Some("py") | Some("js") | Some("ts") | Some("svelte")
+                | Some("html") | Some("css") | Some("json") | Some("csv") | Some("toml")
+                | Some("yaml") | Some("yml") | Some("sh") | Some("sql") | Some("c") | Some("cpp")
+                | Some("h") | Some("go")
+                | Some("pdf")
+        )
     }
 
     pub fn should_ignore_path(path: &Path) -> bool {
@@ -339,11 +337,11 @@ impl FileIngester {
                 {
                     run.push(b);
                 } else {
-                    if run.len() >= 6 {
-                        if let Ok(s) = std::str::from_utf8(&run) {
-                            extracted.push_str(s);
-                            extracted.push(' ');
-                        }
+                    if run.len() >= 6
+                        && let Ok(s) = std::str::from_utf8(&run)
+                    {
+                        extracted.push_str(s);
+                        extracted.push(' ');
                     }
                     run.clear();
                 }
@@ -393,11 +391,11 @@ impl FileIngester {
                     i += 1;
                 }
 
-                if let Ok(s) = std::str::from_utf8(&str_bytes) {
-                    if !s.trim().is_empty() {
-                        out.push_str(s);
-                        out.push(' ');
-                    }
+                if let Ok(s) = std::str::from_utf8(&str_bytes)
+                    && !s.trim().is_empty()
+                {
+                    out.push_str(s);
+                    out.push(' ');
                 }
             } else {
                 i += 1;

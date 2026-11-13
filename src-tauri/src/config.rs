@@ -57,6 +57,12 @@ pub struct ConfigStore {
     path: PathBuf,
 }
 
+impl Default for ConfigStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigStore {
     pub fn new() -> Self {
         Self {

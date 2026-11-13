@@ -49,15 +49,15 @@ impl ModelDownloader {
     where
         F: FnMut(DownloadProgress) + Send + 'static,
     {
-        if let Some(parent) = dest.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    AppError::storage(format!(
-                        "Failed to create model directory {}: {e}",
-                        parent.display()
-                    ))
-                })?;
-            }
+        if let Some(parent) = dest.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError::storage(format!(
+                    "Failed to create model directory {}: {e}",
+                    parent.display()
+                ))
+            })?;
         }
 
         // Part file path

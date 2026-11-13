@@ -280,21 +280,21 @@ pub async fn model_download_preset(
 
     // Record what was installed so returning users skip the setup wizard
     // (App.svelte gates the wizard on selected_models).
-    if !installed.is_empty() {
-        if let Ok(store) = state.config_store.lock() {
-            match store.load() {
-                Ok(mut cfg) => {
-                    for id in &installed {
-                        if !cfg.selected_models.contains(id) {
-                            cfg.selected_models.push(id.clone());
-                        }
-                    }
-                    if let Err(e) = store.save(&cfg) {
-                        log::warn!("Could not record selected models: {e}");
+    if !installed.is_empty()
+        && let Ok(store) = state.config_store.lock()
+    {
+        match store.load() {
+            Ok(mut cfg) => {
+                for id in &installed {
+                    if !cfg.selected_models.contains(id) {
+                        cfg.selected_models.push(id.clone());
                     }
                 }
-                Err(e) => log::warn!("Could not load config to record selected models: {e}"),
+                if let Err(e) = store.save(&cfg) {
+                    log::warn!("Could not record selected models: {e}");
+                }
             }
+            Err(e) => log::warn!("Could not load config to record selected models: {e}"),
         }
     }
     Ok(())

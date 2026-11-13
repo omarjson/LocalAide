@@ -34,21 +34,20 @@ impl ApprovalManager {
         // Check if single-invocation approval is granted
         if req.approved == Some(true) {
             // If session token was provided, remember it for the session
-            if let Some(token) = &req.session_token {
-                if let Ok(mut tokens) = self.session_tokens.lock() {
-                    tokens.insert(token.clone());
-                }
+            if let Some(token) = &req.session_token
+                && let Ok(mut tokens) = self.session_tokens.lock()
+            {
+                tokens.insert(token.clone());
             }
             return true;
         }
 
         // Check if session approval was previously granted
-        if let Some(token) = &req.session_token {
-            if let Ok(tokens) = self.session_tokens.lock() {
-                if tokens.contains(token) {
-                    return true;
-                }
-            }
+        if let Some(token) = &req.session_token
+            && let Ok(tokens) = self.session_tokens.lock()
+            && tokens.contains(token)
+        {
+            return true;
         }
 
         false

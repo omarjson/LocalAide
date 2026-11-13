@@ -155,6 +155,12 @@ impl InstalledState {
     }
 }
 
+impl Default for InstalledState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Model manager: catalog, install/download with resume, verify SHA256, activate/remove.
 pub struct ModelManager {
     models_dir: PathBuf,
@@ -333,13 +339,5 @@ impl ModelManager {
                 false
             }
         }
-    }
-
-    fn entry(&self, id: &str) -> Result<ModelEntry, String> {
-        self.catalog
-            .iter()
-            .find(|m| m.id == id)
-            .cloned()
-            .ok_or_else(|| format!("model {id} not in catalog"))
     }
 }

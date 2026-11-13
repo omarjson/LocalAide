@@ -71,50 +71,49 @@ pub fn run() {
     // local sidecar auto-loads its model in every other case, including when
     // the stored provider was deleted or has an invalid base URL.
     let mut restored_cloud = false;
-    if let Ok(store) = app_state.config_store.lock() {
-        if let Ok(cfg) = store.load() {
-            if cfg.cloud_llm_enabled {
-                let active = cfg
-                    .active_cloud_provider
-                    .as_deref()
-                    .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id));
-                if let Some(p) = active {
-                    if crate::config::validate_base_url(&p.base_url).is_ok() {
-                        app_state.inference_engine.set_cloud_target(
-                            crate::services::inference::remote::RemoteTarget {
-                                label: p.label.clone(),
-                                base_url: p.base_url.clone(),
-                                model: p.model.clone(),
-                                api_key: p.api_key.clone(),
-                            },
-                        );
-                        restored_cloud = true;
-                        log::info!("Cloud mode restored: {label}", label = p.label);
-                    } else {
-                        log::warn!(
-                            "Cloud provider {label} has an invalid base URL; staying local",
-                            label = p.label
-                        );
-                    }
+    if let Ok(store) = app_state.config_store.lock()
+        && let Ok(cfg) = store.load()
+    {
+        if cfg.cloud_llm_enabled {
+            let active = cfg
+                .active_cloud_provider
+                .as_deref()
+                .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id));
+            if let Some(p) = active {
+                if crate::config::validate_base_url(&p.base_url).is_ok() {
+                    app_state.inference_engine.set_cloud_target(
+                        crate::services::inference::remote::RemoteTarget {
+                            label: p.label.clone(),
+                            base_url: p.base_url.clone(),
+                            model: p.model.clone(),
+                            api_key: p.api_key.clone(),
+                        },
+                    );
+                    restored_cloud = true;
+                    log::info!("Cloud mode restored: {label}", label = p.label);
                 } else {
-                    log::warn!("Cloud mode was on but no active provider exists; staying local");
+                    log::warn!(
+                        "Cloud provider {label} has an invalid base URL; staying local",
+                        label = p.label
+                    );
                 }
+            } else {
+                log::warn!("Cloud mode was on but no active provider exists; staying local");
             }
-            if !restored_cloud {
-                if let Some(active_id) = cfg.selected_models.last() {
-                    let models = app_state.model_manager.list_models();
-                    if let Some(entry) = models
-                        .into_iter()
-                        .find(|m| m.id == *active_id && m.installed)
-                    {
-                        let path = app_state.model_manager.primary_path(active_id);
-                        if path.exists() {
-                            match app_state.inference_engine.load(&path, 2048) {
-                                Ok(_) => log::info!("Auto-loaded model: {active_id}"),
-                                Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
-                            }
-                        }
-                    }
+        }
+        if !restored_cloud
+            && let Some(active_id) = cfg.selected_models.last()
+            && app_state
+                .model_manager
+                .list_models()
+                .iter()
+                .any(|m| m.id == *active_id && m.installed)
+        {
+            let path = app_state.model_manager.primary_path(active_id);
+            if path.exists() {
+                match app_state.inference_engine.load(&path, 2048) {
+                    Ok(_) => log::info!("Auto-loaded model: {active_id}"),
+                    Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
                 }
             }
         }

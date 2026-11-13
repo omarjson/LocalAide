@@ -1,6 +1,6 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::config::{AppConfig, UserPreset};
+use crate::config::UserPreset;
 use crate::domain::settings::{AppConfigDto, RamComputationResponse, UserPresetDto};
 use tauri::State;
 

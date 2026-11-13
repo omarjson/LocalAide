@@ -31,7 +31,7 @@ impl ContextBudget {
 
     /// Approximate token count (roughly 4 characters per token).
     pub fn estimate_tokens(text: &str) -> usize {
-        (text.chars().count() + 3) / 4
+        text.chars().count().div_ceil(4)
     }
 
     /// Build a bounded prompt from system prompt and chat history.

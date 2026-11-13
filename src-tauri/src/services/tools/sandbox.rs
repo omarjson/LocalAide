@@ -75,34 +75,34 @@ impl WorkspaceJail {
         // If the path exists on disk, canonicalize it to resolve symlinks and '..'
         if target.exists() || fs::symlink_metadata(&target).is_ok() {
             // First check if it is a symlink
-            if let Ok(meta) = fs::symlink_metadata(&target) {
-                if meta.file_type().is_symlink() {
-                    // Try to resolve symlink target
-                    match fs::canonicalize(&target) {
-                        Ok(canonical_target) => {
-                            if !canonical_target.starts_with(&self.canonical_root) {
-                                return Err(AppError::sandbox_denied(
-                                    input,
-                                    "Symlink target points outside workspace jail",
-                                ));
-                            }
-                            return Ok(canonical_target);
+            if let Ok(meta) = fs::symlink_metadata(&target)
+                && meta.file_type().is_symlink()
+            {
+                // Try to resolve symlink target
+                match fs::canonicalize(&target) {
+                    Ok(canonical_target) => {
+                        if !canonical_target.starts_with(&self.canonical_root) {
+                            return Err(AppError::sandbox_denied(
+                                input,
+                                "Symlink target points outside workspace jail",
+                            ));
                         }
-                        Err(e) => {
-                            // Detect symlink loop
-                            let is_loop = e.raw_os_error() == Some(62) // ELOOP macOS
-                                || e.raw_os_error() == Some(40) // ELOOP Linux
-                                || e.to_string().to_lowercase().contains("too many")
-                                || e.to_string().to_lowercase().contains("loop");
-                            if is_loop {
-                                return Err(AppError::sandbox_denied(
-                                    input,
-                                    "Symlink loop detected",
-                                ));
-                            }
-                            let err_msg = format!("Symlink resolution failed: {e}");
-                            return Err(AppError::sandbox_denied(input, &err_msg));
+                        return Ok(canonical_target);
+                    }
+                    Err(e) => {
+                        // Detect symlink loop
+                        let is_loop = e.raw_os_error() == Some(62) // ELOOP macOS
+                            || e.raw_os_error() == Some(40) // ELOOP Linux
+                            || e.to_string().to_lowercase().contains("too many")
+                            || e.to_string().to_lowercase().contains("loop");
+                        if is_loop {
+                            return Err(AppError::sandbox_denied(
+                                input,
+                                "Symlink loop detected",
+                            ));
                         }
+                        let err_msg = format!("Symlink resolution failed: {e}");
+                        return Err(AppError::sandbox_denied(input, &err_msg));
                     }
                 }
             }
@@ -292,15 +292,16 @@ impl WorkspaceJail {
 
         let target_path = self.resolve_path(rel_path)?;
 
-        if let Some(parent) = target_path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    AppError::storage(format!(
-                        "Failed to create parent directory {}: {e}",
-                        parent.display()
-                    ))
-                })?;
-            }
+        if let Some(parent) = target_path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError::storage(format!(
+                    "Failed to create parent directory {}: {e}",
+                    parent.display()
+                ))
+            })?;
+        }
         }
 
         // Atomic write: write to temp file then rename
@@ -397,10 +398,10 @@ impl WorkspaceJail {
                         matches.push(rel);
                     } else if meta.len() <= 256 * 1024 {
                         // For small files, search content
-                        if let Ok(content) = fs::read_to_string(&path) {
-                            if content.to_lowercase().contains(query) {
-                                matches.push(rel);
-                            }
+                        if let Ok(content) = fs::read_to_string(&path)
+                            && content.to_lowercase().contains(query)
+                        {
+                            matches.push(rel);
                         }
                     }
                 }

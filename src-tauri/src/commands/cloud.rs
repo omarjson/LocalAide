@@ -55,18 +55,17 @@ fn save_config(
 
 /// Switch the runtime engine to match the stored config.
 fn apply_engine_mode(state: &State<'_, AppState>, cfg: &crate::config::AppConfig) {
-    if cfg.cloud_llm_enabled {
-        if let Some(id) = cfg.active_cloud_provider.as_deref() {
-            if let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id) {
-                state.inference_engine.set_cloud_target(RemoteTarget {
-                    label: p.label.clone(),
-                    base_url: p.base_url.clone(),
-                    model: p.model.clone(),
-                    api_key: p.api_key.clone(),
-                });
-                return;
-            }
-        }
+    if cfg.cloud_llm_enabled
+        && let Some(id) = cfg.active_cloud_provider.as_deref()
+        && let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id)
+    {
+        state.inference_engine.set_cloud_target(RemoteTarget {
+            label: p.label.clone(),
+            base_url: p.base_url.clone(),
+            model: p.model.clone(),
+            api_key: p.api_key.clone(),
+        });
+        return;
     }
     state.inference_engine.set_local();
 }

@@ -3,13 +3,13 @@ pub mod ingest;
 pub mod search;
 pub mod watch;
 
-use self::db::{DbDocument, LibraryDb};
-use self::ingest::{FileIngester, IngestedFile};
+use self::db::LibraryDb;
+use self::ingest::FileIngester;
 use self::search::{HybridSearcher, SearchMode};
 use self::watch::{LibraryUpdater, LibraryWatcher};
 use crate::app::error::AppError;
 use crate::domain::document::{IndexerStatsResponse, SearchResultDoc};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -95,10 +95,10 @@ impl LibraryService {
         let mut stack = vec![folder.to_path_buf()];
 
         while let Some(current_dir) = stack.pop() {
-            if let Some(ref flag) = cancel_flag {
-                if flag.load(Ordering::Relaxed) {
-                    break;
-                }
+            if let Some(ref flag) = cancel_flag
+                && flag.load(Ordering::Relaxed)
+            {
+                break;
             }
 
             let entries = match std::fs::read_dir(&current_dir) {
@@ -110,10 +110,10 @@ impl LibraryService {
             };
 
             for entry in entries.flatten() {
-                if let Some(ref flag) = cancel_flag {
-                    if flag.load(Ordering::Relaxed) {
-                        break;
-                    }
+                if let Some(ref flag) = cancel_flag
+                    && flag.load(Ordering::Relaxed)
+                {
+                    break;
                 }
 
                 let p = entry.path();

@@ -97,7 +97,6 @@ impl HybridSearcher {
                 };
                 RawHit {
                     chunk_id: chunk.chunk_id,
-                    document_id: chunk.document_id,
                     path: chunk.path,
                     title: chunk.title,
                     snippet,
@@ -208,7 +207,6 @@ impl HybridSearcher {
 #[derive(Debug, Clone)]
 struct RawHit {
     chunk_id: String,
-    document_id: String,
     path: String,
     title: String,
     snippet: String,

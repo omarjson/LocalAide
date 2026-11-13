@@ -21,6 +21,15 @@ impl LibraryWatcher {
             watcher: Mutex::new(None),
         }
     }
+}
+
+impl Default for LibraryWatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LibraryWatcher {
 
     pub fn start_watch<U: LibraryUpdater>(
         &self,

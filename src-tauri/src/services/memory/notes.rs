@@ -233,16 +233,16 @@ impl NotesManager {
     pub fn forget_all(&self) -> Result<usize, AppError> {
         let mut count = 0;
         // Delete disk files
-        if self.notes_dir.exists() {
-            if let Ok(entries) = fs::read_dir(&self.notes_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        let path_str = path.to_string_lossy().to_string();
-                        let _ = fs::remove_file(&path);
-                        let _ = self.library.remove(&path_str);
-                        count += 1;
-                    }
+        if self.notes_dir.exists()
+            && let Ok(entries) = fs::read_dir(&self.notes_dir)
+        {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    let path_str = path.to_string_lossy().to_string();
+                    let _ = fs::remove_file(&path);
+                    let _ = self.library.remove(&path_str);
+                    count += 1;
                 }
             }
         }

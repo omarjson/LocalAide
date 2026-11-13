@@ -1,8 +1,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::document::{
-    IndexFolderResponse, IndexerStatsResponse, SearchIndexRequest, SearchResultDoc,
-    WatchFolderResponse,
+    IndexFolderResponse, IndexerStatsResponse, SearchResultDoc, WatchFolderResponse,
 };
 use crate::services::library::search::SearchMode;
 use std::path::Path;
