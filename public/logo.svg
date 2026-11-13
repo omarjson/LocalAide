@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="logo-title logo-desc">
   <title id="logo-title">LocalAide</title>
-  <desc id="logo-desc">A stitched ghost with an ember eye, for a private assistant that runs on your computer.</desc>
+  <desc id="logo-desc">A stitched ghost with a glowing ember eye, for a private assistant that runs on your computer.</desc>
   <rect width="512" height="512" rx="112" fill="#120d1a"/>
-  <!-- body -->
+  <!-- body: soft dome with a scalloped hem -->
   <path d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z" fill="#f3ead8"/>
-  <!-- stitch lines -->
-  <path d="M176 292q80-26 160 0" fill="none" stroke="#1f1630" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 12"/>
-  <path d="M176 330q80-26 160 0" fill="none" stroke="#1f1630" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 12"/>
-  <!-- patch -->
+  <!-- stitch line across the hem -->
+  <path d="M176 316q80-26 160 0" fill="none" stroke="#1f1630" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 12"/>
+  <!-- patched ember square, sewn on -->
   <rect x="274" y="352" width="72" height="56" rx="12" fill="#ff7a1a"/>
   <rect x="274" y="352" width="72" height="56" rx="12" fill="none" stroke="#1f1630" stroke-width="5" stroke-dasharray="8 8"/>
   <!-- eyes: one plain, one glowing ember -->
   <circle cx="212" cy="236" r="20" fill="#1f1630"/>
+  <circle cx="300" cy="236" r="27" fill="#ff7a1a" opacity="0.22"/>
   <circle cx="300" cy="236" r="20" fill="#1f1630"/>
-  <circle cx="300" cy="236" r="9" fill="#ff7a1a"/>
+  <circle cx="300" cy="236" r="11" fill="#ff7a1a"/>
 </svg>

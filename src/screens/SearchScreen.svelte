@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
   import { api } from "../lib/api/client";
   import type { IndexerStatsResponse, SearchResultDoc } from "../lib/api/bindings";
   import { onMount } from "svelte";
@@ -12,6 +13,7 @@
   let folder = $state("");
   let watching = $state(false);
   let loading = $state(false);
+  let libraryLoaded = $state(false);
   let searchDurationMs = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
@@ -30,6 +32,8 @@
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      libraryLoaded = true;
     }
   };
 
@@ -132,10 +136,7 @@
   </div>
 
   {#if errorMessage}
-    <div class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex justify-between items-center">
-      <span>{errorMessage}</span>
-      <button onclick={() => errorMessage = null} class="text-rose-400 hover:text-rose-200"><Icon name="close" class="w-3.5 h-3.5" /></button>
-    </div>
+    <ErrorBanner message={errorMessage} onDismiss={() => errorMessage = null} />
   {/if}
 
   <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
@@ -201,6 +202,8 @@
 
     {#if loading}
       <div class="py-12 text-center text-xs text-ink-400 font-mono">Searching library index…</div>
+    {:else if !libraryLoaded}
+      <div class="py-12 text-center text-xs text-ink-400 font-mono">Loading library…</div>
     {:else if results.length === 0}
       <div class="py-16 max-w-md mx-auto text-center space-y-2">
         {#if query}

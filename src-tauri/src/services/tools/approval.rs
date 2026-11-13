@@ -53,16 +53,4 @@ impl ApprovalManager {
 
         false
     }
-
-    pub fn revoke_session(&self, token: &str) {
-        if let Ok(mut tokens) = self.session_tokens.lock() {
-            tokens.remove(token);
-        }
-    }
-
-    pub fn clear_all_sessions(&self) {
-        if let Ok(mut tokens) = self.session_tokens.lock() {
-            tokens.clear();
-        }
-    }
 }

@@ -25,14 +25,6 @@ impl ToolService {
         }
     }
 
-    pub fn jail(&self) -> &WorkspaceJail {
-        &self.jail
-    }
-
-    pub fn approval(&self) -> &ApprovalManager {
-        &self.approval
-    }
-
     pub fn execute(&self, req: ToolExecutionRequest) -> Result<ToolExecutionResponse, AppError> {
         let action_name = match req.action.action_type {
             ToolActionType::ListDir => "list_dir",

@@ -70,16 +70,6 @@ impl JobRegistry {
         (id, cancel_flag)
     }
 
-    pub fn update_progress(&self, id: &str, progress: f32, message: Option<String>) {
-        let mut lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(entry) = lock.get_mut(id) {
-            entry.info.progress = progress.clamp(0.0, 100.0);
-            if message.is_some() {
-                entry.info.message = message;
-            }
-        }
-    }
-
     pub fn complete_job(&self, id: &str) {
         let mut lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(entry) = lock.get_mut(id) {
@@ -112,18 +102,6 @@ impl JobRegistry {
         lock.get(id)
             .map(|e| e.cancel_flag.load(Ordering::Relaxed))
             .unwrap_or(false)
-    }
-
-    pub fn get_job(&self, id: &str) -> Option<JobInfo> {
-        let lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-        lock.get(id).map(|e| e.info.clone())
-    }
-
-    pub fn list_jobs(&self) -> Vec<JobInfo> {
-        let lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-        let mut list: Vec<JobInfo> = lock.values().map(|e| e.info.clone()).collect();
-        list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        list
     }
 }
 

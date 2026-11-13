@@ -50,12 +50,6 @@ export interface ModelVerifyResult {
   error: string | null;
 }
 
-export interface ModelSizeResult {
-  id: string;
-  size_bytes: number;
-  complete: boolean;
-}
-
 export interface ChatMessage {
   role: string;
   content: string;
@@ -107,14 +101,6 @@ export interface ThreadExportRequest {
 export interface ThreadExportResponse {
   content: string;
   filename: string;
-}
-
-export interface IndexFileRequest {
-  path: string;
-}
-
-export interface IndexFolderRequest {
-  folder: string;
 }
 
 export interface IndexFolderResponse {
@@ -221,14 +207,6 @@ export interface ToolAuditEntry {
   details: string | null;
 }
 
-export interface FileInfo {
-  name: string;
-  path: string;
-  is_dir: boolean;
-  size_bytes: number;
-  modified_at: number;
-}
-
 export interface UserPresetDto {
   id: string;
   name: string;
@@ -247,12 +225,6 @@ export interface RamComputationResponse {
   total_ram_gb: number;
 }
 
-export interface EmbeddingStatusResponse {
-  engine: string;
-  dimension: number;
-  ready: boolean;
-}
-
 export interface DownloadProgressEvent {
   model_id: string;
   downloaded_bytes: number;
@@ -260,17 +232,6 @@ export interface DownloadProgressEvent {
   percent: number;
   speed_bps: number;
   status: string;
-}
-
-export type JobState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-
-export interface JobInfo {
-  id: string;
-  kind: string;
-  state: JobState;
-  progress: number;
-  message: string | null;
-  created_at: number;
 }
 
 // Online providers (opt-in cloud mode)

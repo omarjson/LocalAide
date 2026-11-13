@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import Icon from "./Icon.svelte";
+
   interface Props {
     input: string;
     streaming?: boolean;
@@ -24,6 +27,9 @@
     onPickImages,
     onRemoveImage,
   }: Props = $props();
+
+  let textareaEl = $state<HTMLTextAreaElement>();
+  onMount(() => textareaEl?.focus());
 </script>
 
 <div class="border-t border-ink-800 p-4">
@@ -65,8 +71,8 @@
             type="button"
             onclick={() => onRemoveImage?.(i)}
             aria-label="Remove image {i + 1}"
-            class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink-800 text-ink-200 text-xs leading-none"
-          >×</button>
+            class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink-800 text-ink-200 leading-none grid place-items-center"
+          ><Icon name="close" class="w-3 h-3" /></button>
         </div>
       {/each}
     </div>
@@ -89,6 +95,7 @@
     </label>
     <textarea
       aria-label="Chat message"
+      bind:this={textareaEl}
       bind:value={input}
       placeholder={streaming ? "Generating response…" : "Type a message…"}
       disabled={streaming}

@@ -9,5 +9,3 @@ export function formatBytes(bytes: number): string {
   }
   return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
-
-export const RAM_BUDGET_FACTOR = 0.7;

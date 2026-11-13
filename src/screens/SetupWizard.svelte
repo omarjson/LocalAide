@@ -31,6 +31,7 @@
   let selected = $state<Preset | null>(null);
   let progress = $state(0);
   let status = $state("Detecting system memory...");
+  let detectError = $state(false);
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));
@@ -42,9 +43,11 @@
       ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
       ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
       budget = probe.budget_gb * 1024 * 1024 * 1024;
+      detectError = false;
       step = "preset";
       status = `Recommended: ${recommended.name} preset fits your ${probe.budget_gb.toFixed(1)} GB budget.`;
     } catch (e: any) {
+      detectError = true;
       status = "System probe unavailable: " + (e?.message ?? String(e));
     }
   };
@@ -72,13 +75,23 @@
 </script>
 
 <div class="max-w-2xl mx-auto">
-  <div class="rounded-2xl border border-ink-800 bg-ink-900/60 p-6 shadow-[0_0_80px_rgba(217,70,239,0.08)]">
-    <h2 class="text-xl font-semibold tracking-tight mb-4">First run — Simple setup</h2>
+  <div class="rounded-2xl border border-ink-800 bg-ink-900/60 p-6 shadow-[0_0_80px_rgba(255,122,26,0.08)]">
+    <h2 class="text-lg font-semibold tracking-tight mb-4">First run — Simple setup</h2>
 
     {#if step === "detect"}
       <div class="flex flex-col items-center gap-3 py-10">
-        <div class="w-12 h-12 rounded-full border-4 border-ink-700 border-t-ember-500 animate-spin"></div>
-        <p class="text-sm text-ink-400">{status}</p>
+        {#if detectError}
+          <p class="text-sm text-rose-300">{status}</p>
+          <button
+            onclick={detect}
+            class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium transition-colors"
+          >
+            Retry
+          </button>
+        {:else}
+          <div class="w-12 h-12 rounded-full border-4 border-ink-700 border-t-ember-500 animate-spin"></div>
+          <p class="text-sm text-ink-400">{status}</p>
+        {/if}
       </div>
     {:else if step === "preset"}
       <div class="grid grid-cols-3 gap-2 text-sm mb-6">
@@ -131,11 +144,11 @@
       </div>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
-      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all" style="width:{progress}%"></div></div>
+      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>
       <div class="text-xs font-mono text-ink-400">{progress}%</div>
     {:else if step === "done"}
       <div class="flex items-start gap-3 mb-6">
-        <span class="size-6 grid place-items-center rounded-full bg-emerald-500/20 text-emerald-300">✓</span>
+        <span class="size-6 grid place-items-center rounded-full bg-emerald-500/20 text-emerald-300"><Icon name="check" class="w-3.5 h-3.5" /></span>
         <div>
           <div class="font-medium text-ink-100">Setup complete</div>
           <div class="text-sm text-ink-400">{status}</div>

@@ -1,7 +1,11 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api/client";
+  import { dur } from "../lib/motion";
   import type { CloudConfigStatus, ToolAuditEntry } from "../lib/api/bindings";
+  import { slide } from "svelte/transition";
   import { onMount } from "svelte";
+  import Icon from "../components/Icon.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
 
   let activeTab = $state<"general" | "security" | "audit">("general");
 
@@ -179,7 +183,7 @@
   };
 </script>
 
-<div class="max-w-3xl mx-auto space-y-6">
+<div class="max-w-4xl mx-auto space-y-6">
   <div class="border-b border-ink-800 pb-4 flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold tracking-tight text-ink-100">Settings & Security</h2>
@@ -264,7 +268,7 @@
         </p>
 
         {#if cloudError}
-          <div class="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-xl px-3 py-2">{cloudError}</div>
+          <ErrorBanner message={cloudError} onDismiss={() => cloudError = null} />
         {/if}
 
         {#if !cloud || cloud.providers.length === 0}
@@ -328,7 +332,7 @@
         {/if}
 
         {#if showProviderForm}
-          <div class="border border-ink-800 bg-ink-950/80 rounded-xl p-4 space-y-3">
+          <div class="border border-ink-800 bg-ink-950/80 rounded-xl p-4 space-y-3" transition:slide={{ duration: dur(150) }}>
             <div class="text-xs font-semibold text-ink-200 uppercase tracking-wider">
               {editingProviderId ? "Edit provider" : "Add provider"}
             </div>
@@ -370,7 +374,7 @@
               </label>
             </div>
             {#if providerFormError}
-              <div class="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-lg px-3 py-2">{providerFormError}</div>
+              <ErrorBanner message={providerFormError} onDismiss={() => providerFormError = null} />
             {/if}
             <div class="text-[11px] text-ink-400">
               The key is stored in this app's config file on this machine and is sent only to the base URL above.
@@ -409,8 +413,8 @@
     <div class="space-y-4">
       <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm">
-            🔒
+          <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <Icon name="lock" class="w-4 h-4" />
           </div>
           <div>
             <h3 class="text-sm font-semibold text-ink-100">Capability-Rooted Workspace Jail</h3>
@@ -485,7 +489,11 @@
         </div>
       </div>
 
-      {#if audits.length === 0}
+      {#if loadingAudits}
+        <div class="border border-ink-800 rounded-2xl p-8 text-center text-xs text-ink-400 font-mono bg-ink-900/30">
+          Loading audit log…
+        </div>
+      {:else if audits.length === 0}
         <div class="border border-ink-800 rounded-2xl p-8 text-center text-xs text-ink-400 bg-ink-900/30">
           No tool executions recorded yet.
         </div>

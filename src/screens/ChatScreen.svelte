@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
+  import { fly } from "svelte/transition";
   import { api } from "../lib/api/client";
+  import { dur } from "../lib/motion";
   import type { ChatMessage, ChatThread } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
+  import LogoMark from "../components/LogoMark.svelte";
   import ChatInput from "../components/ChatInput.svelte";
 
   let messages = $state<ChatMessage[]>([]);
@@ -344,7 +347,7 @@
           <span class="text-xs font-mono text-amber-300" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">Cloud: {cloudChat.model} · {cloudChat.label}</span>
         {:else}
           <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          <span class="text-xs font-mono text-ink-400">{model}</span>
+          <span class="text-xs font-mono text-ink-400">{activeModelName ?? model}</span>
         {/if}
       </div>
     </div>
@@ -382,7 +385,10 @@
 
   <!-- Threads Drawer -->
   {#if showThreads}
-    <div class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-ink-800 rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto">
+    <div
+      class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-ink-800 rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
+      transition:fly={{ y: -6, duration: dur(120) }}
+    >
       <div class="flex items-center justify-between pb-2 border-b border-ink-800 text-xs font-semibold text-ink-300">
         <span>Saved Conversations</span>
         <button onclick={newChat} class="text-[11px] text-ember-400 hover:underline">+ New</button>
@@ -406,8 +412,9 @@
               onclick={(e) => deleteThread(t.id, e)}
               class="opacity-0 group-hover:opacity-100 p-1 text-ink-400 hover:text-rose-400 transition-opacity"
               title="Delete thread"
+              aria-label="Delete thread {t.title}"
             >
-              ×
+              <Icon name="close" class="w-3 h-3" />
             </button>
           </div>
         {/each}
@@ -450,7 +457,7 @@
       <!-- Empty state: says what to do next, based on whether a model is active -->
       <div class="h-full flex flex-col justify-center items-center text-center p-6 space-y-6">
         <div class="space-y-2 max-w-sm">
-          <img src="/logo.svg" alt="" aria-hidden="true" class="w-12 h-12 mx-auto" />
+          <LogoMark class="w-12 h-12 mx-auto" />
           {#if cloudChat}
             <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
             <p class="text-xs text-ink-400">Running {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
@@ -506,9 +513,11 @@
     {#if userScrolledUp}
       <button
         onclick={() => scrollToBottom(true)}
-        class="fixed bottom-28 right-8 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-ink-700 text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-all flex items-center gap-1.5"
+        in:fly={{ y: 8, duration: dur(120) }}
+        out:fade={{ duration: dur(100) }}
+        class="absolute bottom-28 right-4 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-ink-700 text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-colors flex items-center gap-1.5"
       >
-        <span>↓</span>
+        <Icon name="arrow-down" class="w-3.5 h-3.5" />
         <span>Scroll to bottom</span>
       </button>
     {/if}

@@ -1,15 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use crate::models_dir;
 use crate::services::models::catalog::{CatalogEntry, CatalogManifest};
-use crate::services::models::verify::compute_sha256_streaming;
-use tauri::Emitter;
 
 /// A downloadable companion file (config, tokenizer, sidecar json…).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,15 +131,6 @@ fn catalog_entry_to_model_entry(e: CatalogEntry) -> ModelEntry {
     }
 }
 
-/// Download progress payload emitted via Tauri event.
-#[derive(Debug, Clone, Serialize)]
-pub struct DownloadProgress {
-    pub model_id: String,
-    pub bytes_downloaded: u64,
-    pub bytes_total: u64,
-    pub percent: f32,
-}
-
 /// Installed-model state persisted to disk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstalledState {
@@ -228,18 +216,9 @@ impl ModelManager {
         self.models_dir.join(format!("{id}.gguf"))
     }
 
-    /// Directory that holds model files. All models share the flat models folder.
-    pub(crate) fn model_dir(&self, _id: &str) -> PathBuf {
-        self.models_dir.clone()
-    }
-
     /// Resolve the destination path for a model's primary file.
     pub(crate) fn primary_path(&self, id: &str) -> PathBuf {
         self.model_path(id)
-    }
-
-    pub(crate) fn companion_path(&self, _id: &str, f: &ModelFile) -> PathBuf {
-        self.models_dir.join(&f.dest)
     }
 
     /// List catalog entries with installed/active flags merged from persisted state.
@@ -363,223 +342,4 @@ impl ModelManager {
             .cloned()
             .ok_or_else(|| format!("model {id} not in catalog"))
     }
-
-    /// Download (and install) a model with streaming progress, resume, cancel
-    /// and SHA256 verification. Progress is emitted as `model_download_progress`.
-    pub async fn download(&self, app: tauri::AppHandle, id: String) -> Result<(), String> {
-        let entry = self.entry(&id)?;
-
-        // Mark in-flight and install a fresh cancellation flag.
-        let cancel = Arc::new(AtomicBool::new(false));
-        {
-            let mut cancels = self
-                .cancels
-                .lock()
-                .map_err(|e| format!("cancels mutex poisoned: {e}"))?;
-            cancels.insert(id.clone(), cancel.clone());
-        }
-
-        let result = self.download_inner(&app, &entry, &cancel).await;
-
-        {
-            let mut cancels = self
-                .cancels
-                .lock()
-                .map_err(|e| format!("cancels mutex poisoned: {e}"))?;
-            cancels.remove(&id);
-        }
-
-        match result {
-            Ok(digest) => {
-                let started = now_iso();
-                {
-                    let mut state = self
-                        .state
-                        .lock()
-                        .map_err(|e| format!("state mutex poisoned: {e}"))?;
-                    state.installed.insert(
-                        id.clone(),
-                        InstalledModel {
-                            id: id.clone(),
-                            path: self.primary_path(&id).to_string_lossy().to_string(),
-                            sha256: Some(digest),
-                            installed_at: started,
-                        },
-                    );
-                }
-                self.save_state()?;
-                let _ = app.emit(
-                    "model_download_done",
-                    serde_json::json!({ "id": id, "ok": true }),
-                );
-                Ok(())
-            }
-            Err(e) => {
-                let _ = app.emit(
-                    "model_download_done",
-                    serde_json::json!({ "id": id, "ok": false, "error": e }),
-                );
-                Err(e)
-            }
-        }
-    }
-
-    async fn download_inner(
-        &self,
-        app: &tauri::AppHandle,
-        entry: &ModelEntry,
-        cancel: &AtomicBool,
-    ) -> Result<String, String> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60 * 60))
-            .connect_timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| e.to_string())?;
-
-        // (url, expected sha256, destination path)
-        let mut jobs: Vec<(String, Option<String>, PathBuf)> = vec![(
-            entry.url.clone(),
-            entry.sha256.clone(),
-            self.primary_path(&entry.id),
-        )];
-        for f in &entry.files {
-            jobs.push((
-                f.url.clone(),
-                f.sha256.clone(),
-                self.companion_path(&entry.id, f),
-            ));
-        }
-
-        let mut final_digest = String::new();
-        for (url, expected, dest) in jobs {
-            if let Some(parent) = dest.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-
-            // Resume: keep whatever bytes we already have on disk and request the
-            // remainder with a Range header.
-            let mut offset = dest.metadata().map(|m| m.len()).unwrap_or(0);
-
-            let mut attempt = client.get(&url);
-            if offset > 0 {
-                attempt = attempt.header("Range", format!("bytes={offset}-"));
-            }
-
-            let mut res = attempt.send().await.map_err(|e| e.to_string())?;
-            let status = res.status().as_u16();
-            if !(200..300).contains(&status) {
-                if status == 416 || status == 200 {
-                    // 416: nothing left to fetch. 200: server ignored Range, so we
-                    // restart the file from scratch.
-                    if status == 416 {
-                        let _ = fs::remove_file(&dest);
-                    }
-                    offset = 0;
-                    res = client.get(&url).send().await.map_err(|e| e.to_string())?;
-                    if !(200..300).contains(&res.status().as_u16()) {
-                        return Err(format!("download failed: HTTP {}", res.status()));
-                    }
-                } else {
-                    return Err(format!("download failed: HTTP {status}"));
-                }
-            } else if offset > 0 && status == 200 {
-                offset = 0;
-            }
-
-            final_digest = self
-                .write_stream(app, entry, res, &dest, offset, expected, cancel)
-                .await?;
-        }
-
-        Ok(final_digest)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn write_stream(
-        &self,
-        app: &tauri::AppHandle,
-        entry: &ModelEntry,
-        res: reqwest::Response,
-        dest: &Path,
-        offset: u64,
-        expected: Option<String>,
-        cancel: &AtomicBool,
-    ) -> Result<String, String> {
-        use futures::StreamExt;
-        use std::io::{Seek, Write};
-
-        let file_name = dest
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| entry.id.clone());
-        let total = res.content_length().map(|l| l + offset);
-
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(false)
-            .open(dest)
-            .map_err(|e| e.to_string())?;
-        file.seek(std::io::SeekFrom::Start(offset))
-            .map_err(|e| e.to_string())?;
-
-        let mut downloaded = offset;
-        let mut stream = res.bytes_stream();
-        let mut last_emit = std::time::Instant::now();
-
-        while let Some(chunk) = stream.next().await {
-            if cancel.load(Ordering::SeqCst) {
-                drop(file);
-                let _ = fs::remove_file(dest);
-                return Err("download cancelled".into());
-            }
-            let chunk = chunk.map_err(|e| e.to_string())?;
-            file.write_all(&chunk).map_err(|e| e.to_string())?;
-            downloaded += chunk.len() as u64;
-
-            if last_emit.elapsed() >= Duration::from_millis(100) {
-                let percent = match total {
-                    Some(t) if t > 0 => (downloaded as f32 / t as f32) * 100.0,
-                    _ => 0.0,
-                };
-                let _ = app.emit(
-                    "model_download_progress",
-                    serde_json::json!({
-                        "id": entry.id,
-                        "file": file_name,
-                        "bytes_downloaded": downloaded,
-                        "bytes_total": total.unwrap_or(0),
-                        "percent": percent,
-                    }),
-                );
-                last_emit = std::time::Instant::now();
-            }
-        }
-
-        file.flush().map_err(|e| e.to_string())?;
-        drop(file);
-
-        // Hash the finished file in streamed chunks so large models never load into RAM.
-        let digest = compute_sha256_streaming(dest).map_err(|e| e.to_string())?;
-        if let Some(expected) = expected {
-            let expected = expected.trim();
-            if !expected.eq_ignore_ascii_case(&digest) {
-                let _ = fs::remove_file(dest);
-                return Err(format!(
-                    "SHA256 mismatch for {file_name}: expected {expected}, got {digest}"
-                ));
-            }
-        }
-
-        Ok(digest)
-    }
-}
-
-/// Minimal ISO-8601 UTC timestamp (no chrono dependency).
-fn now_iso() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("{secs}")
 }

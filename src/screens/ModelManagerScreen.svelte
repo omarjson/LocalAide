@@ -3,6 +3,7 @@
   import type { ModelInfo, ModelPreset } from "../lib/api/bindings";
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
 
   type Model = {
     id: string;
@@ -134,6 +135,15 @@
     }
   };
 
+  const unloadModel = async () => {
+    actionError = null;
+    try {
+      await api.unloadInferenceModel();
+    } catch (e) {
+      actionError = errorMessage(e);
+    }
+  };
+
   const removeModel = async (id: string) => {
     actionError = null;
     try {
@@ -157,10 +167,7 @@
 
 <div class="max-w-5xl mx-auto space-y-8">
   {#if actionError}
-    <div class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex justify-between items-center">
-      <span>{actionError}</span>
-      <button onclick={() => actionError = null} aria-label="Dismiss error" class="text-rose-400 hover:text-rose-200"><Icon name="close" class="w-3.5 h-3.5" /></button>
-    </div>
+    <ErrorBanner message={actionError} onDismiss={() => actionError = null} />
   {/if}
   <div class="flex items-center justify-between">
     <div>
@@ -218,11 +225,11 @@
                 <span class="font-medium text-sm text-ink-100">{m.name}</span>
                 <span class="text-xs font-mono px-1.5 rounded border border-ink-700 text-ink-300" title="Model license">{m.license}</span>
                 {#if m.active}
-                  <span class="text-xs font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active</span>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active</span>
                 {/if}
                 {#if budgetGb > 0 && m.ramGb > budgetGb}
                   <span
-                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    class="text-xs font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
                     title="Estimated RAM exceeds your computed budget ({budgetGb.toFixed(1)} GB)"
                   >
                     Over budget
@@ -270,6 +277,14 @@
                   class="px-3 py-1.5 text-xs font-medium rounded-lg bg-ink-800 hover:bg-ink-700 text-ink-200 transition-colors"
                 >
                   Activate
+                </button>
+              {:else}
+                <button
+                  onclick={unloadModel}
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                  title="Stop the local engine and free the model's RAM; the model stays installed"
+                >
+                  Unload
                 </button>
               {/if}
               <button

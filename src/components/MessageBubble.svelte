@@ -1,5 +1,7 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
+  import { dur } from "../lib/motion";
+  import { fade, scale } from "svelte/transition";
   import type { Citation } from "../lib/api/bindings";
 
   interface Props {
@@ -19,7 +21,14 @@
   let copiedBlock = $state<number | null>(null);
   let isEditing = $state(false);
   let editDraft = $state("");
+  let editEl = $state<HTMLTextAreaElement>();
   let activeCitation = $state<Citation | null>(null);
+
+  $effect(() => {
+    if (isEditing) {
+      editEl?.focus();
+    }
+  });
 
   const copyMessage = async () => {
     try {
@@ -101,6 +110,7 @@
     {#if isEditing}
       <div class="w-full bg-ink-900 border border-ink-700 rounded-2xl p-3 space-y-2">
         <textarea
+          bind:this={editEl}
           bind:value={editDraft}
           rows={3}
           class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 font-sans focus:outline-none focus:border-ink-600"
@@ -130,6 +140,9 @@
           </div>
         {/if}
         <div class="space-y-3">
+          {#if streaming && role === "assistant" && !content.trim()}
+            <span class="text-ink-400 text-xs">Thinking…</span>
+          {/if}
           {#each segments as seg, idx}
             {#if seg.type === "text"}
               <div class="whitespace-pre-wrap">{seg.text}</div>
@@ -209,8 +222,24 @@
 </div>
 
 {#if activeCitation}
-  <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-ink-900 border border-ink-800 rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl">
+  <div
+    class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    role="presentation"
+    in:fade={{ duration: dur(100) }}
+    out:fade={{ duration: dur(80) }}
+    onclick={() => activeCitation = null}
+    onkeydown={(e) => { if (e.key === 'Escape') activeCitation = null; }}
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Citation source"
+      in:scale={{ start: 0.97, duration: dur(130) }}
+      out:scale={{ start: 0.97, duration: dur(80) }}
+      class="bg-ink-900 border border-ink-800 rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
       <div class="flex items-center justify-between pb-2 border-b border-ink-800">
         <div class="flex items-center gap-2">
           <span class="px-2 py-0.5 rounded bg-ember-950 border border-ember-800/50 text-ember-300 font-mono text-xs">

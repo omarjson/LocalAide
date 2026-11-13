@@ -92,6 +92,13 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
     Ok(res)
 }
 
+/// Stop the local engine and free the model's RAM. The model stays installed
+/// and active in the catalog; loading it again restarts the sidecar.
+#[tauri::command]
+pub fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.inference_engine.unload()
+}
+
 #[tauri::command]
 pub async fn chat_stream(
     state: State<'_, AppState>,

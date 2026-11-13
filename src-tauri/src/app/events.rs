@@ -31,11 +31,3 @@ pub struct DownloadProgressEvent {
     pub speed_bps: f64,
     pub status: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IndexProgressEvent {
-    pub indexed_count: usize,
-    pub skipped_count: usize,
-    pub current_path: String,
-    pub status: String,
-}

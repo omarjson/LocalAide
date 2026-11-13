@@ -1,20 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryCreateRequest {
-    pub title: String,
-    pub content: String,
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryUpdateRequest {
-    pub path: String,
-    pub content: String,
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryNote {
     pub id: String,
     pub path: String,

@@ -1,16 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IndexFileRequest {
-    pub path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IndexFolderRequest {
-    pub folder: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexFolderResponse {
     pub indexed: usize,
     pub skipped: usize,

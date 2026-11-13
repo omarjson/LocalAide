@@ -1,7 +1,10 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
   import { api } from "../lib/api/client";
+  import { dur } from "../lib/motion";
   import type { MemoryNote } from "../lib/api/bindings";
+  import { fade, scale, slide } from "svelte/transition";
   import { onMount } from "svelte";
 
   type NoteView = {
@@ -30,6 +33,9 @@
   let viewing = $state(false);
   let editing = $state(false);
   let errorMsg = $state<string | null>(null);
+  // Set when search results replaced `notes`; the full list reloads when the
+  // query narrows below the search threshold so stale results never linger.
+  let notesDirty = $state(false);
 
   const fmtDate = (mod?: number) => {
     if (!mod) return "—";
@@ -153,7 +159,13 @@
   onMount(load);
 
   $effect(() => {
-    if (!query.trim() || query.length < 3) return;
+    if (!query.trim() || query.length < 3) {
+      if (notesDirty) {
+        notesDirty = false;
+        void load();
+      }
+      return;
+    }
     let active = true;
     searching = true;
     const timer = setTimeout(async () => {
@@ -174,6 +186,7 @@
         });
         if (active) {
           notes = mapped;
+          notesDirty = true;
         }
       } catch {
       } finally {
@@ -235,18 +248,31 @@
   </div>
 
   {#if errorMsg}
-    <div class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex justify-between items-center">
-      <span>{errorMsg}</span>
-      <button onclick={() => errorMsg = null} class="text-rose-400 hover:text-rose-200"><Icon name="close" class="w-3.5 h-3.5" /></button>
-    </div>
+    <ErrorBanner message={errorMsg} onDismiss={() => errorMsg = null} />
   {/if}
 
   <!-- Forget All Confirmation Modal -->
   {#if showForgetAllConfirm}
-    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-ink-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+    <div
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      role="presentation"
+      in:fade={{ duration: dur(100) }}
+      out:fade={{ duration: dur(80) }}
+      onclick={() => showForgetAllConfirm = false}
+      onkeydown={(e) => { if (e.key === 'Escape') showForgetAllConfirm = false; }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Forget all memory confirmation"
+        in:scale={{ start: 0.97, duration: dur(130) }}
+        out:scale={{ start: 0.97, duration: dur(80) }}
+        class="bg-ink-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
         <div class="flex items-center gap-3 text-rose-400">
-          <span class="text-xl">⚠️</span>
+          <Icon name="alert" class="w-5 h-5" />
           <h3 class="font-semibold text-base text-ink-100">Forget All Memory?</h3>
         </div>
         <p class="text-xs text-ink-300 leading-relaxed">
@@ -272,7 +298,7 @@
 
   <!-- Create Note Drawer -->
   {#if showNew}
-    <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+    <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3" transition:slide={{ duration: dur(150) }}>
       <div class="font-medium text-sm text-ink-100">Create New Knowledge Note</div>
       <input
         type="text"
@@ -305,7 +331,7 @@
 
   <!-- View / Edit Modal/Card -->
   {#if viewing && selectedNote}
-    <div class="border border-ink-800 rounded-2xl p-6 bg-ink-900/70 space-y-4">
+    <div class="border border-ink-800 rounded-2xl p-6 bg-ink-900/70 space-y-4" transition:slide={{ duration: dur(150) }}>
       <div class="flex items-center justify-between pb-3 border-b border-ink-800">
         <div>
           <h3 class="font-semibold text-ink-100 text-sm">{selectedNote.title}</h3>
@@ -410,7 +436,7 @@
                 {#each n.tags as tag}
                   <button
                     onclick={() => selectedTag = tag}
-                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-ink-800/80 text-ember-300 hover:bg-ink-700"
+                    class="text-xs font-mono px-1.5 py-0.5 rounded bg-ink-800/80 text-ember-300 hover:bg-ink-700"
                   >
                     #{tag}
                   </button>

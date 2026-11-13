@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { fade, fly, scale } from "svelte/transition";
   import { api } from "./lib/api/client";
+  import { dur } from "./lib/motion";
   import { formatBytes } from "./lib/format";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
   import Icon from "./components/Icon.svelte";
+  import LogoMark from "./components/LogoMark.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
@@ -139,13 +142,8 @@
   <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-[280px] shrink-0 bg-ink-900/95 lg:bg-ink-900/80 backdrop-blur-xl border-r border-ink-800 flex flex-col transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
     <div class="h-[72px] border-b border-ink-800 flex items-center gap-3 px-5 shrink-0">
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-ink-800"><Icon name="close" class="w-4 h-4" /></button>
-      <div class="size-8 rounded-lg bg-ember-600 grid place-items-center">
-        <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      </div>
+      <LogoMark class="w-9 h-9 shrink-0" />
       <div>
-        <img src="/logo.svg" alt="" aria-hidden="true" class="w-7 h-7 shrink-0" />
         <span class="font-[700] tracking-tight text-[15px]">LocalAide</span>
         <div class="text-xs uppercase tracking-widest text-ink-400">local-first</div>
       </div>
@@ -199,19 +197,21 @@
 
   <section class="flex-1 overflow-y-auto">
     <div class="lg:hidden sticky top-0 z-30 bg-ink-950/80 backdrop-blur p-3 border-b border-ink-800 flex items-center gap-3">
-      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-ink-800">☰</button>
-      <img src="/logo.svg" alt="" aria-hidden="true" class="w-6 h-6 shrink-0" />
+      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-ink-800 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
+      <LogoMark class="w-6 h-6 shrink-0" />
       <span class="font-semibold">LocalAide</span>
     </div>
     <div class="min-h-full p-6 md:p-10">
+      {#key screen}
+        <div in:fade={{ duration: dur(120) }}>
       {#if fatalError}
-        <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-red-500/30 bg-red-950/20 text-center">
-          <div class="text-3xl mb-3">⚠️</div>
-          <h2 class="text-lg font-semibold text-red-200 mb-2">LocalAide recovered from an unexpected error</h2>
+        <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center">
+          <div class="text-rose-300 mb-3 flex justify-center"><Icon name="alert" class="w-7 h-7" /></div>
+          <h2 class="text-lg font-semibold text-rose-200 mb-2">LocalAide recovered from an unexpected error</h2>
           <p class="text-sm text-ink-400 mb-6 font-mono text-left bg-black/40 p-4 rounded-xl border border-ink-800 break-words">{fatalError}</p>
           <div class="flex justify-center gap-3">
-            <button onclick={() => fatalError = null} class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm font-medium">Dismiss and Continue</button>
-            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-ink-700 hover:bg-white/5 text-sm text-ink-300">Copy Diagnostics</button>
+            <button onclick={() => fatalError = null} class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors">Dismiss and Continue</button>
+            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-ink-700 hover:bg-white/5 text-sm text-ink-300 transition-colors">Copy Diagnostics</button>
           </div>
         </div>
       {:else if screen === null}
@@ -234,12 +234,14 @@
       {:else if screen === "dev"}
         <DevConfigScreen />
       {/if}
+        </div>
+      {/key}
     </div>
   </section>
 
   {#if cmdOpen}
-    <div role="presentation" class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" class="w-full max-w-lg mx-auto rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+    <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-lg mx-auto rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-ink-800">
           <span class="text-ink-400"><Icon name="search" /></span>
           <input aria-label="Jump to screen" bind:this={cmdInput} bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-ink-600"/>
@@ -260,14 +262,14 @@
   {/if}
 
   {#if toast}
-    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" role="status">
+    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" role="status" in:fly={{ y: 10, duration: dur(160) }} out:fade={{ duration: dur(100) }}>
       <div class="px-4 py-2 rounded-xl bg-ink-900 border border-ink-800 shadow-lg text-sm text-ink-100">{toast}</div>
     </div>
   {/if}
 
   {#if showHelp}
-    <div role="presentation" class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" class="w-full max-w-md rounded-2xl border border-ink-800 bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+    <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-md rounded-2xl border border-ink-800 bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <h3 class="text-lg font-semibold mb-4 text-ink-100">Keyboard shortcuts</h3>
         <div class="space-y-2.5 text-xs font-mono">
           <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">⌘K / Ctrl+K</kbd></div>

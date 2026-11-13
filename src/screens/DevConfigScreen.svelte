@@ -77,15 +77,20 @@
         </div>
         <div class="text-xs text-ink-400 mb-3">Budget = 70% of usable RAM</div>
         <div class="w-full bg-ink-800 rounded-full h-2 mb-3">
-          <div class={`h-2 rounded-full transition-all ${!overBudget ? 'bg-emerald-500' : 'bg-red-500'}`} style="width: {Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%"></div>
+          <div class={`h-2 rounded-full transition-all duration-300 ${!overBudget ? 'bg-emerald-500' : 'bg-rose-500'}`} style="width: {Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%"></div>
         </div>
         <div class="text-sm font-mono text-ink-300">
           Selected: {totalRam.toFixed(2)} GB · budget: {(ramTotal * 0.7).toFixed(2)} GB
-          <span class={`${overBudget ? 'text-red-400' : 'text-emerald-400'}`}> · {overBudget ? 'over budget' : 'fits'}</span>
+          <span class={`${overBudget ? 'text-rose-400' : 'text-emerald-400'}`}> · {overBudget ? 'over budget' : 'fits'}</span>
         </div>
       </div>
 
       <div class="border border-ink-800 rounded-2xl bg-ink-900/60 divide-y divide-ink-800 overflow-hidden">
+        {#if loading}
+          <div class="py-8 text-center text-xs text-ink-400 font-mono">Loading models…</div>
+        {:else if models.length === 0}
+          <div class="py-8 text-center text-xs text-ink-400">No models available.</div>
+        {:else}
         {#each models as m}
           <label class="flex items-center gap-3 p-4 hover:bg-white/[0.02] cursor-pointer transition">
             <input type="checkbox" bind:group={selected} value={m.id} class="accent-ember-600"/>
@@ -95,6 +100,7 @@
             </div>
           </label>
         {/each}
+        {/if}
       </div>
     </div>
 

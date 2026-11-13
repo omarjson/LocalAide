@@ -10,7 +10,6 @@ import type {
   CloudModeRequest,
   CloudProviderSaveRequest,
   DownloadProgressEvent,
-  EmbeddingStatusResponse,
   ForgetAllResponse,
   IndexFolderResponse,
   IndexerStatsResponse,
@@ -20,7 +19,6 @@ import type {
   MemoryUpdateRequest,
   ModelInfo,
   ModelPreset,
-  ModelSizeResult,
   ModelVerifyResult,
   RamComputationResponse,
   SearchIndexRequest,
@@ -59,10 +57,6 @@ export class ApiClient {
     return invoke<ModelVerifyResult>("model_verify", { id });
   }
 
-  async getModelExistingSize(id: string): Promise<ModelSizeResult> {
-    return invoke<ModelSizeResult>("model_existing_size", { id });
-  }
-
   async getModelPresets(): Promise<ModelPreset[]> {
     return invoke<ModelPreset[]>("model_presets");
   }
@@ -96,6 +90,10 @@ export class ApiClient {
   // Chat & Inference
   async loadInferenceModel(id: string): Promise<string> {
     return invoke<string>("inference_load", { id });
+  }
+
+  async unloadInferenceModel(): Promise<void> {
+    return invoke<void>("inference_unload");
   }
 
   async streamChat(
@@ -146,10 +144,6 @@ export class ApiClient {
   }
 
   // Library & Search
-  async indexFile(path: string): Promise<SearchResultDoc> {
-    return invoke<SearchResultDoc>("index_file", { path });
-  }
-
   async indexFolder(folder: string): Promise<IndexFolderResponse> {
     return invoke<IndexFolderResponse>("index_folder", { folder });
   }
@@ -183,6 +177,7 @@ export class ApiClient {
     return invoke<MemoryCreateResponse>("memory_create", {
       title: req.title,
       content: req.content,
+      tags: req.tags ?? null,
     });
   }
 
@@ -190,6 +185,7 @@ export class ApiClient {
     return invoke<void>("memory_update", {
       path: req.path,
       content: req.content,
+      tags: req.tags ?? null,
     });
   }
 
@@ -241,11 +237,8 @@ export class ApiClient {
     });
   }
 
-  async getEmbeddingStatus(): Promise<EmbeddingStatusResponse> {
-    return invoke<EmbeddingStatusResponse>("embedding_status");
-  }
-
   // Online providers (opt-in cloud mode)
+
   async getCloudConfig(): Promise<CloudConfigStatus> {
     return invoke<CloudConfigStatus>("cloud_config_get");
   }

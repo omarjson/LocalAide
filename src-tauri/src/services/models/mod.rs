@@ -5,10 +5,9 @@ pub mod verify;
 use crate::app::error::AppError;
 use catalog::{CatalogEntry, CatalogManifest};
 use download::{DownloadProgress, ModelDownloader};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use verify::{compute_sha256_streaming, verify_file_checksum};
 
 pub struct ModelService {
     models_dir: PathBuf,
@@ -55,16 +54,6 @@ impl ModelService {
 
     pub fn is_installed(&self, id: &str) -> bool {
         self.model_file_path(id).is_file()
-    }
-
-    pub fn verify_installed_model(&self, id: &str) -> Result<String, AppError> {
-        let entry = self
-            .get_model_entry(id)
-            .ok_or_else(|| AppError::model_not_installed(id))?;
-
-        let path = self.model_file_path(id);
-        verify_file_checksum(&path, &entry.sha256)?;
-        Ok(entry.sha256.clone())
     }
 
     pub async fn download_model<F>(

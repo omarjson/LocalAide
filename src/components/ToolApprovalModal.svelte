@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { fade, scale } from "svelte/transition";
+  import { dur } from "../lib/motion";
+  import Icon from "./Icon.svelte";
   import type { ToolAction } from "../lib/api/bindings";
 
   interface Props {
@@ -21,16 +24,27 @@
 </script>
 
 {#if show && action}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+    role="presentation"
+    in:fade={{ duration: dur(100) }}
+    out:fade={{ duration: dur(80) }}
+    onclick={onDeny}
+    onkeydown={(e) => { if (e.key === 'Escape') onDeny(); }}
+  >
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-title"
+      in:scale={{ start: 0.97, duration: dur(130) }}
+      out:scale={{ start: 0.97, duration: dur(80) }}
       class="bg-ink-900 border border-amber-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
     >
       <div class="flex items-start gap-3">
-        <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-lg">
-          🛡️
+        <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <Icon name="shield" class="w-5 h-5" />
         </div>
         <div>
           <h3 id="approval-title" class="text-sm font-semibold text-ink-100">

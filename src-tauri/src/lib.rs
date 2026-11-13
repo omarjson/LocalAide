@@ -1,10 +1,6 @@
 #![allow(clippy::all, unused)]
 
-use serde::Serialize;
-use sha2::{Digest, Sha256};
-use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::State;
 
 pub mod app;
 pub mod commands;
@@ -140,6 +136,7 @@ pub fn run() {
             commands::model_download_cancel,
             commands::model_download_preset,
             commands::inference_load,
+            commands::inference_unload,
             commands::chat_stream,
             commands::chat_cancel,
             commands::chat_thread_list,

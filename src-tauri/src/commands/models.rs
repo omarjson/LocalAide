@@ -219,6 +219,7 @@ pub async fn model_download_preset(
     // Each model weighs equally in the preset's overall progress bar, and
     // failures stop the preset instead of being swallowed.
     let model_count = preset.models.len() as f32;
+    let mut installed: Vec<String> = Vec::new();
     for (index, model_id) in preset.models.into_iter().enumerate() {
         let (job_id, cancel_flag) = state.jobs.create_job(format!("preset_{model_id}"));
         let channel_clone = channel.clone();
@@ -243,6 +244,7 @@ pub async fn model_download_preset(
             Ok(_path) => {
                 state.jobs.complete_job(&job_id);
                 let _ = state.model_manager.activate(&model_id);
+                installed.push(model_id);
             }
             Err(e) => {
                 let err_msg = e.to_string();
@@ -256,6 +258,26 @@ pub async fn model_download_preset(
                     status: "failed".to_string(),
                 });
                 return Err(e);
+            }
+        }
+    }
+
+    // Record what was installed so returning users skip the setup wizard
+    // (App.svelte gates the wizard on selected_models).
+    if !installed.is_empty() {
+        if let Ok(store) = state.config_store.lock() {
+            match store.load() {
+                Ok(mut cfg) => {
+                    for id in &installed {
+                        if !cfg.selected_models.contains(id) {
+                            cfg.selected_models.push(id.clone());
+                        }
+                    }
+                    if let Err(e) = store.save(&cfg) {
+                        log::warn!("Could not record selected models: {e}");
+                    }
+                }
+                Err(e) => log::warn!("Could not load config to record selected models: {e}"),
             }
         }
     }
