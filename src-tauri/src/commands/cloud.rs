@@ -6,7 +6,9 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::config::{CloudProvider, validate_base_url};
-use crate::domain::cloud::{CloudConfigStatus, CloudModeRequest, CloudProviderDto, CloudProviderSaveRequest};
+use crate::domain::cloud::{
+    CloudConfigStatus, CloudModeRequest, CloudProviderDto, CloudProviderSaveRequest,
+};
 use crate::services::inference::remote::RemoteTarget;
 use tauri::State;
 

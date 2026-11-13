@@ -57,8 +57,6 @@ pub fn config_save(state: State<'_, AppState>, cfg: AppConfigDto) -> Result<(), 
     internal_cfg.cloud_llm_enabled = cfg.cloud_llm_enabled;
 
     store.save(&internal_cfg).map_err(AppError::internal)
-
-    store.save(&internal_cfg).map_err(AppError::internal)
 }
 
 #[tauri::command]
