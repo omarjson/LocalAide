@@ -1,5 +1,3 @@
-#![allow(clippy::all, unused)]
-
 use std::sync::Arc;
 
 pub mod app;
