@@ -218,7 +218,7 @@ pub async fn model_download_preset(
 
     // Each model weighs equally in the preset's overall progress bar, and
     // failures stop the preset instead of being swallowed.
-    let model_count = preset.models.len() as f64;
+    let model_count = preset.models.len() as f32;
     for (index, model_id) in preset.models.into_iter().enumerate() {
         let (job_id, cancel_flag) = state.jobs.create_job(format!("preset_{model_id}"));
         let channel_clone = channel.clone();
@@ -226,8 +226,8 @@ pub async fn model_download_preset(
         let res = state
             .model_service
             .download_model(&model_id, cancel_flag, move |progress| {
-                let overall =
-                    ((index as f64 + progress.percent / 100.0) / model_count * 100.0).min(100.0);
+                let model_share = progress.percent / 100.0;
+                let overall = ((index as f32 + model_share) / model_count * 100.0).min(100.0);
                 let _ = channel_clone.send(DownloadProgressEvent {
                     model_id: event_model_id.clone(),
                     downloaded_bytes: progress.bytes_downloaded,
