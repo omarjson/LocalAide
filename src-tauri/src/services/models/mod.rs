@@ -9,8 +9,8 @@ use download::{DownloadProgress, ModelDownloader};
 use refresh::{CachedCatalog, CatalogRefresher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::sync::RwLock;
+use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct ModelService {
