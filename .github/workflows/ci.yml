@@ -83,10 +83,11 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             # Error annotations are readable through the check-run API.
-            fold -w 600 fmt.diff | head -25 | while IFS= read -r line; do
-              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
-              echo "::error title=fmt-diff::$enc"
-            done
+            # One annotation per file with its changed lines joined, so the
+            # 10-annotation cap is not wasted on headers and context lines.
+            awk '/^diff --git/ { file=$3; out[file]="" }
+                 /^[+-][^+-]/ { line=substr($0,2); gsub(/%/,"%25",line); if (length(out[file] line) < 800) out[file] = out[file] (out[file]==""?"":" | ") line }
+                 END { for (f in out) printf "::error title=fmt:%s::%s\n", f, out[f] }' fmt.diff
             exit 1
           fi
 

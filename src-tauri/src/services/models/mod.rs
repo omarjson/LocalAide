@@ -78,7 +78,11 @@ impl ModelService {
         let data = match std::fs::read_to_string(path) {
             Ok(d) => d,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(AppError::storage(format!("Could not read catalog cache: {e}"))),
+            Err(e) => {
+                return Err(AppError::storage(format!(
+                    "Could not read catalog cache: {e}"
+                )));
+            }
         };
         if data.len() > catalog::MAX_MANIFEST_BYTES {
             return Err(AppError::invalid_input("Catalog cache exceeds the size limit"));
