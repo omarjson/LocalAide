@@ -103,6 +103,11 @@ pub fn validate_base_url(url: &str) -> Result<(), String> {
     let parsed = url::Url::parse(url).map_err(|_| {
         "The base URL is not a valid URL. Use https://provider.example/v1.".to_string()
     })?;
+    // Credentials in the URL would leak into provider error text (reqwest
+    // echoes the request URL); the API key belongs in the header only.
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("Do not put a username or password in the base URL.".to_string());
+    }
     match parsed.scheme() {
         "https" => Ok(()),
         "http" => {
@@ -167,5 +172,11 @@ mod tests {
         assert!(validate_base_url("http://api.example.com/v1").is_err());
         assert!(validate_base_url("ftp://api.example.com").is_err());
         assert!(validate_base_url("not a url").is_err());
+    }
+
+    #[test]
+    fn userinfo_in_urls_is_rejected() {
+        assert!(validate_base_url("https://user:pass@api.example.com/v1").is_err());
+        assert!(validate_base_url("https://user:pass@127.0.0.1:11434/v1").is_err());
     }
 }

@@ -109,6 +109,19 @@ pub fn cloud_provider_save(
 
     let mut cfg = load_config(&state)?;
 
+    // Two entries for the same endpoint and model are always a mistake; the
+    // entry being edited is exempt from its own match.
+    let duplicate = cfg.cloud_providers.iter().any(|p| {
+        p.base_url == base_url
+            && p.model == model
+            && req.id.as_deref() != Some(p.id.as_str())
+    });
+    if duplicate {
+        return Err(AppError::invalid_input(
+            "A provider with this base URL and model already exists.",
+        ));
+    }
+
     let id = match req.id.as_deref() {
         Some(existing) => {
             let provider = cfg.cloud_providers.iter_mut().find(|p| p.id == existing);
@@ -157,8 +170,10 @@ pub fn cloud_provider_save(
         cfg.active_cloud_provider = Some(id);
     }
 
-    apply_engine_mode(&state, &cfg);
+    // Persist first: a failed disk write must not leave the engine switched to
+    // a state the config file disagrees with.
     save_config(&state, &cfg)?;
+    apply_engine_mode(&state, &cfg);
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
@@ -185,15 +200,14 @@ pub fn cloud_provider_delete(
     }
     if cfg.active_cloud_provider.as_deref() == Some(provider_id.as_str()) {
         cfg.active_cloud_provider = cfg.cloud_providers.first().map(|p| p.id.clone());
-    }
-    // Deleting the active provider while cloud mode is on would leave chat
-    // pointing at nothing, so cloud mode turns off.
-    if cfg.active_cloud_provider.is_none() {
+        // Chat pointed at the deleted provider. Turn cloud mode off instead of
+        // silently re-routing to whichever provider is first; the remaining
+        // provider stays marked active so re-enabling is one click.
         cfg.cloud_llm_enabled = false;
     }
 
-    apply_engine_mode(&state, &cfg);
     save_config(&state, &cfg)?;
+    apply_engine_mode(&state, &cfg);
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
@@ -221,15 +235,15 @@ pub fn cloud_mode_set(
         cfg.active_cloud_provider = Some(id);
     }
 
-    cfg.cloud_llm_enabled = req.enabled;
     if req.enabled && cfg.active_cloud_provider.is_none() {
         return Err(AppError::invalid_input(
             "Add and choose an online provider before switching cloud mode on.",
         ));
     }
+    cfg.cloud_llm_enabled = req.enabled;
 
-    apply_engine_mode(&state, &cfg);
     save_config(&state, &cfg)?;
+    apply_engine_mode(&state, &cfg);
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {

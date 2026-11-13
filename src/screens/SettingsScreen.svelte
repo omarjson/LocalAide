@@ -46,6 +46,8 @@
     try {
       await api.clearToolAudits();
       audits = [];
+    } catch {
+      audits = [];
     } finally {
       clearingAudits = false;
     }
@@ -150,26 +152,31 @@
     loadCloud();
   });
 
-  $effect(() => {
+  // Settings persist when the slider moves, not on a component-lifetime
+  // effect: saving on mount would race a cloud-mode toggle in its 500 ms
+  // window and silently revert the persisted engine mode.
+  const persistSettings = async () => {
+    saving = true;
+    try {
+      const current = await api.loadConfig();
+      const cfg = {
+        ram_budget_mb: Math.round(ramBudget * 0.7 * 1024),
+        cloud_llm_enabled: current.cloud_llm_enabled,
+        selected_models: current.selected_models ?? [],
+        presets: current.presets ?? []
+      };
+      await api.saveConfig(cfg);
+      saved = true;
+      setTimeout(() => saved = false, 1500);
+    } finally {
+      saving = false;
+    }
+  };
+
+  const scheduleSave = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
-      saving = true;
-      try {
-        const current = await api.loadConfig();
-        const cfg = {
-          ram_budget_mb: Math.round(ramBudget * 0.7 * 1024),
-          cloud_llm_enabled: current.cloud_llm_enabled,
-          selected_models: current.selected_models ?? [],
-          presets: current.presets ?? []
-        };
-        await api.saveConfig(cfg);
-        saved = true;
-        setTimeout(() => saved = false, 1500);
-      } finally {
-        saving = false;
-      }
-    }, 500);
-  });
+    debounceTimer = setTimeout(persistSettings, 500);
+  };
 </script>
 
 <div class="max-w-3xl mx-auto space-y-6">
@@ -210,7 +217,7 @@
           </div>
           <span class="text-sm font-mono font-semibold text-ember-300">{ramBudget}%</span>
         </div>
-        <input type="range" min={20} max={90} bind:value={ramBudget} class="w-full accent-ember-600"/>
+        <input type="range" min={20} max={90} bind:value={ramBudget} oninput={scheduleSave} class="w-full accent-ember-600"/>
         <div class="mt-3 h-2 rounded-full bg-ink-800 overflow-hidden">
           <div class="h-full bg-ember-600 transition-all" style={`width:${ramBudget}%`}></div>
         </div>
@@ -444,7 +451,7 @@
           </div>
           <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
             <div class="text-ink-400 font-medium">Network Telemetry</div>
-            <div class="text-emerald-400 font-mono mt-1">✓ Zero Telemetry / None</div>
+            <div class="text-emerald-400 font-mono mt-1">✓ None (cloud chat is opt-in)</div>
           </div>
           <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
             <div class="text-ink-400 font-medium">Download Resumption</div>

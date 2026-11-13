@@ -21,8 +21,9 @@ const CHAT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 pub const REMOTE_CONTEXT_SIZE: i32 = 8192;
 
 /// The provider target the engine generates against. Built from the user's
-/// config when cloud mode is switched on.
-#[derive(Debug, Clone, PartialEq)]
+/// config when cloud mode is switched on. Deliberately not `Debug`: it carries
+/// the API key and must never be printable by a stray `{target:?}`.
+#[derive(Clone, PartialEq)]
 pub struct RemoteTarget {
     pub label: String,
     pub base_url: String,
@@ -39,6 +40,9 @@ impl RemoteEngine {
     pub fn new() -> Self {
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(Duration::from_secs(15))
+            // Idle-read timeout: a provider that stalls mid-stream must not
+            // park the generation thread past the user pressing Stop.
+            .read_timeout(Duration::from_secs(60))
             .timeout(CHAT_TIMEOUT)
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
@@ -131,6 +135,7 @@ impl RemoteEngine {
         let mut total_tokens = 0usize;
         let mut ttft: Option<Duration> = None;
         let mut cancelled = false;
+        let mut seen_done = false;
 
         for line in BufReader::new(resp).lines() {
             if cancel_flag.load(Ordering::Relaxed) {
@@ -138,15 +143,26 @@ impl RemoteEngine {
                 break;
             }
             let line = line.map_err(|e| AppError::internal(format!("stream read failed: {e}")))?;
-            let Some(data) = line.strip_prefix("data: ") else {
-                continue;
+            // The SSE spec allows the space after "data:" to be omitted.
+            let data = match line.strip_prefix("data:") {
+                Some(d) => d.strip_prefix(' ').unwrap_or(d),
+                None => continue,
             };
             if data.trim() == "[DONE]" {
+                seen_done = true;
                 break;
             }
             let Ok(v) = serde_json::from_str::<Value>(data) else {
                 continue;
             };
+            // Providers signal mid-stream failures as error events. One
+            // truncated answer presented as complete is worse than an error.
+            if let Some(err) = v.get("error").filter(|e| !e.is_null()) {
+                return Err(AppError::internal(format!(
+                    "{label} streamed an error: {err}",
+                    label = target.label
+                )));
+            }
             let Some(text) = v["choices"][0]["delta"]["content"].as_str() else {
                 continue;
             };
@@ -161,6 +177,15 @@ impl RemoteEngine {
                 index: total_tokens,
             });
             total_tokens += 1;
+        }
+
+        // A clean close without [DONE] means the answer was cut short. Say so
+        // instead of showing a silently truncated reply as finished.
+        if !cancelled && !seen_done {
+            return Err(AppError::internal(format!(
+                "{label} closed the stream before completion (received {total_tokens} tokens).",
+                label = target.label
+            )));
         }
 
         let elapsed = start.elapsed().as_secs_f64();

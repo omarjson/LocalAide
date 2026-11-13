@@ -440,7 +440,10 @@
       <div class="h-full flex flex-col justify-center items-center text-center p-6 space-y-6">
         <div class="space-y-2 max-w-sm">
           <img src="/logo.svg" alt="" aria-hidden="true" class="w-12 h-12 mx-auto" />
-          {#if !modelsChecked}
+          {#if cloudChat}
+            <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
+            <p class="text-xs text-ink-400">Running {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
+          {:else if !modelsChecked}
             <h3 class="text-sm font-medium text-ink-200">Checking for a model…</h3>
           {:else if !activeModelName}
             <h3 class="text-sm font-medium text-ink-200">Pick a model to start chatting.</h3>
@@ -460,7 +463,7 @@
           {/if}
         </div>
 
-        {#if activeModelName}
+        {#if cloudChat || activeModelName}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full">
           {#each starterPrompts as sp}
             <button

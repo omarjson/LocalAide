@@ -41,8 +41,10 @@ impl RouterEngine {
     pub fn set_cloud_target(&self, target: RemoteTarget) {
         self.remote.configure(target);
         *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = EngineMode::Cloud;
-        // The sidecar holds RAM for the loaded model. Cloud mode does not need it.
-        let _ = self.local.unload();
+        // The local model stays loaded on purpose: switching back is instant,
+        // an in-flight answer is not killed mid-stream, and the Settings copy
+        // promises a return to local inference. RAM is reclaimed when a
+        // different model is loaded next.
     }
 
     /// Switch back to the local engine. A model must be loaded before chat works.
