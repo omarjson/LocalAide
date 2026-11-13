@@ -234,6 +234,7 @@
       role="dialog"
       aria-modal="true"
       aria-label="Citation source"
+      tabindex="-1"
       in:scale={{ start: 0.97, duration: dur(130) }}
       out:scale={{ start: 0.97, duration: dur(80) }}
       class="bg-ink-900 border border-ink-800 rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl"

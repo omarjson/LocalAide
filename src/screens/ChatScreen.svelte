@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
-  import { fly } from "svelte/transition";
+  import { fade, fly } from "svelte/transition";
   import { api } from "../lib/api/client";
   import { dur } from "../lib/motion";
   import type { ChatMessage, ChatThread } from "../lib/api/bindings";

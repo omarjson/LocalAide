@@ -36,6 +36,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-title"
+      tabindex="-1"
       in:scale={{ start: 0.97, duration: dur(130) }}
       out:scale={{ start: 0.97, duration: dur(80) }}
       class="bg-ink-900 border border-amber-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4"
