@@ -12,7 +12,7 @@ inclusion: always
 - `docs/`: scope, backlog, ADRs, evidence.
 - `scripts/`: smoke test (`smoke-test.mjs`), packaging helpers, `prepare-sidecar.sh`.
 - `.kiro/`: Kiro project files: `skills/impeccable/`, this `steering/` folder, and `specs/` (`engine-upgrade`, `kiroween-2026`).
-- `README.md`, `ARCHITECTURE.md`, `docs/scope.md`: product and design docs. Some claims in them do not match the code. See `product.md` and `tech.md`.
+- `README.md`, `ARCHITECTURE.md`, `docs/scope.md`: product and design docs. They aim to match the code; if you find a mismatch, fix the doc and note it (see `tech.md` — verify before you claim).
 
 ## Frontend (`src/`)
 
@@ -22,7 +22,7 @@ inclusion: always
 - `components/`: shared pieces. `ChatInput`, `MessageBubble`, `ToolApprovalModal`, `Icon` (the single hand-rolled inline-SVG icon set).
 - `lib/api/bindings.ts`: typed DTOs that mirror the Rust domain types.
 - `lib/api/client.ts`: the typed IPC client. Screens call the backend through it.
-- `lib/types.ts`, `lib/format.ts`: shared types and formatting helpers.
+- `lib/format.ts`: shared formatting helpers.
 
 Put new Svelte screens in `src/screens/`, reusable UI in `src/components/`, and every backend call through `src/lib/api/client.ts`.
 

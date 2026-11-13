@@ -17,13 +17,13 @@
    - Destructive/mutating operations (`write_file`) strictly require interactive user approval.
    - Approval UI presents tool name, target path, operation type, and payload preview with "Allow Once", "Allow for Session", and "Deny" actions.
 
-3. **Immutable SQLite Audit Logging (`src-tauri/src/services/library/db.rs`):**
+3. **SQLite Audit Logging (`src-tauri/src/services/library/db.rs`):**
    - Forward-migrated SQLite `tool_audit` table with index on `timestamp DESC`.
    - Records every tool invocation: timestamp, tool name, action, target path, approval state, execution status (`success`, `denied`, `error`), and error details.
-   - Audit log viewer and log clearing available in Settings UI (`src/screens/SettingsScreen.svelte`).
+   - The log is not append-only: an audit viewer and a clear-log action are available in Settings (`src/screens/SettingsScreen.svelte`).
 
 4. **Cryptographic Model Catalog & Atomic Downloads (`src-tauri/src/services/models/`):**
-   - Signed Catalog Manifest (`catalog.rs`): SHA-256 signature verification over all model entries before catalog acceptance.
+   - Catalog Integrity Digest (`catalog.rs`): SHA-256 digest over all model entries recomputed before catalog acceptance. It is an integrity check, not a publisher signature; Ed25519 signing is future work ([ADR-0005](../adr/0005-updates.md)).
    - Atomic Downloads (`download.rs`): streams directly to `.part` files; supports HTTP `Range` resumption from byte boundary.
    - Constant-RAM Streaming Checksum (`verify.rs`): computes SHA-256 in 64 KB chunks, using <100 KB RAM even for multi-gigabyte models.
    - Immediate Cleanup on Corruption: if finalized SHA-256 digest fails to match expected checksum, the `.part` file is immediately deleted and `AppError::checksum_mismatch` is returned.

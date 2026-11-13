@@ -1,8 +1,8 @@
 # Engine upgrade to llama.cpp v0.9.0: tasks
 
-Decision (2026-11-13, updated same day): chat runs in a `llama-server` sidecar built from llama.cpp tag v0.9.0. Speech is deferred (Phase 5) — no second engine path in v1.0.
+Decision (2026-11-13, updated same day): chat runs in a `llama-server` sidecar built from llama.cpp tag v0.9.0. Speech is deferred (Phase 5) — no second engine path in the shipped product.
 
-Status legend: DONE = written and checked by reading. TODO = not started. Nothing below has been compiled or run. Compile and test on your machine.
+Status legend: DONE = implemented and checked by reading (and, after the 2026-11-13 CI runs, compiled). TODO = not started or not yet verified at runtime. The CI quality gate is green; a real-model chat on your machine is still the outstanding runtime check.
 
 ## Why this change
 
@@ -12,9 +12,9 @@ Status legend: DONE = written and checked by reading. TODO = not started. Nothin
 
 ## Phase 1: build the sidecar binary
 
-- [DONE] `.github/workflows/llama-server.yml` builds `llama-server` at tag v0.9.0 for `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `x86_64-pc-windows-msvc`. Each binary is named `llama-server-<triple>[.exe]`.
-- [TODO] Run the workflow on GitHub Actions. Confirm all three jobs pass and each artifact runs `--version`. Trigger it from the Actions tab with `workflow_dispatch`, or push a branch first.
-- [DONE] Release pipeline in `ci.yml` calls the sidecar workflow, downloads each artifact, runs `scripts/prepare-sidecar.sh`, and builds with the overlay config for macOS (both arches), Windows x64, and Linux x64. (Verified in `ci.yml` on this branch, 2026-11-13.)
+- [DONE] `.github/workflows/llama-server.yml` builds `llama-server` at tag v0.9.0 for `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `x86_64-pc-windows-msvc`. Each binary is named `llama-server-<triple>[.exe]`.
+- [PARTIAL] Workflow run on GitHub Actions: Windows and Linux sidecar jobs pass and the artifacts were consumed by the platform builds; the macOS sidecar jobs were cancelled twice by operator decision (macOS runners bill 10x on the free plan). macOS remains unverified — cancelled, never failed.
+- [DONE] Release pipeline in `ci.yml` calls the sidecar workflow, downloads each artifact, runs `scripts/prepare-sidecar.sh`, and builds with the overlay config for macOS (both arches), Windows x64, and Linux x64. (Verified in `ci.yml`, 2026-11-13.)
 
 ## Phase 2: Tauri sidecar wiring
 
@@ -28,7 +28,7 @@ Status legend: DONE = written and checked by reading. TODO = not started. Nothin
 ## Phase 3: sidecar manager in Rust
 
 - [DONE] `src-tauri/src/services/inference/sidecar.rs` implements `InferenceEngine` with `SidecarEngine`. It starts `llama-server` on 127.0.0.1 with a free port and a 256-bit random API key. It passes `--mmproj` when `{id}.mmproj.gguf` sits next to the model. It waits for `/health`, streams from `/v1/chat/completions`, and kills the process on unload, reload, or exit. Server output goes to `~/.aiassistant/logs/llama-server.log`.
-- [DONE] `app/state.rs` builds `SidecarEngine`. The worker engine, `services/inference/llama.rs`, and the legacy `src/inference.rs` are deleted. Their deletions are staged in git.
+- [DONE] `app/state.rs` builds the `RouterEngine`, which defaults to `SidecarEngine` and routes to the opt-in `RemoteEngine` when cloud mode is on. The worker engine, `services/inference/llama.rs`, and the legacy `src/inference.rs` are deleted.
 - [DONE] `Cargo.toml` drops `llama_cpp_rs` and its `[patch]` entry. It enables reqwest's `blocking` feature.
 - [DONE] `vendor/llama_cpp_rs` is deleted; nothing references it and `Cargo.toml` no longer carries the `[patch]` entry. (Deletion ships with this branch's cleanup, 2026-11-13.)
 - [TODO] Cancel behaves as before, but it applies at the next token. Check that Stop ends generation on a real model.
@@ -36,13 +36,14 @@ Status legend: DONE = written and checked by reading. TODO = not started. Nothin
 
 ## Phase 4: image input
 
-- [TODO] Attach an image in the chat input. Send it as an `image_url` content part.
-- [TODO] Load the model's `mmproj` companion. Show an error if the model has no projector.
-- [TODO] Show the image in the transcript, so the user can see what the model received.
+- [DONE] Attach an image in the chat input. Images are sent as `image_url` content parts (`ChatInput.svelte`, `ChatScreen.svelte`, `wire_message` in `sidecar.rs`; up to 4 images, 20 MB total, validated in `commands/chat.rs`).
+- [DONE] Load the model's `mmproj` companion. The sidecar passes `--mmproj` when `{id}.mmproj.gguf` sits next to the model and returns a readable error for image input on text-only models.
+- [DONE] Show the image in the transcript, so the user can see what the model received (`MessageBubble.svelte`).
+- [TODO] Exercise one real vision model end to end (attach, load, answer). Code-complete; no runtime check recorded yet.
 
 ## Phase 5: speech — DEFERRED (decision 2026-11-13)
 
-Decision (2026-11-13): speech is deferred for v1.0 and the contest demo. The stubs were removed on this branch, so the product is chat-only. The findings below stay as the starting point for post-contest work.
+Decision (2026-11-13): speech is deferred for 0.1.0 and the contest demo. The stubs were removed on this branch, so the product is chat-only. The findings below stay as the starting point for post-contest work.
 
 - [DONE] Research. v0.9.0's TTS tool is `tools/tts/tts.cpp`, target `llama-tts`. It loads a backbone GGUF and an `mmproj` GGUF with audio generation. Its generation loop is `mtmd_helper::gen_audio`, a C++ class in `mtmd-helper.h`. The C header `mtmd.h` only exposes audio metadata and tensor reads. So an in-process binding needs a C++ shim, not a plain C wrapper.
 - [FINDING] The ggml-org Qwen3-TTS 1.7B Base model has no built-in voices. It needs a reference speaker file (`--tts-speaker-file`) for each voice. The product must decide how users supply one.
@@ -60,6 +61,6 @@ Decision (2026-11-13): speech is deferred for v1.0 and the contest demo. The stu
 
 ## Risks
 
-- The in-process speech binding is the largest piece. It is hand-written C FFI against a new API, and nothing here has compiled it yet.
-- The sidecar adds a process. Startup time and crash recovery need tests on all three platforms.
-- The chat prompt is flattened, so multi-turn quality will be weaker until the known gap above is fixed.
+- The deferred in-process speech binding is the largest future piece: hand-written C FFI against a new API, uncompiled.
+- The sidecar adds a process. Startup time and crash recovery need tests on all three platforms; macOS has not run at all yet.
+- Stop-on-real-model and image-input-on-real-model are still unverified at runtime (Phases 3 and 4).

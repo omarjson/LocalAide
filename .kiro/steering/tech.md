@@ -13,7 +13,7 @@ inclusion: always
 - **Storage:** `rusqlite` with the bundled SQLite. WAL mode, `synchronous = NORMAL`, `busy_timeout = 5000`. FTS5 table `chunks_fts` for keyword search.
 - **Other crates:** `sha2` (SHA-256), `reqwest` (downloads), `flate2` (PDF stream), `notify` (folder watching), `sysinfo` (RAM probe), `tracing`/`log`.
 - **Legacy crates removed:** the old `tantivy`/`sled` indexer is gone; SQLite is the only store (ADR-0002).
-- **Optional, off by default:** `voice` Cargo feature (`whisper-rs`, `piper-rs`, `hound`). Do not enable it in v1.0 (ADR-0006).
+- **Optional, off by default:** `voice` Cargo feature (`whisper-rs`, `piper-rs`, `hound`). Do not enable it in shipped builds (ADR-0006).
 
 ## Data locations (`src-tauri/src/app/paths.rs`)
 
@@ -38,7 +38,7 @@ The database is `index/library.db`, not `~/.aiassistant/library.db` as the older
 - `npm run smoke` / `npm test`: `node scripts/smoke-test.mjs`.
 - `cd src-tauri && cargo test --all-targets`.
 - `cd src-tauri && cargo clippy --all-targets`. The Makefile does not pass `-D warnings`. Note that `src-tauri/src/lib.rs` sets `#![allow(clippy::all, unused)]`, so clippy is quieter than the default.
-- `make all` runs check, test and smoke. `make release` runs `npx tauri build`.
+- `make all` runs check, test and smoke. `make release` runs the sidecar-overlay build (`npx tauri build --config src-tauri/tauri.sidecar.conf.json`) after `npm run build`.
 
 ## Conventions
 

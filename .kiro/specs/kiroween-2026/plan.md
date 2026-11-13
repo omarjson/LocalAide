@@ -1,12 +1,12 @@
 # LocalAide for Kiroween 2026: plan
 
-Status: active. Decisions below were made by Omar on 2026-11-13. Work continues on branch `kiroween/engine-and-design`.
+Status: merged. Decisions below were made by Omar on 2026-11-13. The work ran on branch `kiroween/engine-and-design` and was merged into `main` as commit `bb0d0aa`; `main` is the branch of record.
 
 ## 0. Decisions (2026-11-13)
 
 - **Category: Costume Contest.** Judged on a polished, memorable UI. The design pass, DESIGN.md and the patched-ghost brand carry it; the Frankenstein story still shows through the branding.
 - **Online mode: build it in.** OpenAI-compatible cloud providers as an explicit opt-in, disabled by default, user-supplied key. The local-first default and its zero-data-exfiltration guarantee do not change. Docs describe it as in development until it ships.
-- **Speech: defer.** Stubs are already removed; v1.0 stays chat-only. Revisit after the contest (see `engine-upgrade` Phase 5 findings).
+- **Speech: defer.** Stubs are already removed; the product stays chat-only. Revisit after the contest (see `engine-upgrade` Phase 5 findings).
 
 ## 1. Eligibility (checked)
 
@@ -39,7 +39,7 @@ Keep the core that works, and make it excellent:
 Cut or defer:
 
 - Voice (speech and TTS): defer. Stubs removed.
-- Vision: defer. Not built.
+- Vision: the planned Candle/SLM vision path was deferred and never built; image input later shipped through the sidecar's own multimodal support instead (see the outcome notes in §7).
 - Dev Config screen: move it out of the main navigation, or remove it. (Done 2026-11-13: moved to the command palette — see track B.)
 
 Status: scope approved 2026-11-13 with online mode included (reversing the earlier skip recommendation).
@@ -80,11 +80,11 @@ UX rules:
 
 Tracks that can run in parallel, each as a sub-agent with its own files:
 
-- **A. Backend fixes:** folder ignore logic, catalog hashes and presets, hybrid-search honesty, removing voice stubs. — **Done in commits `07ed24c` and `aa5daf6` (written, not yet compiled).**
-- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Design pass and icons landed in `aa5daf6`; Dev Config screen moved out of the sidebar to the command palette (DESIGN.md:49). Remaining Dev Config work is honesty fixes inside the screen (dead button, hardcoded embedding-status stub).**
+- **A. Backend fixes:** folder ignore logic, catalog hashes and presets, hybrid-search honesty, removing voice stubs. — **Done in commits `07ed24c` and `aa5daf6`; compiled and passing the CI quality gate.**
+- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Done: design pass and icons landed in `aa5daf6`; Dev Config screen moved to the command palette (DESIGN.md) and reworked onto live API data. DESIGN.md itself is still "not yet checked on screen".**
 - **C. Docs:** README, ARCHITECTURE, scope, SECURITY and scorecard rewritten to match the code. — **Done 2026-11-13 (truth pass): rubric scores replaced with CI-gate evidence, false claims fixed, broken evidence links repaired.**
-- **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped. — **In progress: `kiro-log.md` added; hook still pending.**
-- **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage. — **Built 2026-11-13: `RemoteEngine` + `RouterEngine` behind the existing `InferenceEngine` trait, cloud commands, Settings UI with add/edit/delete/toggle, cloud badge in the chat header, HTTPS-enforced URLs (HTTP only for loopback proxies), key stored locally and masked in the UI. Not yet compiled; CI is the gate.**
+- **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped. — **Done: `kiro-log.md` added; the hook lives in `.kiro/hooks/svelte-check-on-edit.kiro.hook`.**
+- **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage. — **Built 2026-11-13: `RemoteEngine` + `RouterEngine` behind the existing `InferenceEngine` trait, cloud commands, Settings UI with add/edit/delete/toggle, cloud badge in the chat header, HTTPS-enforced URLs (HTTP only for loopback proxies), key stored locally and masked in the UI. Compiled; the CI quality gate is green, with macOS/package bundling still unverified (see the status line in README.md).**
 
 Each track ends with a written summary. Testing happens on your machine, not here. For each track I will list the exact commands for you to run.
 

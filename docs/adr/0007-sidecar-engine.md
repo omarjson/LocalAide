@@ -27,8 +27,8 @@ The sidecar binary is built by `.github/workflows/llama-server.yml` for macOS (A
 ## Consequences
 
 - Positive: no FFI layer to maintain. The engine version is pinned in CI. The three platform builds share one recipe.
-- Positive: image input uses the server's own multimodal support.
+- Positive: image input uses the server's own multimodal support (`mmproj`).
 - Negative: one extra process per loaded model. Startup takes time, and crashes need recovery. The server log is in `~/.aiassistant/logs/llama-server.log`.
 - Negative: the prompt is a message list rather than a raw string. Earlier turns are trimmed by the context budget.
-- Risk: the sidecar is not yet compiled or tested on the target machine. Verify the GitHub Actions build and one real chat before release.
-- Follow-up: delete `vendor/llama_cpp_rs` once the build passes.
+- Risk: the sidecar compiles in CI for Windows and Linux; the macOS sidecar builds were cancelled twice to save runner cost, so macOS bundling is unverified, and no platform has had a recorded real-model chat yet. Run one real chat per platform before release.
+- Follow-up: done — `vendor/llama_cpp_rs` is deleted.

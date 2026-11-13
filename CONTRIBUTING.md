@@ -1,6 +1,6 @@
 # Contributing to LocalAide
 
-Thank you for your interest in contributing! LocalAide is a local-first AI desktop assistant built with Rust + Tauri v2.
+Thank you for your interest in contributing. LocalAide is a local-first AI desktop assistant built with Rust + Tauri v2.
 
 ## How to Contribute
 
@@ -13,25 +13,22 @@ Thank you for your interest in contributing! LocalAide is a local-first AI deskt
 ## Development Setup
 
 Requirements:
-* Rust 1.90+
-* Node 18+
+* Rust 1.90+ (stable toolchain)
+* Node 20+
 * Tauri prerequisites for your platform
 
 ```bash
 git clone https://github.com/<user>/localaide.git
 cd localaide
-npm install
-cargo check
-npm run build
-cargo tauri dev
+npm ci
+npx tauri dev
 ```
 
 ## Project Structure
 
 * `src-tauri/` - Rust backend
 * `src/` - Svelte 5 frontend
-* `models/` - Model download catalog
-* `docs/` - Documentation
+* `docs/` - Documentation, ADRs, and evidence
 
 ## Reporting Issues
 

@@ -6,7 +6,7 @@
    - User notes are stored as plain Markdown files in `~/.aiassistant/memory/` and indexed in SQLite (`notes` table in `library.db`).
    - Atomic nanosecond note ID generation with atomic counter to prevent collision during rapid note creation.
    - Tag extraction from markdown content (parsing `#tag` tokens) and YAML frontmatter metadata support.
-   - Automatic background indexing into SQLite FTS5 index for unified keyword and hybrid search.
+   - Automatic background indexing into the SQLite FTS5 index used by the production keyword search.
    - Complete CRUD operations: create, read, update, delete with disk-file synchronization.
 
 2. **Relevance Gate & Strict Token Budgeting (`src-tauri/src/services/memory/rag.rs`):**

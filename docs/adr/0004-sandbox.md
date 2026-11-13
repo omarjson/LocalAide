@@ -1,34 +1,30 @@
 # ADR-0004: Workspace Jail Sandbox and Tool Execution Security
 
 ## Status
-Accepted
+Accepted, amended 2026-11-13 when the jail shipped: capability handles were replaced by canonicalization plus lexical checks, and the audit log is clearable, not append-only.
 
 ## Context
-The legacy tool execution implementation in `src-tauri/src/tools.rs` relied on a naive denylist approach:
-- It checked if path strings contained `..` or matched specific forbidden paths (`/etc`, `/Windows`, `~/.ssh`).
+The legacy tool execution implementation in `src-tauri/src/tools.rs` used a naive denylist:
+- It checked whether path strings contained `..` or matched specific forbidden paths (`/etc`, `/Windows`, `~/.ssh`).
 - It was vulnerable to symlink traversal, directory aliasing, non-canonical path resolution, and absolute path escapes.
-- It lacked an interactive user confirmation flow with file diff preview, executing tool calls without approval.
+- It executed tool calls without an interactive confirmation flow.
 
 ## Decision
-1. **Capability-Rooted Filesystem Jail (`cap-std` / openat)**:
-   - Tool operations (reading files, writing files, directory listing) are strictly constrained to a user-configured Workspace Directory.
-   - All filesystem operations are conducted using capability-based directory handles (`cap-std::fs::Dir` or equivalent canonicalization with strict path prefix checks).
-   - Reject any path containing symlinks that resolve outside the designated workspace root.
-   - Reject all absolute paths pointing outside the workspace.
-2. **Explicit User Approval Flow**:
-   - Destructive operations (file writes, deletes, modifications) require interactive frontend approval.
-   - The approval modal must display:
-     - The tool name
-     - The target path relative to workspace
-     - The full payload or unified diff for edits
-     - Explicit options: "Approve Once", "Approve Always for this Workspace", or "Deny".
-3. **Immutable Audit Logging**:
-   - Every tool call, whether approved, rejected, or failed, is written to an append-only audit table in SQLite with a timestamp, caller context, sanitized inputs, and status.
-4. **Hardened Tauri Security Policy**:
-   - Set strict Content Security Policy (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset:; font-src 'self'; connect-src 'self'`).
-   - Remove wildcard permissions and shell plugin access from Tauri capabilities.
+1. **Capability-rooted filesystem jail (`WorkspaceJail`)**:
+   - Tool operations (read, write, list, search) are confined to `~/.aiassistant/workspace/` — a fixed root under the app directory, not a user-chosen one.
+   - Shipped mechanics: lexical traversal checks (component depth for `..`) plus `std::fs::canonicalize` on every existing target and the nearest existing ancestor of new files. An early `cap-std`/openat handle design was replaced by this simpler canonicalization approach before it shipped.
+   - Reject any symlink that resolves outside the root, and any absolute path that resolves outside it.
+2. **Explicit user approval flow**:
+   - Mutating operations (`write_file`) require interactive frontend approval.
+   - The modal shows the tool name, operation, target path, and payload preview, with three options: **Allow Once**, **Allow for Session**, **Deny**.
+   - Reads, listings, and searches are auto-approved and bounded (1 MB reads, 1000-entry listings, 4 MB writes).
+3. **Audit logging**:
+   - Every tool call — approved, denied, or failed — is written to the SQLite `tool_audit` table with timestamp, tool name, action, path, approval state, and status. The log is user-visible and clearable from Settings; it is not append-only.
+4. **Hardened Tauri security policy**:
+   - Strict CSP (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost`).
+   - No wildcard permissions and no shell plugin access in Tauri capabilities.
 
 ## Consequences
-- **Positive**: Complete defense-in-depth against prompt-injection attacks attempting filesystem exfiltration or destruction.
-- **Positive**: Complies with the principle of least privilege.
-- **Negative**: User must confirm file modifications.
+- **Positive**: Defense-in-depth against prompt-injection attempts to read or write outside the jail.
+- **Positive**: Complies with the principle of least privilege; no command-execution tool exists to abuse.
+- **Negative**: The user must confirm file writes, and canonicalization rejects otherwise valid paths that cross the jail boundary through links.

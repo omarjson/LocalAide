@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**The Private, Local-First Desktop AI Assistant**
+**A private, local-first desktop AI assistant**
 
-*Zero telemetry. Local by default. Opt-in cloud when you choose.*
+*Local by default. Zero telemetry. Opt-in cloud with your own key.*
 
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/omarjson/LocalAide/releases)
@@ -13,169 +13,54 @@
 [![Tauri: v2](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app/)
 [![Svelte: 5](https://img.shields.io/badge/Svelte-5%20(Runes)-FF3E00.svg)](https://svelte.dev/)
 [![SQLite: WAL](https://img.shields.io/badge/SQLite-WAL%20Mode-003B57.svg)](https://www.sqlite.org/)
-[![Accessibility: WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-purple.svg)](docs/evidence/a11y.md)
+[![Accessibility: WCAG 2.2 AA target](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20target-purple.svg)](docs/evidence/a11y.md)
 
-[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Packaging Guide](PACKAGING.md) • [Audit & Evidence](docs/evidence/audit-2026-11-13.md)
+[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Packaging Guide](PACKAGING.md) • [Evidence Index](docs/evidence/scorecard.md)
 
 </div>
 
 ---
 
+**Status:** `main` is the branch of record. The CI quality gate (rustfmt, clippy, cargo test, svelte-check, frontend build, smoke test) is green on `main`. macOS/package bundling is the one CI stage never verified: the macOS sidecar builds were cancelled twice to save runner cost, and a cancelled job is not a failed one, so no package has been proven to install and run. Everything else in this README is matched to the code and re-checked against the standing honesty audit in [docs/evidence/audit-2026-11-13.md](docs/evidence/audit-2026-11-13.md).
+
 ## Table of Contents
 
 - [What is LocalAide?](#what-is-localaide)
-- [Why LocalAide? (Cloud vs Local)](#why-localaide-the-case-for-local-first-desktop-ai)
 - [Key Features](#key-features)
-- [Technology Stack](#technology-stack)
-- [System Architecture](#system-architecture)
-- [How Each Subsystem Works](#how-each-subsystem-works)
-  - [1. Inference Engine & Token Budgeting](#1-inference-engine--token-budgeting)
-  - [2. Document Library & Keyword Search (FTS5)](#2-document-library--keyword-search-fts5)
-  - [3. Memory Notes & Verifiable Citations](#3-memory-notes--verifiable-citations)
-  - [4. Capability Sandbox & Tool Approval](#4-capability-sandbox--workspacejail)
-  - [5. Model Manager & Cryptographic Verification](#5-model-manager--streaming-verification)
 - [Hardware Requirements & Models](#hardware-requirements--recommended-models)
 - [Getting Started](#getting-started)
-  - [Option A: Download Precompiled Binaries](#option-a-download-precompiled-binaries)
-  - [Option B: Building From Source](#option-b-building-from-source)
-- [Keyboard Navigation Matrix](#keyboard-navigation-matrix)
+- [Keyboard Navigation](#keyboard-navigation)
 - [Verification & Quality Gates](#verification--quality-gates)
-- [Roadmap & Scope Policy](#roadmap--scope-policy)
+- [Scope & Non-Goals](#scope--non-goals)
+- [Architecture Decision Records](#architecture-decision-records-adrs)
 - [Security Disclosure](#security-disclosure)
 - [License](#license)
 
----
-
 ## What is LocalAide?
 
-**LocalAide** is an open-source, local-first desktop AI assistant engineered for privacy, reliability, and speed. Built natively on **Rust**, **Tauri v2**, **Svelte 5**, and **SQLite**, it runs quantized open-weights Large Language Models (GGUF format) through a local `llama-server` engine — built from llama.cpp v0.9.0 — directly on your computer's hardware.
+LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2, Rust, Svelte 5, and SQLite. It runs quantized open-weights models (GGUF) through a `llama-server` sidecar process built from llama.cpp v0.9.0, talking to it over `127.0.0.1` — there is no browser runtime and no bundled Electron shell.
 
-Unlike browser wrappers or Electron-based frontends, LocalAide is designed as a standalone, low-overhead native desktop application. With cloud mode off — the default — it operates **100% offline** and captures zero user telemetry. All documents, conversation threads, and memory notes are stored strictly on your local filesystem under `~/.aiassistant/`. If you explicitly add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS, and the chat header shows a cloud badge the whole time.
+With cloud mode off — the default — it runs fully offline and collects no telemetry. Documents, conversations, and memory notes stay under `~/.aiassistant/` on your machine. If you add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS with your own API key, and the chat header shows a cloud badge the whole time.
 
----
-
-## Why LocalAide? (The Case for Local-First Desktop AI)
-
-The majority of contemporary AI tools rely on centralized cloud infrastructure. While convenient, cloud-based assistants introduce structural liabilities for developers, legal teams, researchers, and enterprises:
-
-| Risk / Vector | Cloud AI Assistants (OpenAI, Anthropic, Copilot) | LocalAide (Local-First Architecture) |
-|---|---|---|
-| **Data Privacy & Exfiltration** | Transmits proprietary code, documents, and chat transcripts to remote cloud datacenters. | **Local by Default.** Text processing and inference run on your machine. The opt-in cloud mode sends chat only to the provider you configure, and a badge shows when it is active. |
-| **Telemetry & Tracking** | Logs IP addresses, prompt habits, active hours, and hardware fingerprints. | **Zero Telemetry.** No tracking, no analytics, no phone-home pings. |
-| **Recurring Costs** | Requires monthly subscription fees (\$20–\$30/user/month). | **Free & Open-Source Forever.** Licensed under MIT; run any open-weights model on your own hardware. |
-| **Offline Resilience** | Bricked during internet outages, flight travel, or API outages. | **Air-Gapped by Default.** Chat, keyword search, memory recall, and file tools run offline whenever cloud mode is off. |
-| **Hallucination Control** | Black-box citations that often invent references or fabricate URLs. | **Verifiable Citations.** Clickable citation pills link directly to local document chunks with exact score inspection. |
-| **Filesystem Safety** | Plugins either lack local access or possess unrestricted filesystem access. | **Capability-Rooted Jail.** Strict workspace jail (`openat` checks, symlink defense, interactive user consent). |
-| **Memory Footprint** | Bloated Chromium runtimes consuming 1.5–3 GB of idle RAM. | **Ultralight Desktop App.** Native Tauri v2 shell without a bundled browser runtime. |
-
----
+Search is BM25 keyword search over SQLite FTS5. Vector search and rank fusion are not wired in this release. See [ARCHITECTURE.md](ARCHITECTURE.md) for how each subsystem works.
 
 ## Key Features
 
-- **Private Local Chat**: Real-time token streaming with a working Stop control (cancellation applies at the next streamed token, or press `Esc`).
-- **Opt-In Online Providers**: Add an OpenAI-compatible provider (OpenAI, OpenRouter, a localhost proxy, and so on) with your own API key, switch cloud mode on when you want it, and see a cloud badge in the chat header for as long as it is active. Off by default; local inference is untouched.
-- **Sliding-Window Context Budget**: Intelligently packs conversational history, dynamically truncates older turns while preserving the system prompt, and guarantees memory headroom for model responses.
-- **Natural Boundary Document Chunker**: Ingests Markdown, plain text, and PDF files. Chunks text along natural paragraph and sentence boundaries with configurable sliding overlap.
-- **Keyword Search (FTS5 BM25)**: Embedded SQLite WAL engine running full-text BM25 search over FTS5. Vector search and RRF fusion are not wired in v1.0.
-- **Associative Memory with Verifiable Citations**: Bidirectional disk synchronization (`~/.aiassistant/memory/`) with SQLite. Automatically recalls relevant knowledge above a strict relevance gate (`0.010`) and displays clickable citation pills in the chat UI.
-- **Capability-Rooted Workspace Jail**: Sandboxed tool execution environment confined to `~/.aiassistant/workspace/`. Traps directory traversal escapes (`..`), external symlinks, and recursive symlink loops (`ELOOP`).
-- **Interactive Tool Consent**: Non-destructive operations (file reads, directory listings) are safe by default; state-modifying operations (file writes, executions) trigger an explicit approval modal with audit logging in SQLite.
-- **Atomic Model Management**: Catalog manifest with an integrity digest over model ids, sizes, and hashes. Resumable HTTP downloads (`Range: bytes=X-`) and 64 KB constant-RAM streaming SHA-256 cryptographic verification (< 100 KB memory overhead).
-- **Universal Keyboard Navigation**: Power-user keyboard matrix (`⌘K` Command Palette, `⌘N` New Chat, `/` Search, `⌘1`–`⌘5` Screen switching, `Esc` Abort, `?` Help).
-- **WCAG 2.2 AA Accessibility**: Text contrast built on audited design tokens (body and muted text exceed 4.5:1 on the ink background), universal high-visibility focus indicators (`#d946ef`), and screen-reader `aria-live` streaming announcements. See [docs/evidence/a11y.md](docs/evidence/a11y.md) for the current contrast audit.
-
----
-
-## Technology Stack
-
-LocalAide is built from the ground up with a modern, high-performance systems and frontend stack:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 FRONTEND USER INTERFACE                     │
-│  Svelte 5 (Runes: $state, $derived) • TypeScript 5.7        │
-│  Tailwind CSS v4 • Inline SVG Icon Set • Vite 6 Bundle      │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Typed IPC Client (bindings.ts)
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   TAURI V2 NATIVE HOST                      │
-│  Strict CSP • Typed IPC • Default Window Chrome             │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Rust Tauri Commands
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   RUST APPLICATION CORE                     │
-│  Rust 2024 Edition • Tokio Async • Single Managed AppState  │
-│  JobRegistry (Atomic Cancellation Flags & Progress Tracker) │
-└───────┬──────────────────────┬──────────────────────┬───────┘
-        │                      │                      │
-        ▼                      ▼                      ▼
-┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│ INFERENCE ENGINE│  │  STORAGE SERVICE │  │ SECURITY SANDBOX │
-│ llama-server    │  │ SQLite 3 (WAL)   │  │ WorkspaceJail    │
-│ (llama.cpp      │  │ FTS5 BM25 Engine │  │ Canonical Tree   │
-│  v0.9.0 sidecar)│  │ Keyword Search   │  │ Audit Logger     │
-│ Context Budget  │  │                  │  │                  │
-└─────────────────┘  └──────────────────┘  └──────────────────┘
-```
-
-- **Core Languages**:
-  - **Rust** (2024 Edition / 1.90+): High-concurrency backend services, capability sandbox, SQLite integration, and OS thread orchestration.
-  - **TypeScript** (v5.7+): Type-safe IPC client bindings, application models, and frontend contracts.
-  - **Svelte** (v5.0+): High-efficiency UI reactive components utilizing modern Svelte 5 Runes without Virtual DOM overhead.
-  - **C / C++**: Quantized tensor operations run inside the `llama-server` engine (built from llama.cpp v0.9.0 in CI), communicating with the app over localhost HTTP. Apple Metal and AVX2 vector optimizations come from the upstream engine build.
-  - **SQL**: SQLite 3.45+ relational schemas, full-text indexes (FTS5), and transactional migrations.
-- **Styling**: Tailwind CSS v4 with custom design tokens, dark mode palette, and WCAG-compliant color contrasts.
-- **Data Layer**: `rusqlite` bundled with SQLite WAL mode, eliminating database locks and enabling concurrent background search and chat persistence.
-
----
-
-## System Architecture
-
-LocalAide adheres to strict architectural boundaries:
-1. **Single State Owner**: All mutable domain state is encapsulated in `AppState` managed by Tauri's dependency container.
-2. **Typed IPC Edges**: Every command takes a concrete DTO struct and returns a strongly-typed `Result<T, AppError>`. Dynamic JSON is confined to tool arguments and progress event payloads.
-3. **Separate Inference Process**: Chat runs in a `llama-server` child process bound to 127.0.0.1 with a random API key. The GUI never waits on the model.
-4. **Isolated Capability Jail**: File operations are confined to a designated directory with strict validation of lexical depth and canonical ancestry.
-
----
-
-## How Each Subsystem Works
-
-### 1. Inference Engine & Token Budgeting
-- **Model Loading**: Loading a GGUF file starts `llama-server` with the model and its vision projector, if one is present. Switching or stopping models ends the process.
-- **Stream Cancellation**: A cancellation flag is checked per streamed token. Pressing `Esc` or the Stop button halts generation at the next token without corrupting the model state.
-- **Dynamic Context Budgeting**: The `ContextBudget` subsystem calculates the model's token limits. If the conversation history exceeds the budget, older turns are pruned while preserving the system instructions, the RAG context block, and the user's latest query.
-
-### 2. Document Library & Keyword Search (FTS5)
-- **Natural Boundary Chunker**: Text is partitioned into semantically meaningful chunks (target 1500 characters with 250-character overlap) respecting line breaks, paragraphs, and sentence punctuation.
-- **PDF & Markdown Extraction**: Clean, pure-Rust extraction from PDF, Markdown, and text files without external dependencies.
-- **Keyword Search (BM25)**: Full-text search runs over SQLite FTS5. Vector search and RRF fusion are not wired in v1.0; the catalog already lists embedding models for when they are.
-
-### 3. Memory Notes & Verifiable Citations
-- **Associative Memory Sync**: Personal notes stored in `~/.aiassistant/memory/*.md` are continuously synchronized with SQLite tables.
-- **Relevance Gate**: During conversation turns, the `MemoryService` performs a search across stored notes. Only chunks exceeding the strict relevance threshold (`MIN_RELEVANCE_SCORE = 0.010`) are included in the prompt context.
-- **Citation Pills**: Retrieved sources are tagged with sequential markers (`[1]`, `[2]`). In the UI, these render as clickable citation pills that open an inspection drawer showing the exact text snippet, file path, and relevance score.
-- **Zero-Trace Privacy Purge**: The "Forget All" action permanently deletes memory files from disk and clears the database tables in a single atomic transaction.
-
-### 4. Capability Sandbox (`WorkspaceJail`)
-- **Restricted Filesystem Confinement**: Tools are locked to `~/.aiassistant/workspace/`.
-- **Traversal Defense**: All file paths are checked for lexical `..` components and canonicalized to ensure their resolved path resides strictly under the jail's root directory.
-- **Symlink Protection**: Symlinks pointing outside the jail or pointing to circular symlink loops (`ELOOP`) are rejected with `SANDBOX_DENIED`.
-- **Interactive Approval Modal**: Non-destructive operations (reading a file, listing directories) are permitted automatically. Write or command actions trigger an interactive approval dialog in Svelte.
-- **Audit Log**: Every tool execution request, parameter set, user approval decision, and execution status is recorded in a SQLite audit table. The log is user-visible and can be cleared from Settings.
-
-### 5. Model Manager & Streaming Verification
-- **Catalog Integrity Digest**: The bundled manifest carries a digest over every entry's id, size, and hash. A mismatch aborts the catalog before any download starts, so a tampered list cannot send you to a spoofed URL.
-- **Byte-Range Resume**: Interrupted downloads automatically resume using HTTP `Range: bytes=<offset>-` headers, writing to temporary `.part` files.
-- **Constant-RAM Streaming Hash**: Checksums are computed in streaming 64 KB buffers, consuming less than 100 KB of RAM even when validating large 8 GB model files.
-
----
+- **Local chat**: token streaming with a working Stop control and `Esc` (cancellation applies at the next streamed token), conversation history in JSON thread files, and message actions (retry, edit-and-resend, copy, delete thread).
+- **Image input with vision models**: attach up to 4 images (PNG, JPEG, WEBP, GIF, 20 MB total); the sidecar loads the model's `mmproj` projector when one is present and rejects image input for text-only models.
+- **Opt-in online providers**: add an OpenAI-compatible provider (OpenAI, OpenRouter, a localhost proxy such as Ollama or LM Studio) with your own API key. Off by default; the key is stored in the local config file, masked in the UI, and sent only to the provider's base URL.
+- **Sliding-window context budget**: older turns are pruned when the conversation exceeds the model's context, preserving the system prompt, the retrieved context block, and the latest message.
+- **Document library**: index folders of Markdown, text, source, and PDF files; chunking follows natural boundaries (1500 characters, 250 overlap); search runs FTS5 BM25 keyword matching.
+- **Memory notes with citations**: Markdown notes in `~/.aiassistant/memory/` are indexed into SQLite; chat recalls notes above a relevance score of 0.010 and renders clickable citation pills with the snippet, path, and score.
+- **Capability-rooted workspace jail**: file tools are confined to `~/.aiassistant/workspace/`. Paths are checked lexically and canonically; traversal escapes, outside symlinks, and symlink loops are rejected with `SANDBOX_DENIED`.
+- **Explicit tool consent**: reads, listings, and searches run without prompts; file writes require an approval modal ("Allow Once", "Allow for Session", "Deny"). Every tool call lands in a SQLite audit log you can view and clear in Settings.
+- **Verified model downloads**: a 36-model catalog with an integrity digest over ids, sizes, and hashes; resumable HTTP downloads to `.part` files; SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
+- **Keyboard-complete navigation**: see the matrix below.
+- **Accessibility**: WCAG 2.2 AA is the target. Text contrast is audited against the design tokens ([docs/evidence/a11y.md](docs/evidence/a11y.md)); one open finding remains (border contrast), and focus rings, `aria-live` streaming, and reduced-motion support are in place.
 
 ## Hardware Requirements & Recommended Models
 
-LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 models, including vision, embedding, reranking and coding models. Each entry was checked against Hugging Face. Each file's size and SHA-256 match the hub, and each license is shown in the Model Manager.
+LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 models, including vision, embedding, reranking, and coding models. Each entry was checked against Hugging Face; file sizes and SHA-256 values come from the hub's metadata, and each license is shown in the Model Manager.
 
 | Preset | RAM needed | Models |
 |---|---|---|
@@ -184,133 +69,95 @@ LocalAide runs GGUF models with llama.cpp v0.9.0. The built-in catalog lists 36 
 | Balanced | about 9.5 GB | Qwen3.5 9B, Gemma 4 E4B (QAT) |
 | Advanced | about 20 GB | Gemma 4 26B-A4B (MoE), Qwen3.8 27B |
 
-Full list, sources and rejected models: [docs/evidence/models-2026-11.md](docs/evidence/models-2026-11.md).
+Minimum hardware: x86_64 CPU with AVX2 or Apple Silicon; 8 GB RAM (16 GB for 3B–7B models); 2 GB of SSD space for the app plus 0.15–22 GB per model, depending on the entry.
 
-### Minimum Hardware
-- **Processor**: Intel/AMD x86_64 CPU (with AVX2 support) or Apple Silicon (M1/M2/M3/M4).
-- **RAM**: 8 GB minimum (16 GB recommended for 3B/7B models).
-- **Storage**: 2 GB free SSD space for the application; 1–6 GB per downloaded model.
-
----
+Full list, sources, and rejected models: [docs/evidence/models-2026-11.md](docs/evidence/models-2026-11.md).
 
 ## Getting Started
 
-### Option A: Download Precompiled Binaries
+### Option A: download precompiled binaries
 
-Download ready-to-run native desktop packages directly from the [**Releases Page**](https://github.com/omarjson/LocalAide/releases):
+Grab a package from the [Releases page](https://github.com/omarjson/LocalAide/releases):
 
-- **macOS (Apple Silicon M1/M2/M3/M4)**: `LocalAide_<version>_aarch64.dmg`
-- **macOS (Intel Core x86_64)**: `LocalAide_<version>_x64.dmg`
-- **Windows (x64)**: `LocalAide_<version>_x64_en-US.msi` or NSIS installer (`.exe`)
+- **macOS (Apple Silicon)**: `LocalAide_<version>_aarch64.dmg`
+- **macOS (Intel)**: `LocalAide_<version>_x64.dmg`
+- **Windows (x64)**: `LocalAide_<version>_x64_en-US.msi` or the NSIS installer (`.exe`)
 - **Linux (x64)**: `LocalAide_<version>_amd64.deb` or `LocalAide_<version>_amd64.AppImage`
 
----
+Note the status line above: the macOS packages come from a CI stage that has not yet completed, so treat them as unverified until a run proves them.
 
-### Option B: Building From Source
+### Option B: build from source
 
-#### 1. Prerequisites
-- **Node.js**: v20 or newer (`nvm use 20`)
-- **Rust Toolchain**: Stable 1.90+ with `rustfmt` and `clippy` (`rustup update stable`)
-- **C/C++ Compiler**:
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
-  - Linux: `sudo apt install build-essential libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`
-  - Windows: Visual Studio 2022 C++ Build Tools (MSVC)
+1. **Prerequisites**: Node.js 20+ (`nvm use 20`), a Rust stable toolchain with `rustfmt` and `clippy` (`rustup update stable`; the crate declares MSRV 1.90), and a C/C++ compiler:
+   - macOS: Xcode Command Line Tools (`xcode-select --install`)
+   - Linux: `sudo apt install build-essential libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`
+   - Windows: Visual Studio 2022 C++ Build Tools (MSVC)
+2. **Clone and install**:
+   ```bash
+   git clone https://github.com/omarjson/LocalAide.git
+   cd LocalAide
+   npm ci
+   ```
+3. **Run the local checks**:
+   ```bash
+   make all   # check (svelte-check + cargo check), test (cargo test), smoke (build + smoke test)
+   make lint  # clippy, as the CI quality gate runs it
+   ```
+4. **Run in development**:
+   ```bash
+   npx tauri dev   # or `npm run dev` for the frontend alone
+   ```
+5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Build it from the pinned llama.cpp tag (v0.9.0) and stage it with `scripts/prepare-sidecar.sh`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml) and [PACKAGING.md](PACKAGING.md). Then:
+   ```bash
+   npx tauri build --config src-tauri/tauri.sidecar.conf.json
+   ```
+   The overlay adds `bundle.externalBin`. A bare `npx tauri build` — including `make release`, which passes the overlay for you — produces an app that cannot chat without it. Artifacts land in `src-tauri/target/release/bundle/`.
 
-#### 2. Clone and Setup
-```bash
-git clone https://github.com/omarjson/LocalAide.git
-cd LocalAide
+## Keyboard Navigation
 
-# Install frontend dependencies
-npm ci
-```
-
-#### 3. Run Quality Verification Suite
-```bash
-# Runs check (svelte-check + cargo check), test (cargo test), smoke (frontend build + smoke checks)
-make all
-```
-`make all` runs `check`, `test` and `smoke`. Formatting and clippy run in the CI quality gate on every push; `make lint` runs clippy locally.
-
-#### 4. Launch Desktop Application in Development Mode
-```bash
-npm run dev
-# or launch with native Tauri shell
-npx tauri dev
-```
-
-#### 5. Compile Native Release Installer
-
-The app chats through a local `llama-server` sidecar process (ADR-0007), so the installer must bundle that binary next to the app executable.
-
-1. **Get the sidecar binary.** Build it from the pinned llama.cpp tag (v0.9.0) and stage it with `scripts/prepare-sidecar.sh` (it lands in `src-tauri/binaries/`), or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml).
-2. **Build with the sidecar overlay:**
-```bash
-npx tauri build --config src-tauri/tauri.sidecar.conf.json
-```
-The `tauri.sidecar.conf.json` overlay adds `bundle.externalBin` so the sidecar is bundled. A bare `npx tauri build` — including `make release`, which calls it — produces an app that cannot chat.
-
-Binaries will be placed in `src-tauri/target/release/bundle/`.
-
----
-
-## Keyboard Navigation Matrix
-
-LocalAide is fully navigable without a mouse:
-
-| Key Binding | Action | Scope |
-|---|---|---|
-| `⌘K` / `Ctrl+K` | Open Command Palette | Global |
-| `⌘N` / `Ctrl+N` | Start New Conversation Thread | Global |
-| `/` | Focus Search Input | Global |
-| `⌘,` / `Ctrl+,` | Open Settings & Security | Global |
-| `⌘1` | Navigate to Chat Screen | Global |
-| `⌘2` | Navigate to Search (Document Library) | Global |
-| `⌘3` | Navigate to Memory Notes | Global |
-| `⌘4` | Navigate to Model Manager | Global |
-| `⌘5` | Navigate to Settings | Global |
-| `Esc` | Abort Active Generation / Close Modals | Global |
-| `?` | Open Keyboard Shortcuts Reference | Global |
-| `Enter` | Submit Prompt | Chat Input |
-| `Shift+Enter` | Insert Line Break | Chat Input |
-| `Tab` / `Shift+Tab` | Traverse Focusable Controls | Global |
-
----
+| Key | Action |
+|---|---|
+| `Cmd/Ctrl+K` | Command palette |
+| `Cmd/Ctrl+N` | New conversation |
+| `/` | Focus library search (outside inputs) |
+| `Cmd/Ctrl+,` | Settings |
+| `Cmd/Ctrl+1` … `5` | Chat, Search, Memory, Models, Settings |
+| `Esc` | Abort generation / close modal |
+| `?` | Keyboard shortcuts help (outside inputs) |
+| `Enter` / `Shift+Enter` | Send / newline in chat input |
 
 ## Verification & Quality Gates
 
-LocalAide is verified by the CI pipeline on every push. The quality gate runs: Rust `rustfmt` and `clippy --all-targets -- -D warnings`, the full `cargo test --all-targets` suite (unit, contract, fault-injection, inference, library, memory/RAG, and tools/sandbox tests), the frontend `svelte-check` typecheck, and the frontend production build. Release builds compile for macOS (Apple Silicon and Intel), Windows x64, and Linux x64, each bundling the matching `llama-server` sidecar binary.
+CI runs on every push to `main`: rustfmt, `clippy --all-targets -- -D warnings`, the full `cargo test --all-targets` suite (unit, contract, fault-injection, inference, library, memory/RAG, and tools/sandbox tests), `svelte-check`, the frontend production build, and the smoke test. Release builds compile for macOS (Apple Silicon and Intel), Windows x64, and Linux x64, each bundling the matching `llama-server` sidecar.
 
-Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md), and the project keeps a standing honesty audit in [docs/evidence/audit-2026-11-13.md](docs/evidence/audit-2026-11-13.md) that lists every known gap between claims and code. Claims in this README are matched to the code and re-checked against that audit.
+Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md). Known open items, kept visible on purpose:
 
-### Architectural Decision Records (ADRs)
+- Border contrast fails the 3:1 non-text threshold ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
+- The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)).
+- macOS/package bundling is unverified in CI (see the status line).
+- Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest ([ADR-0005](docs/adr/0005-updates.md)).
+
+## Scope & Non-Goals
+
+LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs/scope.md](docs/scope.md). In brief:
+
+- **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager, the SQLite WAL document library with keyword search, Markdown memory notes with RAG citations, safe file tools in the workspace jail, and opt-in online providers.
+- **Deferred**: speech (STT/TTS) — it needs a second runtime (`.kiro/specs/engine-upgrade/tasks.md`); vision runtime verification — image input is wired but has not been exercised against a real vision model end to end.
+- **Non-goals**: telemetry of any kind, silent cloud failover, and in-app component hot-swapping (updates ship as whole packages; updater signing is future work per ADR-0005).
+
+## Architecture Decision Records (ADRs)
+
 - [ADR-0001: Typed IPC Boundaries](docs/adr/0001-typed-ipc.md)
 - [ADR-0002: Storage Engine Migration to SQLite WAL](docs/adr/0002-storage.md)
 - [ADR-0003: Isolated llama.cpp Worker Engine (superseded by ADR-0007)](docs/adr/0003-inference.md)
-- [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
 - [ADR-0004: Capability Workspace Jail](docs/adr/0004-sandbox.md)
 - [ADR-0005: Atomic Updates & Verification](docs/adr/0005-updates.md)
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
-
----
-
-## Roadmap & Scope Policy
-
-To guarantee stability and quality, LocalAide follows a strict scope discipline:
-
-- **Shipped in v1.0**: Local GGUF chat via llama-server, model catalog & manager, SQLite WAL document library with keyword search (FTS5 BM25), markdown memory notes with RAG citations, capability-rooted safe file tools, and opt-in OpenAI-compatible online providers (off by default, user-supplied key, cloud badge while active).
-- **Explicit Non-Goals for v1.0 (Deferred per ADR-0006)**:
-  - *Speech (STT / TTS)*: Deferred. The speech path needs a second runtime. See `.kiro/specs/engine-upgrade/tasks.md`.
-  - *Vision (Candle SLM / Qwen-VL)*: Deferred until multimodal support is verified end-to-end through the sidecar engine.
-  - *Modular In-App Hot-Swapping*: Replaced with standard signed app updates.
-
----
+- [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
 
 ## Security Disclosure
 
-If you discover a security vulnerability within LocalAide, please review our [Security Policy](SECURITY.md) for reporting instructions. Do not open public issues for sensitive security vulnerabilities.
-
----
+Found a security vulnerability? Follow the [Security Policy](SECURITY.md) and report it privately — do not open a public issue.
 
 ## License
 

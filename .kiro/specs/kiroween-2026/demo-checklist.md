@@ -8,7 +8,7 @@ Every step lists what success looks like and what to do if it does not happen.
 ## 0. Before you start
 
 - [ ] Latest build installed from CI artifacts (Quality Gate → sidecar →
-      platform build on `kiroween/engine-and-design`), or `make release` with
+      platform build on `main`), or `make release` with
       the sidecar staged per PACKAGING.md.
 - [ ] Internet available for the model download; nothing else needs the
       network for the rest of the demo.
@@ -41,6 +41,9 @@ text; re-running resumes via the `.part` file rather than restarting.
       badge**. Nothing has left the machine.
 - [ ] Stop a long answer mid-stream with the stop control; the partial text
       stays and is marked, not lost.
+- [ ] Optional, needs a vision model (one marked with a projector, such as
+      Qwen3.5 0.8B): attach an image in chat and get a grounded answer. If the
+      model has no projector, the app says so instead of failing silently.
 
 ## 4. Folder indexing and search
 
