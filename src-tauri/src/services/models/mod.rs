@@ -124,10 +124,7 @@ impl ModelService {
         let current = self.manifest();
         fetched.validate(current.version)?;
 
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         // Persist first, then swap: a failed cache write leaves the active
         // catalog unchanged instead of promising a refresh that would not
         // survive a restart.

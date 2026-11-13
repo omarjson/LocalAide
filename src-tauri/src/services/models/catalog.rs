@@ -602,9 +602,21 @@ mod tests {
     #[test]
     fn validation_rejects_catalog_rollback() {
         let embedded_version = CatalogManifest::default_manifest().version;
-        assert!(sample_manifest(embedded_version - 1).validate(embedded_version).is_err());
-        assert!(sample_manifest(embedded_version).validate(embedded_version).is_ok());
-        assert!(sample_manifest(embedded_version + 1).validate(embedded_version).is_ok());
+        assert!(
+            sample_manifest(embedded_version - 1)
+                .validate(embedded_version)
+                .is_err()
+        );
+        assert!(
+            sample_manifest(embedded_version)
+                .validate(embedded_version)
+                .is_ok()
+        );
+        assert!(
+            sample_manifest(embedded_version + 1)
+                .validate(embedded_version)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -673,7 +685,8 @@ mod tests {
     #[test]
     fn catalog_json_matches_embedded_manifest() {
         let raw = include_str!("../../../../catalog/models.json");
-        let parsed: CatalogManifest = serde_json::from_str(raw).expect("catalog/models.json parses");
+        let parsed: CatalogManifest =
+            serde_json::from_str(raw).expect("catalog/models.json parses");
         assert_eq!(parsed, CatalogManifest::default_manifest());
         parsed.verify().unwrap();
         parsed.validate(parsed.version).unwrap();

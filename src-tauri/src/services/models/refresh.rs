@@ -63,7 +63,8 @@ impl CatalogRefresher {
         let mut body: Vec<u8> = Vec::new();
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| AppError::internal(format!("Catalog stream error: {e}")))?;
+            let chunk =
+                chunk.map_err(|e| AppError::internal(format!("Catalog stream error: {e}")))?;
             if body.len() + chunk.len() > MAX_MANIFEST_BYTES {
                 return Err(AppError::invalid_input(format!(
                     "Catalog exceeds the size limit of {} KB",
