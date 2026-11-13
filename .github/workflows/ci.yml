@@ -92,7 +92,21 @@ jobs:
           fi
 
       - name: Rust Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: |
+          set -o pipefail
+          if ! cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1 | tee clippy.log; then
+            # Error headline and its primary location, as API-readable
+            # annotations (10 per step, most recent wins).
+            grep -E "^error(\[[^]]+\])?:" clippy.log | head -10 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=clippy::$enc"
+            done
+            grep -E "^\s+-->" clippy.log | head -10 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=clippy-loc::$enc"
+            done
+            exit 1
+          fi
 
       - name: Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
