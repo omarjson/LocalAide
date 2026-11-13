@@ -177,11 +177,7 @@ impl ModelService {
         std::fs::write(&tmp, data)
             .map_err(|e| AppError::storage(format!("Could not write catalog cache: {e}")))?;
         std::fs::rename(&tmp, &self.cache_path)
-            .map_err(|e| {
-                AppError::storage(format!(
-                    "Could not save catalog cache: {e}"
-                ))
-            })?;
+            .map_err(|e| AppError::storage(format!("Could not save catalog cache: {e}")))?;
         Ok(())
     }
 
