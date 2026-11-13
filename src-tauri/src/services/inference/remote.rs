@@ -38,11 +38,13 @@ pub struct RemoteEngine {
 
 impl RemoteEngine {
     pub fn new() -> Self {
+        // No idle-read timeout exists on the blocking client — reqwest has
+        // read_timeout only on the async builder. A provider that stalls
+        // mid-stream therefore parks the generation thread until CHAT_TIMEOUT;
+        // the cancel flag is still checked between SSE lines, so the UI
+        // recovers immediately when the user presses Stop.
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(Duration::from_secs(15))
-            // Idle-read timeout: a provider that stalls mid-stream must not
-            // park the generation thread past the user pressing Stop.
-            .read_timeout(Duration::from_secs(60))
             .timeout(CHAT_TIMEOUT)
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());

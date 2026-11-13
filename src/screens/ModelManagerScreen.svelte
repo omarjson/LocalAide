@@ -9,6 +9,7 @@
     name: string;
     size: string;
     ram: string;
+    ramGb: number;
     quant: string;
     license: string;
     status: "installed" | "available" | "installing";
@@ -26,6 +27,8 @@
   let verifying = $state<string | null>(null);
   let verifyStatus = $state<Record<string, boolean>>({});
   let actionError = $state<string | null>(null);
+  // From the system probe: models above this estimated RAM get a warning.
+  let budgetGb = $state(0);
 
   const verifyModel = async (id: string) => {
     verifying = id;
@@ -51,6 +54,7 @@
         name: m.name,
         size: m.size_bytes ? `${(m.size_bytes / 1024 / 1024).toFixed(0)} MB` : "?",
         ram: `${m.ram_estimate_gb} GB`,
+        ramGb: m.ram_estimate_gb,
         status: m.installed ? "installed" : "available",
         quant: m.quant,
         license: m.license,
@@ -69,6 +73,10 @@
     void (async () => {
       await refresh();
       if (!active) return;
+      try {
+        const probe = await api.systemProbe();
+        budgetGb = probe.budget_gb;
+      } catch {}
       try {
         presets = await api.getModelPresets();
       } catch {}
@@ -211,6 +219,14 @@
                 <span class="text-xs font-mono px-1.5 rounded border border-ink-700 text-ink-300" title="Model license">{m.license}</span>
                 {#if m.active}
                   <span class="text-xs font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active</span>
+                {/if}
+                {#if budgetGb > 0 && m.ramGb > budgetGb}
+                  <span
+                    class="text-xs font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    title="Estimated RAM exceeds your computed budget ({budgetGb.toFixed(1)} GB)"
+                  >
+                    Over budget
+                  </span>
                 {/if}
               </div>
               <div class="flex items-center gap-4 text-xs text-ink-400 font-mono mt-1">

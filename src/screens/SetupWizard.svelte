@@ -22,6 +22,8 @@
     { id: "advanced", name: "Advanced", ram: "~20 GB RAM", ramGb: 20.0, fits: "32 GB total RAM", models: ["Gemma 4 26B-A4B (MoE)", "Qwen3.8 27B"] },
   ];
 
+  let { onFinished }: { onFinished?: () => void } = $props();
+
   let step = $state<Step>("detect");
   let ramTotal = $state(0);
   let ramUsable = $state(0);
@@ -51,8 +53,13 @@
   const install = async () => {
     if (!selected) return;
     step = "download"; status = `Downloading ${selected.name} models...`;
+    progress = 0;
     try {
-      await api.downloadModelPreset(selected.id);
+      await api.downloadModelPreset(selected.id, (evt) => {
+        if (evt.status === "failed") return;
+        progress = Math.round(evt.percent);
+        status = `Downloading ${selected.name} models (${evt.model_id})...`;
+      });
       step = "done"; status = `${selected.name} preset installed.`;
     } catch (e: any) {
       status = `Install failed: ${e?.message ?? String(e)}`;
@@ -133,7 +140,7 @@
           <div class="text-sm text-ink-400">{status}</div>
         </div>
       </div>
-      <button onclick={() => location.reload()} class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium">Open app</button>
+      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium">Open app</button>
     {/if}
   </div>
 </div>

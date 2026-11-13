@@ -206,9 +206,9 @@ pub async fn model_download(
 
 #[tauri::command]
 pub async fn model_download_preset(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     id: String,
+    channel: tauri::ipc::Channel<DownloadProgressEvent>,
 ) -> Result<(), AppError> {
     let presets = model_presets();
     let preset = presets
@@ -216,13 +216,48 @@ pub async fn model_download_preset(
         .find(|p| p.id == id)
         .ok_or_else(|| AppError::invalid_input(format!("Unknown preset: {id}")))?;
 
-    for model_id in preset.models {
-        let (job_id, _cancel) = state.jobs.create_job(format!("preset_{model_id}"));
-        let _ = state
-            .model_manager
-            .download(app.clone(), model_id.clone())
+    // Each model weighs equally in the preset's overall progress bar, and
+    // failures stop the preset instead of being swallowed.
+    let model_count = preset.models.len() as f64;
+    for (index, model_id) in preset.models.into_iter().enumerate() {
+        let (job_id, cancel_flag) = state.jobs.create_job(format!("preset_{model_id}"));
+        let channel_clone = channel.clone();
+        let event_model_id = model_id.clone();
+        let res = state
+            .model_service
+            .download_model(&model_id, cancel_flag, move |progress| {
+                let overall =
+                    ((index as f64 + progress.percent / 100.0) / model_count * 100.0).min(100.0);
+                let _ = channel_clone.send(DownloadProgressEvent {
+                    model_id: event_model_id.clone(),
+                    downloaded_bytes: progress.bytes_downloaded,
+                    total_bytes: progress.bytes_total,
+                    percent: overall,
+                    speed_bps: progress.speed_bps,
+                    status: "downloading".to_string(),
+                });
+            })
             .await;
-        state.jobs.complete_job(&job_id);
+
+        match res {
+            Ok(_path) => {
+                state.jobs.complete_job(&job_id);
+                let _ = state.model_manager.activate(&model_id);
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                state.jobs.fail_job(&job_id, &err_msg);
+                let _ = channel.send(DownloadProgressEvent {
+                    model_id,
+                    downloaded_bytes: 0,
+                    total_bytes: 0,
+                    percent: 0.0,
+                    speed_bps: 0.0,
+                    status: "failed".to_string(),
+                });
+                return Err(e);
+            }
+        }
     }
     Ok(())
 }

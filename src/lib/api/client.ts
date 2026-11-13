@@ -67,8 +67,15 @@ export class ApiClient {
     return invoke<ModelPreset[]>("model_presets");
   }
 
-  async downloadModelPreset(id: string): Promise<void> {
-    return invoke<void>("model_download_preset", { id });
+  async downloadModelPreset(
+    id: string,
+    onProgress?: (event: DownloadProgressEvent) => void
+  ): Promise<void> {
+    const channel = new Channel<DownloadProgressEvent>();
+    if (onProgress) {
+      channel.onmessage = onProgress;
+    }
+    return invoke<void>("model_download_preset", { id, channel });
   }
 
   async cancelModelDownload(id: string): Promise<void> {

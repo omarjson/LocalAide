@@ -47,7 +47,7 @@
   let activeModelName = $state<string | null>(null);
   let modelsChecked = $state(false);
 
-  let { onOpenModels }: { onOpenModels?: () => void } = $props();
+  let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
 
   onMount(async () => {
     try {
@@ -122,6 +122,17 @@
     activeThreadTitle = "New Conversation";
     messages = [];
   };
+
+  // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
+  // on a remount (navigating back to chat) the tick already equals its initial
+  // value, and the fresh component is a new conversation anyway.
+  let lastThreadTick = $state(newThreadTick);
+  $effect(() => {
+    if (newThreadTick !== lastThreadTick) {
+      lastThreadTick = newThreadTick;
+      newChat();
+    }
+  });
 
   const selectThread = async (t: ChatThread) => {
     if (streaming) return;

@@ -13,20 +13,32 @@
 
   type Screen = "setup" | "chat" | "memory" | "models" | "settings" | "dev" | "search";
 
-  let screen = $state<Screen>("setup");
+  // Null until startup decides: returning users with a downloaded model go
+  // straight to chat; first-run users see the setup wizard.
+  let screen = $state<Screen | null>(null);
   let ramTotal = $state(0);
   let ramUsable = $state(0);
   let budget = $state(0);
   let cmdOpen = $state(false);
   let cmdQuery = $state("");
+  let cmdInput = $state<HTMLInputElement>();
   let toast = $state<string | null>(null);
   let mobileNav = $state(false);
   let showHelp = $state(false);
   let fatalError = $state<string | null>(null);
+  // Bumped by Ctrl/Cmd+N so ChatScreen starts a fresh thread even when it is
+  // already on screen.
+  let chatResetTick = $state(0);
 
   const navigate = (s: Screen) => {
     screen = s;
   };
+
+  $effect(() => {
+    if (cmdOpen) {
+      cmdInput?.focus();
+    }
+  });
 
   const showToast = (msg: string) => {
     toast = msg;
@@ -45,6 +57,12 @@
   onMount(() => {
     void (async () => {
       try {
+        const cfg = await api.loadConfig();
+        screen = cfg.selected_models?.length ? "chat" : "setup";
+      } catch {
+        screen = "setup";
+      }
+      try {
         const probe = await api.systemProbe();
         ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
         ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
@@ -62,6 +80,7 @@
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
         navigate("chat");
+        chatResetTick += 1;
         showToast("New chat ready");
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
@@ -195,10 +214,15 @@
             <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-ink-700 hover:bg-white/5 text-sm text-ink-300">Copy Diagnostics</button>
           </div>
         </div>
+      {:else if screen === null}
+        <div class="max-w-2xl mx-auto my-24 flex flex-col items-center gap-3">
+          <div class="w-10 h-10 rounded-full border-4 border-ink-700 border-t-ember-500 animate-spin"></div>
+          <p class="text-sm text-ink-400">Starting LocalAide…</p>
+        </div>
       {:else if screen === "setup"}
-        <SetupWizard />
+        <SetupWizard onFinished={() => navigate("chat")} />
       {:else if screen === "chat"}
-        <ChatScreen onOpenModels={() => navigate("models")} />
+        <ChatScreen onOpenModels={() => navigate("models")} newThreadTick={chatResetTick} />
       {:else if screen === "search"}
         <SearchScreen />
       {:else if screen === "memory"}
@@ -218,7 +242,7 @@
       <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" class="w-full max-w-lg mx-auto rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-ink-800">
           <span class="text-ink-400"><Icon name="search" /></span>
-          <input aria-label="Jump to screen" bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-ink-600"/>
+          <input aria-label="Jump to screen" bind:this={cmdInput} bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-ink-600"/>
           <span class="text-xs px-1.5 py-0.5 rounded bg-ink-800 text-ink-400">ESC</span>
         </div>
         <div class="p-2 max-h-80 overflow-auto">
@@ -236,7 +260,7 @@
   {/if}
 
   {#if toast}
-    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" role="status">
       <div class="px-4 py-2 rounded-xl bg-ink-900 border border-ink-800 shadow-lg text-sm text-ink-100">{toast}</div>
     </div>
   {/if}
