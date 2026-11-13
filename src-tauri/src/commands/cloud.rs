@@ -30,14 +30,7 @@ fn provider_dto(p: &CloudProvider, active_id: Option<&str>) -> CloudProviderDto 
         base_url: p.base_url.clone(),
         model: p.model.clone(),
         api_key_hint: key_hint(&p.api_key),
-    }
-    .with_active(active_id == Some(p.id.as_str()))
-}
-
-impl CloudProviderDto {
-    fn with_active(mut self, active: bool) -> Self {
-        self.is_active = active;
-        self
+        is_active: active_id == Some(p.id.as_str()),
     }
 }
 
