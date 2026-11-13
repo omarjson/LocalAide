@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { api } from "../lib/api/client";
+  import { api, errorMessage } from "../lib/api/client";
   import type { ModelInfo, ModelPreset } from "../lib/api/bindings";
   import { onMount } from "svelte";
+  import Icon from "../components/Icon.svelte";
 
   type Model = {
     id: string;
@@ -24,17 +25,19 @@
   let presetInstalling = $state(false);
   let verifying = $state<string | null>(null);
   let verifyStatus = $state<Record<string, boolean>>({});
+  let actionError = $state<string | null>(null);
 
   const verifyModel = async (id: string) => {
     verifying = id;
+    actionError = null;
     try {
       const res = await api.verifyModel(id);
       verifyStatus = { ...verifyStatus, [id]: res.verified };
       if (!res.verified) {
-        alert(`Checksum verification failed for ${id}: ${res.error ?? "mismatched hash"}`);
+        actionError = `Checksum verification failed for ${id}: ${res.error ?? "mismatched hash"}`;
       }
-    } catch (e: any) {
-      alert(`Verification error: ${e?.message ?? String(e)}`);
+    } catch (e) {
+      actionError = errorMessage(e);
     } finally {
       verifying = null;
     }
@@ -77,6 +80,7 @@
   });
 
   const startInstall = async (id: string) => {
+    actionError = null;
     models = models.map(m => m.id === id ? { ...m, status: "installing", progress: 0 } : m);
     try {
       await api.downloadModel(id, (evt) => {
@@ -85,11 +89,11 @@
           : m);
       });
       await refresh();
-    } catch (e: any) {
+    } catch (e) {
       models = models.map(m => m.id === id
         ? { ...m, status: "available", progress: undefined }
         : m);
-      alert(e?.message ?? String(e));
+      actionError = errorMessage(e);
     }
   };
 
@@ -99,28 +103,37 @@
   };
 
   const installPreset = async (id: string) => {
+    actionError = null;
     activePreset = id;
     presetInstalling = true;
     try {
       await api.downloadModelPreset(id);
       await refresh();
-    } catch {}
+    } catch (e) {
+      actionError = errorMessage(e);
+    }
     presetInstalling = false;
     activePreset = null;
   };
 
   const activateModel = async (id: string) => {
+    actionError = null;
     try {
       await api.activateModel(id);
       models = models.map(m => ({ ...m, active: m.id === id }));
-    } catch {}
+    } catch (e) {
+      actionError = errorMessage(e);
+    }
   };
 
   const removeModel = async (id: string) => {
+    actionError = null;
     try {
       await api.removeModel(id);
       await refresh();
-    } catch {}
+    } catch (e) {
+      actionError = errorMessage(e);
+    }
   };
 
   const filtered = $derived(models.filter(m => m.name.toLowerCase().includes(query.toLowerCase())));
@@ -129,15 +142,18 @@
     switch (k) {
       case "llm": return "LLM";
       case "embedding": return "Embedding";
-      case "stt": return "STT";
-      case "tts": return "TTS";
-      case "vision": return "Vision";
       default: return k?.toUpperCase() ?? "MODEL";
     }
   };
 </script>
 
 <div class="max-w-5xl mx-auto space-y-8">
+  {#if actionError}
+    <div class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex justify-between items-center">
+      <span>{actionError}</span>
+      <button onclick={() => actionError = null} aria-label="Dismiss error" class="text-rose-400 hover:text-rose-200"><Icon name="close" class="w-3.5 h-3.5" /></button>
+    </div>
+  {/if}
   <div class="flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold tracking-tight">Models</h2>

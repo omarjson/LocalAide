@@ -1,6 +1,5 @@
 <script lang="ts">
   import { api } from "../lib/api/client";
-  import type { EmbeddingStatusResponse } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   let ramTotal = $state(16);
@@ -10,7 +9,6 @@
   let overBudget = $state(false);
   let loading = $state(true);
   let presetName = $state("");
-  let embeddingStatus = $state<EmbeddingStatusResponse | null>(null);
 
   let presets = $state<any[]>([]);
 
@@ -30,9 +28,6 @@
     } catch {}
     finally { loading = false; }
     try { presets = JSON.parse(localStorage.getItem("dev-presets") || "[]"); } catch {}
-    try {
-      embeddingStatus = await api.getEmbeddingStatus();
-    } catch {}
   });
 
   async function recalc() {
@@ -70,18 +65,6 @@
     <p class="text-xs text-ink-400">Manual model picker with live RAM calculator</p>
   </div>
 
-  {#if embeddingStatus}
-    <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/60 flex items-center justify-between">
-      <div>
-        <div class="text-sm font-medium text-ink-100">{embeddingStatus.engine} ({embeddingStatus.dimension}-dim)</div>
-        <div class="text-xs text-ink-400 font-mono">Cosine Vector Search Ready</div>
-      </div>
-      <div class={`text-xs px-2 py-1 rounded-full border ${embeddingStatus.ready ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-ink-800 text-ink-400 border-ink-700'}`}>
-        {embeddingStatus.ready ? 'Vector Engine Ready' : 'Initializing'}
-      </div>
-    </div>
-  {/if}
-
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div class="space-y-4">
       <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
@@ -116,13 +99,6 @@
     </div>
 
     <div class="space-y-4">
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
-        <div class="font-medium text-ink-100 mb-2">Download</div>
-        <p class="text-xs text-ink-400 mb-4">Parallel download with resume. Override system limits with warning.</p>
-        <button class="w-full py-2.5 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium disabled:opacity-50" disabled={overBudget}>
-          {overBudget ? 'Exceeds RAM budget' : 'Download selected'}
-        </button>
-      </div>
       <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
         <div class="font-medium text-ink-100 mb-2">Preset actions</div>
         <div class="flex gap-2 mb-3">

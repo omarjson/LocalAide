@@ -1,6 +1,5 @@
 use crate::app::jobs::JobRegistry;
 use crate::config::ConfigStore;
-use crate::indexer::Indexer;
 use crate::model_manager::ModelManager;
 use crate::services::inference::RouterEngine;
 use crate::services::library::LibraryService;
@@ -18,7 +17,6 @@ pub struct AppState {
     pub library: Arc<LibraryService>,
     pub memory: Arc<MemoryService>,
     pub tools: Arc<ToolService>,
-    pub indexer: Arc<Indexer>,
     pub config_store: Arc<Mutex<ConfigStore>>,
 }
 
@@ -26,7 +24,6 @@ impl AppState {
     pub fn new(
         model_manager: Arc<ModelManager>,
         model_service: Arc<ModelService>,
-        indexer: Arc<Indexer>,
         library: Arc<LibraryService>,
         memory: Arc<MemoryService>,
         tools: Arc<ToolService>,
@@ -41,7 +38,6 @@ impl AppState {
             library,
             memory,
             tools,
-            indexer,
             config_store: Arc::new(Mutex::new(ConfigStore::new())),
         }
     }

@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "svelte-check on frontend edit",
+  "description": "Runs the workspace typecheck whenever a Svelte component or frontend TypeScript file is edited, so drift is caught at authoring time instead of in CI.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["src/**/*.svelte", "src/**/*.ts"]
+  },
+  "then": {
+    "type": "command",
+    "command": "npm run check"
+  }
+}

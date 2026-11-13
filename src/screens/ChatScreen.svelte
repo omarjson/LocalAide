@@ -329,7 +329,6 @@
 
       <div class="hidden sm:flex items-center gap-2">
         {#if cloudChat}
-          <span class="text-xs font-mono" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">☁️</span>
           <span class="text-xs font-mono text-amber-300" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">Cloud: {cloudChat.model} · {cloudChat.label}</span>
         {:else}
           <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>

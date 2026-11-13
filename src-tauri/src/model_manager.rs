@@ -45,9 +45,6 @@ pub struct ModelEntry {
 pub enum ModelKind {
     LLM,
     Embedding,
-    STT,
-    TTS,
-    Vision,
 }
 
 /// Preset selection computed by the Simple mode wizard.

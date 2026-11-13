@@ -121,7 +121,7 @@
   <div class="flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold tracking-tight text-ink-100">Document Library & Retrieval</h2>
-      <p class="text-xs text-ink-400">Embedded SQLite WAL storage with BM25 keyword matching and vector rank fusion.</p>
+      <p class="text-xs text-ink-400">Embedded SQLite WAL storage with BM25 keyword retrieval.</p>
     </div>
     {#if stats}
       <div class="flex items-center gap-4 text-xs font-mono text-ink-300 bg-ink-900 border border-ink-800 rounded-lg px-3 py-1.5">
@@ -151,7 +151,7 @@
     <div class="flex gap-2">
       <input
         type="text"
-        placeholder="/Users/username/Documents/notes"
+        placeholder="C:\Users\you\Documents\notes"
         id="folder-input"
         bind:value={folder}
         class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"

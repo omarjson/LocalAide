@@ -10,15 +10,10 @@ pub mod app;
 pub mod commands;
 pub mod config;
 pub mod domain;
-pub mod embeddings;
-pub mod indexer;
 pub mod model_manager;
 pub mod services;
-pub mod tools;
-pub mod watcher;
 
 use app::AppState;
-use indexer::Indexer;
 use model_manager::ModelManager;
 use services::inference::InferenceEngine;
 
@@ -30,18 +25,6 @@ pub fn run() {
         let fallback = std::env::temp_dir().join("localaide_models");
         ModelManager::with_dir(fallback)
             .unwrap_or_else(|_| panic!("Failed even temp model manager"))
-    }));
-
-    let indexer = Arc::new(Indexer::open().unwrap_or_else(|e| {
-        log::error!("Failed to init indexer at standard path: {e}; falling back to temp index");
-        let fallback = std::env::temp_dir().join("localaide_index_fallback");
-        let _ = std::fs::create_dir_all(&fallback);
-        Indexer::open_at(&fallback).unwrap_or_else(|e2| {
-            log::error!("Failed to open fallback index: {e2}");
-            let _ = std::fs::remove_dir_all(&fallback);
-            let _ = std::fs::create_dir_all(&fallback);
-            Indexer::open_at(&fallback).expect("Clean temp index directory must open")
-        })
     }));
 
     let library = Arc::new(crate::services::library::LibraryService::open_default(&index_dir()).unwrap_or_else(|e| {
@@ -84,7 +67,6 @@ pub fn run() {
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),
-        indexer.clone(),
         library.clone(),
         memory.clone(),
         tools.clone(),
@@ -181,7 +163,6 @@ pub fn run() {
             commands::memory_search,
             commands::memory_forget_all,
             commands::tool_execute,
-            commands::tool_call,
             commands::tool_audits_list,
             commands::tool_audits_clear,
             commands::config_load,

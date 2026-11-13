@@ -19,7 +19,7 @@
     { id: "tiny", name: "Tiny", ram: "~1.0 GB RAM", ramGb: 1.0, fits: "4 GB+ total RAM", models: ["Qwen3.5 0.8B"] },
     { id: "small", name: "Small", ram: "~4 GB RAM", ramGb: 4.0, fits: "8 GB+ total RAM", models: ["Qwen3.5 2B", "Gemma 4 E2B (QAT)"] },
     { id: "balanced", name: "Balanced", ram: "~9.5 GB RAM", ramGb: 9.5, fits: "16 GB+ total RAM", models: ["Qwen3.5 9B", "Gemma 4 E4B (QAT)"] },
-    { id: "advanced", name: "Advanced", ram: "~20 GB RAM", ramGb: 20.0, fits: "32 GB total RAM", models: ["Gemma 4 26B-A4B (MoE)", "Qwen3.8 27B (vision)"] },
+    { id: "advanced", name: "Advanced", ram: "~20 GB RAM", ramGb: 20.0, fits: "32 GB total RAM", models: ["Gemma 4 26B-A4B (MoE)", "Qwen3.8 27B"] },
   ];
 
   let step = $state<Step>("detect");

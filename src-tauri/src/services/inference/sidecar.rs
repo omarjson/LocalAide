@@ -5,7 +5,7 @@
 //! stops it when a different model loads or the app exits.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -330,24 +330,22 @@ fn free_port() -> Result<u16, AppError> {
     Ok(port)
 }
 
-/// A 256-bit random key, hex encoded. Reads the OS random source where available.
+/// A 256-bit random key, hex encoded, drawn from the OS random source
+/// (BCryptGenRandom on Windows, getrandom elsewhere).
 fn new_api_key() -> String {
     let mut bytes = [0u8; 32];
-    let from_os = File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .is_ok();
-    if from_os {
-        return bytes.iter().map(|b| format!("{b:02x}")).collect();
+    if getrandom::fill(&mut bytes).is_err() {
+        // Practically unreachable on the desktop targets. Fall back to
+        // process-unique hashing so startup never panics over a key.
+        use std::collections::hash_map::RandomState;
+        use std::hash::{BuildHasher, Hasher};
+        for (i, chunk) in bytes.chunks_mut(8).enumerate() {
+            let mut h = RandomState::new().build_hasher();
+            h.write_u8(i as u8);
+            chunk.copy_from_slice(&h.finish().to_le_bytes());
+        }
     }
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let mut out = String::with_capacity(64);
-    for i in 0..4u64 {
-        let mut h = RandomState::new().build_hasher();
-        h.write_u64(i);
-        out.push_str(&format!("{:016x}", h.finish()));
-    }
-    out
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Vision projector that sits next to a model: `{id}.gguf` pairs with `{id}.mmproj.gguf`.
