@@ -69,14 +69,24 @@ jobs:
 
       - name: Rust Formatting Check
         run: |
-          if ! cargo fmt --check --manifest-path src-tauri/Cargo.toml; then
+          if ! cargo fmt --check --manifest-path src-tauri/Cargo.toml 2> fmt_err.txt; then
+            cargo fmt --manifest-path src-tauri/Cargo.toml 2> fmt_out_err.txt || true
+            git diff -- src-tauri > fmt.diff
             {
-              echo '### rustfmt diff'
+              echo '### rustfmt stderr'
+              echo '```'
+              head -c 1500 fmt_err.txt
+              echo '```'
+              echo '### git diff'
               echo '```diff'
-              cargo fmt --manifest-path src-tauri/Cargo.toml
-              git diff -- src-tauri | head -500
+              head -c 6000 fmt.diff
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            # Error annotations are readable through the check-run API.
+            fold -w 600 fmt.diff | head -25 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=fmt-diff::$enc"
+            done
             exit 1
           fi
 
