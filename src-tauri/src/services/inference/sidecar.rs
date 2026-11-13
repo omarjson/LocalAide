@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken, PromptMessage};
 use crate::app::error::AppError;
@@ -144,8 +144,8 @@ impl InferenceEngine for SidecarEngine {
                 return Err(AppError::model_load_failed(
                     &model_id,
                     &format!(
-                    "llama-server exited during startup ({status}). See logs/llama-server.log."
-                ),
+                        "llama-server exited during startup ({status}). See logs/llama-server.log."
+                    ),
                 ));
             }
             if self.health_ok(running.port) {
@@ -216,7 +216,9 @@ impl InferenceEngine for SidecarEngine {
         if !resp.status().is_success() {
             let code = resp.status();
             let text = resp.text().unwrap_or_default();
-            return Err(AppError::internal(format!("llama-server returned {code}: {text}")));
+            return Err(AppError::internal(format!(
+                "llama-server returned {code}: {text}"
+            )));
         }
 
         let mut total_tokens = 0usize;

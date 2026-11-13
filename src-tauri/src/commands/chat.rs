@@ -6,8 +6,8 @@ use crate::domain::chat::{
     ChatMessage, ChatStreamRequest, ChatThread, SummarizeRequest, SummarizeResponse,
     ThreadExportRequest, ThreadExportResponse,
 };
-use crate::services::inference::context::ContextBudget;
 use crate::services::inference::PromptMessage;
+use crate::services::inference::context::ContextBudget;
 use std::fs;
 use std::path::Path;
 use tauri::State;
@@ -75,9 +75,7 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
     std::thread::spawn(move || {
         let _ = tx.send(engine.load(&load_path, 2048));
     });
-    let res = rx
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))??;
+    let res = rx.await.map_err(|e| AppError::internal(e.to_string()))??;
     let _ = state.model_manager.activate(&id);
 
     // Persist active model in config for auto-reload
@@ -245,8 +243,7 @@ pub async fn summarize(
         );
         let _ = tx.send(result.map(|_| ()));
     });
-    rx.await
-        .map_err(|e| AppError::internal(e.to_string()))??;
+    rx.await.map_err(|e| AppError::internal(e.to_string()))??;
 
     let summary = accumulated
         .lock()

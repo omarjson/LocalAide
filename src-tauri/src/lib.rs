@@ -80,7 +80,6 @@ pub fn run() {
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
-
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),

@@ -1,6 +1,6 @@
 pub mod context;
-pub mod sidecar;
 pub mod prompt;
+pub mod sidecar;
 
 use crate::app::error::AppError;
 use std::path::{Path, PathBuf};
