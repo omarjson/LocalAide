@@ -9,10 +9,10 @@ inclusion: always
 - **Shell:** Tauri 2 (`tauri` 2.12.x, `tauri-build` 2.7.x). Window config and CSP live in `src-tauri/tauri.conf.json`.
 - **Rust core:** edition 2024, `rust-version` 1.90. Toolchain channel is `stable` (not pinned to 1.90). Crate name `ai-desktop-assistant`, library crate `app_lib`.
 - **Frontend:** Svelte 5 with runes (`$state`, `$derived`), TypeScript (`~5.8.2`), Tailwind CSS v4 (`@tailwindcss/vite`, `@import "tailwindcss"` in `src/main.css`), Vite 6.
-- **Inference:** `llama_cpp_rs`, patched to the vendored copy in `vendor/llama_cpp_rs`. Runs GGUF models on a dedicated OS thread.
+- **Inference:** llama.cpp's `llama-server` run as a local sidecar child process on 127.0.0.1 (ADR-0007). The app talks to it over HTTP through an `InferenceEngine` trait (`services/inference/`): `SidecarEngine` for local models, plus an opt-in cloud router (`RouterEngine` + `RemoteEngine`) for user-configured OpenAI-compatible providers.
 - **Storage:** `rusqlite` with the bundled SQLite. WAL mode, `synchronous = NORMAL`, `busy_timeout = 5000`. FTS5 table `chunks_fts` for keyword search.
 - **Other crates:** `sha2` (SHA-256), `reqwest` (downloads), `flate2` (PDF stream), `notify` (folder watching), `sysinfo` (RAM probe), `tracing`/`log`.
-- **Legacy, present but not the primary path:** `tantivy`, `sled`. ADR-0002 moved storage to SQLite.
+- **Legacy crates removed:** the old `tantivy`/`sled` indexer is gone; SQLite is the only store (ADR-0002).
 - **Optional, off by default:** `voice` Cargo feature (`whisper-rs`, `piper-rs`, `hound`). Do not enable it in v1.0 (ADR-0006).
 
 ## Data locations (`src-tauri/src/app/paths.rs`)

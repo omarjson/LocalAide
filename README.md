@@ -82,7 +82,7 @@ The majority of contemporary AI tools rely on centralized cloud infrastructure. 
 - **Interactive Tool Consent**: Non-destructive operations (file reads, directory listings) are safe by default; state-modifying operations (file writes, executions) trigger an explicit approval modal with audit logging in SQLite.
 - **Atomic Model Management**: Catalog manifest with an integrity digest over model ids, sizes, and hashes. Resumable HTTP downloads (`Range: bytes=X-`) and 64 KB constant-RAM streaming SHA-256 cryptographic verification (< 100 KB memory overhead).
 - **Universal Keyboard Navigation**: Power-user keyboard matrix (`⌘K` Command Palette, `⌘N` New Chat, `/` Search, `⌘1`–`⌘5` Screen switching, `Esc` Abort, `?` Help).
-- **WCAG 2.2 AA Accessibility**: Full contrast compliance (> 4.5:1 text, > 3.0:1 UI borders), universal high-visibility focus indicators (`#d946ef`), and screen-reader `aria-live` streaming announcements.
+- **WCAG 2.2 AA Accessibility**: Text contrast built on audited design tokens (body and muted text exceed 4.5:1 on the ink background), universal high-visibility focus indicators (`#d946ef`), and screen-reader `aria-live` streaming announcements. See [docs/evidence/a11y.md](docs/evidence/a11y.md) for the current contrast audit.
 
 ---
 
@@ -94,13 +94,13 @@ LocalAide is built from the ground up with a modern, high-performance systems an
 ┌─────────────────────────────────────────────────────────────┐
 │                 FRONTEND USER INTERFACE                     │
 │  Svelte 5 (Runes: $state, $derived) • TypeScript 5.7        │
-│  Tailwind CSS v4 • Lucide Icons • Vite 6 Bundle Engine      │
+│  Tailwind CSS v4 • Inline SVG Icon Set • Vite 6 Bundle      │
 └──────────────────────────────┬──────────────────────────────┘
                                │ Typed IPC Client (bindings.ts)
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   TAURI V2 NATIVE HOST                      │
-│  Custom Window Chrome • Strict CSP • System Trays           │
+│  Strict CSP • Typed IPC • Default Window Chrome             │
 └──────────────────────────────┬──────────────────────────────┘
                                │ Rust Tauri Commands
                                ▼
@@ -227,9 +227,10 @@ npm ci
 
 #### 3. Run Quality Verification Suite
 ```bash
-# Execute full quality gate (formatting, clippy, unit tests, frontend build, smoke check)
+# Runs check (svelte-check + cargo check), test (cargo test), smoke (frontend build + smoke checks)
 make all
 ```
+`make all` runs `check`, `test` and `smoke`. Formatting and clippy run in the CI quality gate on every push; `make lint` runs clippy locally.
 
 #### 4. Launch Desktop Application in Development Mode
 ```bash
@@ -239,11 +240,16 @@ npx tauri dev
 ```
 
 #### 5. Compile Native Release Installer
+
+The app chats through a local `llama-server` sidecar process (ADR-0007), so the installer must bundle that binary next to the app executable.
+
+1. **Get the sidecar binary.** Build it from the pinned llama.cpp tag (v0.9.0) and stage it with `scripts/prepare-sidecar.sh` (it lands in `src-tauri/binaries/`), or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml).
+2. **Build with the sidecar overlay:**
 ```bash
-make release
-# or
-npx tauri build
+npx tauri build --config src-tauri/tauri.sidecar.conf.json
 ```
+The `tauri.sidecar.conf.json` overlay adds `bundle.externalBin` so the sidecar is bundled. A bare `npx tauri build` — including `make release`, which calls it — produces an app that cannot chat.
+
 Binaries will be placed in `src-tauri/target/release/bundle/`.
 
 ---

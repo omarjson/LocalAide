@@ -32,3 +32,10 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 
 - A Kiro hook that runs `npm run check` on save (plan track D).
 - Steering docs live in `.kiro/steering/` (product, structure, tech) and keep the brand voice consistent.
+
+## 2026-11-13 — Verification round 2 (ZCode session, continued)
+
+- Cloud-feature code review (subagent): 14 findings; the HIGH (cloud SSE silently swallowing mid-stream errors and clean-close truncation) plus 10 actionable items fixed in commit afede44 (error surfacing, seen_done check, SSE data: tolerance, 60s idle-read timeout, RemoteTarget no longer Debug, startup fallback to local when provider invalid, corrupt-config fail-loud, delete-active-provider disables cloud mode, duplicate provider rejection, save-before-apply ordering, Settings autosave race removed, ChatScreen cloud-mode empty-state honesty).
+- Repo staleness audit (subagent): vendor/llama_cpp_rs confirmed unreferenced (deletion shipped this round), Dev Config dead button + hardcoded embedding-status stub flagged for fix, stale steering/ADR/evidence claims listed for the second docs pass (this commit).
+- Opportunity scan (subagent): 8 code-only additions identified; adopted now: model-manager error surfacing, Kiro npm-run-check hook, last UI honesty strings; deferred: setup wizard live progress + handoff, real Cmd+N new-thread wiring, a11y focus/aria work, RAM-budget warning badges.
+- CI: quality gate green on 118e4a5 (fmt, clippy, cargo test incl. cloud tests, svelte-check, build, smoke) with Windows + Linux llama-server sidecar builds green; macOS sidecar builds cancelled twice by operator decision (macOS runners bill 10x on free plan) — macOS/package bundling remains intentionally unverified.

@@ -6,7 +6,7 @@ Status legend: DONE = written and checked by reading. TODO = not started. Nothin
 
 ## Why this change
 
-- The vendored llama.cpp in `vendor/llama_cpp_rs` is a 2023 snapshot. It loads only LLaMA, Falcon, GPT-2, GPT-NeoX, MPT, StarCoder, Baichuan, and Refact. None of the 35 catalog models can load.
+- The vendored llama.cpp in `vendor/llama_cpp_rs` is a 2023 snapshot. It loads only LLaMA, Falcon, GPT-2, GPT-NeoX, MPT, StarCoder, Baichuan, and Refact. None of the 36 catalog models can load.
 - The `llama-cpp-2` crate bundles an older llama.cpp than v0.9.0, so it doesn't meet the version requirement.
 - v0.9.0 `llama-server` has the flags the sidecar needs: `--host`, `--port`, `--api-key`, `--mmproj`, `--jinja`, and `/health`.
 
@@ -30,7 +30,7 @@ Status legend: DONE = written and checked by reading. TODO = not started. Nothin
 - [DONE] `src-tauri/src/services/inference/sidecar.rs` implements `InferenceEngine` with `SidecarEngine`. It starts `llama-server` on 127.0.0.1 with a free port and a 256-bit random API key. It passes `--mmproj` when `{id}.mmproj.gguf` sits next to the model. It waits for `/health`, streams from `/v1/chat/completions`, and kills the process on unload, reload, or exit. Server output goes to `~/.aiassistant/logs/llama-server.log`.
 - [DONE] `app/state.rs` builds `SidecarEngine`. The worker engine, `services/inference/llama.rs`, and the legacy `src/inference.rs` are deleted. Their deletions are staged in git.
 - [DONE] `Cargo.toml` drops `llama_cpp_rs` and its `[patch]` entry. It enables reqwest's `blocking` feature.
-- [TODO] `vendor/llama_cpp_rs` is still on disk, unused. Delete it after the build passes on your machine.
+- [DONE] `vendor/llama_cpp_rs` is deleted; nothing references it and `Cargo.toml` no longer carries the `[patch]` entry. (Deletion ships with this branch's cleanup, 2026-11-13.)
 - [TODO] Cancel behaves as before, but it applies at the next token. Check that Stop ends generation on a real model.
 - [DONE] Real message history. The frontend sends earlier turns as `history` (the new message is excluded). `ContextBudget::build_messages` keeps the newest turns that fit, and drops older ones. The engine sends a message list, so the server applies the model's chat template. Summarize sends a system and a user message. `ContextBudget::build_prompt` stays for the existing tests.
 
@@ -56,7 +56,7 @@ Decision (2026-11-13): speech is deferred for v1.0 and the contest demo. The stu
 - [DONE] README, ARCHITECTURE, `docs/scope.md`, SECURITY.md and the scorecard rewritten to match the code, including removing the claim that inference is in-process. (Truth pass, 2026-11-13.)
 - [DONE] North Mini Code is in the catalog (`north-mini-code-q4`, cohere2moe, needs llama.cpp v0.9.0+).
 - [DONE] Engine choice recorded in `docs/adr/0007-sidecar-engine.md`.
-- [TODO] Delete `vendor/llama_cpp_rs` after the build passes on CI or a dev machine.
+- [DONE] `vendor/llama_cpp_rs` deleted. (Ships with this branch's cleanup, 2026-11-13.)
 
 ## Risks
 

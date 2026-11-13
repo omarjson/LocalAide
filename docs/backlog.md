@@ -59,41 +59,41 @@ This backlog tracks the path to a 10/10 v1.0 release. Each task is defined with 
 ---
 
 ## Phase 3: Typed IPC & State Management
-- [ ] **3.1 Generated TypeScript Bindings**
+- [x] **3.1 Generated TypeScript Bindings**
   - **Done When**: Rust command requests and responses are generated into `src/lib/api/bindings.ts` with no hand-written DTOs or `serde_json::Value` / `any`.
   - **Evidence**: `src/lib/api/bindings.ts` generated.
-- [ ] **3.2 Structured AppError Taxonomy**
+- [x] **3.2 Structured AppError Taxonomy**
   - **Done When**: `AppError` enum with stable machine-readable codes is used across all Tauri commands.
   - **Evidence**: Unit tests verifying error code mappings.
-- [ ] **3.3 Single AppState Registration**
+- [x] **3.3 Single AppState Registration**
   - **Done When**: `AppState` holds managed services (Chat, Models, Library, Memory, Tools, Config, Jobs) without split global state.
   - **Evidence**: `lib.rs` registers a single managed `AppState`.
-- [ ] **3.4 Tauri Channels for Streaming**
+- [x] **3.4 Tauri Channels for Streaming**
   - **Done When**: `tauri::ipc::Channel<T>` replaces all `stream_id` global event listeners.
   - **Evidence**: Chat and download progress emit exclusively on channels.
 
 ---
 
 ## Phase 4: Production Model Lifecycle & Inference
-- [ ] **4.1 Dedicated Worker Thread for Inference**
-  - **Done When**: Model loading, context processing, and token streaming run on a dedicated OS worker thread; zero blocking of Tauri async runtime.
-  - **Evidence**: UI remains 60fps responsive during token generation.
-- [ ] **4.2 Real Model Activation & Swap**
-  - **Done When**: Activating a model actually loads the GGUF weights, frees the previously active model from RAM, and verifies GGUF headers.
-  - **Evidence**: Memory inspection confirms old model memory is reclaimed.
-- [ ] **4.3 Interruptible Generation & Cancellation**
-  - **Done When**: Stopping chat generation immediately interrupts token evaluation and releases the worker lock.
+- [x] **4.1 Inference Off the Async Runtime (sidecar engine)**
+  - **Done When**: Model loading and token streaming run outside the Tauri async runtime; zero blocking of the UI.
+  - **Evidence**: Chat generation runs in the `llama-server` sidecar child process (ADR-0007); `commands/chat.rs` drives it from a plain thread.
+- [x] **4.2 Real Model Activation & Swap**
+  - **Done When**: Activating a model starts the sidecar on the downloaded GGUF weights (SHA-256 verified before activation), and unloading or switching ends the previous server process, reclaiming its memory.
+  - **Evidence**: `SidecarEngine::load`/`unload` in `src-tauri/src/services/inference/sidecar.rs` spawn and kill the child process per model.
+- [x] **4.3 Interruptible Generation & Cancellation**
+  - **Done When**: Stopping chat generation immediately interrupts token streaming at the next chunk.
   - **Evidence**: Stop generation latency < 100ms.
-- [ ] **4.4 Context Window Management**
+- [x] **4.4 Context Window Management**
   - **Done When**: Conversations exceeding token limits gracefully trim oldest turns with warning.
   - **Evidence**: Automated test exceeding context limits without crash.
 
 ---
 
 ## Phase 5: Complete Chat Product
-- [ ] **5.1 Persistent Conversations in SQLite**
-  - **Done When**: Conversations, messages, and settings are saved to SQLite and survive app restarts.
-  - **Evidence**: Conversation reload test passes.
+- [x] **5.1 Persistent Conversations**
+  - **Done When**: Conversations, messages, and settings survive app restarts. Shipped as JSON thread files under `~/.aiassistant/conversations/` plus `config.json`; the document library, notes index and audit log persist in SQLite WAL.
+  - **Evidence**: `chat_thread_save` / `chat_thread_load` in `src-tauri/src/commands/chat.rs`; threads reload on restart.
 - [ ] **5.2 Chat Action Controls**
   - **Done When**: Stop, regenerate, edit-and-resend, copy message, and conversation deletion are implemented.
   - **Evidence**: End-to-end chat test verifying all actions.
@@ -104,11 +104,11 @@ This backlog tracks the path to a 10/10 v1.0 release. Each task is defined with 
 ---
 
 ## Phase 6: Document Library & Retrieval
-- [ ] **6.1 SQLite Database Schema & Migrations**
+- [x] **6.1 SQLite Database Schema & Migrations**
   - **Done When**: Embedded SQLite WAL database manages documents, chunks, and FTS5 tables with automated schema migrations.
   - **Evidence**: SQLite integration tests.
-- [ ] **6.2 Token-Based Chunking & Real Embeddings**
-  - **Done When**: Files are parsed into 512-token chunks with 64-token overlap and embedded using a real quantized model (or pinned ONNX/GGUF).
+- [ ] **6.2 Natural-Boundary Chunking & Real Embeddings**
+  - **Done When**: Files are parsed into natural-boundary chunks of target 1500 characters with 250-character overlap (shipped in `src-tauri/src/services/library/ingest.rs`) and embedded using a real quantized model (or pinned ONNX/GGUF).
   - **Evidence**: Chunking unit tests.
 - [ ] **6.3 Debounced Index Watcher**
   - **Done When**: File modifications in indexed roots debounce cleanly without locking the database.
@@ -128,12 +128,12 @@ This backlog tracks the path to a 10/10 v1.0 release. Each task is defined with 
 
 ## Phase 8: Trustworthy Installs, Tools & Sandbox
 - [ ] **8.1 Signed Model Catalog**
-  - **Done When**: `catalog.json` contains SHA-256 hashes, sizes, and licenses, verified via digital signature.
-  - **Evidence**: Catalog verification test.
+  - **Done When**: `catalog.json` contains SHA-256 hashes, sizes, and licenses. Shipped state: the catalog is checked by a SHA-256 integrity digest over its entries before any download starts — the code documents this as an integrity check, not a publisher signature. Ed25519 catalog signing remains the open piece of this item.
+  - **Evidence**: Catalog digest verification in `src-tauri/src/services/models/catalog.rs`.
 - [ ] **8.2 Resumable Streaming Downloads**
   - **Done When**: Downloads write to `.part` files, verify SHA-256 on completion, and support Range resumption.
   - **Evidence**: Interrupted download resumption test.
-- [ ] **8.3 Workspace Jail Sandbox**
+- [x] **8.3 Workspace Jail Sandbox**
   - **Done When**: Tools cannot read, write, or delete files outside the approved directory, including via symlinks.
   - **Evidence**: Path traversal penetration test suite.
 - [ ] **8.4 Tool Confirmation UI**

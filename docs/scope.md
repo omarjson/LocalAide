@@ -16,7 +16,7 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
    - Persistence of conversations and messages in an embedded SQLite database.
 2. **Model Management**:
    - Curated catalog of 36 verified GGUF models: Qwen 3/3.5/3.8, Gemma 4 (QAT), Granite 4.x, LFM, MiniCPM5, SmolLM3, plus coding, embedding, and reranking entries.
-   - Atomic streaming downloads with `.part` files, pause/resume, cancel without losing progress, and preflight disk checks.
+   - Atomic streaming downloads with `.part` files. Downloads can be cancelled; a cancelled or interrupted download keeps its `.part` file and resumes from where it stopped via HTTP Range on the next attempt (there is no separate pause control).
    - Mandatory SHA-256 integrity verification against the catalog before installation.
    - Inference runs in a `llama-server` child process, with clean load, unload, and model switching.
 3. **Document Library & Indexing**:
@@ -27,10 +27,10 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
 4. **Memory & RAG**:
    - Personal markdown memory notes under a fixed memory root at `~/.aiassistant/memory/`.
    - Full atomic CRUD operations (create, read, update, delete) with slug management.
-   - Memory search scoped strictly to the memory root with recency biasing.
+   - Memory search delegated to the whole-library hybrid search (`MemoryService.search` calls `LibraryService.search`): notes are indexed into the unified SQLite index alongside documents, so results are not scoped to the memory root and there is no recency biasing. Production search is BM25 keyword.
    - Chat retrieval augmented generation (RAG) with numbered, clickable citations linking to source notes.
 5. **Safe Tools & Workspace Jail**:
-   - Workspace directory isolation (`cap-std` / openat semantics) rejecting path traversal and symlink escapes.
+   - Workspace directory isolation via `std::fs::canonicalize` plus lexical path checks (traversal-component scanning), rejecting path traversal and symlink escapes.
    - Mandatory explicit user approval prompt displaying tool action, arguments, and file diffs prior to write execution.
    - Persistent audit log for all tool invocations; user-visible and clearable from Settings.
 6. **Opt-In Online Providers**:

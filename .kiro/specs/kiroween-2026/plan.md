@@ -40,7 +40,7 @@ Cut or defer:
 
 - Voice (speech and TTS): defer. Stubs removed.
 - Vision: defer. Not built.
-- Dev Config screen: move it out of the main navigation, or remove it.
+- Dev Config screen: move it out of the main navigation, or remove it. (Done 2026-11-13: moved to the command palette — see track B.)
 
 Status: scope approved 2026-11-13 with online mode included (reversing the earlier skip recommendation).
 
@@ -81,7 +81,7 @@ UX rules:
 Tracks that can run in parallel, each as a sub-agent with its own files:
 
 - **A. Backend fixes:** folder ignore logic, catalog hashes and presets, hybrid-search honesty, removing voice stubs. — **Done in commits `07ed24c` and `aa5daf6` (written, not yet compiled).**
-- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Design pass and icons landed in `aa5daf6`; Dev Config screen still in the nav.**
+- **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Design pass and icons landed in `aa5daf6`; Dev Config screen moved out of the sidebar to the command palette (DESIGN.md:49). Remaining Dev Config work is honesty fixes inside the screen (dead button, hardcoded embedding-status stub).**
 - **C. Docs:** README, ARCHITECTURE, scope, SECURITY and scorecard rewritten to match the code. — **Done 2026-11-13 (truth pass): rubric scores replaced with CI-gate evidence, false claims fixed, broken evidence links repaired.**
 - **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped. — **In progress: `kiro-log.md` added; hook still pending.**
 - **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage. — **Built 2026-11-13: `RemoteEngine` + `RouterEngine` behind the existing `InferenceEngine` trait, cloud commands, Settings UI with add/edit/delete/toggle, cloud badge in the chat header, HTTPS-enforced URLs (HTTP only for loopback proxies), key stored locally and masked in the UI. Not yet compiled; CI is the gate.**

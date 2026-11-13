@@ -1,7 +1,7 @@
 # ADR-0003: Model Inference Architecture and llama.cpp Runtime
 
 ## Status
-Accepted
+Superseded by ADR-0007 (sidecar engine)
 
 ## Context
 The legacy application included a vendored fork of `llama_cpp_rs` (version 0.3.0 in `vendor/llama_cpp_rs`) patched via `[patch.crates-io]`. However:
@@ -25,8 +25,7 @@ The legacy application included a vendored fork of `llama_cpp_rs` (version 0.3.0
    - Run all model initialization, FFI calls, and token generation on a dedicated OS worker thread (not inside Tokio async tasks).
    - Wrap FFI boundary invocations with `std::panic::catch_unwind` to prevent native panics from terminating the Tauri host process.
 3. **Vendored vs Upstream Crate**:
-   - Retain the vendored `vendor/llama_cpp_rs` fork in the near term with documented patches, while auditing compatibility with `llama-cpp-2`.
-   - Maintain the build flags for Metal on macOS (`GGML_METAL=1`), CUDA where configured, and CPU fallbacks.
+   - Note (2026-11-13): the vendored `vendor/llama_cpp_rs` fork was deleted after the sidecar swap shipped (ADR-0007); CI now builds `llama-server` from the pinned upstream llama.cpp tag (`.github/workflows/llama-server.yml`).
 4. **Context Accounting & Truncation**:
    - Track token usage strictly per message.
    - When the conversation history approaches context limits, perform oldest-message truncation while preserving the system prompt.

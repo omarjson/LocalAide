@@ -12,10 +12,10 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 
 ## Core promises
 
-- **100% offline inference.** Chat runs on a local GGUF model through llama.cpp. The chat path makes no network calls.
+- **100% offline inference by default.** Chat runs on a local GGUF model through the llama-server sidecar (ADR-0007). With cloud mode off — the default — the chat path makes no network calls.
 - **Zero telemetry.** No analytics, crash beacons or remote logging.
-- **Zero cloud subscriptions.** No cloud LLM API calls, now or in v1.0.
-- Network access happens only for explicit user actions: downloading a model from the built-in catalog, and the update check.
+- **Local by default.** Local inference is the default and the app works fully offline. An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
+- Network access happens only for explicit user actions: downloading a model from the built-in catalog, the update check, and — when the user switches cloud mode on — chat requests to the provider they configured.
 
 ## Key features (v1.0, verified in code)
 
@@ -38,7 +38,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 
 - Voice (speech to text and text to speech). Deferred by ADR-0006.
 - Vision and multimodal models.
-- Cloud LLM API fallback.
+- Cloud inference is never a silent fallback. The only cloud path is the opt-in Online Providers mode above; the app never ships a provider, a key, or an automatic failover to the cloud.
 - Hot-swapping components in the app. Updates ship as whole signed app releases.
 - Any telemetry.
 

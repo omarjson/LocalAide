@@ -1,5 +1,7 @@
 # Phase 5 Verification: End-to-End Chat Experience
 
+> Note (2026-11-13): the engine this phase exercised (llama_cpp_rs token callbacks) was replaced by the llama-server sidecar (ADR-0007). Kept as historical evidence; the chat commands, thread persistence and message actions below still describe shipped code.
+
 ## Completed Deliverables
 
 1. **Conversation Persistence & Thread Management (`src-tauri/src/commands/chat.rs`):**

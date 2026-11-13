@@ -18,8 +18,11 @@ build:
 smoke: build
 	node scripts/smoke-test.mjs
 
+# The packaged app needs llama-server next to the binary to chat. Stage it
+# first (see PACKAGING.md: build llama.cpp from the pinned tag, then run
+# scripts/prepare-sidecar.sh), or rely on CI which does both.
 release: build
-	npx tauri build
+	npx tauri build --config src-tauri/tauri.sidecar.conf.json
 
 clean:
 	rm -rf dist src-tauri/target
