@@ -52,15 +52,16 @@
   const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name} preset (~${p.ram})?`; };
   const install = async () => {
     if (!selected) return;
-    step = "download"; status = `Downloading ${selected.name} models...`;
+    const preset = selected;
+    step = "download"; status = `Downloading ${preset.name} models...`;
     progress = 0;
     try {
-      await api.downloadModelPreset(selected.id, (evt) => {
+      await api.downloadModelPreset(preset.id, (evt) => {
         if (evt.status === "failed") return;
         progress = Math.round(evt.percent);
-        status = `Downloading ${selected.name} models (${evt.model_id})...`;
+        status = `Downloading ${preset.name} models (${evt.model_id})...`;
       });
-      step = "done"; status = `${selected.name} preset installed.`;
+      step = "done"; status = `${preset.name} preset installed.`;
     } catch (e: any) {
       status = `Install failed: ${e?.message ?? String(e)}`;
       step = "confirm";

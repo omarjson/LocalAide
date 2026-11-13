@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { api } from "../lib/api/client";
   import type { ChatMessage, ChatThread } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
@@ -125,8 +125,9 @@
 
   // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
   // on a remount (navigating back to chat) the tick already equals its initial
-  // value, and the fresh component is a new conversation anyway.
-  let lastThreadTick = $state(newThreadTick);
+  // value, and the fresh component is a new conversation anyway. The seen-tick
+  // marker is deliberately non-reactive; untrack captures the initial value.
+  let lastThreadTick = untrack(() => newThreadTick);
   $effect(() => {
     if (newThreadTick !== lastThreadTick) {
       lastThreadTick = newThreadTick;
