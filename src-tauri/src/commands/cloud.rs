@@ -112,9 +112,7 @@ pub fn cloud_provider_save(
     // Two entries for the same endpoint and model are always a mistake; the
     // entry being edited is exempt from its own match.
     let duplicate = cfg.cloud_providers.iter().any(|p| {
-        p.base_url == base_url
-            && p.model == model
-            && req.id.as_deref() != Some(p.id.as_str())
+        p.base_url == base_url && p.model == model && req.id.as_deref() != Some(p.id.as_str())
     });
     if duplicate {
         return Err(AppError::invalid_input(
