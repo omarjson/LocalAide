@@ -1,0 +1,93 @@
+name: Build llama-server sidecar
+
+# Builds the llama.cpp `llama-server` binary that LocalAide runs as its chat
+# engine. The binary is named the way Tauri expects sidecars to be named:
+# `llama-server-<target-triple>[.exe]`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_cpp_tag:
+        description: 'llama.cpp release tag to build'
+        required: true
+        default: 'v0.9.0'
+        type: string
+  workflow_call:
+    inputs:
+      llama_cpp_tag:
+        required: true
+        default: 'v0.9.0'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: llama-server (${{ matrix.triple }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            triple: aarch64-apple-darwin
+            ext: ''
+          - os: macos-14
+            triple: x86_64-apple-darwin
+            ext: ''
+            cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=x86_64'
+          - os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            ext: ''
+          - os: windows-2022
+            triple: x86_64-pc-windows-msvc
+            ext: '.exe'
+    steps:
+      - name: Check out llama.cpp at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ inputs.llama_cpp_tag }}
+          path: llama.cpp
+          fetch-depth: 1
+
+      - name: Configure (server only, static, no OpenSSL)
+        shell: bash
+        working-directory: llama.cpp
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLAMA_BUILD_SERVER=ON \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_OPENSSL=OFF \
+            ${{ matrix.cmake_extra }}
+
+      - name: Build llama-server
+        shell: bash
+        working-directory: llama.cpp
+        run: cmake --build build --config Release --target llama-server -j
+
+      - name: Stage sidecar binary
+        shell: bash
+        working-directory: llama.cpp
+        run: |
+          set -euo pipefail
+          SRC="$(find build -type f -name "llama-server${{ matrix.ext }}" | head -n 1)"
+          if [ -z "$SRC" ]; then
+            echo "llama-server binary not found" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/sidecar"
+          cp "$SRC" "$RUNNER_TEMP/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}"
+          "$RUNNER_TEMP/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}" --version || true
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-${{ matrix.triple }}
+          path: ${{ runner.temp }}/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}
+          if-no-files-found: error
+          retention-days: 14

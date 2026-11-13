@@ -48,12 +48,14 @@ pub fn config_save(state: State<'_, AppState>, cfg: AppConfigDto) -> Result<(), 
         })
         .collect();
 
-    let internal_cfg = AppConfig {
-        selected_models: cfg.selected_models,
-        presets,
-        ram_budget_mb: cfg.ram_budget_mb,
-        cloud_llm_enabled: cfg.cloud_llm_enabled,
-    };
+    // Cloud provider settings are managed by their own commands. Load the
+    // current config so a preset save here cannot wipe them. A corrupt file
+    // must fail loudly, not be overwritten with defaults.
+    let mut internal_cfg = store.load().map_err(AppError::internal)?;
+    internal_cfg.selected_models = cfg.selected_models;
+    internal_cfg.presets = presets;
+    internal_cfg.ram_budget_mb = cfg.ram_budget_mb;
+    internal_cfg.cloud_llm_enabled = cfg.cloud_llm_enabled;
 
     store.save(&internal_cfg).map_err(AppError::internal)
 }

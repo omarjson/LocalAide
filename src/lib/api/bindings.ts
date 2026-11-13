@@ -24,6 +24,8 @@ export interface ModelInfo {
   filename: string;
   size_bytes: number;
   ram_estimate_gb: number;
+  quant: string;
+  license: string;
   sha256: string;
   download_url: string;
   installed: boolean;
@@ -59,6 +61,8 @@ export interface ChatMessage {
   content: string;
   ts?: number;
   citations?: Citation[];
+  /** Attached images as data URLs. Kept in the session only, not saved with the thread. */
+  images?: string[];
 }
 
 export interface ChatThread {
@@ -76,6 +80,8 @@ export interface ChatStreamRequest {
   system_prompt?: string;
   temperature?: number;
   max_tokens?: number;
+  history?: ChatMessage[];
+  images?: string[];
 }
 
 export type ChatStreamEvent =
@@ -265,4 +271,34 @@ export interface JobInfo {
   progress: number;
   message: string | null;
   created_at: number;
+}
+
+// Online providers (opt-in cloud mode)
+export interface CloudProviderDto {
+  id: string;
+  label: string;
+  base_url: string;
+  model: string;
+  api_key_hint: string;
+  is_active: boolean;
+}
+
+export interface CloudConfigStatus {
+  cloud_enabled: boolean;
+  providers: CloudProviderDto[];
+  active_provider_id: string | null;
+}
+
+export interface CloudProviderSaveRequest {
+  id?: string;
+  label: string;
+  base_url: string;
+  model: string;
+  /** Full key. Omit when editing to keep the stored key. */
+  api_key?: string;
+}
+
+export interface CloudModeRequest {
+  enabled: boolean;
+  provider_id?: string;
 }

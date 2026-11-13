@@ -6,6 +6,9 @@ import type {
   ChatStreamEvent,
   ChatStreamRequest,
   ChatThread,
+  CloudConfigStatus,
+  CloudModeRequest,
+  CloudProviderSaveRequest,
   DownloadProgressEvent,
   EmbeddingStatusResponse,
   ForgetAllResponse,
@@ -64,8 +67,15 @@ export class ApiClient {
     return invoke<ModelPreset[]>("model_presets");
   }
 
-  async downloadModelPreset(id: string): Promise<void> {
-    return invoke<void>("model_download_preset", { id });
+  async downloadModelPreset(
+    id: string,
+    onProgress?: (event: DownloadProgressEvent) => void
+  ): Promise<void> {
+    const channel = new Channel<DownloadProgressEvent>();
+    if (onProgress) {
+      channel.onmessage = onProgress;
+    }
+    return invoke<void>("model_download_preset", { id, channel });
   }
 
   async cancelModelDownload(id: string): Promise<void> {
@@ -234,7 +244,37 @@ export class ApiClient {
   async getEmbeddingStatus(): Promise<EmbeddingStatusResponse> {
     return invoke<EmbeddingStatusResponse>("embedding_status");
   }
+
+  // Online providers (opt-in cloud mode)
+  async getCloudConfig(): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_config_get");
+  }
+
+  async saveCloudProvider(req: CloudProviderSaveRequest): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_provider_save", { req });
+  }
+
+  async deleteCloudProvider(providerId: string): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_provider_delete", { providerId });
+  }
+
+  async setCloudMode(req: CloudModeRequest): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_mode_set", { req });
+  }
 }
 
 export const api = new ApiClient();
 export default api;
+
+/**
+ * Extract a readable message from a Tauri rejection, which can be a string,
+ * an Error, or the serialized AppError object from the backend.
+ */
+export function errorMessage(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e !== null && "message" in e) {
+    return String((e as { message: unknown }).message);
+  }
+  return String(e);
+}

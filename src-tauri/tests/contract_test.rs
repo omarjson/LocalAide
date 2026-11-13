@@ -48,6 +48,8 @@ fn test_model_info_serialization() {
         filename: "qwen3-0.6b-q4.bin".to_string(),
         size_bytes: 400_000_000,
         ram_estimate_gb: 0.8,
+        quant: "Q4_K_M".to_string(),
+        license: "Apache-2.0".to_string(),
         sha256: "abcdef123456".to_string(),
         download_url: "https://example.com/model.bin".to_string(),
         installed: true,

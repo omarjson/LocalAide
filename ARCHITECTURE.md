@@ -10,7 +10,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
                   │   Tailwind 4 • High-Contrast WCAG 2.2   │
                   └────────────────────┬────────────────────┘
                                        │ Generated TypeScript Bindings
-                                       │ (Strictly Typed IPC, No 'any')
+                                       │ (Typed DTOs; dynamic JSON only for tool args & events)
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │              Tauri Core                 │
@@ -21,16 +21,16 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
          ▼                             ▼                             ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │   ChatService    │         │   LibraryService  │         │   ToolService    │
-│  LlamaWorker     │         │   SQLite (WAL)    │         │  Workspace Jail  │
-│  Token Budgeting │         │   FTS5 + Cosine   │         │  User Approval   │
-│  RAG Citations   │         │   Hybrid RRF      │         │  Audit Log       │
+│  SidecarEngine   │         │   SQLite (WAL)    │         │  Workspace Jail  │
+│  Token Budgeting │         │   FTS5 BM25       │         │  User Approval   │
+│  RAG Citations   │         │   Keyword Search  │         │  Audit Log       │
 └────────┬─────────┘         └─────────┬─────────┘         └────────┬─────────┘
          │                             │                            │
          ▼                             ▼                            ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
 │  InferenceEngine │         │  Embedded Storage │         │ Host Filesystem  │
-│  llama.cpp GGUF  │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
-│  Sub-100ms Abort │         │  library.db       │         │ workspace/       │
+│  llama-server    │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
+│  Next-token Stop │         │  index/library.db │         │ workspace/       │
 └──────────────────┘         └───────────────────┘         └──────────────────┘
 ```
 
@@ -44,14 +44,16 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 - Holds `JobRegistry` for concurrent lifecycle tracking, cancel tokens, and progress monitoring.
 
 ### 2. Inference & Model Lifecycle (`src-tauri/src/services/inference/`)
-- `LlamaWorkerEngine`: executes inference on dedicated OS thread to guarantee zero UI stuttering.
-- Thread-safe cancellation flag checked every generation turn (< 100 ms cancellation latency).
+- `RouterEngine`: one `InferenceEngine` for the rest of the app. It forwards to the local sidecar by default and to the remote engine only when the user switches on cloud mode in Settings. Loading a model always returns to local.
+- `SidecarEngine`: runs `llama-server` (llama.cpp v0.9.0) as a child process on 127.0.0.1 with a random API key. Chat streams from `/v1/chat/completions`. See ADR-0007.
+- `RemoteEngine` (opt-in): streams from the user-configured OpenAI-compatible provider over HTTPS — or from a loopback proxy over HTTP. Enabled only from Settings with a user-supplied key; the chat header shows a cloud badge while it is active.
+- Cancellation flag checked per streamed token; generation stops at the next token after Stop or `Esc`.
 - `ContextBudget`: strict token budgeting preserving system persona while truncating oldest turns.
 
 ### 3. Document Library & Retrieval Engine (`src-tauri/src/services/library/`)
 - Single transactional ACID store: `library.db` running SQLite in WAL mode (`journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 5000`).
 - Multi-format parser: natural paragraph/sentence chunker (1500 chars, 250 overlap), pure PDF stream extractor via `flate2`.
-- Hybrid Search: Reciprocal Rank Fusion (RRF $k=60$) combining BM25 full-text rank with cosine vector similarity.
+- Search: keyword (BM25) over FTS5 only. Vector search and RRF fusion are not wired in v1.0.
 
 ### 4. Memory & RAG Pipeline (`src-tauri/src/services/memory/`)
 - Plaintext Markdown files in `~/.aiassistant/memory/` synchronized with SQLite `notes` index.
@@ -64,7 +66,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 - Blocks lexical `..` traversal escapes and canonical target escapes.
 - Blocks external symlinks and detects symlink loops.
 - Explicit approval flow: mutating operations (`write_file`) require interactive approval with preview.
-- Immutable SQLite audit log (`tool_audit` table) tracking every execution.
+- SQLite audit log (`tool_audit` table) tracking every execution; user-visible and clearable from Settings.
 
 ---
 
@@ -73,7 +75,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 | Threat | Mitigation Mechanism |
 |---|---|
 | **Prompt Injection Exfiltration** | Filesystem tools constrained to `WorkspaceJail`; absolute paths and external symlinks blocked with `SANDBOX_DENIED`. |
-| **Model Weight Tampering** | Signed catalog manifest (`CatalogManifest`); streaming SHA-256 integrity verification before atomic rename. |
+| **Model Weight Tampering** | Catalog integrity digest (`CatalogManifest.signature`) over ids, sizes, and hashes; streaming SHA-256 integrity verification before atomic rename. |
 | **Cross-Site Scripting (XSS)** | Hardened CSP (`default-src 'self' ...`); no remote CDN scripts; IPC channel isolation. |
-| **Data Exfiltration / Snooping** | Zero telemetry stance; zero network requests in chat/search paths; 100% offline local inference. |
+| **Data Exfiltration / Snooping** | Zero telemetry stance; with cloud mode off, zero network requests in chat/search paths and fully local inference. Cloud mode is opt-in, sends chat only to the user-configured provider, and shows a badge while active. |
 | **Memory Exhaustion (OOM)** | Streaming hashing via 64 KB buffers (< 100 KB RAM); strict turn budgeting in context engine. |

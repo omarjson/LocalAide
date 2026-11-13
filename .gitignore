@@ -15,3 +15,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# llama-server sidecar binaries, placed by scripts/prepare-sidecar.sh
+src-tauri/binaries/

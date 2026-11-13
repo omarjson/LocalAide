@@ -1,5 +1,7 @@
 # Optimizations Summary
 
+> **Status: historical only.** This file describes unwrap-removal work on `src-tauri/src/inference.rs` (and parts of `model_manager.rs` / `indexer.rs`) — code that has since been replaced: the in-process engine was swapped for the llama-server sidecar (ADR-0007) and the legacy tantivy/sled `indexer.rs` was deleted. The file is retained as a record of that refactor; do not treat the file paths below as current.
+
 ## Scope
 Files reviewed: `src-tauri/src/inference.rs`, `src-tauri/src/model_manager.rs`, `src-tauri/src/indexer.rs`
 

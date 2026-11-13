@@ -10,20 +10,12 @@ pub mod app;
 pub mod commands;
 pub mod config;
 pub mod domain;
-pub mod embeddings;
-pub mod indexer;
-pub mod inference;
 pub mod model_manager;
 pub mod services;
-pub mod tools;
-pub mod voice;
-pub mod watcher;
 
 use app::AppState;
-use indexer::Indexer;
-use inference::LlamaState;
 use model_manager::ModelManager;
-use voice::VoiceManager;
+use services::inference::InferenceEngine;
 
 pub use app::paths::{config_path, index_dir, memory_dir, models_dir};
 
@@ -33,18 +25,6 @@ pub fn run() {
         let fallback = std::env::temp_dir().join("localaide_models");
         ModelManager::with_dir(fallback)
             .unwrap_or_else(|_| panic!("Failed even temp model manager"))
-    }));
-
-    let indexer = Arc::new(Indexer::open().unwrap_or_else(|e| {
-        log::error!("Failed to init indexer at standard path: {e}; falling back to temp index");
-        let fallback = std::env::temp_dir().join("localaide_index_fallback");
-        let _ = std::fs::create_dir_all(&fallback);
-        Indexer::open_at(&fallback).unwrap_or_else(|e2| {
-            log::error!("Failed to open fallback index: {e2}");
-            let _ = std::fs::remove_dir_all(&fallback);
-            let _ = std::fs::create_dir_all(&fallback);
-            Indexer::open_at(&fallback).expect("Clean temp index directory must open")
-        })
     }));
 
     let library = Arc::new(crate::services::library::LibraryService::open_default(&index_dir()).unwrap_or_else(|e| {
@@ -84,34 +64,61 @@ pub fn run() {
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
-    let llama_state = Arc::new(LlamaState::new());
-    let voice_manager = Arc::new(VoiceManager::new());
-
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),
-        indexer.clone(),
         library.clone(),
         memory.clone(),
         tools.clone(),
-        llama_state.clone(),
-        voice_manager.clone(),
     );
 
-    // Auto-reload previously active model from config if installed on disk
+    // Restore the engine mode and previously active model from config. Cloud
+    // mode (opt-in) wins if it was left enabled with a valid provider; the
+    // local sidecar auto-loads its model in every other case, including when
+    // the stored provider was deleted or has an invalid base URL.
+    let mut restored_cloud = false;
     if let Ok(store) = app_state.config_store.lock() {
         if let Ok(cfg) = store.load() {
-            if let Some(active_id) = cfg.selected_models.last() {
-                let models = app_state.model_manager.list_models();
-                if let Some(entry) = models
-                    .into_iter()
-                    .find(|m| m.id == *active_id && m.installed)
-                {
-                    let path = app_state.model_manager.primary_path(active_id);
-                    if path.exists() {
-                        match app_state.inference_engine.load(&path, 2048) {
-                            Ok(_) => log::info!("Auto-loaded model: {active_id}"),
-                            Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
+            if cfg.cloud_llm_enabled {
+                let active = cfg
+                    .active_cloud_provider
+                    .as_deref()
+                    .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id));
+                if let Some(p) = active {
+                    if crate::config::validate_base_url(&p.base_url).is_ok() {
+                        app_state.inference_engine.set_cloud_target(
+                            crate::services::inference::remote::RemoteTarget {
+                                label: p.label.clone(),
+                                base_url: p.base_url.clone(),
+                                model: p.model.clone(),
+                                api_key: p.api_key.clone(),
+                            },
+                        );
+                        restored_cloud = true;
+                        log::info!("Cloud mode restored: {label}", label = p.label);
+                    } else {
+                        log::warn!(
+                            "Cloud provider {label} has an invalid base URL; staying local",
+                            label = p.label
+                        );
+                    }
+                } else {
+                    log::warn!("Cloud mode was on but no active provider exists; staying local");
+                }
+            }
+            if !restored_cloud {
+                if let Some(active_id) = cfg.selected_models.last() {
+                    let models = app_state.model_manager.list_models();
+                    if let Some(entry) = models
+                        .into_iter()
+                        .find(|m| m.id == *active_id && m.installed)
+                    {
+                        let path = app_state.model_manager.primary_path(active_id);
+                        if path.exists() {
+                            match app_state.inference_engine.load(&path, 2048) {
+                                Ok(_) => log::info!("Auto-loaded model: {active_id}"),
+                                Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
+                            }
                         }
                     }
                 }
@@ -156,13 +163,16 @@ pub fn run() {
             commands::memory_search,
             commands::memory_forget_all,
             commands::tool_execute,
-            commands::tool_call,
             commands::tool_audits_list,
             commands::tool_audits_clear,
             commands::config_load,
             commands::config_save,
             commands::config_compute_ram,
             commands::embedding_status,
+            commands::cloud_config_get,
+            commands::cloud_provider_save,
+            commands::cloud_provider_delete,
+            commands::cloud_mode_set,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

@@ -7,6 +7,8 @@ pub struct ModelInfo {
     pub filename: String,
     pub size_bytes: u64,
     pub ram_estimate_gb: f64,
+    pub quant: String,
+    pub license: String,
     pub sha256: String,
     pub download_url: String,
     pub installed: bool,

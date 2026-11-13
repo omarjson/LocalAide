@@ -47,9 +47,12 @@ pub struct EmbeddingStatusResponse {
 
 #[tauri::command]
 pub fn embedding_status() -> Result<EmbeddingStatusResponse, AppError> {
+    // Truthful status: the embedding engine is compiled in at 768 dimensions,
+    // but semantic search is not wired into the retrieval path yet — search
+    // runs BM25 keyword only (docs/evidence/audit-2026-11-13.md item 4).
     Ok(EmbeddingStatusResponse {
-        engine: "sqlite-vector".to_string(),
-        dimension: 384,
-        ready: true,
+        engine: "not-wired".to_string(),
+        dimension: 768,
+        ready: false,
     })
 }

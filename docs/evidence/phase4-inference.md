@@ -1,5 +1,7 @@
 # Phase 4 Evidence: Production-Grade Model Lifecycle & Inference
 
+> Note (2026-11-13): the in-process engine described here (llama_cpp_rs token callbacks, dedicated worker thread) was replaced by the llama-server sidecar (ADR-0007). Kept as historical evidence; the `InferenceEngine` trait, context budgeting and prompt formatting below still describe shipped code.
+
 ## Deliverables & Automated Verification
 
 1. **`InferenceEngine` Trait (`src-tauri/src/services/inference/mod.rs`)**

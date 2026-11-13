@@ -26,15 +26,14 @@ log = "0.4"
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-log = "2"
 sysinfo = "0.32"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
+url = "2"
+tokio = { version = "1", features = ["sync"] }
 futures = "0.3"
 sha2 = "0.10"
 dirs-next = "2.0"
-# llama.cpp GGUF runtime
-llama_cpp_rs = "0.3.0"
-# legacy indexer & storage (sqlite WAL is primary in v1.0 per ADR-0002)
-tantivy = "0.27.0"
-sled = "0.34"
+# OS-random bytes for the llama-server loopback API key (ADR-0007).
+getrandom = "0.3"
 notify = "6"
 # voice (deferred per ADR-0006)
 whisper-rs = { version = "0.16", optional = true }
@@ -48,5 +47,3 @@ default = []
 voice = ["whisper-rs", "piper-rs", "hound"]
 
 
-[patch.crates-io]
-llama_cpp_rs = { path = "../vendor/llama_cpp_rs" }

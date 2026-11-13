@@ -55,6 +55,7 @@ impl LibraryWatcher {
             })?;
 
         // Background debouncer thread
+        let root = folder.to_path_buf();
         std::thread::spawn(move || {
             let mut pending_files: HashSet<PathBuf> = HashSet::new();
             let mut removed_files: HashSet<PathBuf> = HashSet::new();
@@ -67,7 +68,8 @@ impl LibraryWatcher {
                         Ok(event) => match event.kind {
                             EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any => {
                                 for p in event.paths {
-                                    if !FileIngester::should_ignore_path(&p)
+                                    let inside = p.strip_prefix(&root).unwrap_or(p.as_path());
+                                    if !FileIngester::should_ignore_path(inside)
                                         && FileIngester::is_supported_extension(&p)
                                         && p.is_file()
                                     {

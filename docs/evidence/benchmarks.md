@@ -4,12 +4,13 @@
 
 | Metric | Budget Target | Measured | Result | Verification Location |
 |---|---|:---:|:---:|---|
-| **Hybrid Search Latency (BM25 + Vector)** | < 50 ms | **< 15 ms** | **PASS** | `src-tauri/tests/library_test.rs` |
+| **Keyword Search Latency (FTS5 BM25)** | < 50 ms | **< 15 ms** | **PASS** | `src-tauri/tests/library_test.rs` |
+| *Vector search latency* | — | — | **N/A** | The vector half of hybrid search never executes in production: chunk embeddings are never written and no query vector is passed, so there is no vector latency to measure. |
 | **Context Assembly (200 turns)** | < 50 ms | **< 2 ms** | **PASS** | `src-tauri/tests/fault_injection_test.rs` |
 | **Streaming SHA-256 Hashing RAM** | < 1 MB | **< 100 KB** (64KB buffer) | **PASS** | `src-tauri/src/services/models/verify.rs` |
 | **Model Cancellation Latency** | < 100 ms | **< 15 ms** | **PASS** | `src-tauri/tests/contract_test.rs` |
 | **Frontend Production Bundle Size** | < 250 KB | **128 KB JS / 45 KB CSS** | **PASS** | `npm run build` |
-| **Startup Smoke Initialization** | < 1000 ms | **350 ms** | **PASS** | `scripts/smoke-test.mjs` |
+| **Startup Smoke Checks** | dist/ build sanity | No timing is measured. The script asserts the built `dist/` output: `#app` mount container, `LocalAide` title, no dead assets, a compiled Tailwind CSS bundle (> 10 KB) and a JS bundle with the brand present. | **PASS** | `scripts/smoke-test.mjs` |
 
 ---
 
@@ -25,4 +26,4 @@
 | **Path Traversal Attack** | Traversal tokens `../` and `/etc/passwd` | Jail blocks lexical escape and canonical parent escapes | Returns `AppError { code: "SANDBOX_DENIED" }` | **PASS** |
 | **Symlink Exfiltration** | Symlink resolving to secret file outside workspace jail | Jail inspects canonical target and blocks exfiltration | Returns `AppError { code: "SANDBOX_DENIED" }` | **PASS** |
 
-All 33 unit, integration, and fault injection tests pass reliably in CI.
+Honest state: 32 of the 33 tests pass reliably; the one known failure (`library_test::test_folder_recursive_crawler_and_ignore_patterns`, which depends on the temp-dir path shape) is documented in [audit-2026-11-13.md](audit-2026-11-13.md).

@@ -1,6 +1,10 @@
 pub mod context;
-pub mod llama;
 pub mod prompt;
+pub mod remote;
+pub mod router;
+pub mod sidecar;
+
+pub use router::RouterEngine;
 
 use crate::app::error::AppError;
 use std::path::{Path, PathBuf};
@@ -29,12 +33,20 @@ pub struct EngineStatus {
     pub context_size: i32,
 }
 
+/// One chat turn. `images` holds `data:image/...;base64,` URLs and is empty for text-only turns.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PromptMessage {
+    pub role: String,
+    pub content: String,
+    pub images: Vec<String>,
+}
+
 pub trait InferenceEngine: Send + Sync {
     fn load(&self, model_path: &Path, context_size: i32) -> Result<String, AppError>;
     fn unload(&self) -> Result<(), AppError>;
     fn generate(
         &self,
-        prompt: &str,
+        messages: &[PromptMessage],
         max_tokens: i32,
         temperature: f32,
         cancel_flag: Arc<AtomicBool>,

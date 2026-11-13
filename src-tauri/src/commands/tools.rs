@@ -12,14 +12,6 @@ pub fn tool_execute(
 }
 
 #[tauri::command]
-pub fn tool_call(
-    state: State<'_, AppState>,
-    req: ToolExecutionRequest,
-) -> Result<ToolExecutionResponse, AppError> {
-    state.tools.execute(req)
-}
-
-#[tauri::command]
 pub fn tool_audits_list(
     state: State<'_, AppState>,
     limit: Option<usize>,
