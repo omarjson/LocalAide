@@ -1,6 +1,10 @@
 pub mod context;
 pub mod prompt;
+pub mod remote;
+pub mod router;
 pub mod sidecar;
+
+pub use router::RouterEngine;
 
 use crate::app::error::AppError;
 use std::path::{Path, PathBuf};

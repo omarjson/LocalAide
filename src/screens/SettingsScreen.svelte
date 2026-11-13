@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api } from "../lib/api/client";
-  import type { ToolAuditEntry } from "../lib/api/bindings";
+  import { api, errorMessage } from "../lib/api/client";
+  import type { CloudConfigStatus, ToolAuditEntry } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   let activeTab = $state<"general" | "security" | "audit">("general");
@@ -14,6 +14,18 @@
   let audits = $state<ToolAuditEntry[]>([]);
   let loadingAudits = $state(false);
   let clearingAudits = $state(false);
+
+  // Online providers (opt-in cloud mode)
+  let cloud = $state<CloudConfigStatus | null>(null);
+  let cloudError = $state<string | null>(null);
+  let cloudBusy = $state(false);
+  let showProviderForm = $state(false);
+  let editingProviderId = $state<string | null>(null);
+  let providerLabel = $state("");
+  let providerUrl = $state("");
+  let providerModel = $state("");
+  let providerKey = $state("");
+  let providerFormError = $state<string | null>(null);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -39,6 +51,95 @@
     }
   };
 
+  const loadCloud = async () => {
+    try {
+      cloud = await api.getCloudConfig();
+    } catch {
+      cloud = null;
+    }
+  };
+
+  const openAddProvider = () => {
+    editingProviderId = null;
+    providerLabel = "";
+    providerUrl = "";
+    providerModel = "";
+    providerKey = "";
+    providerFormError = null;
+    showProviderForm = true;
+  };
+
+  const openEditProvider = (id: string) => {
+    const p = cloud?.providers.find((x) => x.id === id);
+    if (!p) return;
+    editingProviderId = id;
+    providerLabel = p.label;
+    providerUrl = p.base_url;
+    providerModel = p.model;
+    providerKey = "";
+    providerFormError = null;
+    showProviderForm = true;
+  };
+
+  const saveProvider = async () => {
+    providerFormError = null;
+    cloudBusy = true;
+    try {
+      cloud = await api.saveCloudProvider({
+        id: editingProviderId ?? undefined,
+        label: providerLabel,
+        base_url: providerUrl,
+        model: providerModel,
+        api_key: providerKey ? providerKey : undefined,
+      });
+      showProviderForm = false;
+    } catch (e) {
+      providerFormError = errorMessage(e);
+    } finally {
+      cloudBusy = false;
+    }
+  };
+
+  const deleteProvider = async (id: string) => {
+    const p = cloud?.providers.find((x) => x.id === id);
+    if (!confirm(`Delete provider "${p?.label ?? id}"? Its stored API key is removed too.`)) return;
+    cloudBusy = true;
+    cloudError = null;
+    try {
+      cloud = await api.deleteCloudProvider(id);
+    } catch (e) {
+      cloudError = errorMessage(e);
+    } finally {
+      cloudBusy = false;
+    }
+  };
+
+  const toggleCloud = async () => {
+    if (!cloud) return;
+    cloudBusy = true;
+    cloudError = null;
+    try {
+      cloud = await api.setCloudMode({ enabled: !cloud.cloud_enabled });
+    } catch (e) {
+      cloudError = errorMessage(e);
+    } finally {
+      cloudBusy = false;
+    }
+  };
+
+  const activateProvider = async (id: string) => {
+    if (!cloud) return;
+    cloudBusy = true;
+    cloudError = null;
+    try {
+      cloud = await api.setCloudMode({ enabled: cloud.cloud_enabled, provider_id: id });
+    } catch (e) {
+      cloudError = errorMessage(e);
+    } finally {
+      cloudBusy = false;
+    }
+  };
+
   onMount(async () => {
     try {
       const cfg = await api.loadConfig();
@@ -46,6 +147,7 @@
       modelPriority = cfg.selected_models?.length ? "local" : modelPriority;
     } catch {}
     loadAudits();
+    loadCloud();
   });
 
   $effect(() => {
@@ -56,7 +158,7 @@
         const current = await api.loadConfig();
         const cfg = {
           ram_budget_mb: Math.round(ramBudget * 0.7 * 1024),
-          cloud_llm_enabled: false,
+          cloud_llm_enabled: current.cloud_llm_enabled,
           selected_models: current.selected_models ?? [],
           presets: current.presets ?? []
         };
@@ -117,7 +219,13 @@
 
       <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
         <div class="font-medium text-ink-100 mb-2">Model Execution Priority</div>
-        <p class="text-xs text-ink-400 mb-3">All inference executes exclusively on local device silicon.</p>
+        <p class="text-xs text-ink-400 mb-3">
+          {#if cloud?.cloud_enabled}
+            Chat currently runs on your online provider. Switch it off to return to fully local inference.
+          {:else}
+            All inference executes locally on this machine. No messages leave your computer.
+          {/if}
+        </p>
         <div class="space-y-2">
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="radio" name="priority" bind:group={modelPriority} value="local" class="accent-ember-600" checked/>
@@ -126,14 +234,157 @@
         </div>
       </div>
 
-      <div class="border border-ink-800/80 rounded-2xl p-5 bg-ink-950/60 flex items-center justify-between">
-        <div>
-          <div class="font-medium text-xs text-ink-400">External Cloud Services</div>
-          <div class="text-[11px] text-ink-400 mt-0.5">Cloud LLM APIs are out-of-scope for v1.0 (frozen per ADR-0006).</div>
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-medium text-ink-100">Online Providers</div>
+            <div class="text-xs text-ink-400">Optional cloud chat with an OpenAI-compatible provider you configure yourself.</div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={cloud?.cloud_enabled ?? false}
+            aria-label="Use online provider for chat"
+            onclick={toggleCloud}
+            disabled={cloudBusy || !cloud || cloud.providers.length === 0}
+            class={`relative w-11 h-6 rounded-full transition-colors disabled:opacity-40 ${cloud?.cloud_enabled ? "bg-ember-600" : "bg-ink-700"}`}
+          >
+            <span class={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${cloud?.cloud_enabled ? "translate-x-5" : ""}`}></span>
+          </button>
         </div>
-        <span class="px-2 py-0.5 text-xs uppercase font-mono rounded bg-ink-900 text-ink-400 border border-ink-800">
-          Disabled in v1.0
-        </span>
+
+        <p class="text-[11px] text-ink-400 border-l-2 border-amber-500/50 pl-2">
+          When this is on, your chat messages are sent to the provider below over HTTPS and answers come back from its servers — they are not processed on this machine. When it is off, nothing leaves your computer.
+        </p>
+
+        {#if cloudError}
+          <div class="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-xl px-3 py-2">{cloudError}</div>
+        {/if}
+
+        {#if !cloud || cloud.providers.length === 0}
+          <div class="border border-ink-800/80 bg-ink-950/60 rounded-xl p-4 text-center space-y-2">
+            <div class="text-xs text-ink-400">No online providers yet. Everything stays local until you add one.</div>
+            <button
+              onclick={openAddProvider}
+              class="px-3 py-1.5 text-xs rounded-xl bg-ink-800 hover:bg-ink-700 text-ink-200 font-medium transition-colors"
+            >
+              + Add provider
+            </button>
+          </div>
+        {:else}
+          <div class="space-y-2">
+            {#each cloud.providers as p (p.id)}
+              <div class={`rounded-xl border p-3 flex items-center justify-between gap-3 ${p.is_active ? "border-ember-500/40 bg-ember-500/5" : "border-ink-800 bg-ink-950/60"}`}>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm text-ink-100 font-medium">{p.label}</span>
+                    {#if p.is_active}
+                      <span class="px-1.5 py-0.5 text-[10px] uppercase font-mono rounded bg-ember-600/20 text-ember-300 border border-ember-500/30">Active</span>
+                    {/if}
+                  </div>
+                  <div class="text-[11px] text-ink-400 font-mono truncate mt-0.5">{p.model} · {p.base_url} · key {p.api_key_hint}</div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  {#if !p.is_active}
+                    <button
+                      onclick={() => activateProvider(p.id)}
+                      disabled={cloudBusy}
+                      class="px-2 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 text-ink-200 transition-colors disabled:opacity-40"
+                    >
+                      Use
+                    </button>
+                  {/if}
+                  <button
+                    onclick={() => openEditProvider(p.id)}
+                    disabled={cloudBusy}
+                    class="px-2 py-1 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onclick={() => deleteProvider(p.id)}
+                    disabled={cloudBusy}
+                    class="px-2 py-1 text-xs rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 transition-colors disabled:opacity-40"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            {/each}
+            <button
+              onclick={openAddProvider}
+              disabled={cloudBusy}
+              class="px-3 py-1.5 text-xs rounded-xl bg-ink-800 hover:bg-ink-700 text-ink-200 font-medium transition-colors disabled:opacity-40"
+            >
+              + Add provider
+            </button>
+          </div>
+        {/if}
+
+        {#if showProviderForm}
+          <div class="border border-ink-800 bg-ink-950/80 rounded-xl p-4 space-y-3">
+            <div class="text-xs font-semibold text-ink-200 uppercase tracking-wider">
+              {editingProviderId ? "Edit provider" : "Add provider"}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="space-y-1">
+                <span class="text-[11px] text-ink-400">Name</span>
+                <input
+                  bind:value={providerLabel}
+                  placeholder="OpenAI, OpenRouter, Ollama proxy…"
+                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
+                />
+              </label>
+              <label class="space-y-1">
+                <span class="text-[11px] text-ink-400">Model</span>
+                <input
+                  bind:value={providerModel}
+                  placeholder="gpt-4o-mini"
+                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
+                />
+              </label>
+              <label class="space-y-1 sm:col-span-2">
+                <span class="text-[11px] text-ink-400">Base URL (OpenAI-compatible, HTTPS — plain HTTP only for proxies on this machine)</span>
+                <input
+                  bind:value={providerUrl}
+                  placeholder="https://api.openai.com/v1"
+                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                />
+              </label>
+              <label class="space-y-1 sm:col-span-2">
+                <span class="text-[11px] text-ink-400">
+                  API key {editingProviderId ? "(leave empty to keep the stored key)" : ""}
+                </span>
+                <input
+                  type="password"
+                  bind:value={providerKey}
+                  placeholder={editingProviderId ? "Stored key kept if empty" : "sk-…"}
+                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                />
+              </label>
+            </div>
+            {#if providerFormError}
+              <div class="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded-lg px-3 py-2">{providerFormError}</div>
+            {/if}
+            <div class="text-[11px] text-ink-400">
+              The key is stored in this app's config file on this machine and is sent only to the base URL above.
+            </div>
+            <div class="flex items-center gap-2 justify-end">
+              <button
+                onclick={() => showProviderForm = false}
+                class="px-3 py-1.5 text-xs rounded-xl border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onclick={saveProvider}
+                disabled={cloudBusy}
+                class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-ink-950 font-medium transition-colors disabled:opacity-40"
+              >
+                {cloudBusy ? "Saving…" : "Save provider"}
+              </button>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <div class="pt-2 flex items-center gap-3">

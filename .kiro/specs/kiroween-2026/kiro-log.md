@@ -23,6 +23,11 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - Online mode: **build it in** as opt-in (plan §0).
 - Speech: **defer** (plan §0, engine-upgrade Phase 5).
 
+## 2026-11-13 — Online mode built from the plan decision
+
+- **Kiro artifact:** plan §4 scope ("Online mode (approved 2026-11-13)") and track E.
+- **What changed:** `RouterEngine` routes between the local sidecar and a new `RemoteEngine`; both sit behind the existing `InferenceEngine` trait, so the chat path, context budget, RAG citations, and cancellation work unchanged in either mode. Providers are managed by four new commands and a Settings panel (add/edit/delete/toggle) with an explicit privacy note; the chat header shows a cloud badge whenever cloud mode is active. Base URLs must be HTTPS unless they point at the user's own machine, and the API key is stored only in the local config file, masked in the UI. Docs (README, scope, ARCHITECTURE, SECURITY) were updated in the same pass so the "local by default" claim stays true.
+
 ## Pending Kiro evidence
 
 - A Kiro hook that runs `npm run check` on save (plan track D).

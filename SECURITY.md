@@ -43,7 +43,16 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
 
 ---
 
-## 4. Reporting a Vulnerability
+## 4. Online Providers (Opt-In)
+
+- Cloud mode is **off by default** and never activates itself. Chat runs locally until the user adds a provider in Settings and switches it on.
+- The provider's API key is stored in the app config file on this machine only. The backend sends it solely as a bearer token to the base URL the user configured — never to any other endpoint, and it is never returned to the frontend (only a masked hint of the last four characters).
+- Base URLs must use HTTPS. Plain HTTP is accepted only for loopback addresses (`127.0.0.1`, `localhost`), where localhost proxies such as Ollama or LM Studio run.
+- While cloud mode is active, the chat header shows a cloud badge so it is always visible that messages are leaving the machine. Switching cloud mode off, or loading a local model, returns all inference to the local sidecar.
+
+---
+
+## 5. Reporting a Vulnerability
 
 If you discover a security vulnerability in LocalAide, please report it privately:
 - Email: `security@localaide.dev`

@@ -371,7 +371,7 @@ fn open_log() -> Option<(File, File)> {
 }
 
 /// Convert one chat turn to the OpenAI-style wire format. Images become content parts.
-fn wire_message(m: &PromptMessage) -> Value {
+pub(crate) fn wire_message(m: &PromptMessage) -> Value {
     if m.images.is_empty() {
         return json!({ "role": m.role, "content": m.content });
     }

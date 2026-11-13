@@ -6,6 +6,7 @@ use crate::domain::chat::{
     ChatMessage, ChatStreamRequest, ChatThread, SummarizeRequest, SummarizeResponse,
     ThreadExportRequest, ThreadExportResponse,
 };
+use crate::services::inference::InferenceEngine;
 use crate::services::inference::PromptMessage;
 use crate::services::inference::context::ContextBudget;
 use std::fs;

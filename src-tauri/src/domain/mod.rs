@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod cloud;
 pub mod document;
 pub mod memory;
 pub mod model;
@@ -7,6 +8,7 @@ pub mod system;
 pub mod tool;
 
 pub use chat::*;
+pub use cloud::*;
 pub use document::*;
 pub use memory::*;
 pub use model::*;

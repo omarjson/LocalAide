@@ -39,6 +39,10 @@
 
   let model = $state("Local model");
 
+  // Set when the opt-in online provider is active. Shows a cloud badge in the
+  // header so it is always clear which engine is answering.
+  let cloudChat = $state<{ label: string; model: string } | null>(null);
+
   // Shown in the empty state: which model is active, or none yet.
   let activeModelName = $state<string | null>(null);
   let modelsChecked = $state(false);
@@ -53,6 +57,13 @@
       activeModelName = null;
     } finally {
       modelsChecked = true;
+    }
+    try {
+      const cloud = await api.getCloudConfig();
+      const provider = cloud.providers.find((p) => p.id === cloud.active_provider_id);
+      cloudChat = cloud.cloud_enabled && provider ? { label: provider.label, model: provider.model } : null;
+    } catch {
+      cloudChat = null;
     }
   });
   let systemPrompt = $state("You are a helpful local AI assistant.");
@@ -317,8 +328,13 @@
       </button>
 
       <div class="hidden sm:flex items-center gap-2">
-        <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-        <span class="text-xs font-mono text-ink-400">{model}</span>
+        {#if cloudChat}
+          <span class="text-xs font-mono" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">☁️</span>
+          <span class="text-xs font-mono text-amber-300" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">Cloud: {cloudChat.model} · {cloudChat.label}</span>
+        {:else}
+          <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span class="text-xs font-mono text-ink-400">{model}</span>
+        {/if}
       </div>
     </div>
 

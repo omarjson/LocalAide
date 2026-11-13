@@ -4,7 +4,7 @@
 
 **The Private, Local-First Desktop AI Assistant**
 
-*Zero cloud subscriptions. Zero telemetry. 100% on-device inference.*
+*Zero telemetry. Local by default. Opt-in cloud when you choose.*
 
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/omarjson/LocalAide/releases)
@@ -50,7 +50,7 @@
 
 **LocalAide** is an open-source, local-first desktop AI assistant engineered for privacy, reliability, and speed. Built natively on **Rust**, **Tauri v2**, **Svelte 5**, and **SQLite**, it runs quantized open-weights Large Language Models (GGUF format) through a local `llama-server` engine — built from llama.cpp v0.9.0 — directly on your computer's hardware.
 
-Unlike browser wrappers or Electron-based frontends, LocalAide is designed as a standalone, low-overhead native desktop application. It operates **100% offline**, never connects to third-party AI APIs, captures zero user telemetry, and stores all documents, conversation threads, and memory notes strictly on your local filesystem under `~/.aiassistant/`.
+Unlike browser wrappers or Electron-based frontends, LocalAide is designed as a standalone, low-overhead native desktop application. With cloud mode off — the default — it operates **100% offline** and captures zero user telemetry. All documents, conversation threads, and memory notes are stored strictly on your local filesystem under `~/.aiassistant/`. If you explicitly add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS, and the chat header shows a cloud badge the whole time.
 
 ---
 
@@ -60,10 +60,10 @@ The majority of contemporary AI tools rely on centralized cloud infrastructure. 
 
 | Risk / Vector | Cloud AI Assistants (OpenAI, Anthropic, Copilot) | LocalAide (Local-First Architecture) |
 |---|---|---|
-| **Data Privacy & Exfiltration** | Transmits proprietary code, documents, and chat transcripts to remote cloud datacenters. | **Zero Data Exfiltration.** All text processing and inference execute on your machine. |
-| **Telemetry & Tracking** | Logs IP addresses, prompt habits, active hours, and hardware fingerprints. | **Zero Telemetry.** No tracking, no analytics, no phone-home pings, no external network requests. |
+| **Data Privacy & Exfiltration** | Transmits proprietary code, documents, and chat transcripts to remote cloud datacenters. | **Local by Default.** Text processing and inference run on your machine. The opt-in cloud mode sends chat only to the provider you configure, and a badge shows when it is active. |
+| **Telemetry & Tracking** | Logs IP addresses, prompt habits, active hours, and hardware fingerprints. | **Zero Telemetry.** No tracking, no analytics, no phone-home pings. |
 | **Recurring Costs** | Requires monthly subscription fees (\$20–\$30/user/month). | **Free & Open-Source Forever.** Licensed under MIT; run any open-weights model on your own hardware. |
-| **Offline Resilience** | Bricked during internet outages, flight travel, or API outages. | **100% Offline.** Full chat, keyword search, memory recall, and file tools operate air-gapped. |
+| **Offline Resilience** | Bricked during internet outages, flight travel, or API outages. | **Air-Gapped by Default.** Chat, keyword search, memory recall, and file tools run offline whenever cloud mode is off. |
 | **Hallucination Control** | Black-box citations that often invent references or fabricate URLs. | **Verifiable Citations.** Clickable citation pills link directly to local document chunks with exact score inspection. |
 | **Filesystem Safety** | Plugins either lack local access or possess unrestricted filesystem access. | **Capability-Rooted Jail.** Strict workspace jail (`openat` checks, symlink defense, interactive user consent). |
 | **Memory Footprint** | Bloated Chromium runtimes consuming 1.5–3 GB of idle RAM. | **Ultralight Desktop App.** Native Tauri v2 shell without a bundled browser runtime. |
@@ -73,6 +73,7 @@ The majority of contemporary AI tools rely on centralized cloud infrastructure. 
 ## Key Features
 
 - **Private Local Chat**: Real-time token streaming with a working Stop control (cancellation applies at the next streamed token, or press `Esc`).
+- **Opt-In Online Providers**: Add an OpenAI-compatible provider (OpenAI, OpenRouter, a localhost proxy, and so on) with your own API key, switch cloud mode on when you want it, and see a cloud badge in the chat header for as long as it is active. Off by default; local inference is untouched.
 - **Sliding-Window Context Budget**: Intelligently packs conversational history, dynamically truncates older turns while preserving the system prompt, and guarantees memory headroom for model responses.
 - **Natural Boundary Document Chunker**: Ingests Markdown, plain text, and PDF files. Chunks text along natural paragraph and sentence boundaries with configurable sliding overlap.
 - **Keyword Search (FTS5 BM25)**: Embedded SQLite WAL engine running full-text BM25 search over FTS5. Vector search and RRF fusion are not wired in v1.0.
@@ -291,9 +292,7 @@ Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md
 
 To guarantee stability and quality, LocalAide follows a strict scope discipline:
 
-- **Shipped in v1.0**: Local GGUF chat via llama-server, model catalog & manager, SQLite WAL document library with keyword search (FTS5 BM25), markdown memory notes with RAG citations, and capability-rooted safe file tools.
-- **In Development (Opt-In, Next Release)**:
-  - *Online Providers*: OpenAI-compatible cloud APIs as an explicit opt-in, disabled by default, with a user-supplied key. The local-first default and its zero-data-exfiltration guarantee do not change.
+- **Shipped in v1.0**: Local GGUF chat via llama-server, model catalog & manager, SQLite WAL document library with keyword search (FTS5 BM25), markdown memory notes with RAG citations, capability-rooted safe file tools, and opt-in OpenAI-compatible online providers (off by default, user-supplied key, cloud badge while active).
 - **Explicit Non-Goals for v1.0 (Deferred per ADR-0006)**:
   - *Speech (STT / TTS)*: Deferred. The speech path needs a second runtime. See `.kiro/specs/engine-upgrade/tasks.md`.
   - *Vision (Candle SLM / Qwen-VL)*: Deferred until multimodal support is verified end-to-end through the sidecar engine.

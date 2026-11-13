@@ -84,7 +84,7 @@ Tracks that can run in parallel, each as a sub-agent with its own files:
 - **B. Design system:** tokens, logo, screens, empty states, navigation cleanup. — **Design pass and icons landed in `aa5daf6`; Dev Config screen still in the nav.**
 - **C. Docs:** README, ARCHITECTURE, scope, SECURITY and scorecard rewritten to match the code. — **Done 2026-11-13 (truth pass): rubric scores replaced with CI-gate evidence, false claims fixed, broken evidence links repaired.**
 - **D. Kiro evidence:** spec tasks, a hook for `npm run check` on save, and a short write-up of how Kiro helped. — **In progress: `kiro-log.md` added; hook still pending.**
-- **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage.
+- **E. Online mode (added 2026-11-13):** OpenAI-compatible opt-in providers, settings UI, streaming, key storage. — **Built 2026-11-13: `RemoteEngine` + `RouterEngine` behind the existing `InferenceEngine` trait, cloud commands, Settings UI with add/edit/delete/toggle, cloud badge in the chat header, HTTPS-enforced URLs (HTTP only for loopback proxies), key stored locally and masked in the UI. Not yet compiled; CI is the gate.**
 
 Each track ends with a written summary. Testing happens on your machine, not here. For each track I will list the exact commands for you to run.
 

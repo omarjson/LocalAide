@@ -33,7 +33,12 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
    - Workspace directory isolation (`cap-std` / openat semantics) rejecting path traversal and symlink escapes.
    - Mandatory explicit user approval prompt displaying tool action, arguments, and file diffs prior to write execution.
    - Persistent audit log for all tool invocations; user-visible and clearable from Settings.
-6. **Accessible, Honest Frontend**:
+6. **Opt-In Online Providers**:
+   - User-configured OpenAI-compatible providers (label, base URL, model, API key), stored in the local config file.
+   - Cloud mode is off by default; switching it on sends chat only to the chosen provider over HTTPS (plain HTTP allowed only for loopback proxies).
+   - A cloud badge in the chat header shows whenever cloud mode is active; local inference stays available and switches back on model load.
+   - The API key never leaves the backend except as a bearer token to the provider's base URL.
+7. **Accessible, Honest Frontend**:
    - Svelte 5 runes architecture with design system components.
    - Zero dead buttons, no unhandled async rejections, no synthetic mock data.
    - Keyboard complete navigation, ARIA semantics, and WCAG 2.2 AA conformance.
@@ -44,7 +49,6 @@ LocalAide is a privacy-first, local-first desktop assistant designed for daily c
 The following capabilities are explicitly deferred to Phase 12 or post-v1.0. All UI controls, commands, dependencies, and doc claims for these features are disabled or removed until fully implemented end-to-end:
 - **Speech (STT / TTS)**: Needs a second runtime. Deferred until verified on the target platforms.
 - **Vision / Multimodal SLM**: Image comprehension models are excluded from the v1.0 core until multimodal support is verified end-to-end through the sidecar engine.
-- **Cloud LLM APIs**: In development as an explicit opt-in (OpenAI-compatible providers, disabled by default, user-supplied key). Not shipped in the current build; local inference remains the only shipped engine, and the local path keeps its strict offline guarantee.
 - **Modular Component Hot-swapping**: In-app binary component replacement is deferred; all updates happen via verified whole-app updates.
 - **Telemetry / Remote Analytics**: There is zero background telemetry, analytics, or user profiling. Ever.
 
@@ -71,6 +75,6 @@ A platform, model, or feature is **supported** if and only if:
 
 ## 5. Privacy and Security Stance
 - **Zero Telemetry**: No tracking pixels, analytics SDKs, crash beacons, or remote logging.
-- **Network Boundaries**: Network access occurs exclusively for explicit user requests (model downloads from verified catalog URLs, and app updater checks).
+- **Network Boundaries**: Network access occurs exclusively for explicit user requests: model downloads from verified catalog URLs, app updater checks, and — when cloud mode is explicitly switched on — chat requests to the provider the user configured.
 - **Filesystem Isolation**: File access by tools is jailed to approved user directories. Path traversal (`../`), symlink escapes, and system roots are hard-rejected.
-- **Integrity**: Models are verified via cryptographic SHA-256 checksums before entering active status.
+- **Integrity**: Models are verified via cryptographic SHA-256 checksums before entering active status. Provider base URLs must be HTTPS unless they point at the user's own machine.

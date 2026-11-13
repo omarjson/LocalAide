@@ -20,6 +20,7 @@ pub mod watcher;
 use app::AppState;
 use indexer::Indexer;
 use model_manager::ModelManager;
+use services::inference::InferenceEngine;
 
 pub use app::paths::{config_path, index_dir, memory_dir, models_dir};
 
@@ -89,10 +90,26 @@ pub fn run() {
         tools.clone(),
     );
 
-    // Auto-reload previously active model from config if installed on disk
+    // Restore the engine mode and previously active model from config. Cloud
+    // mode (opt-in) wins if it was left enabled with a valid provider; the
+    // local sidecar auto-loads its model otherwise.
     if let Ok(store) = app_state.config_store.lock() {
         if let Ok(cfg) = store.load() {
-            if let Some(active_id) = cfg.selected_models.last() {
+            if cfg.cloud_llm_enabled {
+                if let Some(id) = cfg.active_cloud_provider.as_deref() {
+                    if let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id) {
+                        app_state.inference_engine.set_cloud_target(
+                            crate::services::inference::remote::RemoteTarget {
+                                label: p.label.clone(),
+                                base_url: p.base_url.clone(),
+                                model: p.model.clone(),
+                                api_key: p.api_key.clone(),
+                            },
+                        );
+                        log::info!("Cloud mode restored: {label}", label = p.label);
+                    }
+                }
+            } else if let Some(active_id) = cfg.selected_models.last() {
                 let models = app_state.model_manager.list_models();
                 if let Some(entry) = models
                     .into_iter()
@@ -154,6 +171,10 @@ pub fn run() {
             commands::config_save,
             commands::config_compute_ram,
             commands::embedding_status,
+            commands::cloud_config_get,
+            commands::cloud_provider_save,
+            commands::cloud_provider_delete,
+            commands::cloud_mode_set,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

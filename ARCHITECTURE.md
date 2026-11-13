@@ -44,7 +44,9 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 - Holds `JobRegistry` for concurrent lifecycle tracking, cancel tokens, and progress monitoring.
 
 ### 2. Inference & Model Lifecycle (`src-tauri/src/services/inference/`)
+- `RouterEngine`: one `InferenceEngine` for the rest of the app. It forwards to the local sidecar by default and to the remote engine only when the user switches on cloud mode in Settings. Loading a model always returns to local.
 - `SidecarEngine`: runs `llama-server` (llama.cpp v0.9.0) as a child process on 127.0.0.1 with a random API key. Chat streams from `/v1/chat/completions`. See ADR-0007.
+- `RemoteEngine` (opt-in): streams from the user-configured OpenAI-compatible provider over HTTPS — or from a loopback proxy over HTTP. Enabled only from Settings with a user-supplied key; the chat header shows a cloud badge while it is active.
 - Cancellation flag checked per streamed token; generation stops at the next token after Stop or `Esc`.
 - `ContextBudget`: strict token budgeting preserving system persona while truncating oldest turns.
 
@@ -75,5 +77,5 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 | **Prompt Injection Exfiltration** | Filesystem tools constrained to `WorkspaceJail`; absolute paths and external symlinks blocked with `SANDBOX_DENIED`. |
 | **Model Weight Tampering** | Catalog integrity digest (`CatalogManifest.signature`) over ids, sizes, and hashes; streaming SHA-256 integrity verification before atomic rename. |
 | **Cross-Site Scripting (XSS)** | Hardened CSP (`default-src 'self' ...`); no remote CDN scripts; IPC channel isolation. |
-| **Data Exfiltration / Snooping** | Zero telemetry stance; zero network requests in chat/search paths; 100% offline local inference. |
+| **Data Exfiltration / Snooping** | Zero telemetry stance; with cloud mode off, zero network requests in chat/search paths and fully local inference. Cloud mode is opt-in, sends chat only to the user-configured provider, and shows a badge while active. |
 | **Memory Exhaustion (OOM)** | Streaming hashing via 64 KB buffers (< 100 KB RAM); strict turn budgeting in context engine. |
