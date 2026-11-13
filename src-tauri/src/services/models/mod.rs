@@ -85,7 +85,9 @@ impl ModelService {
             }
         };
         if data.len() > catalog::MAX_MANIFEST_BYTES {
-            return Err(AppError::invalid_input("Catalog cache exceeds the size limit"));
+            return Err(AppError::invalid_input(
+                "Catalog cache exceeds the size limit",
+            ));
         }
         let cached: CachedCatalog = serde_json::from_str(&data).map_err(|e| {
             AppError::invalid_input(format!("Catalog cache is not a valid manifest: {e}"))
@@ -128,7 +130,10 @@ impl ModelService {
         let current = self.manifest();
         fetched.validate(current.version)?;
 
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         // Persist first, then swap: a failed cache write leaves the active
         // catalog unchanged instead of promising a refresh that would not
         // survive a restart.
@@ -143,7 +148,9 @@ impl ModelService {
         if let Err(e) = std::fs::remove_file(&self.cache_path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            return Err(AppError::storage(format!("Could not delete catalog cache: {e}")));
+            return Err(AppError::storage(format!(
+                "Could not delete catalog cache: {e}"
+            )));
         }
         let builtin = CatalogManifest::default_manifest();
         builtin.verify()?;
@@ -169,9 +176,12 @@ impl ModelService {
         let tmp = self.cache_path.with_extension("tmp");
         std::fs::write(&tmp, data)
             .map_err(|e| AppError::storage(format!("Could not write catalog cache: {e}")))?;
-        std::fs::rename(&tmp, &self.cache_path).map_err(|e| {
-            AppError::storage(format!("Could not save catalog cache: {e}"))
-        })?;
+        std::fs::rename(&tmp, &self.cache_path)
+            .map_err(|e| {
+                AppError::storage(format!(
+                    "Could not save catalog cache: {e}"
+                ))
+            })?;
         Ok(())
     }
 
