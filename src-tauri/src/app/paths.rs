@@ -26,6 +26,11 @@ pub fn conversations_dir() -> PathBuf {
     app_dir().join("conversations")
 }
 
+/// User-saved prompt skills, one markdown file each.
+pub fn skills_dir() -> PathBuf {
+    app_dir().join("skills")
+}
+
 pub fn config_path() -> PathBuf {
     app_dir().join("config.json")
 }
