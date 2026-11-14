@@ -425,8 +425,14 @@ fn collect_dir(dir: &Path, prefix: &str) -> Result<Vec<BackupFile>, AppError> {
 mod tests {
     use super::*;
 
-    fn temp_app_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("la-backup-test-{}", std::process::id()));
+    fn temp_app_dir(tag: &str) -> PathBuf {
+        // Tagged per test: cargo test runs tests in parallel threads, and a
+        // shared dir would let one test's remove_dir_all delete another's files.
+        let dir = std::env::temp_dir().join(format!(
+            "la-backup-test-{}-{}",
+            std::process::id(),
+            tag
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("memory")).unwrap();
         std::fs::create_dir_all(dir.join("conversations")).unwrap();
@@ -435,7 +441,7 @@ mod tests {
 
     #[test]
     fn archive_roundtrip() {
-        let dir = temp_app_dir();
+        let dir = temp_app_dir("roundtrip");
         std::fs::write(dir.join("memory").join("note.md"), "# hi\n\ncontent").unwrap();
         std::fs::write(dir.join("conversations").join("t.json"), "{\"id\":1}").unwrap();
         let engine = BackupEngine::new(dir.clone());
@@ -458,7 +464,7 @@ mod tests {
 
     #[test]
     fn api_keys_stripped_unless_included() {
-        let dir = temp_app_dir();
+        let dir = temp_app_dir("api-keys");
         let engine = BackupEngine::new(dir.clone());
         let config = serde_json::json!({
             "cloud_providers": [{"id": "p1", "api_key": "sk-secret"}]
@@ -477,11 +483,13 @@ mod tests {
 
     #[test]
     fn write_list_and_restore() {
-        let dir = temp_app_dir();
+        let dir = temp_app_dir("restore");
         std::fs::write(dir.join("memory").join("n.md"), "note body").unwrap();
         let engine = BackupEngine::new(dir.clone());
         let payload = engine.build_payload(serde_json::json!({}), false).unwrap();
         let target = dir.parent().unwrap().join("la-backup-target");
+        // Clear leftovers so the single-archive assertion holds on reruns.
+        let _ = std::fs::remove_dir_all(&target);
         let path = engine
             .write_backup(&target, &payload, "long-enough-pass")
             .unwrap();
