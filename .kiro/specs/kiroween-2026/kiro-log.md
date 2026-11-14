@@ -55,6 +55,7 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 
 - **Kiro artifact:** the open-gap list this log tracks; ADR-0008 records the trust model.
 - **What changed:** the Models screen can now refresh the catalog without an app update. The manifest lives at a pinned URL in this repository (`catalog/models.json`, generated from `default_manifest()` and kept identical by a CI parity test). A refresh is explicit, streamed under a 512 KB cap, verified against the integrity digest, structurally validated (known kinds, unique ids, hex SHA-256 pins, HTTPS-only URLs, bounded counts), and rejected if older than the active version. Accepted manifests persist to `catalog-cache.json` (atomic temp+rename) and load at startup; Reset restores the built-in list. New commands: `model_catalog_status`, `model_catalog_refresh`, `model_catalog_reset`. The Models screen shows catalog version/source with Refresh and Reset controls, and model cards now carry their real kind (chat/code/embedding/reranker) instead of a hardcoded "LLM" label.
+- **CI:** Quality Gate GREEN on `2684235` — first CI run of `cargo test` with the parity test proving `catalog/models.json` ≡ `default_manifest()`. Getting there surfaced two compile-time failures (a `Result<CatalogManifest>` vs `Arc<CatalogManifest>` signature mismatch and a contract-test fixture missing `ModelInfo.kind`); a diagnostics branch plus check-run annotations made CI compile errors readable without admin log access, then the scaffolding was removed once green.
 
 ## Still open
 
