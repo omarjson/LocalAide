@@ -122,7 +122,8 @@ pub fn cloud_provider_presets() -> Vec<CloudProviderPreset> {
 fn is_loopback_http(base_url: &str) -> bool {
     url::Url::parse(base_url).is_ok_and(|u| {
         u.scheme() == "http"
-            && u.host_str().is_some_and(|h| h == "localhost" || h.starts_with("127."))
+            && u.host_str()
+                .is_some_and(|h| h == "localhost" || h.starts_with("127."))
     })
 }
 

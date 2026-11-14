@@ -5,7 +5,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::config::AppConfig;
-use crate::services::websearch::{WebHit, WebPage, WebSearchKeys, PROVIDER_TABLE};
+use crate::services::websearch::{PROVIDER_TABLE, WebHit, WebPage, WebSearchKeys};
 use serde::Serialize;
 use tauri::State;
 
@@ -108,9 +108,7 @@ pub fn web_set_key(
     provider: String,
     key: Option<String>,
 ) -> Result<(), AppError> {
-    let value = key
-        .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty());
+    let value = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
     if let Some(k) = &value
         && k.len() > 500
     {

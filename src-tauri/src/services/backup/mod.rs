@@ -95,10 +95,7 @@ impl BackupEngine {
             && let Some(web) = config.get_mut("web_search").and_then(|v| v.as_object_mut())
         {
             for slot in ["exa_api_key", "firecrawl_api_key"] {
-                web.insert(
-                    slot.to_string(),
-                    serde_json::Value::String(String::new()),
-                );
+                web.insert(slot.to_string(), serde_json::Value::String(String::new()));
             }
         }
         // Stamp the backup time inside the config so a restore can refuse

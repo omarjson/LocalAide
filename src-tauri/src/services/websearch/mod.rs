@@ -31,11 +31,36 @@ pub struct WebProvider {
 }
 
 pub const PROVIDER_TABLE: &[WebProvider] = &[
-    WebProvider { id: "duckduckgo", label: "DuckDuckGo", needs_key: false, supports: "search" },
-    WebProvider { id: "wikipedia", label: "Wikipedia", needs_key: false, supports: "search" },
-    WebProvider { id: "jina", label: "Jina Reader", needs_key: false, supports: "crawl" },
-    WebProvider { id: "exa", label: "Exa", needs_key: true, supports: "search" },
-    WebProvider { id: "firecrawl", label: "Firecrawl", needs_key: true, supports: "search+crawl" },
+    WebProvider {
+        id: "duckduckgo",
+        label: "DuckDuckGo",
+        needs_key: false,
+        supports: "search",
+    },
+    WebProvider {
+        id: "wikipedia",
+        label: "Wikipedia",
+        needs_key: false,
+        supports: "search",
+    },
+    WebProvider {
+        id: "jina",
+        label: "Jina Reader",
+        needs_key: false,
+        supports: "crawl",
+    },
+    WebProvider {
+        id: "exa",
+        label: "Exa",
+        needs_key: true,
+        supports: "search",
+    },
+    WebProvider {
+        id: "firecrawl",
+        label: "Firecrawl",
+        needs_key: true,
+        supports: "search+crawl",
+    },
 ];
 
 /// Provider ids accepted by the engine, in one place for validation.
@@ -152,10 +177,7 @@ impl WebSearchEngine {
         let limit = limit.clamp(1, 20) as usize;
         match provider {
             "duckduckgo" => {
-                let body = self.post_form(
-                    &format!("{}/lite/", self.bases.ddg),
-                    &[("q", query)],
-                )?;
+                let body = self.post_form(&format!("{}/lite/", self.bases.ddg), &[("q", query)])?;
                 parse_ddg_html(&body, limit)
             }
             "wikipedia" => {
@@ -343,7 +365,8 @@ fn read_capped(mut response: reqwest::blocking::Response) -> Result<String, AppE
             ));
         }
     }
-    String::from_utf8(body).map_err(|_| AppError::invalid_input("The web response is not valid UTF-8"))
+    String::from_utf8(body)
+        .map_err(|_| AppError::invalid_input("The web response is not valid UTF-8"))
 }
 
 /// Very small percent-encoding for query strings — enough for search terms.
@@ -494,7 +517,9 @@ pub fn parse_ddg_html(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError>
 
         // Snippet: the next snippet element, if it precedes the next result.
         let snippet_window = &after_open[close + 4..];
-        let next_result = snippet_window.find(title_marker).unwrap_or(snippet_window.len());
+        let next_result = snippet_window
+            .find(title_marker)
+            .unwrap_or(snippet_window.len());
         let snippet = match snippet_window.find(snippet_marker) {
             Some(pos) if pos < next_result => {
                 let after = &snippet_window[pos..];
@@ -507,7 +532,9 @@ pub fn parse_ddg_html(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError>
                         .filter_map(|c| tail.find(c))
                         .min()
                         .unwrap_or(tail.len());
-                    decode_entities(&strip_tags(&tail[..end])).trim().to_string()
+                    decode_entities(&strip_tags(&tail[..end]))
+                        .trim()
+                        .to_string()
                 } else {
                     String::new()
                 }
@@ -549,7 +576,11 @@ pub fn parse_jina_response(
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
-            .or_else(|| header_title.filter(|s| !s.is_empty()).map(|s| s.to_string()));
+            .or_else(|| {
+                header_title
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            });
         return Ok(WebPage {
             title,
             url: url.to_string(),
@@ -557,7 +588,9 @@ pub fn parse_jina_response(
         });
     }
     Ok(WebPage {
-        title: header_title.filter(|s| !s.is_empty()).map(|s| s.to_string()),
+        title: header_title
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
         url: url.to_string(),
         content: body.to_string(),
     })
@@ -575,15 +608,13 @@ struct WikiEntry {
 
 /// Parse the Wikipedia REST search response into hits pointing at the
 /// article pages. Pure function; `base` is injected for tests.
-pub fn parse_wikipedia_json(
-    body: &str,
-    limit: usize,
-    base: &str,
-) -> Result<Vec<WebHit>, AppError> {
+pub fn parse_wikipedia_json(body: &str, limit: usize, base: &str) -> Result<Vec<WebHit>, AppError> {
     let root: serde_json::Value = serde_json::from_str(body)
         .map_err(|e| AppError::invalid_input(format!("Wikipedia response is invalid: {e}")))?;
     let entries: Vec<WikiEntry> = serde_json::from_value(
-        root.get("pages").cloned().unwrap_or(serde_json::Value::Null),
+        root.get("pages")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
     )
     .map_err(|e| AppError::invalid_input(format!("Wikipedia response is invalid: {e}")))?;
     Ok(entries
@@ -618,7 +649,9 @@ pub fn parse_exa_json(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError>
     let root: serde_json::Value = serde_json::from_str(body)
         .map_err(|e| AppError::invalid_input(format!("Exa response is invalid: {e}")))?;
     let entries: Vec<ExaEntry> = serde_json::from_value(
-        root.get("results").cloned().unwrap_or(serde_json::Value::Null),
+        root.get("results")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
     )
     .map_err(|e| AppError::invalid_input(format!("Exa response is invalid: {e}")))?;
     Ok(entries
@@ -627,7 +660,11 @@ pub fn parse_exa_json(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError>
         .map(|e| {
             let snippet: String = e.text.chars().take(400).collect();
             WebHit {
-                title: if e.title.is_empty() { e.url.clone() } else { e.title },
+                title: if e.title.is_empty() {
+                    e.url.clone()
+                } else {
+                    e.title
+                },
                 url: e.url,
                 snippet,
             }
@@ -645,10 +682,7 @@ struct FcWebEntry {
 }
 
 /// Parse a Firecrawl `/v1/search` response. Pure function.
-pub fn parse_firecrawl_search_json(
-    body: &str,
-    limit: usize,
-) -> Result<Vec<WebHit>, AppError> {
+pub fn parse_firecrawl_search_json(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError> {
     let root: serde_json::Value = serde_json::from_str(body)
         .map_err(|e| AppError::invalid_input(format!("Firecrawl response is invalid: {e}")))?;
     let entries: Vec<FcWebEntry> = serde_json::from_value(
@@ -661,7 +695,11 @@ pub fn parse_firecrawl_search_json(
         .into_iter()
         .take(limit)
         .map(|e| WebHit {
-            title: if e.title.is_empty() { e.url.clone() } else { e.title },
+            title: if e.title.is_empty() {
+                e.url.clone()
+            } else {
+                e.title
+            },
             url: e.url,
             snippet: e.description,
         })
@@ -675,9 +713,7 @@ pub fn parse_firecrawl_scrape_json(body: &str, url: &str) -> Result<WebPage, App
     let markdown = root
         .pointer("/data/markdown")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            AppError::invalid_input("Firecrawl returned no page content for that URL")
-        })?
+        .ok_or_else(|| AppError::invalid_input("Firecrawl returned no page content for that URL"))?
         .to_string();
     let title = root
         .pointer("/data/metadata/title")
@@ -830,9 +866,7 @@ mod tests {
     fn unknown_providers_are_rejected() {
         let engine = WebSearchEngine::new();
         let keys = WebSearchKeys::default();
-        let err = engine
-            .search("not-a-provider", "q", 5, &keys)
-            .unwrap_err();
+        let err = engine.search("not-a-provider", "q", 5, &keys).unwrap_err();
         assert_eq!(err.code, "WEB_UNKNOWN_PROVIDER");
         let err = engine
             .read_page("https://example.com", "duckduckgo", &keys)
@@ -881,7 +915,12 @@ mod tests {
 
     #[test]
     fn ddg_search_end_to_end_over_http() {
-        let bases = spawn_mock("200 OK", "text/html; charset=UTF-8", "", DDG_FIXTURE.as_bytes());
+        let bases = spawn_mock(
+            "200 OK",
+            "text/html; charset=UTF-8",
+            "",
+            DDG_FIXTURE.as_bytes(),
+        );
         let engine = WebSearchEngine::with_bases(bases);
         let hits = engine
             .search("duckduckgo", "rust", 10, &WebSearchKeys::default())
@@ -906,7 +945,8 @@ mod tests {
 
     #[test]
     fn firecrawl_scrape_end_to_end() {
-        let body = br##"{"success":true,"data":{"markdown":"# Page","metadata":{"title":"Page"}}}"##;
+        let body =
+            br##"{"success":true,"data":{"markdown":"# Page","metadata":{"title":"Page"}}}"##;
         let bases = spawn_mock("200 OK", "application/json", "", body);
         let engine = WebSearchEngine::with_bases(bases);
         let keys = WebSearchKeys {
