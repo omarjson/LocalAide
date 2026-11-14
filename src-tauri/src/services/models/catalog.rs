@@ -496,7 +496,8 @@ impl CatalogManifest {
                         857_078_496, "mistral-small-4-119b.mmproj.gguf",
                     ),
                 ],
-            ).with_dest("Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf"),
+            ).with_dest("Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf")
+            .with_context(262_144),
             entry(
                 "gemma4-26b-a4b-q4", "Gemma 4 26B-A4B (MoE)", "26B total, 4B active", "chat", "Apache-2.0",
                 16_947_541_728, 20.0,
