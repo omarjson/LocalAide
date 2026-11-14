@@ -2,6 +2,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
   AppConfigDto,
   AppError,
+  BackfillResponse,
   CatalogStatus,
   ChatMessage,
   ChatStreamEvent,
@@ -11,6 +12,7 @@ import type {
   CloudModeRequest,
   CloudProviderSaveRequest,
   DownloadProgressEvent,
+  EmbeddingStatusResponse,
   ForgetAllResponse,
   IndexFolderResponse,
   IndexerStatsResponse,
@@ -270,6 +272,24 @@ export class ApiClient {
 
   async setContext(tokens: number): Promise<number> {
     return invoke<number>("settings_set_context", { tokens: Math.round(tokens) });
+  }
+
+  // Local embedding engine (semantic / hybrid search)
+
+  async getEmbeddingStatus(): Promise<EmbeddingStatusResponse> {
+    return invoke<EmbeddingStatusResponse>("embedding_status");
+  }
+
+  async startEmbeddingEngine(modelId?: string): Promise<EmbeddingStatusResponse> {
+    return invoke<EmbeddingStatusResponse>("embedding_start", { modelId });
+  }
+
+  async stopEmbeddingEngine(): Promise<void> {
+    return invoke<void>("embedding_stop");
+  }
+
+  async backfillEmbeddings(): Promise<BackfillResponse> {
+    return invoke<BackfillResponse>("embedding_backfill");
   }
 
   // Online providers (opt-in cloud mode)

@@ -127,10 +127,13 @@ pub async fn chat_stream(
 
     validate_images(&req.images)?;
 
-    // RAG Recall: Retrieve context from MemoryService / LibraryService
+    // RAG Recall: Retrieve context from MemoryService / LibraryService. The
+    // query embeds against the local engine when it is running, so hybrid
+    // ranking uses vectors; without it recall is keyword-ranked.
+    let query_vector = state.embedding_engine.embed_query(&req.message).ok();
     let rag_res = state
         .memory
-        .recall(&req.message, Some(512))
+        .recall(&req.message, query_vector.as_deref(), Some(512))
         .unwrap_or_else(|_| crate::services::memory::rag::RagRecallResult {
             citations: Vec::new(),
             context_prompt: String::new(),

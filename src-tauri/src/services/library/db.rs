@@ -495,6 +495,75 @@ impl LibraryDb {
         Ok(records)
     }
 
+    /// Chunks that have no stored vector yet, oldest documents first, so a
+    /// backfill makes steady progress and can resume after a restart.
+    pub fn chunks_missing_embeddings(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT c.id, c.text
+                 FROM chunks c
+                 WHERE c.embedding IS NULL
+                 ORDER BY c.document_id, c.chunk_index
+                 LIMIT ?1",
+            )
+            .map_err(|e| {
+                AppError::storage(format!("Failed to prepare missing-embeddings query: {e}"))
+            })?;
+
+        let rows = stmt
+            .query_map([limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| {
+                AppError::storage(format!("Failed to query missing embeddings: {e}"))
+            })?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| AppError::storage(format!("Missing row read error: {e}")))?);
+        }
+        Ok(out)
+    }
+
+    /// Store a vector for one chunk (a backfill step).
+    pub fn update_chunk_embedding(&self, chunk_id: &str, vector: &[f32]) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let blob = Self::embedding_to_blob(vector);
+        conn.execute(
+            "UPDATE chunks SET embedding = ?1 WHERE id = ?2",
+            rusqlite::params![blob, chunk_id],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to store embedding: {e}")))?;
+        Ok(())
+    }
+
+    /// (total chunks, chunks with stored vectors).
+    pub fn embedding_coverage(&self) -> Result<(usize, usize), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))
+            .map_err(|e| AppError::storage(format!("Failed to count chunks: {e}")))?;
+        let embedded: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| AppError::storage(format!("Failed to count embeddings: {e}")))?;
+        Ok((total as usize, embedded as usize))
+    }
+
     fn sanitize_fts_query(query: &str) -> String {
         let clean: String = query
             .chars()

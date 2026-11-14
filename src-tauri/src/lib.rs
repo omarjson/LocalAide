@@ -59,9 +59,18 @@ pub fn run() {
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
+    // Local embedding engine for semantic and hybrid search. Starts only on
+    // explicit user action (RAM budget respect); the library uses it for
+    // ingest vectorization and query embedding when it is running.
+    let embedding_engine = Arc::new(crate::services::library::embedding::EmbeddingEngine::new(
+        model_service.clone(),
+    ));
+    library.set_embedding_engine(embedding_engine.clone());
+
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),
+        embedding_engine.clone(),
         library.clone(),
         memory.clone(),
         tools.clone(),
@@ -174,6 +183,9 @@ pub fn run() {
             commands::settings_context,
             commands::settings_set_context,
             commands::embedding_status,
+            commands::embedding_start,
+            commands::embedding_stop,
+            commands::embedding_backfill,
             commands::cloud_config_get,
             commands::cloud_provider_save,
             commands::cloud_provider_delete,

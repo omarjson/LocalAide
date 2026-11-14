@@ -145,7 +145,7 @@ fn test_rag_relevance_gate_and_citation_generation() {
 
     // Recall matching query
     let recall_res = memory
-        .recall("references outlive Rust lifetimes", Some(512))
+        .recall("references outlive Rust lifetimes", None, Some(512))
         .expect("Recall");
     assert!(
         !recall_res.citations.is_empty(),

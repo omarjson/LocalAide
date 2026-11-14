@@ -25,6 +25,7 @@ impl RagEngine {
     pub fn recall(
         &self,
         query: &str,
+        query_vector: Option<&[f32]>,
         max_tokens: Option<usize>,
     ) -> Result<RagRecallResult, AppError> {
         let budget = max_tokens.unwrap_or(DEFAULT_RAG_BUDGET);
@@ -36,8 +37,9 @@ impl RagEngine {
             });
         }
 
-        // Query library hybrid search
-        let raw_hits = self.library.search(query, SearchMode::Hybrid, 10)?;
+        // Query library hybrid search; the vector ranks when the embedding
+        // engine provided one, otherwise this is BM25 keyword ranking.
+        let raw_hits = self.library.search(query, query_vector, SearchMode::Hybrid, 10)?;
 
         let mut citations = Vec::new();
         let mut context_chunks = Vec::new();

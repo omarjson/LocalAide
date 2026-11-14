@@ -1,6 +1,8 @@
 use crate::app::error::AppError;
+use crate::app::state::AppState;
 use crate::domain::system::SystemProbeResult;
 use sysinfo::System;
+use tauri::State;
 
 const OS_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GB
 const BUDGET_SHARE: f64 = 0.7; // 70% of usable RAM
@@ -40,19 +42,29 @@ pub fn system_probe() -> Result<SystemProbeResult, AppError> {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EmbeddingStatusResponse {
+    /// "llama-server" when the embedding sidecar is up, "not-running" otherwise.
     pub engine: String,
-    pub dimension: usize,
+    pub model_id: Option<String>,
+    pub dimension: Option<usize>,
     pub ready: bool,
+    pub total_chunks: usize,
+    pub embedded_chunks: usize,
 }
 
 #[tauri::command]
-pub fn embedding_status() -> Result<EmbeddingStatusResponse, AppError> {
-    // Truthful status: the embedding engine is compiled in at 768 dimensions,
-    // but semantic search is not wired into the retrieval path yet — search
-    // runs BM25 keyword only (docs/evidence/audit-2026-11-13.md item 4).
+pub fn embedding_status(state: State<'_, AppState>) -> Result<EmbeddingStatusResponse, AppError> {
+    let engine_state = state.embedding_engine.state();
+    let (total_chunks, embedded_chunks) = state.library.embedding_coverage()?;
     Ok(EmbeddingStatusResponse {
-        engine: "not-wired".to_string(),
-        dimension: 768,
-        ready: false,
+        engine: if engine_state.ready {
+            "llama-server".to_string()
+        } else {
+            "not-running".to_string()
+        },
+        model_id: engine_state.model_id,
+        dimension: engine_state.dimension,
+        ready: engine_state.ready,
+        total_chunks,
+        embedded_chunks,
     })
 }

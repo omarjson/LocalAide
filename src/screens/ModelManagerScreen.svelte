@@ -28,6 +28,7 @@
   let presetInstalling = $state(false);
   let verifying = $state<string | null>(null);
   let verifyStatus = $state<Record<string, boolean>>({});
+  let searchModelBusy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   // From the system probe: models above this estimated RAM get a warning.
   let budgetGb = $state(0);
@@ -49,6 +50,21 @@
       actionError = errorMessage(e);
     } finally {
       verifying = null;
+    }
+  };
+
+  // Start the local embedding engine on this model. The Search screen shows
+  // the resulting status; semantic and hybrid ranking turn on with it.
+  const useForSearch = async (id: string) => {
+    searchModelBusy = id;
+    actionError = null;
+    try {
+      await api.startEmbeddingEngine(id);
+      actionError = null;
+    } catch (e) {
+      actionError = errorMessage(e);
+    } finally {
+      searchModelBusy = null;
     }
   };
 
@@ -413,6 +429,16 @@
                   title="Stop the local engine and free the model's RAM; the model stays installed"
                 >
                   Unload
+                </button>
+              {/if}
+              {#if m.kind === "embedding"}
+                <button
+                  onclick={() => useForSearch(m.id)}
+                  disabled={searchModelBusy !== null}
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg border border-violet-500/40 hover:bg-violet-500/10 text-violet-300 transition-colors disabled:opacity-40"
+                  title="Start the embedding engine on this model to power semantic and hybrid search"
+                >
+                  {searchModelBusy === m.id ? "Starting…" : "Use for search"}
                 </button>
               {/if}
               <button

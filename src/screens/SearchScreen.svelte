@@ -1,13 +1,18 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
-  import { api } from "../lib/api/client";
-  import type { IndexerStatsResponse, SearchResultDoc } from "../lib/api/bindings";
+  import { api, errorMessage as errMsg } from "../lib/api/client";
+  import type {
+    EmbeddingStatusResponse,
+    IndexerStatsResponse,
+    SearchResultDoc,
+  } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   let query = $state("");
-  // Only keyword (BM25) search runs in v1.0. Semantic and hybrid modes need embeddings.
-  const mode = "keyword" as const;
+  // Keyword is BM25-only. Semantic and hybrid rank with vectors from the
+  // local embedding engine and quietly fall back to keyword when it is off.
+  let mode = $state<"keyword" | "semantic" | "hybrid">("keyword");
   let results = $state<SearchResultDoc[]>([]);
   let stats = $state<IndexerStatsResponse | null>(null);
   let folder = $state("");
@@ -18,12 +23,53 @@
   let errorMessage = $state<string | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let singleFile = $state("");
+  let embedding = $state<EmbeddingStatusResponse | null>(null);
+  let embedBusy = $state(false);
 
   onMount(async () => {
     await refreshStats();
+    await refreshEmbedding();
     await loadInitialLibrary();
     searchInputEl?.focus();
   });
+
+  const refreshEmbedding = async () => {
+    try {
+      embedding = await api.getEmbeddingStatus();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleEngine = async () => {
+    embedBusy = true;
+    errorMessage = null;
+    try {
+      if (embedding?.ready) {
+        await api.stopEmbeddingEngine();
+      } else {
+        await api.startEmbeddingEngine();
+      }
+      await refreshEmbedding();
+    } catch (e) {
+      errorMessage = errMsg(e);
+    } finally {
+      embedBusy = false;
+    }
+  };
+
+  const backfill = async () => {
+    embedBusy = true;
+    errorMessage = null;
+    try {
+      await api.backfillEmbeddings();
+      await refreshEmbedding();
+    } catch (e) {
+      errorMessage = errMsg(e);
+    } finally {
+      embedBusy = false;
+    }
+  };
 
   const loadInitialLibrary = async () => {
     try {
@@ -167,6 +213,58 @@
   {#if errorMessage}
     <ErrorBanner message={errorMessage} onDismiss={() => errorMessage = null} />
   {/if}
+
+  <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-xs font-semibold text-ink-300 mb-1.5">Search mode</div>
+        <div class="flex items-center gap-2">
+          {#each [["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"]] as [value, label]}
+            <button
+              type="button"
+              onclick={() => { mode = value; if (query.length > 2) search(); }}
+              class="text-xs font-mono px-2.5 py-1 rounded-full border transition-colors {mode === value
+                ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
+                : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-ink-300'}"
+            >
+              {label}
+            </button>
+          {/each}
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-xs font-mono">
+        {#if embedding?.ready}
+          <span class="text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-2.5 py-1">
+            Embeddings on · {embedding.model_id}{#if embedding.dimension} · {embedding.dimension}d{/if}
+          </span>
+          {#if embedding && embedding.embedded_chunks < embedding.total_chunks}
+            <button onclick={backfill} disabled={embedBusy} class="text-ink-300 border border-ink-700 rounded-full px-2.5 py-1 hover:border-ink-600 disabled:opacity-40">
+              {embedBusy ? "Backfilling…" : `Backfill ${embedding.total_chunks - embedding.embedded_chunks} chunks`}
+            </button>
+          {/if}
+          <button onclick={toggleEngine} disabled={embedBusy} class="text-rose-300 border border-rose-500/30 rounded-full px-2.5 py-1 hover:border-rose-500/60 disabled:opacity-40">
+            Stop
+          </button>
+        {:else}
+          <span class="text-ink-400 border border-ink-800 rounded-full px-2.5 py-1">
+            {#if embedding && embedding.total_chunks > 0}
+              Keyword only · {embedding.embedded_chunks}/{embedding.total_chunks} chunks vectorized
+            {:else}
+              Keyword only
+            {/if}
+          </span>
+          <button onclick={toggleEngine} disabled={embedBusy} class="text-ember-300 border border-ember-500/40 rounded-full px-2.5 py-1 hover:border-ember-500/70 disabled:opacity-40">
+            {embedBusy ? "Starting…" : "Start embeddings"}
+          </button>
+        {/if}
+      </div>
+    </div>
+    {#if mode !== "keyword" && !embedding?.ready}
+      <p class="text-[11px] text-amber-300/90 font-mono">
+        {mode} mode needs the embedding engine — results fall back to keyword ranking until it is running.
+      </p>
+    {/if}
+  </div>
 
   <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
     <div class="flex items-center justify-between">

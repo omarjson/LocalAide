@@ -228,7 +228,7 @@ fn test_folder_recursive_crawler_and_ignore_patterns() {
 
     // Search index
     let search_res = service
-        .search("databases", SearchMode::Keyword, 10)
+        .search("databases", None, SearchMode::Keyword, 10)
         .expect("search");
     assert_eq!(search_res.len(), 1);
     assert_eq!(search_res[0].title, "doc1.txt");

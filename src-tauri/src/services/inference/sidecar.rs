@@ -296,7 +296,7 @@ impl InferenceEngine for SidecarEngine {
 }
 
 /// Find the `llama-server` binary: the env override first, then next to the app executable.
-fn locate_binary() -> Result<PathBuf, AppError> {
+pub(crate) fn locate_binary() -> Result<PathBuf, AppError> {
     if let Ok(p) = std::env::var(ENV_BIN) {
         let path = PathBuf::from(p);
         if path.is_file() {
@@ -319,7 +319,7 @@ fn locate_binary() -> Result<PathBuf, AppError> {
 }
 
 /// Pick a free loopback port. There is a small race before the server binds it.
-fn free_port() -> Result<u16, AppError> {
+pub(crate) fn free_port() -> Result<u16, AppError> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .map_err(|e| AppError::internal(format!("cannot pick a port: {e}")))?;
     let port = listener
@@ -332,7 +332,7 @@ fn free_port() -> Result<u16, AppError> {
 
 /// A 256-bit random key, hex encoded, drawn from the OS random source
 /// (BCryptGenRandom on Windows, getrandom elsewhere).
-fn new_api_key() -> String {
+pub(crate) fn new_api_key() -> String {
     let mut bytes = [0u8; 32];
     if getrandom::fill(&mut bytes).is_err() {
         // Practically unreachable on the desktop targets. Fall back to
@@ -356,7 +356,7 @@ fn mmproj_for(model_path: &Path) -> Option<PathBuf> {
 }
 
 /// Open the server log in the app folder for stdout and stderr.
-fn open_log() -> Option<(File, File)> {
+pub(crate) fn open_log() -> Option<(File, File)> {
     let dir = crate::app::paths::app_dir().join("logs");
     std::fs::create_dir_all(&dir).ok()?;
     let file = std::fs::OpenOptions::new()

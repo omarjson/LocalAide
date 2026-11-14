@@ -66,12 +66,17 @@ impl MemoryService {
     pub fn recall(
         &self,
         query: &str,
+        query_vector: Option<&[f32]>,
         max_tokens: Option<usize>,
     ) -> Result<RagRecallResult, AppError> {
-        self.rag.recall(query, max_tokens)
+        self.rag.recall(query, query_vector, max_tokens)
     }
 
-    pub fn search(&self, query: &str) -> Result<Vec<SearchResultDoc>, AppError> {
-        self.library.search(query, SearchMode::Hybrid, 20)
+    pub fn search(
+        &self,
+        query: &str,
+        query_vector: Option<&[f32]>,
+    ) -> Result<Vec<SearchResultDoc>, AppError> {
+        self.library.search(query, query_vector, SearchMode::Hybrid, 20)
     }
 }

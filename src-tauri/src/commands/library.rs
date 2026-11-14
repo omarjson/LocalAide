@@ -33,8 +33,52 @@ pub fn search_index(
         Some("keyword") => SearchMode::Keyword,
         _ => SearchMode::Hybrid,
     };
+    // Semantic and hybrid embed the query against the local engine when it
+    // is running; with no engine the searcher degrades to keyword ranking.
+    let query_vector = if search_mode == SearchMode::Keyword {
+        None
+    } else {
+        state.embedding_engine.embed_query(&query).ok()
+    };
     let limit_num = limit.unwrap_or(20);
-    state.library.search(&query, search_mode, limit_num)
+    state
+        .library
+        .search(&query, query_vector.as_deref(), search_mode, limit_num)
+}
+
+/// Start the embedding engine on an installed embedding model. `model_id`
+/// picks a specific one; None picks the smallest installed.
+#[tauri::command]
+pub fn embedding_start(
+    state: State<'_, AppState>,
+    model_id: Option<String>,
+) -> Result<crate::services::library::embedding::EmbeddingState, AppError> {
+    state.embedding_engine.start(model_id.as_deref())
+}
+
+#[tauri::command]
+pub fn embedding_stop(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.embedding_engine.stop();
+    Ok(())
+}
+
+/// Fill in stored vectors for chunks indexed while the engine was off.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BackfillResponse {
+    pub updated: usize,
+    pub total_chunks: usize,
+    pub embedded_chunks: usize,
+}
+
+#[tauri::command]
+pub fn embedding_backfill(state: State<'_, AppState>) -> Result<BackfillResponse, AppError> {
+    let updated = state.library.backfill_embeddings(64)?;
+    let (total, embedded) = state.library.embedding_coverage()?;
+    Ok(BackfillResponse {
+        updated,
+        total_chunks: total,
+        embedded_chunks: embedded,
+    })
 }
 
 #[tauri::command]

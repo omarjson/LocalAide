@@ -278,3 +278,20 @@ export interface CloudModeRequest {
   enabled: boolean;
   provider_id?: string;
 }
+
+/** Live state of the local embedding engine (semantic/hybrid search). */
+export interface EmbeddingStatusResponse {
+  /** "llama-server" when running, "not-running" otherwise. */
+  engine: string;
+  model_id: string | null;
+  dimension: number | null;
+  ready: boolean;
+  total_chunks: number;
+  embedded_chunks: number;
+}
+
+export interface BackfillResponse {
+  updated: number;
+  total_chunks: number;
+  embedded_chunks: number;
+}

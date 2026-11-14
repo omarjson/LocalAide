@@ -46,7 +46,8 @@ pub fn memory_search(
     state: State<'_, AppState>,
     query: String,
 ) -> Result<Vec<SearchResultDoc>, AppError> {
-    state.memory.search(&query)
+    let query_vector = state.embedding_engine.embed_query(&query).ok();
+    state.memory.search(&query, query_vector.as_deref())
 }
 
 #[tauri::command]
