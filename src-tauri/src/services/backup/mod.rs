@@ -428,11 +428,8 @@ mod tests {
     fn temp_app_dir(tag: &str) -> PathBuf {
         // Tagged per test: cargo test runs tests in parallel threads, and a
         // shared dir would let one test's remove_dir_all delete another's files.
-        let dir = std::env::temp_dir().join(format!(
-            "la-backup-test-{}-{}",
-            std::process::id(),
-            tag
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("la-backup-test-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("memory")).unwrap();
         std::fs::create_dir_all(dir.join("conversations")).unwrap();
