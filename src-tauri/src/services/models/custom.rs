@@ -117,10 +117,6 @@ impl CustomModels {
         *self.entries.write().expect("community-model lock poisoned") = Arc::new(next);
         Ok(())
     }
-
-    pub fn len(&self) -> usize {
-        self.all().len()
-    }
 }
 
 /// Slugify one path component for a community-model id: lowercase, keep
@@ -193,12 +189,12 @@ mod tests {
 
         let first = CustomModels::load(path.clone());
         first.add(sample("hf-org-repo-model")).unwrap();
-        assert_eq!(first.len(), 1);
+        assert_eq!(first.all().len(), 1);
 
         let second = CustomModels::load(path.clone());
         assert!(second.get("hf-org-repo-model").is_some());
         second.remove("hf-org-repo-model").unwrap();
-        assert_eq!(second.len(), 0);
+        assert_eq!(second.all().len(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
