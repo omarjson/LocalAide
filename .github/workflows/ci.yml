@@ -2,7 +2,7 @@ name: CI & Release Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
@@ -81,7 +81,10 @@ jobs:
       - name: Smoke Test
         run: npm run smoke
 
+      # The Rust steps run even when an earlier step failed, so one run
+      # reports formatting, lint and test problems together.
       - name: Rust Formatting Check
+        if: ${{ !cancelled() }}
         run: |
           if ! cargo fmt --check --manifest-path src-tauri/Cargo.toml 2> fmt_err.txt; then
             cargo fmt --manifest-path src-tauri/Cargo.toml 2> fmt_out_err.txt || true
@@ -105,11 +108,92 @@ jobs:
             exit 1
           fi
 
+      # cargo-annotate.mjs turns failures into annotations, which the
+      # check-run API serves without log access.
       - name: Rust Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        if: ${{ !cancelled() }}
+        run: node scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings
 
       - name: Rust Tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
+        if: ${{ !cancelled() }}
+        run: node scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast
+
+  # The app ships for Windows first, and Windows-only code (job objects,
+  # message boxes, console flags) does not compile on the Linux gate.
+  windows-check:
+    name: Rust on Windows (Clippy, Test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-check-
+
+      # tauri::generate_context! embeds ../dist, so the frontend is built first.
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Frontend Build
+        run: npm run build
+
+      - name: Rust Clippy
+        run: node scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings
+
+      - name: Rust Tests
+        if: ${{ !cancelled() }}
+        run: node scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast
+
+  # Feature branches only: apply `cargo fmt` and record new dependencies in
+  # Cargo.lock, then push that as a commit. A push made with GITHUB_TOKEN
+  # starts no new workflow run, so this cannot loop.
+  rust-fixup:
+    name: Rust fmt and Cargo.lock fixup
+    if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name != 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Format and refresh the lockfile
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          cargo metadata --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+
+      - name: Push the fixup commit
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to fix."
+            exit 0
+          fi
+          git config user.name "ci-rust-fixup"
+          git config user.email "ci-rust-fixup@users.noreply.github.com"
+          git commit -am "style: cargo fmt and Cargo.lock refresh (CI)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
   # Every catalog pin (sha256 + size) is checked against the Hugging Face
   # API. No model downloads: only repo tree metadata. This is the permanent
