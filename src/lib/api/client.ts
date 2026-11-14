@@ -15,6 +15,8 @@ import type {
   DownloadProgressEvent,
   EmbeddingStatusResponse,
   ForgetAllResponse,
+  SystemHealthResponse,
+  UpdateCheckResponse,
   IndexFolderResponse,
   IndexerStatsResponse,
   MemoryCreateRequest,
@@ -340,6 +342,20 @@ export class ApiClient {
 
   async setChatPrefs(prefs: ChatPrefs): Promise<void> {
     return invoke<void>("chat_prefs_set", { prefs });
+  }
+
+  // Diagnostics & update check (display-only, all local)
+
+  async getSystemHealth(): Promise<SystemHealthResponse> {
+    return invoke<SystemHealthResponse>("system_health");
+  }
+
+  async checkForUpdate(): Promise<UpdateCheckResponse> {
+    return invoke<UpdateCheckResponse>("update_check");
+  }
+
+  async getLogTail(lines?: number): Promise<string[]> {
+    return invoke<string[]>("logs_tail", { lines });
   }
 
   // Online providers (opt-in cloud mode)

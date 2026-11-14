@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod cloud;
+pub mod diagnostics;
 pub mod library;
 pub mod memory;
 pub mod models;
@@ -10,6 +11,7 @@ pub mod tools;
 
 pub use chat::*;
 pub use cloud::*;
+pub use diagnostics::*;
 pub use library::*;
 pub use memory::*;
 pub use models::*;

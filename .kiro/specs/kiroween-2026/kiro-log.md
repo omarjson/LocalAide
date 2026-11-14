@@ -51,6 +51,17 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **The clippy gate is now real:** `#![allow(clippy::all, unused)]` removed from `lib.rs`. The first unshielded clippy run reported 38 findings (6 unused imports; a dead method and struct field orphaned by the dead-code rounds; 18 collapsible-if converted to Rust 2024 let-chains; 3 missing `Default` impls; `sort_by_key`; `div_ceil`; `matches!`; `as_chunks`) plus 3 svelte a11y warnings on the lightbox dialog. All fixed across `0c85b7f`, `8c66e14`, `65bda98`.
 - **CI:** Quality Gate GREEN on `65bda98` with `clippy -D warnings` earned, not suppressed. Windows + Linux sidecar builds green; macOS cancelled again by operator decision.
 
+## 2026-11-14 — Modernization round: late-2026 currency, catalog v7, real retrieval, skills
+
+- **Kiro artifact:** this entry; the six-track modernization plan approved by the operator; CHANGELOG [Unreleased].
+- **Currency pass:** Node 24 (runners dropped Node 20 in September), actions v5, Vite 8, vite-plugin-svelte 7, vite-plugin-checker 1.0, TypeScript 5.9.3 (5.10/5.11 do not exist — pinned from the live registry), notify 8, llama.cpp sidecar v1.0.0, dead devDeps removed. Platform builds gated behind tags/`[build-all]` so routine pushes stop burning 10× macOS minutes.
+- **Catalog v7:** six additions from live HF metadata (gpt-oss-20b MXFP4, DeepSeek-R1-0528-Qwen3-8B, Mistral Small 3.2, Llama 3.2 3B, Phi-4-mini, BGE-M3) — every one of the 42 pins re-verified against the Hugging Face API, and a permanent `catalog-pins` CI job now keeps them honest. Companion (mmproj) files finally download with their model — vision via the catalog was broken until now.
+- **The dead hybrid search is alive:** the audit found `SearchMode::Semantic/Hybrid`, cosine + RRF, and a `chunks.embedding` column all shipped but unwired, with `embedding_status` admitting "not-wired". A local embedding engine (second `llama-server --embedding` instance, spawn pattern shared with the chat sidecar) now vectorizes chunks at ingest, backfills old ones, embeds queries for Search/Memory/chat RAG, and reports truthfully. Reranker second-stage is the planned follow-up.
+- **Skills + honest adaptation:** markdown skill files with a slash-menu in chat and a full editor screen; persisted chat prefs (prompt/temperature/persona/context); a local usage counter suggests saving prompts you keep re-typing. No profiles, no network, no fake learning claims.
+- **Diagnostics:** Settings → Diagnostics tab (subsystem health, llama-server log tail, display-only update check); a11y fix for the lightbox image that newer svelte-check flags as an error.
+- **Deferred:** light theme (needs visual verification — no local Node toolchain), cloud backup (needs operator app registrations), reranker second stage.
+- **CI:** gate cycles during this round were diagnosed through check-run annotations (svelte-check output, npm ERESOLVE logs); the diagnostics emitters stay in ci.yml as permanent failure reporting.
+
 ## 2026-11-14 — Model catalog refresh (ADR-0008)
 
 - **Kiro artifact:** the open-gap list this log tracks; ADR-0008 records the trust model.
@@ -60,6 +71,8 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 ## Still open
 
 - A real-model chat and demo run on each platform (plan §8 test list, `demo-checklist.md`).
-- macOS/package bundling in CI (see the status line in README.md).
-- Image input exercised against a real vision model end to end.
+- macOS/package bundling in CI (see the status line in README.md). Platform builds are now gated to release tags, manual dispatch, or `[build-all]` commits — they no longer run on every push.
+- Image input exercised against a real vision model end to end (companions now download with the model, so this is testable for the first time).
+- Light theme (needs visual verification, which requires a local Node toolchain).
+- Cloud backup providers (OneDrive/Drive need operator app registrations; ADR-0009 planned with the backup track).
 - Binary code signing / notarization (ADR-0005).

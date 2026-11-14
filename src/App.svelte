@@ -33,6 +33,9 @@
   // Bumped by Ctrl/Cmd+N so ChatScreen starts a fresh thread even when it is
   // already on screen.
   let chatResetTick = $state(0);
+  // Display-only update check (never auto-downloads anything).
+  let updateAvailable = $state(false);
+  let latestVersion = $state("");
 
   const navigate = (s: Screen) => {
     screen = s;
@@ -72,6 +75,11 @@
         ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
         ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
         budget = probe.budget_gb * 1024 * 1024 * 1024;
+      } catch {}
+      try {
+        const update = await api.checkForUpdate();
+        updateAvailable = update.update_available;
+        latestVersion = update.latest_version ?? "";
       } catch {}
     })();
 
@@ -195,6 +203,15 @@
       </button>
     </nav>
     <div class="p-4 border-t border-ink-800 shrink-0 space-y-2">
+      {#if updateAvailable}
+        <button
+          onclick={() => navigate("settings")}
+          class="w-full text-left text-[11px] font-mono rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 px-3 py-2 hover:border-amber-500/70 transition-colors"
+          title="A newer LocalAide release exists on GitHub. Check Settings → Diagnostics."
+        >
+          Update available: v{latestVersion}
+        </button>
+      {/if}
       <div class="text-sm font-medium text-ink-200">RAM budget</div>
       <div class="grid grid-cols-3 gap-2 text-[11px] font-mono">
         <div class="rounded-lg bg-white/5 p-2"><div class="text-ink-400">total</div><div class="text-ink-200">{formatBytes(ramTotal)}</div></div>

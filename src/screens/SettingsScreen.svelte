@@ -7,10 +7,15 @@
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
+  import type { SystemHealthResponse, UpdateCheckResponse } from "../lib/api/bindings";
 
   let appVersion = $state("");
 
-  let activeTab = $state<"general" | "security" | "audit">("general");
+  let activeTab = $state<"general" | "security" | "audit" | "diagnostics">("general");
+  let health = $state<SystemHealthResponse | null>(null);
+  let updateInfo = $state<UpdateCheckResponse | null>(null);
+  let logLines = $state<string[]>([]);
+  let diagBusy = $state(false);
 
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
@@ -203,6 +208,21 @@
       } catch {}
     }, 500);
   };
+
+  const loadDiagnostics = async () => {
+    diagBusy = true;
+    try {
+      const [h, u, logs] = await Promise.all([
+        api.getSystemHealth(),
+        api.checkForUpdate().catch(() => null),
+        api.getLogTail(120).catch(() => [] as string[]),
+      ]);
+      health = h;
+      updateInfo = u;
+      logLines = logs;
+    } catch {}
+    diagBusy = false;
+  };
 </script>
 
 <div class="max-w-4xl mx-auto space-y-6">
@@ -223,6 +243,12 @@
         class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "security" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Security Jail
+      </button>
+      <button
+        onclick={() => { activeTab = "diagnostics"; loadDiagnostics(); }}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "diagnostics" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+      >
+        Diagnostics
       </button>
       <button
         onclick={() => { activeTab = "audit"; loadAudits(); }}
@@ -585,6 +611,99 @@
               </tbody>
             </table>
           </div>
+        </div>
+      {:else if activeTab === "diagnostics"}
+        <div class="space-y-6">
+          {#if diagBusy && !health}
+            <div class="py-10 text-center text-xs text-ink-400 font-mono">Collecting local health…</div>
+          {:else if health}
+            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="font-medium text-ink-100">Update check</div>
+                <button
+                  onclick={loadDiagnostics}
+                  disabled={diagBusy}
+                  class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                >
+                  {diagBusy ? "Checking…" : "Refresh"}
+                </button>
+              </div>
+              {#if updateInfo?.update_available}
+                <div class="border border-amber-500/40 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-200">
+                  Version {updateInfo?.latest_version} is available (you have {updateInfo?.current_version}). Get it from
+                  <span class="font-mono">github.com/omarjson/LocalAide/releases</span> — the app never downloads or installs anything by itself.
+                </div>
+              {:else}
+                <div class="text-xs text-ink-400 font-mono">
+                  {#if updateInfo}
+                    Up to date · v{updateInfo.current_version}
+                  {:else}
+                    Release lookup unavailable (offline or no releases yet) · v{health.app_version}
+                  {/if}
+                </div>
+              {/if}
+            </div>
+
+            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+              <div class="font-medium text-ink-100 mb-3">Local subsystems</div>
+              <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Chat engine</div>
+                  <div class="text-ink-200">
+                    {#if health.engine.loaded}
+                      {health.engine.active_model} · {health.engine.context_size} ctx
+                    {:else}
+                      Not loaded{#if !health.engine.sidecar_binary_found} · sidecar binary missing{/if}
+                    {/if}
+                  </div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Embedding engine</div>
+                  <div class="text-ink-200">
+                    {#if health.embedding.ready}
+                      {health.embedding.model_id}{#if health.embedding.dimension} · {health.embedding.dimension}d{/if}
+                    {:else}
+                      Not running
+                    {/if}
+                  </div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Library vectors</div>
+                  <div class="text-ink-200">{health.embedding.embedded_chunks}/{health.embedding.total_chunks} chunks</div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Documents</div>
+                  <div class="text-ink-200">{health.library.doc_count} indexed</div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Catalog</div>
+                  <div class="text-ink-200">v{health.catalog_version}</div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Config</div>
+                  <div class="text-ink-200">{health.config_ok ? "OK" : "Read error"}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+              <div class="flex items-center justify-between mb-2">
+                <div class="font-medium text-ink-100">llama-server log (tail)</div>
+                <button
+                  onclick={loadDiagnostics}
+                  disabled={diagBusy}
+                  class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                >
+                  Refresh log
+                </button>
+              </div>
+              {#if logLines.length === 0}
+                <div class="text-xs text-ink-500 font-mono py-4 text-center">No log output yet.</div>
+              {:else}
+                <pre class="bg-ink-950 border border-ink-800 rounded-xl p-3 text-[11px] font-mono text-ink-300 overflow-auto max-h-72 whitespace-pre-wrap">{logLines.join("\n")}</pre>
+              {/if}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

@@ -279,12 +279,18 @@
     onclick={() => (lightbox = null)}
     onkeydown={(e) => { if (e.key === 'Escape') lightbox = null; }}
   >
-    <img
-      src={lightbox}
-      alt="Attached image fullscreen"
-      class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700"
+    <button
+      type="button"
+      class="max-h-[85vh] max-w-[92vw] p-0 border-none bg-transparent cursor-zoom-out"
+      title="Click to close the fullscreen image"
       onclick={(e) => e.stopPropagation()}
-    />
+    >
+      <img
+        src={lightbox}
+        alt="Attached image fullscreen"
+        class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700"
+      />
+    </button>
     <button
       type="button"
       onclick={() => (lightbox = null)}

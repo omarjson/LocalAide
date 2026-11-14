@@ -318,3 +318,34 @@ export interface ChatPrefs {
   max_tokens: number | null;
   persona: string | null;
 }
+
+/** Aggregate local-subsystem health snapshot. */
+export interface SystemHealthResponse {
+  app_version: string;
+  catalog_version: number;
+  engine: {
+    loaded: boolean;
+    active_model: string | null;
+    context_size: number;
+    sidecar_binary_found: boolean;
+  };
+  embedding: {
+    ready: boolean;
+    model_id: string | null;
+    dimension: number | null;
+    total_chunks: number;
+    embedded_chunks: number;
+  };
+  library: {
+    doc_count: number;
+  };
+  config_ok: boolean;
+}
+
+/** Result of the display-only update check against GitHub Releases. */
+export interface UpdateCheckResponse {
+  current_version: string;
+  latest_version: string | null;
+  update_available: boolean;
+  release_url: string;
+}
