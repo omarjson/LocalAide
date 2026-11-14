@@ -148,13 +148,14 @@ pub fn community_id(org: &str, repo: &str, filename: &str) -> String {
 }
 
 /// Ensure uniqueness against existing ids by appending `-2`, `-3`, …
-pub fn unique_id(existing: &[CatalogEntry], mut base: String) -> String {
+pub fn unique_id(existing: &[CatalogEntry], base: String) -> String {
+    let mut candidate = base.clone();
     let mut n = 1;
-    while existing.iter().any(|e| e.id == base) {
+    while existing.iter().any(|e| e.id == candidate) {
         n += 1;
-        base = format!("{base}-{n}");
+        candidate = format!("{base}-{n}");
     }
-    base
+    candidate
 }
 
 #[cfg(test)]
