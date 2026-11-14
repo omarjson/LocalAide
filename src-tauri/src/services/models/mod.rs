@@ -278,3 +278,86 @@ impl ModelService {
         Ok(primary.expect("the primary file is always first"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_service(tag: &str) -> (ModelService, PathBuf) {
+        // Tagged per test: cargo test runs tests in parallel threads.
+        let dir = std::env::temp_dir().join(format!("la-modelservice-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let service = ModelService::new(
+            dir.join("models"),
+            dir.join("catalog-cache.json"),
+            dir.join("custom-models.json"),
+        )
+        .expect("service must initialize");
+        (service, dir)
+    }
+
+    fn community_entry(id: &str, dest: Option<String>) -> CatalogEntry {
+        CatalogEntry {
+            id: id.into(),
+            name: "Community model".into(),
+            params: "community".into(),
+            kind: "chat".into(),
+            license: "MIT".into(),
+            file_size: 1_000,
+            ram_estimate_gb: 1.0,
+            url: "https://huggingface.co/org/repo/resolve/main/model.gguf".into(),
+            sha256: "ab".repeat(32),
+            quant: "Q4_K_M".into(),
+            description: "test".into(),
+            context_tokens: Some(131_072),
+            dest,
+            companions: vec![],
+        }
+    }
+
+    #[test]
+    fn custom_entries_resolve_through_the_standard_accessors() {
+        let (service, dir) = temp_service("resolve");
+        // A plain community model: dest falls back to {id}.gguf.
+        service
+            .custom_models()
+            .add(community_entry("hf-org-repo-model", None))
+            .unwrap();
+        assert!(
+            service.get_model_entry("hf-org-repo-model").is_some(),
+            "community entries must resolve like catalog entries"
+        );
+        assert_eq!(
+            service.model_file_path("hf-org-repo-model"),
+            dir.join("models").join("hf-org-repo-model.gguf")
+        );
+        assert_eq!(
+            service.effective_context("hf-org-repo-model", 8192),
+            8192,
+            "the entry's native context hint caps the setting"
+        );
+        assert_eq!(
+            service.effective_context("hf-org-repo-model", 999_999),
+            131_072
+        );
+
+        // A split GGUF keeps its shard-pattern dest for llama.cpp discovery.
+        service
+            .custom_models()
+            .add(community_entry(
+                "hf-org-repo-shard",
+                Some("model-00001-of-00003.gguf".into()),
+            ))
+            .unwrap();
+        assert_eq!(
+            service.model_file_path("hf-org-repo-shard"),
+            dir.join("models").join("model-00001-of-00003.gguf")
+        );
+        assert!(!service.is_installed("hf-org-repo-shard"));
+
+        service.custom_models().remove("hf-org-repo-model").unwrap();
+        assert!(service.get_model_entry("hf-org-repo-model").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
