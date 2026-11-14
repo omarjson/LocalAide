@@ -41,33 +41,12 @@ pub fn search_index(
         state.embedding_engine.embed_query(&query).ok()
     };
     let limit_num = limit.unwrap_or(20);
-    let mut results = state.library.search(
-        &query,
-        query_vector.as_deref(),
-        search_mode,
-        limit_num,
-    )?;
-
-    // Reranker second stage: when the engine is running, re-order the top
-    // candidates by true query-document relevance. A rerank failure degrades
-    // to the fused ranking instead of failing the search.
-    if state.rerank_engine.is_running() && results.len() > 1 {
-        let candidates: Vec<SearchResultDoc> = results
-            .into_iter()
-            .take(crate::services::library::rerank::RERANK_CANDIDATES)
-            .collect();
-        let texts: Vec<String> = candidates.iter().map(|d| d.snippet.clone()).collect();
-        match state.rerank_engine.rerank(&query, &texts) {
-            Ok(hits) => {
-                let mut reranked = crate::services::library::rerank::reorder(&candidates, &hits);
-                reranked.truncate(limit_num);
-                results = reranked;
-            }
-            Err(e) => log::warn!("Rerank failed, keeping fused ranking: {e}"),
-        }
-    }
-
-    Ok(results)
+    // The reranker second stage (when its engine is running) is applied
+    // inside LibraryService::search, so the Search screen, memory search,
+    // and chat RAG all get the same re-ranked results.
+    state
+        .library
+        .search(&query, query_vector.as_deref(), search_mode, limit_num)
 }
 
 /// Start the reranker engine on an installed reranker model. `model_id`

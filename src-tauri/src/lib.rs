@@ -80,6 +80,7 @@ pub fn run() {
         model_service.clone(),
     ));
     library.set_embedding_engine(embedding_engine.clone());
+    library.set_rerank_engine(rerank_engine.clone());
 
     // Local reranker engine for the search second stage; like the embedding
     // engine it starts only on explicit user action (RAM budget respect).

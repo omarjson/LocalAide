@@ -10,6 +10,7 @@ use self::embedding::EmbeddingEngine;
 use self::ingest::FileIngester;
 use self::search::{HybridSearcher, SearchMode};
 use self::watch::{LibraryUpdater, LibraryWatcher};
+use self::rerank::{RerankEngine, RERANK_CANDIDATES, reorder};
 use crate::app::error::AppError;
 use crate::domain::document::{IndexerStatsResponse, SearchResultDoc};
 use std::path::Path;
@@ -24,6 +25,9 @@ pub struct LibraryService {
     /// The local embedding engine, when one has been wired in. Chunks are
     /// vectorized at ingest and queries embed before hybrid/semantic search.
     embedding: RwLock<Option<Arc<EmbeddingEngine>>>,
+    /// The local reranker engine, when one has been wired in. When running,
+    /// search re-orders the top candidates by query-document relevance.
+    rerank: RwLock<Option<Arc<RerankEngine>>>,
 }
 
 impl LibraryService {
@@ -35,6 +39,7 @@ impl LibraryService {
             searcher,
             watcher,
             embedding: RwLock::new(None),
+            rerank: RwLock::new(None),
         }
     }
 
@@ -51,6 +56,18 @@ impl LibraryService {
         self.embedding
             .read()
             .expect("embedding slot lock poisoned")
+            .clone()
+    }
+
+    /// Attach the reranker engine after construction.
+    pub fn set_rerank_engine(&self, engine: Arc<RerankEngine>) {
+        *self.rerank.write().expect("reranker slot lock poisoned") = Some(engine);
+    }
+
+    fn rerank_engine(&self) -> Option<Arc<RerankEngine>> {
+        self.rerank
+            .read()
+            .expect("reranker slot lock poisoned")
             .clone()
     }
 
@@ -186,7 +203,9 @@ impl LibraryService {
 
     /// Search the library. `query_vector` comes from the embedding engine
     /// for semantic and hybrid modes; keyword mode ignores it, and hybrid
-    /// degrades to keyword ranking when no vector is available.
+    /// degrades to keyword ranking when no vector is available. When the
+    /// reranker engine is running, the top fused candidates are re-ordered
+    /// by query-document relevance; a rerank failure keeps the fused order.
     pub fn search(
         &self,
         query: &str,
@@ -194,7 +213,25 @@ impl LibraryService {
         mode: SearchMode,
         limit: usize,
     ) -> Result<Vec<SearchResultDoc>, AppError> {
-        self.searcher.search(query, query_vector, mode, limit)
+        let mut results = self.searcher.search(query, query_vector, mode, limit)?;
+
+        let engine = match self.rerank_engine() {
+            Some(engine) if engine.is_running() && results.len() > 1 => engine,
+            _ => return Ok(results),
+        };
+
+        let candidates: Vec<SearchResultDoc> =
+            results.into_iter().take(RERANK_CANDIDATES).collect();
+        let texts: Vec<String> = candidates.iter().map(|d| d.snippet.clone()).collect();
+        match engine.rerank(query, &texts) {
+            Ok(hits) => {
+                let mut reranked = reorder(&candidates, &hits);
+                reranked.truncate(limit);
+                results = reranked;
+            }
+            Err(e) => log::warn!("Rerank failed, keeping fused ranking: {e}"),
+        }
+        Ok(results)
     }
 
     /// Fill in stored vectors for chunks that were indexed without the
