@@ -6,6 +6,7 @@ use crate::services::library::LibraryService;
 use crate::services::library::embedding::EmbeddingEngine;
 use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
+use crate::services::skills::SkillsService;
 use crate::services::tools::ToolService;
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub embedding_engine: Arc<EmbeddingEngine>,
     pub library: Arc<LibraryService>,
     pub memory: Arc<MemoryService>,
+    pub skills: Arc<SkillsService>,
     pub tools: Arc<ToolService>,
     pub config_store: Arc<Mutex<ConfigStore>>,
 }
@@ -29,6 +31,7 @@ impl AppState {
         embedding_engine: Arc<EmbeddingEngine>,
         library: Arc<LibraryService>,
         memory: Arc<MemoryService>,
+        skills: Arc<SkillsService>,
         tools: Arc<ToolService>,
     ) -> Self {
         Self {
@@ -41,6 +44,7 @@ impl AppState {
             embedding_engine,
             library,
             memory,
+            skills,
             tools,
             config_store: Arc::new(Mutex::new(ConfigStore::new())),
         }

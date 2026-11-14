@@ -5,6 +5,7 @@
     | "chat"
     | "search"
     | "memory"
+    | "skills"
     | "models"
     | "settings"
     | "dev"
@@ -44,6 +45,9 @@
   {:else if name === "memory"}
     <path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z" />
     <path d="M9 7h6M9 11h6M9 15h4" />
+  {:else if name === "skills"}
+    <path d="m12 3 1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+    <path d="M18 15.5 19 18l2.5 1L19 20l-1 2.5L17 20l-2.5-1 2.5-1z" />
   {:else if name === "models"}
     <rect x="6" y="6" width="12" height="12" rx="2" />
     <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />

@@ -295,3 +295,26 @@ export interface BackfillResponse {
   total_chunks: number;
   embedded_chunks: number;
 }
+
+/** A saved prompt skill: one markdown file under ~/.aiassistant/skills/. */
+export interface Skill {
+  name: string;
+  description: string;
+  tags: string[];
+  body: string;
+  path: string;
+}
+
+/** A custom prompt reused often enough for the save-as-skill hint. */
+export interface SkillSuggestion {
+  prompt: string;
+  use_count: number;
+}
+
+/** Chat preferences persisted across sessions. */
+export interface ChatPrefs {
+  system_prompt: string | null;
+  temperature: number | null;
+  max_tokens: number | null;
+  persona: string | null;
+}

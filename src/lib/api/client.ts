@@ -4,6 +4,7 @@ import type {
   AppError,
   BackfillResponse,
   CatalogStatus,
+  ChatPrefs,
   ChatMessage,
   ChatStreamEvent,
   ChatStreamRequest,
@@ -25,6 +26,8 @@ import type {
   ModelVerifyResult,
   RamComputationResponse,
   SearchIndexRequest,
+  Skill,
+  SkillSuggestion,
   SearchResultDoc,
   SummarizeRequest,
   SummarizeResponse,
@@ -290,6 +293,53 @@ export class ApiClient {
 
   async backfillEmbeddings(): Promise<BackfillResponse> {
     return invoke<BackfillResponse>("embedding_backfill");
+  }
+
+  // Skills (saved prompt templates)
+
+  async skillsList(): Promise<Skill[]> {
+    return invoke<Skill[]>("skills_list");
+  }
+
+  async skillsRead(path: string): Promise<Skill> {
+    return invoke<Skill>("skills_read", { path });
+  }
+
+  async skillsCreate(
+    name: string,
+    description: string,
+    tags: string[],
+    body: string
+  ): Promise<Skill> {
+    return invoke<Skill>("skills_create", { name, description, tags, body });
+  }
+
+  async skillsUpdate(
+    path: string,
+    name: string,
+    description: string,
+    tags: string[],
+    body: string
+  ): Promise<Skill> {
+    return invoke<Skill>("skills_update", { path, name, description, tags, body });
+  }
+
+  async skillsDelete(path: string): Promise<void> {
+    return invoke<void>("skills_delete", { path });
+  }
+
+  async skillsSuggestions(): Promise<SkillSuggestion[]> {
+    return invoke<SkillSuggestion[]>("skills_suggestions");
+  }
+
+  // Persisted chat preferences
+
+  async getChatPrefs(): Promise<ChatPrefs> {
+    return invoke<ChatPrefs>("chat_prefs_get");
+  }
+
+  async setChatPrefs(prefs: ChatPrefs): Promise<void> {
+    return invoke<void>("chat_prefs_set", { prefs });
   }
 
   // Online providers (opt-in cloud mode)

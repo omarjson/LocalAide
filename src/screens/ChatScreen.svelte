@@ -4,7 +4,7 @@
   import { api } from "../lib/api/client";
   import { dur } from "../lib/motion";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ChatMessage, ChatThread, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ChatMessage, ChatThread, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
@@ -69,8 +69,38 @@
     } catch {
       cloudChat = null;
     }
+    // Restore the chat preferences from the last session (honest local
+    // adaptation: what the user chose, not a profile).
+    try {
+      const prefs = await api.getChatPrefs();
+      if (prefs.system_prompt) systemPrompt = prefs.system_prompt;
+      if (prefs.temperature !== null) temperature = prefs.temperature;
+      if (prefs.max_tokens !== null) maxTokens = prefs.max_tokens;
+      if (prefs.persona) persona = prefs.persona;
+    } catch {}
+    // Skills for the "/" slash menu in the input box.
+    try {
+      skills = await api.skillsList();
+    } catch {}
   });
+
+  // Persist the chosen chat preferences for the next session. The backend
+  // also counts custom-prompt reuse for the save-as-skill suggestions.
+  const savePrefs = async () => {
+    try {
+      await api.setChatPrefs({
+        system_prompt: systemPrompt,
+        temperature,
+        max_tokens: maxTokens,
+        persona,
+      });
+    } catch {}
+  };
   let systemPrompt = $state("You are a helpful local AI assistant.");
+  let temperature = $state(0.7);
+  let maxTokens = $state(512);
+  let persona = $state("General");
+  let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
   let showTools = $state(false);
   let showThreads = $state(false);
@@ -218,6 +248,7 @@
     messages.push({ role: "user", content: userMsg, ts: Date.now(), images });
     streaming = true;
     userScrolledUp = false;
+    void savePrefs();
 
     const assistantIdx = messages.length;
     messages.push({ role: "assistant", content: "", ts: Date.now() });
@@ -231,8 +262,8 @@
           images,
           model,
           system_prompt: systemPrompt,
-          temperature: 0.7,
-          max_tokens: 512,
+          temperature,
+          max_tokens: maxTokens,
         },
         (event) => {
           if (event.type === "token") {
@@ -485,20 +516,35 @@
   <!-- Persona / System Prompt Selector -->
   {#if showSystem}
     <div class="p-3 bg-ink-900/60 border-b border-ink-800 text-xs space-y-2">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <span class="text-ink-400">Presets:</span>
         {#each systemPresets as p}
           <button
-            onclick={() => systemPrompt = p.prompt}
+            onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }}
             class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-ink-950 font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
           >
             {p.label}
           </button>
         {/each}
+        <span class="ml-auto flex items-center gap-2 text-ink-400">
+          Temp
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            bind:value={temperature}
+            onchange={savePrefs}
+            class="w-24 accent-ember-600"
+            aria-label="Sampling temperature"
+          />
+          <span class="font-mono text-ink-300">{temperature.toFixed(1)}</span>
+        </span>
       </div>
       <textarea
         bind:value={systemPrompt}
         rows={2}
+        onblur={savePrefs}
         class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-ink-200 font-mono text-xs focus:outline-none focus:border-ink-600"
       ></textarea>
     </div>
@@ -597,6 +643,8 @@
     pendingImages={pendingImages}
     onPickImages={addImages}
     onRemoveImage={removeImage}
+    {skills}
+    onPickSkill={(body) => { input = body; }}
   />
 
   <ToolApprovalModal

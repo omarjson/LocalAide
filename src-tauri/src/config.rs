@@ -20,6 +20,16 @@ pub struct AppConfig {
     /// model by the catalog's native context hint when one exists.
     #[serde(default = "default_context_tokens")]
     pub context_tokens: u32,
+    /// Chat preferences the user last chose, restored on the next session.
+    /// All fields are optional so old config files keep loading.
+    #[serde(default)]
+    pub chat_system_prompt: Option<String>,
+    #[serde(default)]
+    pub chat_temperature: Option<f32>,
+    #[serde(default)]
+    pub chat_max_tokens: Option<u32>,
+    #[serde(default)]
+    pub chat_persona: Option<String>,
 }
 
 fn default_context_tokens() -> u32 {
@@ -58,6 +68,10 @@ impl Default for AppConfig {
             cloud_providers: vec![],
             active_cloud_provider: None,
             context_tokens: default_context_tokens(),
+            chat_system_prompt: None,
+            chat_temperature: None,
+            chat_max_tokens: None,
+            chat_persona: None,
         }
     }
 }

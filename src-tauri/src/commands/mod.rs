@@ -4,6 +4,7 @@ pub mod library;
 pub mod memory;
 pub mod models;
 pub mod settings;
+pub mod skills;
 pub mod system;
 pub mod tools;
 
@@ -13,5 +14,6 @@ pub use library::*;
 pub use memory::*;
 pub use models::*;
 pub use settings::*;
+pub use skills::*;
 pub use system::*;
 pub use tools::*;

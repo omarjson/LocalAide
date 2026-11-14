@@ -59,6 +59,10 @@ pub fn run() {
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
 
+    // User-saved prompt skills (markdown files) plus the honest local usage
+    // counters behind the "save this as a skill?" suggestions.
+    let skills = Arc::new(crate::services::skills::SkillsService::new());
+
     // Local embedding engine for semantic and hybrid search. Starts only on
     // explicit user action (RAM budget respect); the library uses it for
     // ingest vectorization and query embedding when it is running.
@@ -73,6 +77,7 @@ pub fn run() {
         embedding_engine.clone(),
         library.clone(),
         memory.clone(),
+        skills.clone(),
         tools.clone(),
     );
 
@@ -182,6 +187,14 @@ pub fn run() {
             commands::config_compute_ram,
             commands::settings_context,
             commands::settings_set_context,
+            commands::chat_prefs_get,
+            commands::chat_prefs_set,
+            commands::skills_list,
+            commands::skills_read,
+            commands::skills_create,
+            commands::skills_update,
+            commands::skills_delete,
+            commands::skills_suggestions,
             commands::embedding_status,
             commands::embedding_start,
             commands::embedding_stop,

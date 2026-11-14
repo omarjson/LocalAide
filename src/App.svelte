@@ -9,12 +9,13 @@
   import Icon from "./components/Icon.svelte";
   import LogoMark from "./components/LogoMark.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
+  import SkillsScreen from "./screens/SkillsScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
   import DevConfigScreen from "./screens/DevConfigScreen.svelte";
   import SearchScreen from "./screens/SearchScreen.svelte";
 
-  type Screen = "setup" | "chat" | "memory" | "models" | "settings" | "dev" | "search";
+  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "dev" | "search";
 
   // Null until startup decides: returning users with a downloaded model go
   // straight to chat; first-run users see the setup wizard.
@@ -52,6 +53,7 @@
     { id: "chat", label: "Chat" },
     { id: "search", label: "Search" },
     { id: "memory", label: "Memory" },
+    { id: "skills", label: "Skills" },
     { id: "models", label: "Models" },
     { id: "settings", label: "Settings" },
     { id: "dev", label: "Developer config" },
@@ -171,6 +173,13 @@
         Memory
       </button>
       <button
+        onclick={() => navigate("skills")}
+        class={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${screen === 'skills' ? 'bg-white/5 text-white' : 'text-ink-400'}`}
+      >
+        <span class="size-8 grid place-items-center rounded-lg bg-white/5 group-hover:bg-white/10"><Icon name="skills" /></span>
+        Skills
+      </button>
+      <button
         onclick={() => navigate("models")}
         class={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${screen === 'models' ? 'bg-white/5 text-white' : 'text-ink-400'}`}
       >
@@ -227,6 +236,8 @@
         <SearchScreen />
       {:else if screen === "memory"}
         <MemoryScreen />
+      {:else if screen === "skills"}
+        <SkillsScreen />
       {:else if screen === "models"}
         <ModelManagerScreen />
       {:else if screen === "settings"}

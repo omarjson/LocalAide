@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Icon from "./Icon.svelte";
+  import type { Skill } from "../lib/api/bindings";
 
   interface Props {
     input: string;
@@ -15,6 +16,9 @@
     pendingImages?: string[];
     onPickImages?: (files: FileList | null) => void;
     onRemoveImage?: (index: number) => void;
+    /** Saved prompt skills; typing / opens the picker. */
+    skills?: Skill[];
+    onPickSkill?: (body: string) => void;
   }
 
   let {
@@ -30,10 +34,68 @@
     pendingImages = [],
     onPickImages,
     onRemoveImage,
+    skills = [],
+    onPickSkill,
   }: Props = $props();
 
   let textareaEl = $state<HTMLTextAreaElement>();
+  let skillCursor = $state(0);
   onMount(() => textareaEl?.focus());
+
+  // Slash menu: typing "/word" filters the skill list; Enter or click
+  // inserts the skill body as the message text (the user can edit it).
+  const slashMatch = $derived(
+    input.length > 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null
+  );
+  const skillMatches = $derived(
+    slashMatch === null
+      ? []
+      : skills.filter(
+          (s) =>
+            s.name.toLowerCase().includes(slashMatch) ||
+            s.description.toLowerCase().includes(slashMatch)
+        )
+  );
+
+  const pickSkill = (skill: Skill) => {
+    input = skill.body;
+    onPickSkill?.(skill.body);
+    skillCursor = 0;
+    textareaEl?.focus();
+  };
+
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (skillMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        skillCursor = (skillCursor + 1) % skillMatches.length;
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        skillCursor = (skillCursor - 1 + skillMatches.length) % skillMatches.length;
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        pickSkill(skillMatches[skillCursor]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skillCursor = 0;
+        input = "";
+        return;
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey && !streaming) {
+      e.preventDefault();
+      onSend();
+    } else if (e.key === "Escape" && streaming) {
+      e.preventDefault();
+      onCancel?.();
+    }
+  };
 </script>
 
 <div class="border-t border-ink-800 p-4">
@@ -45,7 +107,7 @@
     >
       {showTools ? 'Hide tool panel' : 'File tool'}
     </button>
-    <div class="text-xs text-ink-400">Enter to send • Shift+Enter for newline • Esc to cancel</div>
+    <div class="text-xs text-ink-400">Enter to send • Shift+Enter for newline • Esc to cancel • / for skills</div>
   </div>
 
   {#if showTools}
@@ -100,6 +162,24 @@
     </div>
   {/if}
 
+  {#if slashMatch !== null && skillMatches.length > 0}
+    <div class="mb-2 border border-ink-800 rounded-xl bg-ink-950 overflow-hidden" role="listbox" aria-label="Skill picker">
+      {#each skillMatches.slice(0, 6) as skill, i (skill.path)}
+        <button
+          type="button"
+          role="option"
+          aria-selected={i === skillCursor}
+          onclick={() => pickSkill(skill)}
+          class={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${i === skillCursor ? 'bg-white/10' : 'hover:bg-white/5'}`}
+        >
+          <Icon name="skills" class="w-3.5 h-3.5 text-ember-400 shrink-0" />
+          <span class="font-mono text-ink-100 shrink-0">/{skill.name}</span>
+          <span class="text-ink-400 truncate">{skill.description || skill.body.slice(0, 60)}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   <form onsubmit={(e) => { e.preventDefault(); if (streaming) onCancel?.(); else onSend(); }} class="flex gap-2">
     <label
       class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
@@ -119,18 +199,10 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Generating response…" : "Type a message…"}
+      placeholder={streaming ? "Generating response…" : "Type a message… / for skills"}
       disabled={streaming}
       rows={1}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !streaming) {
-          e.preventDefault();
-          onSend();
-        } else if (e.key === 'Escape' && streaming) {
-          e.preventDefault();
-          onCancel?.();
-        }
-      }}
+      onkeydown={handleKeydown}
       class="flex-1 bg-ink-900 border border-ink-800 rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
     ></textarea>
 

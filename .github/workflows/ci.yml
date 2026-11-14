@@ -59,7 +59,21 @@ jobs:
         run: npm ci
 
       - name: Svelte & TypeScript Check
-        run: npm run check
+        run: |
+          set +e
+          npm run check > check.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            # Emit the svelte-check output head as annotations (readable via
+            # the check-run API) so failures are diagnosable without admin
+            # log access.
+            head -c 4000 check.log | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=check::$enc"
+            done
+            exit 1
+          fi
 
       - name: Frontend Build
         run: npm run build
