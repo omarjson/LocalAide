@@ -33,7 +33,7 @@ sha2 = "0.10"
 dirs-next = "2.0"
 # OS-random bytes for the llama-server loopback API key (ADR-0007).
 getrandom = "0.3"
-notify = "6"
+notify = "8"
 # voice (deferred per ADR-0006)
 whisper-rs = { version = "0.16", optional = true }
 piper-rs = { version = "0.2", optional = true }

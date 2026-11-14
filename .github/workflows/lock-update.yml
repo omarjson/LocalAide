@@ -1,0 +1,42 @@
+name: Lockfile Update
+
+# Regenerates package-lock.json whenever package.json changes and publishes
+# it to the `ci/lock-update` branch, so dependency bumps stay in lock-step
+# even without a local Node toolchain. Merge the branch back into main and
+# delete this workflow when the dependency work is done.
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'package.json' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-lock:
+    name: Regenerate package-lock.json
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Regenerate lockfile (install-only, no node_modules)
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Publish lockfile to ci/lock-update
+        run: |
+          set -euo pipefail
+          git config user.name "ci-lock-update"
+          git config user.email "ci-lock-update@users.noreply.github.com"
+          git checkout -b ci/lock-update || git checkout ci/lock-update
+          git add package-lock.json
+          git commit -m "regenerate package-lock.json for ${GITHUB_SHA}" || true
+          git push origin ci/lock-update --force

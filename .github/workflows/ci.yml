@@ -26,7 +26,7 @@ jobs:
     name: Quality Gate (Lint, Typecheck, Test, Smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust Stable Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -34,9 +34,9 @@ jobs:
           components: clippy, rustfmt
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Install Linux Build & WebKitGTK Dependencies
@@ -97,22 +97,27 @@ jobs:
       - name: Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 
+  # Platform builds (incl. 10x-billed macOS runners) only run for release
+  # tags, manual dispatch, or pushes whose commit message contains
+  # [build-all]. Routine pushes verify with the quality gate alone.
   llama-server:
     name: llama-server sidecar
     needs: quality-gate
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     uses: ./.github/workflows/llama-server.yml
     with:
-      llama_cpp_tag: v0.9.0
+      llama_cpp_tag: v1.0.0
 
   build-macos:
     name: Build macOS (${{ matrix.target }})
     needs: [quality-gate, llama-server]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: macos-latest
     strategy:
       matrix:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -120,9 +125,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Cache Cargo
@@ -164,12 +169,13 @@ jobs:
   build-windows:
     name: Build Windows (${{ matrix.target }})
     needs: [quality-gate, llama-server]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: windows-latest
     strategy:
       matrix:
         target: [x86_64-pc-windows-msvc]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -177,9 +183,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Cache Cargo
@@ -221,17 +227,18 @@ jobs:
   build-linux:
     name: Build Linux (x86_64)
     needs: [quality-gate, llama-server]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust Stable Toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Install Linux Build & WebKitGTK Dependencies
@@ -282,7 +289,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4

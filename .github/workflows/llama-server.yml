@@ -10,13 +10,13 @@ on:
       llama_cpp_tag:
         description: 'llama.cpp release tag to build'
         required: true
-        default: 'v0.9.0'
+        default: 'v1.0.0'
         type: string
   workflow_call:
     inputs:
       llama_cpp_tag:
         required: true
-        default: 'v0.9.0'
+        default: 'v1.0.0'
         type: string
 
 permissions:
@@ -45,7 +45,7 @@ jobs:
             ext: '.exe'
     steps:
       - name: Check out llama.cpp at the pinned tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ggml-org/llama.cpp
           ref: ${{ inputs.llama_cpp_tag }}
