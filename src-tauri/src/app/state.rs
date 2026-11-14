@@ -37,6 +37,8 @@ impl AppState {
     ) -> Self {
         // The embedding and reranker sidecars both resolve models through
         // the model service; they start only on explicit user action.
+        let embedding_engine = Arc::new(EmbeddingEngine::new(model_service.clone()));
+        let rerank_engine = Arc::new(RerankEngine::new(model_service.clone()));
         Self {
             jobs: Arc::new(JobRegistry::new()),
             model_manager,
@@ -44,8 +46,8 @@ impl AppState {
             // Routes between the local llama-server sidecar and the opt-in
             // cloud engine. Starts local; startup restores the last mode.
             inference_engine: Arc::new(RouterEngine::new()),
-            embedding_engine: Arc::new(EmbeddingEngine::new(model_service.clone())),
-            rerank_engine: Arc::new(RerankEngine::new(model_service.clone())),
+            embedding_engine,
+            rerank_engine,
             library,
             memory,
             skills,
