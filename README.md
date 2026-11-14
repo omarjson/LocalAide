@@ -42,7 +42,7 @@ LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2,
 
 With cloud mode off — the default — it runs fully offline and collects no telemetry. Documents, conversations, and memory notes stay under `~/.aiassistant/` on your machine. If you add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS with your own API key, and the chat header shows a cloud badge the whole time.
 
-Search is BM25 keyword search over SQLite FTS5 by default; with the local embedding engine running, semantic and hybrid retrieval with reciprocal-rank fusion rank by vector similarity. See [ARCHITECTURE.md](ARCHITECTURE.md) for how each subsystem works.
+Search is BM25 keyword search over SQLite FTS5 by default; with the local embedding engine running, semantic and hybrid retrieval with reciprocal-rank fusion rank by vector similarity, and with the local reranker engine running too, the top fused candidates are re-ordered by a true reranking model. See [ARCHITECTURE.md](ARCHITECTURE.md) for how each subsystem works.
 
 ## Key Features
 
@@ -50,7 +50,7 @@ Search is BM25 keyword search over SQLite FTS5 by default; with the local embedd
 - **Image input with vision models**: attach up to 4 images (PNG, JPEG, WEBP, GIF, 20 MB total); the sidecar loads the model's `mmproj` projector when one is present and rejects image input for text-only models.
 - **Opt-in online providers**: add an OpenAI-compatible provider (OpenAI, OpenRouter, a localhost proxy such as Ollama or LM Studio) with your own API key. Off by default; the key is stored in the local config file, masked in the UI, and sent only to the provider's base URL.
 - **Sliding-window context budget**: older turns are pruned when the conversation exceeds the model's context, preserving the system prompt, the retrieved context block, and the latest message.
-- **Document library**: index folders of Markdown, text, source, and PDF files; chunking follows natural boundaries (1500 characters, 250 overlap); search runs FTS5 BM25 keyword matching — or semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running, with a one-click backfill for existing indexes.
+- **Document library**: index folders of Markdown, text, source, and PDF files; chunking follows natural boundaries (1500 characters, 250 overlap); search runs FTS5 BM25 keyword matching — or semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running, re-ranked by a local reranker model when that engine is running too, with a one-click backfill for existing indexes.
 - **Skills**: reusable prompts saved as local markdown files with a full editor; type `/` in chat to pull one in. Custom prompts you keep re-typing surface a local save-as-skill suggestion (usage counts stay on this machine).
 - **Memory notes with citations**: Markdown notes in `~/.aiassistant/memory/` are indexed into SQLite; chat recalls notes above a relevance score of 0.010 and renders clickable citation pills with the snippet, path, and score.
 - **Capability-rooted workspace jail**: file tools are confined to `~/.aiassistant/workspace/`. Paths are checked lexically and canonically; traversal escapes, outside symlinks, and symlink loops are rejected with `SANDBOX_DENIED`.

@@ -29,7 +29,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
    - User-specified folder indexing into embedded SQLite with WAL mode.
    - Content hashing, deduplication, incremental scanning skipping unchanged files by mtime/size.
    - Bounded file reading and natural-boundary chunking (1500 characters, 250 overlap).
-   - Keyword search over SQLite FTS5 (BM25), plus semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running; existing indexes get a one-click embedding backfill.
+   - Keyword search over SQLite FTS5 (BM25), plus semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running; existing indexes get a one-click embedding backfill. When the local reranker engine is running, the top fused candidates are re-ordered by query-document relevance through llama-server's `/v1/rerank` (the catalog's Qwen3 Reranker 0.6B, or a community reranker).
 5. **Memory & RAG**:
    - Personal Markdown memory notes under a fixed memory root at `~/.aiassistant/memory/`.
    - Full atomic CRUD operations with slug management.
@@ -56,7 +56,6 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
 The following are out of scope for this release. UI controls, dependencies, and doc claims for them are disabled or removed until implemented end-to-end:
 
 - **Speech (STT / TTS)**: needs a second runtime. Deferred per ADR-0006; findings recorded in `.kiro/specs/engine-upgrade/tasks.md` Phase 5.
-- **Reranker second stage**: the catalog ships a reranking model and llama-server exposes `/v1/rerank`, but hybrid results are fused by RRF only today; a second-stage rerank pass is future work.
 - **Modular component hot-swapping**: deferred; updates ship as whole packages (updater signing is future work, ADR-0005).
 - **Telemetry / remote analytics**: zero background telemetry, analytics, or user profiling.
 

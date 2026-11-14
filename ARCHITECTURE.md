@@ -50,7 +50,7 @@ One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelMana
 - One transactional store: `~/.aiassistant/index/library.db`, SQLite in WAL mode (`journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 5000`).
 - Ingest: natural paragraph/sentence chunking (1500 characters, 250 overlap), pure-Rust PDF text extraction via `flate2`, content hashing for deduplication. When the embedding engine is running, chunk vectors are written at index time; a backfill command vectorizes indexes built without it.
 - `EmbeddingEngine` runs a second `llama-server --embedding` instance for an installed embedding model (EmbeddingGemma by default) and serves `/v1/embeddings` locally; `Drop` stops it.
-- Search: three modes — keyword BM25 over FTS5, semantic cosine over chunk vectors, and hybrid with reciprocal-rank fusion of both rankings. Semantic and hybrid quietly fall back to keyword while the embedding engine is off.
+- Search: three modes — keyword BM25 over FTS5, semantic cosine over chunk vectors, and hybrid with reciprocal-rank fusion of both rankings. Semantic and hybrid quietly fall back to keyword while the embedding engine is off. When the reranker engine (a third `llama-server --rerank` instance) is running, the top fused candidates are re-ordered by query-document relevance through `/v1/rerank`; a rerank failure keeps the fused order.
 
 ### Memory & RAG (`src-tauri/src/services/memory/`)
 - Markdown notes in `~/.aiassistant/memory/` are synchronized with the SQLite `notes` index.
