@@ -706,7 +706,9 @@
             </table>
           </div>
         </div>
-      {:else if activeTab === "diagnostics"}
+      {/if}
+    </div>
+  {:else if activeTab === "diagnostics"}
         <div class="space-y-6">
           {#if diagBusy && !health}
             <div class="py-10 text-center text-xs text-ink-400 font-mono">Collecting local health…</div>
@@ -901,7 +903,5 @@
             <div class="text-xs font-mono text-ink-300 border-l-2 border-ember-500/50 pl-2">{backupNotice}</div>
           {/if}
         </div>
-      {/if}
-    </div>
   {/if}
 </div>
