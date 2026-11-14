@@ -235,13 +235,14 @@ impl BackupEngine {
         let mut memories_restored = 0;
         for file in &payload.memories {
             let dest = self.app_dir.join(&file.rel_path);
-            if let Some(parent) = dest.parent()
-                && !parent.starts_with(&*self.app_dir)
-            {
-                continue;
+            match dest.parent() {
+                Some(parent) if parent.starts_with(&self.app_dir) => {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        AppError::storage(format!("Could not create restore folder: {e}"))
+                    })?;
+                }
+                _ => continue,
             }
-            std::fs::create_dir_all(parent.unwrap_or(&self.app_dir))
-                .map_err(|e| AppError::storage(format!("Could not create restore folder: {e}")))?;
             std::fs::write(&dest, &file.content)
                 .map_err(|e| AppError::storage(format!("Could not restore {}: {e}", file.rel_path)))?;
             memories_restored += 1;

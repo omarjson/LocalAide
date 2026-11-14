@@ -154,8 +154,7 @@ fn version_newer(current: &str, latest: &str) -> bool {
 
 /// Tail of the llama-server log for the Settings diagnostics panel.
 #[tauri::command]
-pub fn logs_tail(state: State<'_, AppState>, lines: Option<usize>) -> Result<Vec<String>, AppError> {
-    let _ = state;
+pub fn logs_tail(lines: Option<usize>) -> Result<Vec<String>, AppError> {
     let path = crate::app::paths::app_dir().join("logs").join("llama-server.log");
     let data = match std::fs::read(&path) {
         Ok(data) => data,
