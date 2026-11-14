@@ -3,7 +3,10 @@
 /*
  * LocalAide design tokens. See DESIGN.md at the repo root.
  * Neutrals are plum-tinted "ink". The accent is "ember". Bone is the body text.
- * Text on ember must use ink-950, not white: white on ember fails 4.5:1.
+ * Text on ember fills must use `text-on-ember` (the token that flips with
+ * the theme), never white: white on ember fails 4.5:1 in the dark theme.
+ * Borders that carry meaning use `border-edge`, sized to clear the 3:1
+ * non-text contrast floor against the page background (docs/evidence/a11y.md).
  */
 @theme {
   --color-ink-50: #fbf7f0;
@@ -29,27 +32,61 @@
   --color-ember-800: #8a3d0b;
   --color-ember-900: #5e2a0a;
   --color-ember-950: #331505;
+
+  /* Semantic: text sitting on ember/amber fills; meaningful borders. */
+  --color-on-ember: #120d1a;
+  --color-edge: #6b6280;
+}
+
+/* Light theme: the ink ramp inverts (bone page, dark ink text) and the
+ * light accent-text roles darken so status colors stay readable on light
+ * fills. Values were checked with the WCAG 2.x contrast math recorded in
+ * docs/evidence/a11y.md (body text ≥ 4.5:1, borders ≥ 3:1). */
+:root[data-theme="light"] {
+  --color-ink-50: #2a251e;
+  --color-ink-100: #332d24;
+  --color-ink-200: #3f382c;
+  --color-ink-300: #57503f;
+  --color-ink-400: #6a6155;
+  --color-ink-500: #7f7669;
+  --color-ink-600: #9a9081;
+  --color-ink-700: #d6cab7;
+  --color-ink-800: #e6ddcf;
+  --color-ink-900: #fbf7f0;
+  --color-ink-950: #f6f1e7;
+
+  --color-ember-200: #a34a08;
+  --color-ember-300: #a34a08;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #047857;
+  --color-rose-300: #be123c;
+  --color-rose-400: #be123c;
+  --color-amber-300: #92400e;
+  --color-amber-600: #b45309;
+
+  --color-on-ember: #ffffff;
+  --color-edge: #857a95;
 }
 
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #120d1a;
-  color: #f3ead8;
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
 }
 
 ::selection {
   background: rgb(255 122 26 / 0.35);
-  color: #fbf7f0;
+  color: var(--color-ink-50);
 }
 
 textarea,
 input {
-  caret-color: #ff7a1a;
+  caret-color: var(--color-ember-500);
 }
 
 html {
-  scrollbar-color: #463d58 #120d1a;
+  scrollbar-color: var(--color-ink-700) var(--color-ink-950);
 }
 
 :focus-visible {

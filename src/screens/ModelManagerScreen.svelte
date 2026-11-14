@@ -339,7 +339,7 @@
           type="text"
           placeholder="Filter models…"
           bind:value={query}
-          class="bg-ink-900 border border-ink-800 rounded-lg px-3 py-1.5 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 w-56 font-mono"
+          class="bg-ink-900 border border-edge rounded-lg px-3 py-1.5 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge w-56 font-mono"
         />
       </div>
     </div>
@@ -352,7 +352,7 @@
         onclick={() => kindFilter = value}
         class="text-xs font-mono px-2.5 py-1 rounded-full border transition-colors {kindFilter === value
           ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
-          : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-ink-300'}"
+          : 'border-edge text-ink-400 hover:border-edge hover:text-ink-300'}"
       >
         {label}
       </button>
@@ -360,14 +360,14 @@
   </div>
 
   {#if catalog}
-    <div class="border border-ink-800 rounded-2xl px-4 py-3 bg-ink-900/40 flex items-center justify-between gap-4">
+    <div class="border border-edge rounded-2xl px-4 py-3 bg-ink-900/40 flex items-center justify-between gap-4">
       <div class="min-w-0">
         <div class="text-sm font-medium text-ink-200 flex items-center gap-2">
           Catalog v{catalog.version}
           <span
             class="text-xs font-mono px-1.5 py-0.5 rounded border {catalog.source === 'refreshed'
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-              : 'border-ink-700 text-ink-400'}"
+              : 'border-edge text-ink-400'}"
             title={catalog.source === 'refreshed' ? 'Fetched from the project repository' : 'Compiled into this build'}
           >
             {catalog.source}
@@ -382,7 +382,7 @@
           <button
             onclick={resetCatalogData}
             disabled={catalogBusy}
-            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
             title="Delete the cached catalog and restore the list built into this app"
           >
             Reset
@@ -401,11 +401,11 @@
   {/if}
 
   {#if presets.length > 0}
-    <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40">
+    <div class="border border-edge rounded-2xl p-4 bg-ink-900/40">
       <div class="text-sm font-medium text-ink-200 mb-3">Hardware presets</div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
         {#each presets as p}
-          <div class="border border-ink-800 rounded-xl p-3 bg-ink-950/60 flex flex-col justify-between">
+          <div class="border border-edge rounded-xl p-3 bg-ink-950/60 flex flex-col justify-between">
             <div>
               <div class="font-medium text-sm text-ink-100">{p.name}</div>
               <div class="text-xs text-ink-400 mt-0.5">{p.description}</div>
@@ -432,7 +432,7 @@
     </div>
   {/if}
 
-  <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
+  <div class="border border-edge rounded-2xl p-4 bg-ink-900/40 space-y-3">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <div>
         <div class="text-sm font-medium text-ink-200">Hugging Face community models</div>
@@ -448,12 +448,12 @@
         onkeydown={(e) => { if (e.key === "Enter") hfSearchRepos(); }}
         placeholder="Search huggingface.co for GGUF models, e.g. qwen 3.5 9b"
         aria-label="Search Hugging Face for GGUF models"
-        class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+        class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
       />
       <button
         onclick={hfSearchRepos}
         disabled={hfBusy || !hfQuery.trim()}
-        class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-950 transition-colors"
+        class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-on-ember transition-colors"
       >
         {hfBusy ? "Searching…" : "Search"}
       </button>
@@ -462,11 +462,11 @@
     {#if hfRepos.length > 0}
       <div class="space-y-2">
         {#each hfRepos as r (r.id)}
-          <div class="border border-ink-800 rounded-xl bg-ink-950/60">
+          <div class="border border-edge rounded-xl bg-ink-950/60">
             <button
               type="button"
               onclick={() => hfToggleRepo(r.id)}
-              class="w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-3 hover:border-ink-700 transition-colors"
+              class="w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-3 hover:border-edge transition-colors"
             >
               <div class="min-w-0">
                 <div class="text-sm text-ink-200 truncate font-medium">{r.id}</div>
@@ -485,7 +485,7 @@
             </button>
 
             {#if hfExpanded === r.id}
-              <div class="border-t border-ink-800 p-3 space-y-2">
+              <div class="border-t border-edge p-3 space-y-2">
                 {#if hfFilesBusy === r.id}
                   <div class="text-xs text-ink-400 font-mono py-2">Listing GGUF files…</div>
                 {:else}
@@ -497,7 +497,7 @@
                         onclick={() => { hfKinds = { ...hfKinds, [r.id]: (hfKinds[r.id] ?? "chat") === kindValue ? "chat" : kindValue }; }}
                         class="text-[11px] font-mono px-2 py-0.5 rounded-full border transition-colors {(hfKinds[r.id] ?? "chat") === kindValue
                           ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
-                          : 'border-ink-800 text-ink-400 hover:border-ink-700'}"
+                          : 'border-edge text-ink-400 hover:border-edge'}"
                       >
                         {kindLabel}
                       </button>
@@ -515,7 +515,7 @@
                       <button
                         onclick={() => hfAddAndDownload(r.id, f)}
                         disabled={hfAdding !== null}
-                        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-[11px] font-medium text-ink-950 transition-colors flex-shrink-0"
+                        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-[11px] font-medium text-on-ember transition-colors flex-shrink-0"
                       >
                         {hfAdding === f.path ? "Adding…" : "Add & download"}
                       </button>
@@ -535,7 +535,7 @@
   {:else}
     <div class="grid grid-cols-1 gap-3">
       {#each filtered as m}
-        <div class="border border-ink-800 rounded-xl p-4 bg-ink-900/40 flex items-center justify-between hover:border-ink-700 transition-colors">
+        <div class="border border-edge rounded-xl p-4 bg-ink-900/40 flex items-center justify-between hover:border-edge transition-colors">
           <div class="flex items-start gap-3">
             <span class="text-xs uppercase font-mono px-2 py-0.5 rounded bg-ink-800 text-ink-400 mt-0.5">
               {kindLabel(m.kind)}
@@ -543,7 +543,7 @@
             <div>
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm text-ink-100">{m.name}</span>
-                <span class="text-xs font-mono px-1.5 rounded border border-ink-700 text-ink-300" title="Model license">{m.license}</span>
+                <span class="text-xs font-mono px-1.5 rounded border border-edge text-ink-300" title="Model license">{m.license}</span>
                 {#if m.source === "community"}
                   <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30" title="Added from the Hugging Face hub. Verified against the hash HF serves; weights and license are not vetted.">Community</span>
                 {/if}
@@ -591,7 +591,7 @@
                 <button
                   onclick={() => verifyModel(m.id)}
                   disabled={verifying === m.id}
-                  class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                  class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
                   title="Verify cryptographic SHA-256 integrity"
                 >
                   {verifying === m.id ? "Checking…" : "Verify"}
@@ -607,7 +607,7 @@
               {:else}
                 <button
                   onclick={unloadModel}
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
                   title="Stop the local engine and free the model's RAM; the model stays installed"
                 >
                   Unload
@@ -639,7 +639,7 @@
             {:else}
               <button
                 onclick={() => startInstall(m.id)}
-                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-ember-600 hover:bg-ember-500 text-ink-950 transition-colors"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-ember-600 hover:bg-ember-500 text-on-ember transition-colors"
               >
                 Download
               </button>

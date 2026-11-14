@@ -191,6 +191,8 @@ pub fn run() {
             commands::config_compute_ram,
             commands::settings_context,
             commands::settings_set_context,
+            commands::settings_theme,
+            commands::settings_set_theme,
             commands::chat_prefs_get,
             commands::chat_prefs_set,
             commands::skills_list,

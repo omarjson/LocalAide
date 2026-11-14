@@ -57,7 +57,7 @@
         </div>
       </div>
 
-      <div class="bg-ink-950 border border-ink-800 rounded-xl p-3 space-y-2 text-xs font-mono">
+      <div class="bg-ink-950 border border-edge rounded-xl p-3 space-y-2 text-xs font-mono">
         <div class="flex justify-between text-ink-400">
           <span>Tool:</span>
           <span class="text-ink-300 font-semibold">{toolName}</span>
@@ -75,7 +75,7 @@
       {#if action.content}
         <div>
           <div class="text-[11px] font-medium text-ink-400 mb-1">Payload / Content Preview:</div>
-          <pre class="bg-ink-950 border border-ink-800 rounded-xl p-3 text-xs font-mono text-ink-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{action.content}</pre>
+          <pre class="bg-ink-950 border border-edge rounded-xl p-3 text-xs font-mono text-ink-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{action.content}</pre>
         </div>
       {/if}
 
@@ -83,7 +83,7 @@
         Workspace sandbox enforces boundary limits. Files outside the workspace cannot be touched.
       </div>
 
-      <div class="flex items-center justify-end gap-2 pt-2 border-t border-ink-800">
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
         <button
           onclick={onDeny}
           class="px-3 py-1.5 text-xs rounded-xl bg-ink-800 hover:bg-ink-700 text-ink-300 transition-colors"
@@ -92,13 +92,13 @@
         </button>
         <button
           onclick={onApproveOnce}
-          class="px-3 py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-ink-950 font-medium transition-colors"
+          class="px-3 py-1.5 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-on-ember font-medium transition-colors"
         >
           Allow Once
         </button>
         <button
           onclick={onApproveSession}
-          class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-ink-950 font-medium transition-colors"
+          class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-on-ember font-medium transition-colors"
         >
           Allow for Session
         </button>

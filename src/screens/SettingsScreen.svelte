@@ -65,6 +65,19 @@
   let webNotice = $state<string | null>(null);
   const appliedPreset = $derived(webPresets.find((p) => p.id === appliedPresetId) ?? null);
 
+  // Theme choice; the dark default stays until the user picks light.
+  let theme = $state<"dark" | "light">("dark");
+
+  const setTheme = async (value: "dark" | "light") => {
+    theme = value;
+    document.documentElement.dataset.theme = value;
+    try {
+      await api.setTheme(value);
+    } catch {
+      // The visual change still applied; persistence retries next toggle.
+    }
+  };
+
   const loadWebProviders = async () => {
     try {
       webProviders = await api.webProviders();
@@ -258,6 +271,13 @@
     loadAudits();
     loadCloud();
     loadWebProviders();
+    try {
+      const stored = await api.getTheme();
+      if (stored === "light" || stored === "dark") {
+        theme = stored;
+        document.documentElement.dataset.theme = stored;
+      }
+    } catch {}
   });
 
   // Settings persist when the slider moves, not on a component-lifetime
@@ -385,39 +405,39 @@
 </script>
 
 <div class="max-w-4xl mx-auto space-y-6">
-  <div class="border-b border-ink-800 pb-4 flex items-center justify-between">
+  <div class="border-b border-edge pb-4 flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold tracking-tight text-ink-100">Settings & Security</h2>
       <p class="text-xs text-ink-400">Resource quotas, capability sandbox, and audit verification</p>
     </div>
-    <div class="flex items-center gap-1 bg-ink-900 border border-ink-800 p-1 rounded-xl text-xs">
+    <div class="flex items-center gap-1 bg-ink-900 border border-edge p-1 rounded-xl text-xs">
       <button
         onclick={() => activeTab = "general"}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "general" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "general" ? "bg-ember-600 text-on-ember font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         General
       </button>
       <button
         onclick={() => activeTab = "security"}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "security" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "security" ? "bg-ember-600 text-on-ember font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Security Jail
       </button>
       <button
         onclick={() => { activeTab = "diagnostics"; loadDiagnostics(); }}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "diagnostics" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "diagnostics" ? "bg-ember-600 text-on-ember font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Diagnostics
       </button>
       <button
         onclick={() => { activeTab = "backup"; loadBackup(); }}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "backup" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "backup" ? "bg-ember-600 text-on-ember font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Backup
       </button>
       <button
         onclick={() => { activeTab = "audit"; loadAudits(); }}
-        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "audit" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "audit" ? "bg-ember-600 text-on-ember font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Audit Log
       </button>
@@ -426,7 +446,33 @@
 
   {#if activeTab === "general"}
     <div class="space-y-6">
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="font-medium text-ink-100">Theme</div>
+            <div class="text-xs text-ink-400">The light theme flips the ink ramp; accents darken to stay readable</div>
+          </div>
+          <div class="flex gap-1.5">
+            <button
+              onclick={() => setTheme("dark")}
+              class={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${theme === "dark" ? "bg-ember-600 text-on-ember font-medium border-ember-600" : "border-edge text-ink-300 hover:bg-ink-800"}`}
+            >
+              Dark
+            </button>
+            <button
+              onclick={() => setTheme("light")}
+              class={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${theme === "light" ? "bg-ember-600 text-on-ember font-medium border-ember-600" : "border-edge text-ink-300 hover:bg-ink-800"}`}
+            >
+              Light
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] text-ink-400">
+          The light theme has not yet been eyeballed on a real screen — dark remains the designed default. The choice persists across restarts.
+        </p>
+      </div>
+
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="flex items-center justify-between mb-4">
           <div>
             <div class="font-medium text-ink-100">RAM Budget</div>
@@ -441,7 +487,7 @@
         <div class="mt-2 text-[11px] text-ink-400 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
       </div>
 
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="flex items-center justify-between mb-4">
           <div>
             <div class="font-medium text-ink-100">Context Window</div>
@@ -463,7 +509,7 @@
         </div>
       </div>
 
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="font-medium text-ink-100 mb-2">Model Execution Priority</div>
         <p class="text-xs text-ink-400 mb-3">
           {#if cloud?.cloud_enabled}
@@ -480,7 +526,7 @@
         </div>
       </div>
 
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-4">
         <div class="flex items-center justify-between">
           <div>
             <div class="font-medium text-ink-100">Online Providers</div>
@@ -507,7 +553,7 @@
         {/if}
 
         {#if !cloud || cloud.providers.length === 0}
-          <div class="border border-ink-800/80 bg-ink-950/60 rounded-xl p-4 text-center space-y-2">
+          <div class="border border-edge/80 bg-ink-950/60 rounded-xl p-4 text-center space-y-2">
             <div class="text-xs text-ink-400">No online providers yet. Everything stays local until you add one.</div>
             <button
               onclick={openAddProvider}
@@ -519,7 +565,7 @@
         {:else}
           <div class="space-y-2">
             {#each cloud.providers as p (p.id)}
-              <div class={`rounded-xl border p-3 flex items-center justify-between gap-3 ${p.is_active ? "border-ember-500/40 bg-ember-500/5" : "border-ink-800 bg-ink-950/60"}`}>
+              <div class={`rounded-xl border p-3 flex items-center justify-between gap-3 ${p.is_active ? "border-ember-500/40 bg-ember-500/5" : "border-edge bg-ink-950/60"}`}>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="text-sm text-ink-100 font-medium">{p.label}</span>
@@ -542,7 +588,7 @@
                   <button
                     onclick={() => openEditProvider(p.id)}
                     disabled={cloudBusy}
-                    class="px-2 py-1 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                    class="px-2 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
                   >
                     Edit
                   </button>
@@ -567,7 +613,7 @@
         {/if}
 
         {#if showProviderForm}
-          <div class="border border-ink-800 bg-ink-950/80 rounded-xl p-4 space-y-3" transition:slide={{ duration: dur(150) }}>
+          <div class="border border-edge bg-ink-950/80 rounded-xl p-4 space-y-3" transition:slide={{ duration: dur(150) }}>
             <div class="text-xs font-semibold text-ink-200 uppercase tracking-wider">
               {editingProviderId ? "Edit provider" : "Add provider"}
             </div>
@@ -576,7 +622,7 @@
               <select
                 bind:value={appliedPresetId}
                 onchange={applyPreset}
-                class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 outline-none focus:border-ember-500/60"
+                class="w-full bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-100 outline-none focus:border-ember-500/60"
               >
                 <option value={null}>Choose a provider…</option>
                 {#each webPresets as preset (preset.id)}
@@ -598,7 +644,7 @@
                 <input
                   bind:value={providerLabel}
                   placeholder="OpenAI, OpenRouter, Ollama proxy…"
-                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
+                  class="w-full bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
                 />
               </label>
               <label class="space-y-1">
@@ -606,7 +652,7 @@
                 <input
                   bind:value={providerModel}
                   placeholder="gpt-4o-mini"
-                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
+                  class="w-full bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60"
                 />
               </label>
               <label class="space-y-1 sm:col-span-2">
@@ -614,7 +660,7 @@
                 <input
                   bind:value={providerUrl}
                   placeholder="https://api.openai.com/v1"
-                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                  class="w-full bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
                 />
               </label>
               <label class="space-y-1 sm:col-span-2">
@@ -625,7 +671,7 @@
                   type="password"
                   bind:value={providerKey}
                   placeholder={editingProviderId ? "Stored key kept if empty" : "sk-…"}
-                  class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                  class="w-full bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
                 />
               </label>
             </div>
@@ -638,14 +684,14 @@
             <div class="flex items-center gap-2 justify-end">
               <button
                 onclick={() => showProviderForm = false}
-                class="px-3 py-1.5 text-xs rounded-xl border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                class="px-3 py-1.5 text-xs rounded-xl border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onclick={saveProvider}
                 disabled={cloudBusy}
-                class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-ink-950 font-medium transition-colors disabled:opacity-40"
+                class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-on-ember font-medium transition-colors disabled:opacity-40"
               >
                 {cloudBusy ? "Saving…" : "Save provider"}
               </button>
@@ -654,7 +700,7 @@
         {/if}
       </div>
 
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="mb-2">
           <div class="font-medium text-ink-100">Web search</div>
           <div class="text-xs text-ink-400">Search and read web pages — only when you click. DuckDuckGo and Wikipedia need no key.</div>
@@ -664,7 +710,7 @@
         {/if}
         <div class="space-y-2">
           {#each webProviders as wp (wp.id)}
-            <div class={`rounded-xl border p-3 flex flex-wrap items-center gap-2 justify-between ${wp.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-ink-800 bg-ink-950/60"}`}>
+            <div class={`rounded-xl border p-3 flex flex-wrap items-center gap-2 justify-between ${wp.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-edge bg-ink-950/60"}`}>
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="text-sm text-ink-100 font-medium">{wp.label}</span>
@@ -681,7 +727,7 @@
                     type="password"
                     bind:value={webKeyDraft[wp.id]}
                     placeholder={wp.key_set ? "Replace key" : "Paste API key"}
-                    class="w-40 bg-ink-900 border border-ink-800 rounded-lg px-2 py-1.5 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                    class="w-40 bg-ink-900 border border-edge rounded-lg px-2 py-1.5 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
                   />
                   <button
                     onclick={() => saveWebKey(wp.id)}
@@ -695,7 +741,7 @@
                   <button
                     onclick={() => setWebDefault(wp.id)}
                     disabled={webBusy}
-                    class="px-2 py-1 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                    class="px-2 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
                   >
                     Make default
                   </button>
@@ -727,7 +773,7 @@
     </div>
   {:else if activeTab === "security"}
     <div class="space-y-4">
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-4">
         <div class="flex items-center gap-3">
           <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <Icon name="lock" class="w-4 h-4" />
@@ -738,7 +784,7 @@
           </div>
         </div>
 
-        <div class="bg-ink-950 border border-ink-800 rounded-xl p-3 space-y-2 text-xs">
+        <div class="bg-ink-950 border border-edge rounded-xl p-3 space-y-2 text-xs">
           <div class="flex justify-between">
             <span class="text-ink-400">Root Directory:</span>
             <span class="font-mono text-cyan-300">~/.aiassistant/workspace</span>
@@ -758,22 +804,22 @@
         </div>
       </div>
 
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-3">
         <h4 class="text-xs font-semibold text-ink-200 uppercase tracking-wider">Cryptographic Security</h4>
         <div class="grid grid-cols-2 gap-3 text-xs">
-          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+          <div class="p-3 bg-ink-950 border border-edge rounded-xl">
             <div class="text-ink-400 font-medium">Model Catalog Integrity</div>
             <div class="text-emerald-400 font-mono mt-1">✓ SHA-256 Manifest Verified</div>
           </div>
-          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+          <div class="p-3 bg-ink-950 border border-edge rounded-xl">
             <div class="text-ink-400 font-medium">Content Security Policy</div>
             <div class="text-emerald-400 font-mono mt-1">✓ Strict CSP Active</div>
           </div>
-          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+          <div class="p-3 bg-ink-950 border border-edge rounded-xl">
             <div class="text-ink-400 font-medium">Network Telemetry</div>
             <div class="text-emerald-400 font-mono mt-1">✓ None (cloud chat is opt-in)</div>
           </div>
-          <div class="p-3 bg-ink-950 border border-ink-800 rounded-xl">
+          <div class="p-3 bg-ink-950 border border-edge rounded-xl">
             <div class="text-ink-400 font-medium">Download Resumption</div>
             <div class="text-emerald-400 font-mono mt-1">✓ Atomic .part + Checksums</div>
           </div>
@@ -806,18 +852,18 @@
       </div>
 
       {#if loadingAudits}
-        <div class="border border-ink-800 rounded-2xl p-8 text-center text-xs text-ink-400 font-mono bg-ink-900/30">
+        <div class="border border-edge rounded-2xl p-8 text-center text-xs text-ink-400 font-mono bg-ink-900/30">
           Loading audit log…
         </div>
       {:else if audits.length === 0}
-        <div class="border border-ink-800 rounded-2xl p-8 text-center text-xs text-ink-400 bg-ink-900/30">
+        <div class="border border-edge rounded-2xl p-8 text-center text-xs text-ink-400 bg-ink-900/30">
           No tool executions recorded yet.
         </div>
       {:else}
-        <div class="border border-ink-800 rounded-2xl overflow-hidden bg-ink-900/40">
+        <div class="border border-edge rounded-2xl overflow-hidden bg-ink-900/40">
           <div class="max-h-96 overflow-y-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-ink-950 border-b border-ink-800 text-ink-400 font-mono sticky top-0">
+              <thead class="bg-ink-950 border-b border-edge text-ink-400 font-mono sticky top-0">
                 <tr>
                   <th class="p-2.5">Time</th>
                   <th class="p-2.5">Action</th>
@@ -863,13 +909,13 @@
           {#if diagBusy && !health}
             <div class="py-10 text-center text-xs text-ink-400 font-mono">Collecting local health…</div>
           {:else if health}
-            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+            <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-4">
               <div class="flex items-center justify-between">
                 <div class="font-medium text-ink-100">Update check</div>
                 <button
                   onclick={loadDiagnostics}
                   disabled={diagBusy}
-                  class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                  class="px-3 py-1.5 text-xs rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
                 >
                   {diagBusy ? "Checking…" : "Refresh"}
                 </button>
@@ -890,10 +936,10 @@
               {/if}
             </div>
 
-            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+            <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
               <div class="font-medium text-ink-100 mb-3">Local subsystems</div>
               <div class="grid grid-cols-2 gap-3 text-xs font-mono">
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Chat engine</div>
                   <div class="text-ink-200">
                     {#if health.engine.loaded}
@@ -903,7 +949,7 @@
                     {/if}
                   </div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Embedding engine</div>
                   <div class="text-ink-200">
                     {#if health.embedding.ready}
@@ -913,7 +959,7 @@
                     {/if}
                   </div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Reranker engine</div>
                   <div class="text-ink-200">
                     {#if health.rerank.ready}
@@ -923,32 +969,32 @@
                     {/if}
                   </div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Library vectors</div>
                   <div class="text-ink-200">{health.embedding.embedded_chunks}/{health.embedding.total_chunks} chunks</div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Documents</div>
                   <div class="text-ink-200">{health.library.doc_count} indexed</div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Catalog</div>
                   <div class="text-ink-200">v{health.catalog_version}</div>
                 </div>
-                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                <div class="rounded-xl bg-ink-950/60 border border-edge p-3">
                   <div class="text-ink-400 mb-1">Config</div>
                   <div class="text-ink-200">{health.config_ok ? "OK" : "Read error"}</div>
                 </div>
               </div>
             </div>
 
-            <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+            <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
               <div class="flex items-center justify-between mb-2">
                 <div class="font-medium text-ink-100">llama-server log (tail)</div>
                 <button
                   onclick={loadDiagnostics}
                   disabled={diagBusy}
-                  class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                  class="px-3 py-1.5 text-xs rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
                 >
                   Refresh log
                 </button>
@@ -956,14 +1002,14 @@
               {#if logLines.length === 0}
                 <div class="text-xs text-ink-500 font-mono py-4 text-center">No log output yet.</div>
               {:else}
-                <pre class="bg-ink-950 border border-ink-800 rounded-xl p-3 text-[11px] font-mono text-ink-300 overflow-auto max-h-72 whitespace-pre-wrap">{logLines.join("\n")}</pre>
+                <pre class="bg-ink-950 border border-edge rounded-xl p-3 text-[11px] font-mono text-ink-300 overflow-auto max-h-72 whitespace-pre-wrap">{logLines.join("\n")}</pre>
               {/if}
             </div>
           {/if}
         </div>
       {:else if activeTab === "backup"}
         <div class="space-y-6">
-          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+          <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-4">
             <div>
               <div class="font-medium text-ink-100">Encrypted backups (ADR-0009)</div>
               <p class="text-xs text-ink-400 mt-1">
@@ -977,7 +1023,7 @@
               <input
                 bind:value={backupTargetInput}
                 placeholder="D:\Backups\LocalAide or a synced folder path"
-                class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+                class="mt-1 w-full bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono"
               />
             </label>
             <label class="flex items-center gap-3 cursor-pointer">
@@ -989,25 +1035,25 @@
             <button
               onclick={saveBackupConfig}
               disabled={backupBusy}
-              class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+              class="px-3 py-1.5 text-xs rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
             >
               Save backup settings
             </button>
           </div>
 
-          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+          <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-3">
             <div class="font-medium text-ink-100">Create a backup</div>
             <div class="flex gap-2">
               <input
                 type="password"
                 bind:value={backupPass}
                 placeholder="Backup passphrase (min 8 characters)"
-                class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+                class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono"
               />
               <button
                 onclick={runBackup}
                 disabled={backupBusy || backupPass.length < 8}
-                class="px-4 py-2 text-xs font-medium rounded-lg bg-ember-600 hover:bg-ember-500 disabled:opacity-40 text-ink-950 transition-colors"
+                class="px-4 py-2 text-xs font-medium rounded-lg bg-ember-600 hover:bg-ember-500 disabled:opacity-40 text-on-ember transition-colors"
               >
                 {backupBusy ? "Working…" : "Back up now"}
               </button>
@@ -1019,7 +1065,7 @@
             {/if}
           </div>
 
-          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+          <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-3">
             <div class="font-medium text-ink-100">Restore</div>
             {#if backups.length === 0}
               <div class="text-xs text-ink-500 font-mono py-2">No backup archives in the folder yet.</div>
@@ -1031,7 +1077,7 @@
                     onclick={() => selectedBackup = b.file_name}
                     class={`w-full text-left text-xs font-mono px-3 py-2 rounded-lg border transition-colors ${selectedBackup === b.file_name
                       ? 'border-ember-500/40 bg-ember-500/10 text-ember-200'
-                      : 'border-ink-800 text-ink-300 hover:border-ink-700'}`}
+                      : 'border-edge text-ink-300 hover:border-edge'}`}
                   >
                     {b.file_name} · {(b.size_bytes / 1024).toFixed(0)} KB
                   </button>
@@ -1042,7 +1088,7 @@
                   type="password"
                   bind:value={restorePass}
                   placeholder="Passphrase of the selected archive"
-                  class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+                  class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono"
                 />
                 <label class="flex items-center gap-2 text-xs text-ink-400 cursor-pointer">
                   <input type="checkbox" bind:checked={restoreConfigFlag} class="accent-ember-600" />
@@ -1051,7 +1097,7 @@
                 <button
                   onclick={runRestore}
                   disabled={backupBusy || !selectedBackup || !restorePass}
-                  class="px-4 py-2 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
+                  class="px-4 py-2 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
                 >
                   Restore
                 </button>

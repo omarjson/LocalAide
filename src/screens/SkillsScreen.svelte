@@ -124,7 +124,7 @@
     </div>
     <button
       onclick={() => openCreate()}
-      class="px-3 py-1.5 text-xs font-medium rounded-xl bg-ember-600 hover:bg-ember-500 text-ink-950 transition-colors"
+      class="px-3 py-1.5 text-xs font-medium rounded-xl bg-ember-600 hover:bg-ember-500 text-on-ember transition-colors"
     >
       + New skill
     </button>
@@ -147,7 +147,7 @@
         You have reused these custom prompts several times this session. Save one as a skill? (Local usage counts only.)
       </p>
       {#each suggestions.slice(0, 3) as s (s.prompt)}
-        <div class="border border-ink-800 rounded-xl p-3 bg-ink-950/60 flex items-center justify-between gap-3">
+        <div class="border border-edge rounded-xl p-3 bg-ink-950/60 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <div class="text-xs text-ink-300 truncate font-mono">{s.prompt}</div>
             <div class="text-[11px] text-ink-500 font-mono">used {s.use_count} times</div>
@@ -164,7 +164,7 @@
   {/if}
 
   {#if showEditor}
-    <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+    <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-3">
       <div class="flex items-center justify-between">
         <div class="font-medium text-ink-100">{editing ? "Edit skill" : "New skill"}</div>
         <button
@@ -180,7 +180,7 @@
           <input
             bind:value={name}
             placeholder="code-review"
-            class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+            class="mt-1 w-full bg-ink-950 border border-edge rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono"
           />
         </label>
         <label class="block">
@@ -188,7 +188,7 @@
           <input
             bind:value={tags}
             placeholder="coding, quality"
-            class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+            class="mt-1 w-full bg-ink-950 border border-edge rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono"
           />
         </label>
       </div>
@@ -197,7 +197,7 @@
         <input
           bind:value={description}
           placeholder="What this skill does, shown in the slash menu"
-          class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700"
+          class="mt-1 w-full bg-ink-950 border border-edge rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge"
         />
       </label>
       <label class="block">
@@ -206,14 +206,14 @@
           bind:value={body}
           rows="8"
           placeholder="The prompt text inserted into chat when this skill is picked…"
-          class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono resize-y"
+          class="mt-1 w-full bg-ink-950 border border-edge rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-600 focus:outline-none focus:border-edge font-mono resize-y"
         ></textarea>
       </label>
       <div class="flex justify-end">
         <button
           onclick={save}
           disabled={busy || !name.trim() || !body.trim()}
-          class="px-4 py-2 text-xs font-medium rounded-xl bg-ember-600 hover:bg-ember-500 disabled:opacity-40 text-ink-950 transition-colors"
+          class="px-4 py-2 text-xs font-medium rounded-xl bg-ember-600 hover:bg-ember-500 disabled:opacity-40 text-on-ember transition-colors"
         >
           {busy ? "Saving…" : editing ? "Save changes" : "Create skill"}
         </button>
@@ -224,7 +224,7 @@
   {#if loading}
     <div class="py-10 text-center text-xs text-ink-400 font-mono">Loading skills…</div>
   {:else if skills.length === 0 && !showEditor}
-    <div class="border border-ink-800 rounded-2xl p-8 bg-ink-900/40 text-center space-y-2">
+    <div class="border border-edge rounded-2xl p-8 bg-ink-900/40 text-center space-y-2">
       <Icon name="skills" class="w-8 h-8 mx-auto text-ink-600" />
       <p class="text-sm text-ink-300">No skills yet.</p>
       <p class="text-xs text-ink-400 max-w-md mx-auto">
@@ -235,13 +235,13 @@
   {:else}
     <div class="grid grid-cols-1 gap-3">
       {#each skills as s (s.path)}
-        <div class="border border-ink-800 rounded-xl p-4 bg-ink-900/40 hover:border-ink-700 transition-colors">
+        <div class="border border-edge rounded-xl p-4 bg-ink-900/40 hover:border-edge transition-colors">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-medium text-sm text-ink-100 font-mono">/{s.name}</span>
                 {#each s.tags as t (t)}
-                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-ink-700 text-ink-400">{t}</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-edge text-ink-400">{t}</span>
                 {/each}
               </div>
               {#if s.description}
@@ -252,14 +252,14 @@
             <div class="flex items-center gap-1.5 shrink-0">
               <button
                 onclick={() => copyBody(s)}
-                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
                 title="Copy the prompt body"
               >
                 Copy
               </button>
               <button
                 onclick={() => openEdit(s)}
-                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
               >
                 Edit
               </button>

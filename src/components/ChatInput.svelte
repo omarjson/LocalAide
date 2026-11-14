@@ -98,12 +98,12 @@
   };
 </script>
 
-<div class="border-t border-ink-800 p-4">
+<div class="border-t border-edge p-4">
   <div class="flex items-center justify-between mb-2">
     <button
       type="button"
       onclick={() => showTools = !showTools}
-      class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-ink-800 text-ink-400 hover:text-ink-200"
+      class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-edge text-ink-400 hover:text-ink-200"
     >
       {showTools ? 'Hide tool panel' : 'File tool'}
     </button>
@@ -117,12 +117,12 @@
           aria-label="Workspace file path"
           bind:value={toolPath}
           placeholder="Workspace file path to inspect or write…"
-          class="flex-1 bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
+          class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
         />
         <button
           type="button"
           onclick={onReadFile}
-          class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300"
+          class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300"
         >
           Read
         </button>
@@ -131,7 +131,7 @@
           onclick={onWriteFile}
           disabled={!toolContent.trim()}
           title="write_file always requires explicit approval in the sandbox"
-          class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300 disabled:opacity-40"
+          class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300 disabled:opacity-40"
         >
           Write
         </button>
@@ -141,7 +141,7 @@
         bind:value={toolContent}
         rows={3}
         placeholder="Content to write into the file above. Writes are jailed to the workspace and need your approval."
-        class="w-full bg-ink-950 border border-ink-800 rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500 font-mono resize-none"
+        class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500 font-mono resize-none"
       ></textarea>
     </div>
   {/if}
@@ -150,7 +150,7 @@
     <div class="flex flex-wrap gap-2 mb-3">
       {#each pendingImages as src, i (i)}
         <div class="relative">
-          <img src={src} alt="Attachment {i + 1}" class="h-16 rounded-lg border border-ink-700" />
+          <img src={src} alt="Attachment {i + 1}" class="h-16 rounded-lg border border-edge" />
           <button
             type="button"
             onclick={() => onRemoveImage?.(i)}
@@ -163,7 +163,7 @@
   {/if}
 
   {#if slashMatch !== null && skillMatches.length > 0}
-    <div class="mb-2 border border-ink-800 rounded-xl bg-ink-950 overflow-hidden" role="listbox" aria-label="Skill picker">
+    <div class="mb-2 border border-edge rounded-xl bg-ink-950 overflow-hidden" role="listbox" aria-label="Skill picker">
       {#each skillMatches.slice(0, 6) as skill, i (skill.path)}
         <button
           type="button"
@@ -182,7 +182,7 @@
 
   <form onsubmit={(e) => { e.preventDefault(); if (streaming) onCancel?.(); else onSend(); }} class="flex gap-2">
     <label
-      class="px-3 rounded-xl bg-white/5 border border-ink-800 hover:bg-white/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
+      class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
       title="Attach an image. Needs a vision model."
     >
       Image
@@ -203,7 +203,7 @@
       disabled={streaming}
       rows={1}
       onkeydown={handleKeydown}
-      class="flex-1 bg-ink-900 border border-ink-800 rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
+      class="flex-1 bg-ink-900 border border-edge rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
     ></textarea>
 
     {#if streaming}
@@ -219,7 +219,7 @@
       <button
         type="submit"
         disabled={!input.trim() && pendingImages.length === 0}
-        class="px-5 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium disabled:opacity-40 transition-opacity"
+        class="px-5 rounded-xl bg-ember-600 text-on-ember text-sm font-medium disabled:opacity-40 transition-opacity"
       >
         Send
       </button>

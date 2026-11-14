@@ -225,7 +225,7 @@
 
 <div class="max-w-4xl mx-auto space-y-6">
   <!-- Header -->
-  <div class="flex items-center justify-between pb-4 border-b border-ink-800">
+  <div class="flex items-center justify-between pb-4 border-b border-edge">
     <div>
       <h2 class="text-lg font-semibold tracking-tight text-ink-100">Knowledge & Memory</h2>
       <p class="text-xs text-ink-400">Curated notes stored in SQLite WAL and on disk. Automatically recalled with citations in chat.</p>
@@ -240,7 +240,7 @@
       </button>
       <button
         onclick={() => showNew = !showNew}
-        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950 transition-colors"
+        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-on-ember transition-colors"
       >
         + New note
       </button>
@@ -299,31 +299,31 @@
 
   <!-- Create Note Drawer -->
   {#if showNew}
-    <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3" transition:slide={{ duration: dur(150) }}>
+    <div class="border border-edge rounded-2xl p-5 bg-ink-900/60 space-y-3" transition:slide={{ duration: dur(150) }}>
       <div class="font-medium text-sm text-ink-100">Create New Knowledge Note</div>
       <input
         type="text"
         placeholder="Title (e.g. Project Venus Architecture)…"
         bind:value={newTitle}
-        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2.5 text-xs text-ink-200 focus:outline-none focus:border-ink-700 font-sans"
+        class="w-full bg-ink-950 border border-edge rounded-lg p-2.5 text-xs text-ink-200 focus:outline-none focus:border-edge font-sans"
       />
       <input
         type="text"
         placeholder="Tags (comma separated, e.g. architecture, database)…"
         bind:value={newTags}
-        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 focus:outline-none focus:border-ink-700 font-mono text-[11px]"
+        class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-xs text-ink-200 focus:outline-none focus:border-edge font-mono text-[11px]"
       />
       <textarea
         rows={6}
         placeholder="Content in Markdown format…"
         bind:value={newContent}
-        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2.5 text-xs text-ink-200 font-mono focus:outline-none focus:border-ink-700 leading-relaxed"
+        class="w-full bg-ink-950 border border-edge rounded-lg p-2.5 text-xs text-ink-200 font-mono focus:outline-none focus:border-edge leading-relaxed"
       ></textarea>
       <div class="flex justify-end gap-2">
         <button onclick={() => showNew = false} class="px-3 py-1.5 text-xs text-ink-400 hover:text-ink-200">
           Cancel
         </button>
-        <button onclick={createNote} class="px-4 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950 transition-colors">
+        <button onclick={createNote} class="px-4 py-1.5 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-on-ember transition-colors">
           Save Note
         </button>
       </div>
@@ -332,18 +332,18 @@
 
   <!-- View / Edit Modal/Card -->
   {#if viewing && selectedNote}
-    <div class="border border-ink-800 rounded-2xl p-6 bg-ink-900/70 space-y-4" transition:slide={{ duration: dur(150) }}>
-      <div class="flex items-center justify-between pb-3 border-b border-ink-800">
+    <div class="border border-edge rounded-2xl p-6 bg-ink-900/70 space-y-4" transition:slide={{ duration: dur(150) }}>
+      <div class="flex items-center justify-between pb-3 border-b border-edge">
         <div>
           <h3 class="font-semibold text-ink-100 text-sm">{selectedNote.title}</h3>
           <p class="text-[11px] font-mono text-ink-400 truncate max-w-md">{selectedNote.path}</p>
         </div>
         <div class="flex items-center gap-2">
           {#if editing}
-            <button onclick={saveNote} class="px-3 py-1 bg-ember-600 hover:bg-ember-500 text-ink-950 rounded text-xs font-medium">Save</button>
+            <button onclick={saveNote} class="px-3 py-1 bg-ember-600 hover:bg-ember-500 text-on-ember rounded text-xs font-medium">Save</button>
             <button onclick={() => editing = false} class="px-2 py-1 text-ink-400 hover:text-ink-200 text-xs">Cancel</button>
           {:else}
-            <button onclick={() => editing = true} class="px-2.5 py-1 text-xs border border-ink-800 hover:bg-ink-800 rounded text-ink-300">Edit</button>
+            <button onclick={() => editing = true} class="px-2.5 py-1 text-xs border border-edge hover:bg-ink-800 rounded text-ink-300">Edit</button>
             <button onclick={() => deleteNote(selectedNote!.path)} class="px-2.5 py-1 text-xs border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 rounded">Delete</button>
             <button onclick={() => viewing = false} class="px-2.5 py-1 text-xs text-ink-400 hover:text-ink-200">Close</button>
           {/if}
@@ -355,24 +355,24 @@
           type="text"
           placeholder="Tags (comma separated)…"
           bind:value={selectedTagsEdit}
-          class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 font-mono text-[11px]"
+          class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-xs text-ink-200 font-mono text-[11px]"
         />
         <textarea
           rows={12}
           bind:value={selectedContent}
-          class="w-full bg-ink-950 border border-ink-800 rounded-lg p-3 text-xs text-ink-200 font-mono focus:outline-none focus:border-ink-700 leading-relaxed"
+          class="w-full bg-ink-950 border border-edge rounded-lg p-3 text-xs text-ink-200 font-mono focus:outline-none focus:border-edge leading-relaxed"
         ></textarea>
       {:else}
         {#if selectedNote.tags.length > 0}
           <div class="flex flex-wrap gap-1.5">
             {#each selectedNote.tags as tag}
-              <span class="px-2 py-0.5 rounded bg-ink-800 text-xs font-mono text-ember-300 border border-ink-700">
+              <span class="px-2 py-0.5 rounded bg-ink-800 text-xs font-mono text-ember-300 border border-edge">
                 #{tag}
               </span>
             {/each}
           </div>
         {/if}
-        <div class="bg-ink-950 border border-ink-800/80 rounded-xl p-4 max-h-96 overflow-y-auto">
+        <div class="bg-ink-950 border border-edge/80 rounded-xl p-4 max-h-96 overflow-y-auto">
           <pre class="text-xs text-ink-300 font-mono whitespace-pre-wrap leading-relaxed">{selectedContent}</pre>
         </div>
       {/if}
@@ -386,7 +386,7 @@
         type="text"
         placeholder="Search notes (Enter to search)…"
         bind:value={query}
-        class="flex-1 bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+        class="flex-1 bg-ink-900 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
       />
       {#if query}
         <button onclick={() => { query = ""; load(); }} class="px-3 py-2 bg-ink-800 hover:bg-ink-700 rounded-lg text-xs text-ink-300">
@@ -401,7 +401,7 @@
         {#each allTags as tag}
           <button
             onclick={() => selectedTag = tag}
-            class={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${selectedTag === tag ? 'bg-ember-600 text-ink-950 font-medium' : 'bg-ink-900 border border-ink-800 text-ink-400 hover:text-ink-200'}`}
+            class={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${selectedTag === tag ? 'bg-ember-600 text-on-ember font-medium' : 'bg-ink-900 border border-edge text-ink-400 hover:text-ink-200'}`}
           >
             {tag === "All" ? "All notes" : `#${tag}`}
           </button>
@@ -416,14 +416,14 @@
   {:else if searching}
     <div class="py-12 text-center text-xs text-ink-400 font-mono">Searching knowledge notes…</div>
   {:else if filteredNotes.length === 0}
-    <div class="border border-dashed border-ink-800 rounded-2xl p-12 text-center space-y-2">
+    <div class="border border-dashed border-edge rounded-2xl p-12 text-center space-y-2">
       <div class="text-xs text-ink-400">No memory notes found</div>
       <div class="text-[11px] text-ink-400">Create one above to enable automatic context recall and citations in chat.</div>
     </div>
   {:else}
     <div class="space-y-3">
       {#each filteredNotes as n}
-        <div class="border border-ink-800 rounded-xl p-4 bg-ink-900/40 hover:border-ink-700 transition-colors flex justify-between items-start gap-4">
+        <div class="border border-edge rounded-xl p-4 bg-ink-900/40 hover:border-edge transition-colors flex justify-between items-start gap-4">
           <div class="space-y-1.5 flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <button onclick={() => openNote(n)} class="font-medium text-sm text-ink-100 hover:text-ember-400 transition-colors text-left truncate">

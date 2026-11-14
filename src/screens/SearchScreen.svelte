@@ -264,7 +264,7 @@
       <p class="text-xs text-ink-400">Embedded SQLite WAL storage with BM25 keyword retrieval.</p>
     </div>
     {#if stats}
-      <div class="flex items-center gap-4 text-xs font-mono text-ink-300 bg-ink-900 border border-ink-800 rounded-lg px-3 py-1.5">
+      <div class="flex items-center gap-4 text-xs font-mono text-ink-300 bg-ink-900 border border-edge rounded-lg px-3 py-1.5">
         <span>Docs: {stats.doc_count}</span>
         <span>Size: {(stats.total_bytes / 1024).toFixed(1)} KB</span>
       </div>
@@ -275,7 +275,7 @@
     <ErrorBanner message={errorMessage} onDismiss={() => errorMessage = null} />
   {/if}
 
-  <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
+  <div class="border border-edge rounded-2xl p-4 bg-ink-900/40 space-y-3">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div>
         <div class="text-xs font-semibold text-ink-300 mb-1.5">Search mode</div>
@@ -286,7 +286,7 @@
               onclick={() => { mode = value; if (query.length > 2) search(); }}
               class="text-xs font-mono px-2.5 py-1 rounded-full border transition-colors {mode === value
                 ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
-                : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-ink-300'}"
+                : 'border-edge text-ink-400 hover:border-edge hover:text-ink-300'}"
             >
               {label}
             </button>
@@ -299,7 +299,7 @@
             Embeddings on · {embedding.model_id}{#if embedding.dimension} · {embedding.dimension}d{/if}
           </span>
           {#if embedding && embedding.embedded_chunks < embedding.total_chunks}
-            <button onclick={backfill} disabled={embedBusy} class="text-ink-300 border border-ink-700 rounded-full px-2.5 py-1 hover:border-ink-600 disabled:opacity-40">
+            <button onclick={backfill} disabled={embedBusy} class="text-ink-300 border border-edge rounded-full px-2.5 py-1 hover:border-ink-600 disabled:opacity-40">
               {embedBusy ? "Backfilling…" : `Backfill ${embedding.total_chunks - embedding.embedded_chunks} chunks`}
             </button>
           {/if}
@@ -307,7 +307,7 @@
             Stop
           </button>
         {:else}
-          <span class="text-ink-400 border border-ink-800 rounded-full px-2.5 py-1">
+          <span class="text-ink-400 border border-edge rounded-full px-2.5 py-1">
             {#if embedding && embedding.total_chunks > 0}
               Keyword only · {embedding.embedded_chunks}/{embedding.total_chunks} chunks vectorized
             {:else}
@@ -344,7 +344,7 @@
     {/if}
   </div>
 
-  <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
+  <div class="border border-edge rounded-2xl p-4 bg-ink-900/40 space-y-3">
     <div class="flex items-center justify-between">
       <div class="text-xs font-semibold text-ink-300">Index Local Directory</div>
       {#if watching}
@@ -364,9 +364,9 @@
         placeholder="C:\Users\you\Documents\notes"
         id="folder-input"
         bind:value={folder}
-        class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+        class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
       />
-      <button onclick={indexFolder} disabled={loading || !folder.trim()} class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-950 transition-colors">
+      <button onclick={indexFolder} disabled={loading || !folder.trim()} class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-on-ember transition-colors">
         {loading ? "Indexing…" : "Index Folder"}
       </button>
       <button onclick={startWatch} disabled={watching || !folder.trim()} class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
@@ -378,7 +378,7 @@
         type="text"
         placeholder="…or index a single file: C:\Users\you\Documents\note.md"
         bind:value={singleFile}
-        class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+        class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
       />
       <button onclick={indexSingleFile} disabled={loading || !singleFile.trim()} class="px-4 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
         Index File
@@ -398,7 +398,7 @@
             : "Search documents by keyword (Enter to search, Esc to clear)…"}
           bind:value={query}
           onkeydown={handleKeydown}
-          class="w-full bg-ink-900 border border-ink-800 rounded-lg pl-3 pr-8 py-2 text-sm text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+          class="w-full bg-ink-900 border border-edge rounded-lg pl-3 pr-8 py-2 text-sm text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
         />
         {#if query}
           <button
@@ -436,7 +436,7 @@
       {:else}
         <div class="space-y-2">
           {#each webResults as hit}
-            <div class="border border-ink-800 rounded-xl p-3.5 bg-ink-900/30 hover:border-ink-700 transition-colors">
+            <div class="border border-edge rounded-xl p-3.5 bg-ink-900/30 hover:border-edge transition-colors">
               <div class="space-y-1.5">
                 <div class="font-medium text-sm text-ink-200">{hit.title}</div>
                 <p class="text-xs text-ink-400 line-clamp-2 leading-relaxed">{hit.snippet}</p>
@@ -448,7 +448,7 @@
                 {#if webPages[hit.url]}
                   <button
                     onclick={() => { const rest = { ...webPages }; delete rest[hit.url]; webPages = rest; }}
-                    class="text-xs px-2.5 py-1 rounded bg-ink-900 border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                    class="text-xs px-2.5 py-1 rounded bg-ink-900 border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
                   >
                     Hide page text
                   </button>
@@ -464,7 +464,7 @@
                 <span class="text-[10px] text-ink-500">Reads through the keyless Jina Reader, or Firecrawl when its key is set</span>
               </div>
               {#if webPages[hit.url]}
-                <pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-ink-800 bg-ink-950 p-3 text-[11px] text-ink-300 whitespace-pre-wrap font-mono">{webPages[hit.url].content}</pre>
+                <pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-edge bg-ink-950 p-3 text-[11px] text-ink-300 whitespace-pre-wrap font-mono">{webPages[hit.url].content}</pre>
               {/if}
             </div>
           {/each}
@@ -492,7 +492,7 @@
     {:else}
       <div class="space-y-2">
         {#each results as doc}
-          <div class="border border-ink-800 rounded-xl p-3.5 bg-ink-900/30 hover:border-ink-700 transition-colors flex justify-between items-start gap-4">
+          <div class="border border-edge rounded-xl p-3.5 bg-ink-900/30 hover:border-edge transition-colors flex justify-between items-start gap-4">
             <div class="space-y-1.5 flex-1 min-w-0">
               <div class="font-medium text-sm text-ink-200 truncate">{doc.title}</div>
               <p class="text-xs text-ink-400 line-clamp-2 font-mono leading-relaxed">{doc.snippet}</p>

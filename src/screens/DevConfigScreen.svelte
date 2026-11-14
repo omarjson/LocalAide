@@ -67,11 +67,11 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div class="space-y-4">
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="flex items-center justify-between mb-4">
           <div class="font-medium text-ink-100">Available RAM</div>
           <div class="flex items-center gap-2">
-            <input bind:value={ramTotal} type="number" class="w-24 bg-ink-950 border border-ink-700 rounded-lg px-2 py-1 text-sm font-mono text-ink-200 focus:outline-none focus:border-ember-500"/>
+            <input bind:value={ramTotal} type="number" class="w-24 bg-ink-950 border border-edge rounded-lg px-2 py-1 text-sm font-mono text-ink-200 focus:outline-none focus:border-ember-500"/>
             <span class="text-xs text-ink-400">GB</span>
           </div>
         </div>
@@ -85,7 +85,7 @@
         </div>
       </div>
 
-      <div class="border border-ink-800 rounded-2xl bg-ink-900/60 divide-y divide-ink-800 overflow-hidden">
+      <div class="border border-edge rounded-2xl bg-ink-900/60 divide-y divide-ink-800 overflow-hidden">
         {#if loading}
           <div class="py-8 text-center text-xs text-ink-400 font-mono">Loading models…</div>
         {:else if models.length === 0}
@@ -105,15 +105,15 @@
     </div>
 
     <div class="space-y-4">
-      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
         <div class="font-medium text-ink-100 mb-2">Preset actions</div>
         <div class="flex gap-2 mb-3">
-          <input bind:value={presetName} placeholder="Preset name" class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-2 py-1.5 text-xs text-ink-200 focus:outline-none focus:border-ember-500"/>
-          <button onclick={savePreset} class="px-3 py-1.5 rounded-lg bg-white/5 border border-ink-800 text-xs text-ink-300 hover:bg-white/10">Save</button>
+          <input bind:value={presetName} placeholder="Preset name" class="flex-1 bg-ink-950 border border-edge rounded-lg px-2 py-1.5 text-xs text-ink-200 focus:outline-none focus:border-ember-500"/>
+          <button onclick={savePreset} class="px-3 py-1.5 rounded-lg bg-white/5 border border-edge text-xs text-ink-300 hover:bg-white/10">Save</button>
         </div>
         <div class="space-y-1 max-h-32 overflow-auto">
           {#each presets as p}
-            <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-ink-800 text-xs text-ink-300 hover:bg-white/10">{p.name}</button>
+            <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-edge text-xs text-ink-300 hover:bg-white/10">{p.name}</button>
           {:else}
             <div class="text-xs text-ink-400">No saved presets</div>
           {/each}

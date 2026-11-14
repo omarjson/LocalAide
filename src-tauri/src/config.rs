@@ -39,6 +39,9 @@ pub struct AppConfig {
     /// excluded from backups unless explicitly included.
     #[serde(default)]
     pub web_search: WebSearchConfig,
+    /// UI theme: Some("dark") | Some("light"). None = dark (the default).
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -107,6 +110,7 @@ impl Default for AppConfig {
             chat_persona: None,
             backup: BackupConfig::default(),
             web_search: WebSearchConfig::default(),
+            theme: None,
         }
     }
 }

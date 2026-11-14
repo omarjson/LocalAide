@@ -146,18 +146,18 @@
     </div>
 
     {#if isEditing}
-      <div class="w-full bg-ink-900 border border-ink-700 rounded-2xl p-3 space-y-2">
+      <div class="w-full bg-ink-900 border border-edge rounded-2xl p-3 space-y-2">
         <textarea
           bind:this={editEl}
           bind:value={editDraft}
           rows={3}
-          class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-xs text-ink-200 font-sans focus:outline-none focus:border-ink-600"
+          class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-xs text-ink-200 font-sans focus:outline-none focus:border-ink-600"
         ></textarea>
         <div class="flex justify-end gap-2">
           <button onclick={() => isEditing = false} class="px-2.5 py-1 text-xs text-ink-400 hover:text-ink-200">
             Cancel
           </button>
-          <button onclick={submitEdit} class="px-3 py-1 bg-ember-600 hover:bg-ember-500 text-ink-950 rounded-lg text-xs font-medium">
+          <button onclick={submitEdit} class="px-3 py-1 bg-ember-600 hover:bg-ember-500 text-on-ember rounded-lg text-xs font-medium">
             Save & Submit
           </button>
         </div>
@@ -166,8 +166,8 @@
       <div
         class={`px-4 py-3 rounded-2xl text-sm leading-relaxed relative ${
           role === "user"
-            ? "bg-ember-600 text-ink-950 shadow-md shadow-ember-500/10"
-            : "bg-ink-900 border border-ink-800 text-ink-100"
+            ? "bg-ember-600 text-on-ember shadow-md shadow-ember-500/10"
+            : "bg-ink-900 border border-edge text-ink-100"
         }`}
       >
         {#if images.length > 0}
@@ -192,12 +192,12 @@
             {#if seg.type === "text"}
               <div class="whitespace-pre-wrap">
                 {#each parseInline(seg.text) as tok, ti (ti)}
-                  {#if tok.t === "code"}<code class="px-1 py-0.5 rounded bg-ink-950 border border-ink-700/60 text-[0.85em] font-mono text-ember-200">{tok.v}</code>{:else if tok.t === "bold"}<strong class="font-semibold text-ink-50">{tok.v}</strong>{:else if tok.t === "italic"}<em class="italic">{tok.v}</em>{:else if tok.t === "link"}<a href={tok.href} target="_blank" rel="noopener noreferrer" class="underline decoration-ember-500/50 hover:decoration-ember-400 text-ember-300 break-all">{tok.v}</a>{:else}{tok.v}{/if}
+                  {#if tok.t === "code"}<code class="px-1 py-0.5 rounded bg-ink-950 border border-edge/60 text-[0.85em] font-mono text-ember-200">{tok.v}</code>{:else if tok.t === "bold"}<strong class="font-semibold text-ink-50">{tok.v}</strong>{:else if tok.t === "italic"}<em class="italic">{tok.v}</em>{:else if tok.t === "link"}<a href={tok.href} target="_blank" rel="noopener noreferrer" class="underline decoration-ember-500/50 hover:decoration-ember-400 text-ember-300 break-all">{tok.v}</a>{:else}{tok.v}{/if}
                 {/each}
               </div>
             {:else}
-              <div class="rounded-xl overflow-hidden border border-ink-700/60 bg-ink-950 my-2">
-                <div class="flex items-center justify-between px-3 py-1.5 bg-ink-900/90 border-b border-ink-800 text-[11px] font-mono text-ink-400">
+              <div class="rounded-xl overflow-hidden border border-edge/60 bg-ink-950 my-2">
+                <div class="flex items-center justify-between px-3 py-1.5 bg-ink-900/90 border-b border-edge text-[11px] font-mono text-ink-400">
                   <span>{seg.lang}</span>
                   <button
                     type="button"
@@ -217,13 +217,13 @@
         </div>
 
         {#if citations && citations.length > 0}
-          <div class="mt-3 pt-2.5 border-t border-ink-800/80 flex flex-wrap items-center gap-1.5">
+          <div class="mt-3 pt-2.5 border-t border-edge/80 flex flex-wrap items-center gap-1.5">
             <span class="text-xs font-mono uppercase tracking-wider text-ink-400">Sources:</span>
             {#each citations as cit}
               <button
                 type="button"
                 onclick={() => activeCitation = cit}
-                class="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-ink-800/80 hover:bg-ink-700/80 text-ember-300 border border-ink-700/60 transition-colors"
+                class="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-ink-800/80 hover:bg-ink-700/80 text-ember-300 border border-edge/60 transition-colors"
               >
                 <span class="text-ember-400 font-semibold">[{cit.index}]</span>
                 <span class="max-w-[120px] truncate">{cit.title}</span>
@@ -288,14 +288,14 @@
       <img
         src={lightbox}
         alt=""
-        class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700"
+        class="max-h-[85vh] max-w-[92vw] rounded-xl border border-edge"
       />
     </button>
     <button
       type="button"
       onclick={() => (lightbox = null)}
       aria-label="Close fullscreen image"
-      class="absolute top-5 right-5 p-2 rounded-xl bg-ink-900 border border-ink-700 text-ink-300 hover:text-ink-100 transition-colors"
+      class="absolute top-5 right-5 p-2 rounded-xl bg-ink-900 border border-edge text-ink-300 hover:text-ink-100 transition-colors"
     >
       <Icon name="close" class="w-4 h-4" />
     </button>
@@ -318,11 +318,11 @@
       tabindex="-1"
       in:scale={{ start: 0.97, duration: dur(130) }}
       out:scale={{ start: 0.97, duration: dur(80) }}
-      class="bg-ink-900 border border-ink-800 rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl"
+      class="bg-ink-900 border border-edge rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
     >
-      <div class="flex items-center justify-between pb-2 border-b border-ink-800">
+      <div class="flex items-center justify-between pb-2 border-b border-edge">
         <div class="flex items-center gap-2">
           <span class="px-2 py-0.5 rounded bg-ember-950 border border-ember-800/50 text-ember-300 font-mono text-xs">
             Source [{activeCitation.index}]
@@ -336,7 +336,7 @@
       <div class="text-[11px] font-mono text-ink-400 break-all">
         {activeCitation.source}
       </div>
-      <div class="bg-ink-950 border border-ink-800/80 rounded-xl p-3 max-h-60 overflow-y-auto">
+      <div class="bg-ink-950 border border-edge/80 rounded-xl p-3 max-h-60 overflow-y-auto">
         <pre class="text-xs font-mono text-ink-300 whitespace-pre-wrap leading-relaxed">{activeCitation.snippet}</pre>
       </div>
       <div class="flex justify-between items-center text-xs font-mono text-ink-400 pt-1">

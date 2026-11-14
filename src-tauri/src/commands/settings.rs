@@ -100,6 +100,32 @@ pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u
     Ok(cfg.context_tokens)
 }
 
+/// The UI theme the user last chose. None = the dark default.
+#[tauri::command]
+pub fn settings_theme(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    Ok(store.load().map_err(AppError::internal)?.theme)
+}
+
+/// Persist the theme choice. Unknown values fall back to the dark default.
+#[tauri::command]
+pub fn settings_set_theme(
+    state: State<'_, AppState>,
+    theme: Option<String>,
+) -> Result<(), AppError> {
+    let value = theme.filter(|t| t == "dark" || t == "light");
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.theme = value;
+    store.save(&cfg).map_err(AppError::internal)
+}
+
 /// Chat preferences the user last chose (system prompt, temperature,
 /// sampling cap, persona), persisted across sessions.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

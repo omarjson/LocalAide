@@ -446,11 +446,11 @@
 
 <div class="max-w-4xl mx-auto h-full flex flex-col relative">
   <!-- Header Bar -->
-  <div class="flex items-center justify-between px-2 py-3 border-b border-ink-800">
+  <div class="flex items-center justify-between px-2 py-3 border-b border-edge">
     <div class="flex items-center gap-3">
       <button
         onclick={() => showThreads = !showThreads}
-        class="flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 text-ink-300 font-medium transition-colors"
+        class="flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 text-ink-300 font-medium transition-colors"
       >
         <span class="text-ink-400 inline-flex"><Icon name="chat" class="w-4 h-4" /></span>
         <span class="max-w-[140px] truncate">{activeThreadTitle}</span>
@@ -480,7 +480,7 @@
                 {switchError}
               </div>
             {:else if pickerOpen && installedModels.length > 1}
-              <div class="absolute left-0 top-6 z-20 min-w-[240px] max-h-64 overflow-y-auto bg-ink-950 border border-ink-800 rounded-xl shadow-xl py-1">
+              <div class="absolute left-0 top-6 z-20 min-w-[240px] max-h-64 overflow-y-auto bg-ink-950 border border-edge rounded-xl shadow-xl py-1">
                 {#each installedModels as m (m.id)}
                   <button
                     type="button"
@@ -506,14 +506,14 @@
       </button>
       <button
         onclick={() => showSystem = !showSystem}
-        class="px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 text-ink-300 transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 text-ink-300 transition-colors"
       >
         Persona
       </button>
       <button
         onclick={() => exportCurrentThread("markdown")}
         disabled={messages.length === 0}
-        class="px-2.5 py-1 text-xs rounded-lg border border-ink-800 hover:bg-ink-800/60 disabled:opacity-30 text-ink-400 transition-colors"
+        class="px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 disabled:opacity-30 text-ink-400 transition-colors"
         title="Export conversation as Markdown"
       >
         Export
@@ -531,10 +531,10 @@
   <!-- Threads Drawer -->
   {#if showThreads}
     <div
-      class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-ink-800 rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
+      class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-edge rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
       transition:fly={{ y: -6, duration: dur(120) }}
     >
-      <div class="flex items-center justify-between pb-2 border-b border-ink-800 text-xs font-semibold text-ink-300">
+      <div class="flex items-center justify-between pb-2 border-b border-edge text-xs font-semibold text-ink-300">
         <span>Saved Conversations</span>
         <button onclick={newChat} class="text-[11px] text-ember-400 hover:underline">+ New</button>
       </div>
@@ -569,13 +569,13 @@
 
   <!-- Persona / System Prompt Selector -->
   {#if showSystem}
-    <div class="p-3 bg-ink-900/60 border-b border-ink-800 text-xs space-y-2">
+    <div class="p-3 bg-ink-900/60 border-b border-edge text-xs space-y-2">
       <div class="flex items-center gap-2 flex-wrap">
         <span class="text-ink-400">Presets:</span>
         {#each systemPresets as p}
           <button
             onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }}
-            class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-ink-950 font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
+            class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-on-ember font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
           >
             {p.label}
           </button>
@@ -599,7 +599,7 @@
         bind:value={systemPrompt}
         rows={2}
         onblur={savePrefs}
-        class="w-full bg-ink-950 border border-ink-800 rounded-lg p-2 text-ink-200 font-mono text-xs focus:outline-none focus:border-ink-600"
+        class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-ink-200 font-mono text-xs focus:outline-none focus:border-ink-600"
       ></textarea>
     </div>
   {/if}
@@ -630,7 +630,7 @@
               <button
                 type="button"
                 onclick={onOpenModels}
-                class="mt-2 px-4 py-2 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-ink-950"
+                class="mt-2 px-4 py-2 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-on-ember"
               >
                 Open Models
               </button>
@@ -646,7 +646,7 @@
           {#each starterPrompts as sp}
             <button
               onclick={() => { input = sp; send(); }}
-              class="text-left p-3 rounded-xl border border-ink-800/80 bg-ink-900/40 hover:bg-ink-900 hover:border-ink-700 text-xs text-ink-300 transition-all"
+              class="text-left p-3 rounded-xl border border-edge/80 bg-ink-900/40 hover:bg-ink-900 hover:border-edge text-xs text-ink-300 transition-all"
             >
               "{sp}"
             </button>
@@ -675,7 +675,7 @@
         onclick={() => scrollToBottom(true)}
         in:fly={{ y: 8, duration: dur(120) }}
         out:fade={{ duration: dur(100) }}
-        class="absolute bottom-28 right-4 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-ink-700 text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-colors flex items-center gap-1.5"
+        class="absolute bottom-28 right-4 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-edge text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-colors flex items-center gap-1.5"
       >
         <Icon name="arrow-down" class="w-3.5 h-3.5" />
         <span>Scroll to bottom</span>

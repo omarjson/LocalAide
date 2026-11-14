@@ -373,6 +373,16 @@ export class ApiClient {
     return invoke<CloudProviderPreset[]>("cloud_provider_presets");
   }
 
+  // Theme
+
+  async getTheme(): Promise<string | null> {
+    return invoke<string | null>("settings_theme");
+  }
+
+  async setTheme(theme: "dark" | "light" | null): Promise<void> {
+    return invoke<void>("settings_set_theme", { theme });
+  }
+
   // Skills (saved prompt templates)
 
   async skillsList(): Promise<Skill[]> {

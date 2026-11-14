@@ -100,7 +100,7 @@
 </script>
 
 <div class="max-w-2xl mx-auto">
-  <div class="rounded-2xl border border-ink-800 bg-ink-900/60 p-6 shadow-[0_0_80px_rgba(255,122,26,0.08)]">
+  <div class="rounded-2xl border border-edge bg-ink-900/60 p-6 shadow-[0_0_80px_rgba(255,122,26,0.08)]">
     <h2 class="text-lg font-semibold tracking-tight mb-4">First run — Simple setup</h2>
 
     {#if step === "detect"}
@@ -109,22 +109,22 @@
           <p class="text-sm text-rose-300">{status}</p>
           <button
             onclick={detect}
-            class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium transition-colors"
+            class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium transition-colors"
           >
             Retry
           </button>
         {:else}
-          <div class="w-12 h-12 rounded-full border-4 border-ink-700 border-t-ember-500 animate-spin"></div>
+          <div class="w-12 h-12 rounded-full border-4 border-edge border-t-ember-500 animate-spin"></div>
           <p class="text-sm text-ink-400">{status}</p>
         {/if}
       </div>
     {:else if step === "preset"}
       <div class="grid grid-cols-3 gap-2 text-sm mb-6">
-        <div class="px-3 py-2 rounded-xl border border-ink-800 bg-ink-950">
+        <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Total</span>
           <span class="font-mono text-ink-200">{formatBytes(ramTotal)}</span>
         </div>
-        <div class="px-3 py-2 rounded-xl border border-ink-800 bg-ink-950">
+        <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Usable</span>
           <span class="font-mono text-ink-200">{formatBytes(ramUsable)}</span>
         </div>
@@ -144,7 +144,7 @@
         {#each presets as p}
           {@const fits = p.ramGb <= budgetGb}
           {@const isRec = p.id === recommended.id}
-          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-xl border transition ${fits ? 'border-ink-800 hover:border-ember-500/50 hover:bg-white/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
+          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-xl border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-white/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
             <div class="flex items-center justify-between">
               <div>
                 <div class="font-medium text-ink-100 flex items-center gap-2">
@@ -164,14 +164,14 @@
         {/each}
       </div>
     {:else if step === "confirm"}
-      <div class="bg-ink-950 rounded-xl p-4 mb-6 border border-ink-800">
+      <div class="bg-ink-950 rounded-xl p-4 mb-6 border border-edge">
         <div class="font-medium text-ink-100">{selected?.name} preset</div>
         <div class="text-sm text-ink-400">{selected?.models.join(", ")}</div>
       </div>
       <p class="text-sm text-ink-400 mb-6">{status}</p>
       <div class="flex gap-3">
-        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-white/5 border border-ink-800 text-sm text-ink-300 hover:bg-white/10">Change preset</button>
-        <button onclick={install} class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium">Install</button>
+        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-white/5 border border-edge text-sm text-ink-300 hover:bg-white/10">Change preset</button>
+        <button onclick={install} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Install</button>
       </div>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
@@ -191,7 +191,7 @@
           <div class="text-sm text-ink-400">{status}</div>
         </div>
       </div>
-      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-xl bg-ember-600 text-ink-950 text-sm font-medium">Open app</button>
+      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Open app</button>
     {/if}
   </div>
 </div>

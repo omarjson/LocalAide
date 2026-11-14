@@ -65,6 +65,12 @@
   onMount(() => {
     void (async () => {
       try {
+        const theme = await api.getTheme();
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+      } catch {}
+      try {
         const cfg = await api.loadConfig();
         screen = cfg.selected_models?.length ? "chat" : "setup";
       } catch {
@@ -149,9 +155,9 @@
 </script>
 
 <main class="h-screen flex overflow-hidden bg-ink-950 text-ink-100 selection:bg-ember-500/30">
-  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-[280px] shrink-0 bg-ink-900/95 lg:bg-ink-900/80 backdrop-blur-xl border-r border-ink-800 flex flex-col transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-    <div class="h-[72px] border-b border-ink-800 flex items-center gap-3 px-5 shrink-0">
-      <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-ink-800"><Icon name="close" class="w-4 h-4" /></button>
+  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-[280px] shrink-0 bg-ink-900/95 lg:bg-ink-900/80 backdrop-blur-xl border-r border-edge flex flex-col transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+    <div class="h-[72px] border-b border-edge flex items-center gap-3 px-5 shrink-0">
+      <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-lg bg-white/5 border border-edge"><Icon name="close" class="w-4 h-4" /></button>
       <LogoMark class="w-9 h-9 shrink-0" />
       <div>
         <span class="font-[700] tracking-tight text-[15px]">LocalAide</span>
@@ -202,7 +208,7 @@
         Settings
       </button>
     </nav>
-    <div class="p-4 border-t border-ink-800 shrink-0 space-y-2">
+    <div class="p-4 border-t border-edge shrink-0 space-y-2">
       {#if updateAvailable}
         <button
           onclick={() => navigate("settings")}
@@ -222,8 +228,8 @@
   </aside>
 
   <section class="flex-1 overflow-y-auto">
-    <div class="lg:hidden sticky top-0 z-30 bg-ink-950/80 backdrop-blur p-3 border-b border-ink-800 flex items-center gap-3">
-      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-ink-800 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
+    <div class="lg:hidden sticky top-0 z-30 bg-ink-950/80 backdrop-blur p-3 border-b border-edge flex items-center gap-3">
+      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-lg bg-white/5 border border-edge text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
       <LogoMark class="w-6 h-6 shrink-0" />
       <span class="font-semibold">LocalAide</span>
     </div>
@@ -234,15 +240,15 @@
         <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center">
           <div class="text-rose-300 mb-3 flex justify-center"><Icon name="alert" class="w-7 h-7" /></div>
           <h2 class="text-lg font-semibold text-rose-200 mb-2">LocalAide recovered from an unexpected error</h2>
-          <p class="text-sm text-ink-400 mb-6 font-mono text-left bg-black/40 p-4 rounded-xl border border-ink-800 break-words">{fatalError}</p>
+          <p class="text-sm text-ink-400 mb-6 font-mono text-left bg-black/40 p-4 rounded-xl border border-edge break-words">{fatalError}</p>
           <div class="flex justify-center gap-3">
             <button onclick={() => fatalError = null} class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors">Dismiss and Continue</button>
-            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-ink-700 hover:bg-white/5 text-sm text-ink-300 transition-colors">Copy Diagnostics</button>
+            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-edge hover:bg-white/5 text-sm text-ink-300 transition-colors">Copy Diagnostics</button>
           </div>
         </div>
       {:else if screen === null}
         <div class="max-w-2xl mx-auto my-24 flex flex-col items-center gap-3">
-          <div class="w-10 h-10 rounded-full border-4 border-ink-700 border-t-ember-500 animate-spin"></div>
+          <div class="w-10 h-10 rounded-full border-4 border-edge border-t-ember-500 animate-spin"></div>
           <p class="text-sm text-ink-400">Starting LocalAide…</p>
         </div>
       {:else if screen === "setup"}
@@ -269,8 +275,8 @@
 
   {#if cmdOpen}
     <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-lg mx-auto rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-        <div class="flex items-center gap-3 px-4 py-3 border-b border-ink-800">
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-lg mx-auto rounded-2xl border border-edge bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+        <div class="flex items-center gap-3 px-4 py-3 border-b border-edge">
           <span class="text-ink-400"><Icon name="search" /></span>
           <input aria-label="Jump to screen" bind:this={cmdInput} bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-ink-600"/>
           <span class="text-xs px-1.5 py-0.5 rounded bg-ink-800 text-ink-400">ESC</span>
@@ -291,25 +297,25 @@
 
   {#if toast}
     <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" role="status" in:fly={{ y: 10, duration: dur(160) }} out:fade={{ duration: dur(100) }}>
-      <div class="px-4 py-2 rounded-xl bg-ink-900 border border-ink-800 shadow-lg text-sm text-ink-100">{toast}</div>
+      <div class="px-4 py-2 rounded-xl bg-ink-900 border border-edge shadow-lg text-sm text-ink-100">{toast}</div>
     </div>
   {/if}
 
   {#if showHelp}
     <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-md rounded-2xl border border-ink-800 bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-md rounded-2xl border border-edge bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <h3 class="text-lg font-semibold mb-4 text-ink-100">Keyboard shortcuts</h3>
         <div class="space-y-2.5 text-xs font-mono">
-          <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">⌘K / Ctrl+K</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">⌘N / Ctrl+N</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Focus search</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">/</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">⌘, / Ctrl+,</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Switch tabs (1: Chat, 2: Search, ...)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">⌘1 – ⌘5</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / Dismiss dialog</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">Esc</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">Enter</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-ink-700 text-ink-200">?</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘K / Ctrl+K</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘N / Ctrl+N</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Focus search</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">/</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘, / Ctrl+,</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Switch tabs (1: Chat, 2: Search, ...)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘1 – ⌘5</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / Dismiss dialog</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Esc</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Enter</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">?</kbd></div>
         </div>
-        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-xl bg-white/5 border border-ink-800 text-sm hover:bg-white/10">Close</button>
+        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-xl bg-white/5 border border-edge text-sm hover:bg-white/10">Close</button>
       </div>
     </div>
   {/if}
