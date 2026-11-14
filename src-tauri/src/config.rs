@@ -262,7 +262,10 @@ mod tests {
         let cfg: AppConfig = serde_json::from_str(old).unwrap();
         assert!(cfg.cloud_providers.is_empty());
         assert!(cfg.active_cloud_provider.is_none());
-        assert_eq!(cfg.memory_percent_for_models(), DEFAULT_MODEL_MEMORY_PERCENT);
+        assert_eq!(
+            cfg.memory_percent_for_models(),
+            DEFAULT_MODEL_MEMORY_PERCENT
+        );
     }
 
     #[test]
