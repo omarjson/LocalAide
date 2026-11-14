@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 /// or broken server cannot stream unbounded data into memory.
 pub const MAX_MANIFEST_BYTES: usize = 512 * 1024;
 pub const MAX_MODELS: usize = 200;
-const MAX_COMPANIONS_PER_MODEL: usize = 8;
+pub const MAX_COMPANIONS_PER_MODEL: usize = 8;
 const KNOWN_KINDS: [&str; 4] = ["chat", "code", "embedding", "reranker"];
 
 fn is_sha256_hex(s: &str) -> bool {

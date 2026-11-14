@@ -134,7 +134,7 @@ impl ModelService {
     /// Every model the app knows about: the active catalog plus the
     /// user's community additions.
     pub fn all_entries(&self) -> Vec<CatalogEntry> {
-        let mut all = self.manifest().models.as_ref().clone();
+        let mut all = self.manifest().models.clone();
         all.extend(self.custom.all().as_ref().clone());
         all
     }

@@ -128,10 +128,10 @@ pub async fn hf_custom_add(
             .iter()
             .filter(|f| f.is_mmproj && parent_of(&f.path) == parent_of(&primary.path))
             .collect();
-        let projector = same_dir
-            .iter()
-            .min_by_key(|f| f.size)
-            .or_else(|| files.iter().filter(|f| f.is_mmproj).min_by_key(|f| f.size));
+        let projector = match same_dir.iter().min_by_key(|f| f.size) {
+            Some(f) => Some(*f),
+            None => files.iter().filter(|f| f.is_mmproj).min_by_key(|f| f.size),
+        };
         if let Some(p) = projector {
             let stem = primary_dest.strip_suffix(".gguf").unwrap_or(&primary_dest);
             companions.push(CatalogCompanion {
