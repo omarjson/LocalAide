@@ -18,7 +18,7 @@ if ($start -lt 0) { throw "could not find the models vec in catalog.rs" }
 $end = $src.IndexOf("];", $start)
 $body = $src.Substring($start, $end - $start)
 
-$entryRegex = [regex]'entry\(\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*([\d_]+),\s*([\d.]+),\s*"([^"]*)",\s*"([0-9a-f]{64})",\s*"([^"]*)",\s*"([^"]*)",\s*(vec!\[[\s\S]*?\]|vec!\[\])\s*,\s*\)\s*(?:\.with_context\(([\d_]+)\)\s*)?(?:\.with_dest\("([^"]*)"\)\s*)?'
+$entryRegex = [regex]'entry\(\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*([\d_]+),\s*([\d.]+),\s*"([^"]*)",\s*"([0-9a-f]{64})",\s*"([^"]*)",\s*"([^"]*)",\s*(vec!\[[\s\S]*?\]|vec!\[\])\s*,\s*\)\s*((?:\.\w+\([\s\S]*?\)\s*)+)?'
 $companionRegex = [regex]'companion\(\s*"([^"]+)",\s*"([0-9a-f]{64})",\s*([\d_]+),\s*"([^"]+)",?\s*\)'
 
 $models = New-Object System.Collections.Generic.List[object]
@@ -45,8 +45,13 @@ foreach ($m in $entryRegex.Matches($body)) {
         quant           = $m.Groups[10].Value
         description     = $m.Groups[11].Value
     }
-    if ($m.Groups[13].Success) { $e["context_tokens"] = [int64]$m.Groups[13].Value.Replace("_", "") }
-    if ($m.Groups[14].Success) { $e["dest"] = $m.Groups[14].Value }
+    # Builders may chain in any order: pull with_context and with_dest out of
+    # the tail instead of relying on a fixed group order.
+    $tail = $m.Groups[13].Value
+    $ctx = [regex]::Match($tail, '\.with_context\(([\d_]+)\)')
+    if ($ctx.Success) { $e["context_tokens"] = [int64]$ctx.Groups[1].Value.Replace("_", "") }
+    $dest = [regex]::Match($tail, '\.with_dest\("([^"]*)"\)')
+    if ($dest.Success) { $e["dest"] = $dest.Groups[1].Value }
     $e["companions"] = $companions
     $models.Add($e)
 }

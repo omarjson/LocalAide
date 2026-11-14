@@ -474,6 +474,7 @@
                        "sha256":  "a46511af19832459a6a967c5a259d5b824c808017d33683d281fa0144c690009",
                        "quant":  "MXFP4_MOE",
                        "description":  "Mistral\u0027s 2026 flagship: 128 experts with native MXFP4 quantization, vision input, 256k context (March 2026). Ships as three split GGUF shards llama.cpp loads together.",
+                       "context_tokens":  262144,
                        "dest":  "Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf",
                        "companions":  [
                                           {
