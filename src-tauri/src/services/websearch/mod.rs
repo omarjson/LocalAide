@@ -760,7 +760,9 @@ mod tests {
         assert_eq!(hits[0].title, "The Rust Programming Language");
         assert_eq!(hits[0].url, "https://www.rust-lang.org/");
         assert!(hits[0].snippet.contains("empowering everyone"));
-        assert!(!hits[0].snippet.contains('&'));
+        // Entities decode to their characters; no raw markup survives.
+        assert!(!hits[0].snippet.contains("&amp;"));
+        assert!(hits[0].snippet.contains("software & more"));
         // Direct (non-redirect) href passes through untouched.
         assert_eq!(hits[1].url, "https://doc.rust-lang.org/book/");
     }
@@ -897,8 +899,10 @@ mod tests {
             };
             let mut buf = [0u8; 8192];
             let _ = stream.read(&mut buf);
+            // The blank line after the extra headers terminates the header
+            // section; without it every client rejects the response.
             let response = format!(
-                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{}",
+                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n",
                 status,
                 ct,
                 body.len(),
