@@ -28,8 +28,14 @@ pub async fn index_folder(
     folder: String,
 ) -> Result<IndexFolderResponse, AppError> {
     with_app_state(&state, move |state| {
-        let (indexed, skipped) = state.library.index_folder(Path::new(&folder), None)?;
-        Ok(IndexFolderResponse { indexed, skipped })
+        let report = state
+            .library
+            .index_folder_report(Path::new(&folder), None)?;
+        Ok(IndexFolderResponse {
+            indexed: report.indexed,
+            skipped: report.skipped,
+            limited: report.limited,
+        })
     })
     .await
 }
@@ -138,9 +144,37 @@ pub async fn embedding_backfill(state: State<'_, AppState>) -> Result<BackfillRe
     .await
 }
 
+/// One page of the library, newest first. Without a limit, 200 documents.
 #[tauri::command]
-pub async fn list_index(state: State<'_, AppState>) -> Result<Vec<SearchResultDoc>, AppError> {
-    with_app_state(&state, |state| state.library.list()).await
+pub async fn list_index(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<SearchResultDoc>, AppError> {
+    let limit = limit.unwrap_or(200).clamp(1, 1000);
+    with_app_state(&state, move |state| {
+        state.library.list_page(Some(limit), offset.unwrap_or(0))
+    })
+    .await
+}
+
+/// Rebuilds the database file without unused space.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CompactResponse {
+    pub bytes_before: u64,
+    pub bytes_after: u64,
+}
+
+#[tauri::command]
+pub async fn library_compact(state: State<'_, AppState>) -> Result<CompactResponse, AppError> {
+    with_app_state(&state, |state| {
+        let (bytes_before, bytes_after) = state.library.compact()?;
+        Ok(CompactResponse {
+            bytes_before,
+            bytes_after,
+        })
+    })
+    .await
 }
 
 #[tauri::command]

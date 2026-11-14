@@ -113,11 +113,13 @@ fn test_document_and_preset_serialization() {
     let ifr = IndexFolderResponse {
         indexed: 5,
         skipped: 1,
+        limited: true,
     };
     let json_ifr = serde_json::to_string(&ifr).expect("Serialization");
     let roundtrip_ifr: IndexFolderResponse =
         serde_json::from_str(&json_ifr).expect("Deserialization");
     assert_eq!(roundtrip_ifr.indexed, 5);
+    assert!(roundtrip_ifr.limited);
 }
 
 #[test]

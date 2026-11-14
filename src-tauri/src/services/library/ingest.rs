@@ -9,6 +9,10 @@ use std::path::Path;
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024; // 5 MB ceiling per file
 pub const TARGET_CHUNK_CHARS: usize = 1500;
 pub const OVERLAP_CHARS: usize = 250;
+/// Most text kept from one file. A small compressed PDF can unpack to far more.
+pub const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
+/// Most bytes unpacked from one compressed PDF stream.
+const MAX_PDF_STREAM_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct IngestedFile {
@@ -92,16 +96,28 @@ impl FileIngester {
             .to_lowercase();
         let is_pdf = ext == "pdf";
 
-        let mut file = File::open(path).map_err(|e| {
+        let file = File::open(path).map_err(|e| {
             AppError::storage(format!("Failed to open file {}: {e}", path.display()))
         })?;
+        // Read at most one byte past the limit, in case the file grew after the
+        // size check above.
         let mut raw_bytes = Vec::with_capacity(size as usize);
-        file.read_to_end(&mut raw_bytes).map_err(|e| {
-            AppError::storage(format!("Failed to read file {}: {e}", path.display()))
-        })?;
+        file.take(MAX_FILE_BYTES + 1)
+            .read_to_end(&mut raw_bytes)
+            .map_err(|e| {
+                AppError::storage(format!("Failed to read file {}: {e}", path.display()))
+            })?;
+        if raw_bytes.len() as u64 > MAX_FILE_BYTES {
+            return Err(AppError::invalid_input(format!(
+                "File {} grew past the indexing limit while it was read",
+                path.display()
+            )));
+        }
 
-        // Guard against non-PDF binary files
-        if !is_pdf && Self::is_binary(&raw_bytes) {
+        // Guard against non-PDF binary files. UTF-16 text is full of zero
+        // bytes, so a file with a byte order mark counts as text.
+        let has_bom = encoding_rs::Encoding::for_bom(&raw_bytes).is_some();
+        if !is_pdf && !has_bom && Self::is_binary(&raw_bytes) {
             return Err(AppError::invalid_input(format!(
                 "File {} is a binary file",
                 path.display()
@@ -109,11 +125,12 @@ impl FileIngester {
         }
 
         // Extract text
-        let text_content = if is_pdf {
-            Self::extract_pdf_text(&raw_bytes)?
+        let mut text_content = if is_pdf {
+            Self::pdf_text(&raw_bytes)?
         } else {
-            String::from_utf8_lossy(&raw_bytes).to_string()
+            decode_text(&raw_bytes)
         };
+        truncate_at_char_boundary(&mut text_content, MAX_TEXT_BYTES);
 
         if text_content.trim().is_empty() {
             return Err(AppError::invalid_input(format!(
@@ -283,12 +300,32 @@ impl FileIngester {
         chunks
     }
 
+    /// Reads a PDF's text with the pdf-extract crate, which understands fonts
+    /// and text encodings. When it fails, or panics on a damaged file, the
+    /// simple stream reader below gets a try.
+    fn pdf_text(bytes: &[u8]) -> Result<String, AppError> {
+        match std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(bytes)) {
+            Ok(Ok(text)) if !text.trim().is_empty() => Ok(text),
+            Ok(Ok(_)) => Self::extract_pdf_text(bytes),
+            Ok(Err(e)) => {
+                log::debug!("pdf-extract could not read a PDF: {e}");
+                Self::extract_pdf_text(bytes)
+            }
+            Err(_) => {
+                log::warn!("pdf-extract stopped on a damaged PDF; using the simple reader");
+                Self::extract_pdf_text(bytes)
+            }
+        }
+    }
+
+    /// A simple PDF reader: it unpacks content streams and keeps the text
+    /// inside `( )` strings. It misses text drawn with embedded font encodings.
     pub fn extract_pdf_text(bytes: &[u8]) -> Result<String, AppError> {
         let mut extracted = String::new();
         let len = bytes.len();
         let mut pos = 0;
 
-        while pos < len {
+        while pos < len && extracted.len() < MAX_TEXT_BYTES {
             // Find "stream"
             if let Some(stream_rel) = find_subsequence(&bytes[pos..], b"stream") {
                 let stream_start = pos + stream_rel + 6;
@@ -312,7 +349,9 @@ impl FileIngester {
                     let stream_bytes = &bytes[data_start..stream_end];
 
                     let content_bytes = if is_flate {
-                        let mut decoder = ZlibDecoder::new(stream_bytes);
+                        // Capped, so a tiny file cannot unpack to gigabytes.
+                        let mut decoder =
+                            ZlibDecoder::new(stream_bytes).take(MAX_PDF_STREAM_BYTES);
                         let mut decompressed = Vec::new();
                         if decoder.read_to_end(&mut decompressed).is_ok() {
                             decompressed
@@ -414,9 +453,77 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
+/// Turns file bytes into text. A byte order mark picks UTF-8 or UTF-16.
+/// Without one, valid UTF-8 is used as it is, and anything else is read as
+/// Windows-1252, the usual encoding of older Windows text files.
+pub fn decode_text(bytes: &[u8]) -> String {
+    if let Some((encoding, bom_length)) = encoding_rs::Encoding::for_bom(bytes) {
+        let (text, _) = encoding.decode_without_bom_handling(&bytes[bom_length..]);
+        return text.into_owned();
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => {
+            let (text, _) = encoding_rs::WINDOWS_1252.decode_without_bom_handling(bytes);
+            text.into_owned()
+        }
+    }
+}
+
+/// Shortens `text` to at most `max` bytes without splitting a character.
+fn truncate_at_char_boundary(text: &mut String, max: usize) {
+    if text.len() <= max {
+        return;
+    }
+    let mut cut = max;
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    text.truncate(cut);
+}
+
 #[cfg(test)]
 mod tests {
-    use super::FileIngester;
+    use super::{FileIngester, decode_text, truncate_at_char_boundary};
+
+    #[test]
+    fn text_in_common_encodings_decodes() {
+        assert_eq!(decode_text("café".as_bytes()), "café");
+        // UTF-8 with a byte order mark.
+        assert_eq!(decode_text(b"\xEF\xBB\xBFhello"), "hello");
+        // UTF-16 little endian with a byte order mark: "hi".
+        assert_eq!(decode_text(b"\xFF\xFEh\x00i\x00"), "hi");
+        // Windows-1252: 0xE9 is "é" and is not valid UTF-8 on its own.
+        assert_eq!(decode_text(b"caf\xE9"), "café");
+    }
+
+    #[test]
+    fn truncation_keeps_whole_characters() {
+        let mut text = "aé".to_string(); // 'é' takes two bytes.
+        truncate_at_char_boundary(&mut text, 2);
+        assert_eq!(text, "a");
+        let mut short = "abc".to_string();
+        truncate_at_char_boundary(&mut short, 10);
+        assert_eq!(short, "abc");
+    }
+
+    #[test]
+    fn utf16_files_are_text_not_binary() {
+        let dir = std::env::temp_dir().join(format!("la-ingest-utf16-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("notes.txt");
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in "meeting notes".encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        std::fs::write(&file, bytes).unwrap();
+
+        let ingested = FileIngester::ingest_file(&file).unwrap();
+        assert!(ingested.chunks[0].text.contains("meeting notes"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn identical_files_get_their_own_document_ids() {

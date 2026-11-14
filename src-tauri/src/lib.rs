@@ -205,6 +205,7 @@ pub fn run() {
             commands::index_folder,
             commands::search_index,
             commands::list_index,
+            commands::library_compact,
             commands::indexer_stats,
             commands::index_remove,
             commands::index_watch_start,
@@ -308,6 +309,10 @@ pub fn run() {
                 let _ = shutdown_state.inference_engine.unload();
                 shutdown_state.embedding_engine.stop();
                 shutdown_state.rerank_engine.stop();
+                // Fold the database log into the file, so the next start is quick.
+                if let Err(e) = shutdown_state.library.checkpoint() {
+                    log::warn!("Database checkpoint at exit failed: {e}");
+                }
             }
         });
 }

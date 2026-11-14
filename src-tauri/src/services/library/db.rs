@@ -70,17 +70,22 @@ pub struct FtsHit {
     pub size: u64,
 }
 
+/// What a search result shows for one chunk.
 #[derive(Debug, Clone)]
-pub struct ChunkEmbeddingRecord {
+pub struct ChunkDetail {
     pub chunk_id: String,
-    pub document_id: String,
     pub path: String,
     pub title: String,
     pub text: String,
     pub modified: u64,
     pub size: u64,
-    pub embedding: Vec<f32>,
 }
+
+/// The newest schema version. See `migrate`.
+const SCHEMA_VERSION: i64 = 2;
+
+/// The activity log keeps this many of the newest rows.
+const MAX_AUDIT_ROWS: i64 = 10_000;
 
 pub struct LibraryDb {
     conn: Arc<Mutex<Connection>>,
@@ -117,7 +122,7 @@ impl LibraryDb {
     }
 
     fn configure_and_migrate(&self) -> Result<(), AppError> {
-        let conn = self
+        let mut conn = self
             .conn
             .lock()
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
@@ -196,7 +201,110 @@ impl LibraryDb {
         )
         .map_err(|e| AppError::storage(format!("Failed to apply SQLite schema migrations: {e}")))?;
 
+        Self::migrate(&mut conn)?;
+
+        // The activity log keeps the newest rows only.
+        conn.execute(
+            "DELETE FROM tool_audit WHERE id <= (
+                 SELECT id FROM tool_audit ORDER BY id DESC LIMIT 1 OFFSET ?1
+             )",
+            params![MAX_AUDIT_ROWS],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to trim the activity log: {e}")))?;
+
         Ok(())
+    }
+
+    /// Versioned schema changes, each applied once.
+    ///
+    /// Version 2 gives each chunk the rowid of its full-text row
+    /// (`chunks.fts_rowid`). `chunks_fts.document_id` is not indexed, so
+    /// deleting by it read the whole full-text table each time. Deletes now go
+    /// by rowid. The full-text rows are rebuilt once with known rowids.
+    fn migrate(conn: &mut Connection) -> Result<(), AppError> {
+        let version: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::storage(format!("Failed to read the schema version: {e}")))?;
+        if version >= SCHEMA_VERSION {
+            return Ok(());
+        }
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| AppError::storage(format!("Failed to start the migration: {e}")))?;
+        if version < 2 {
+            let has_column = tx
+                .prepare("SELECT 1 FROM pragma_table_info('chunks') WHERE name = 'fts_rowid'")
+                .and_then(|mut stmt| stmt.exists([]))
+                .map_err(|e| AppError::storage(format!("Failed to inspect the chunks table: {e}")))?;
+            if !has_column {
+                tx.execute_batch("ALTER TABLE chunks ADD COLUMN fts_rowid INTEGER;")
+                    .map_err(|e| AppError::storage(format!("Failed to add chunks.fts_rowid: {e}")))?;
+            }
+            tx.execute_batch(
+                "DELETE FROM chunks_fts;
+                 UPDATE chunks SET fts_rowid = rowid;
+                 INSERT INTO chunks_fts (rowid, chunk_id, document_id, title, text)
+                     SELECT c.fts_rowid, c.id, c.document_id, d.title, c.text
+                     FROM chunks c JOIN documents d ON d.id = c.document_id;",
+            )
+            .map_err(|e| AppError::storage(format!("Failed to rebuild the search index: {e}")))?;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        tx.execute(
+            "INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+            params![SCHEMA_VERSION, now],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to record the schema version: {e}")))?;
+        tx.commit()
+            .map_err(|e| AppError::storage(format!("Failed to commit the migration: {e}")))
+    }
+
+    /// Removes one document, its chunks and its full-text rows.
+    fn delete_document_rows(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<(), AppError> {
+        tx.execute(
+            "DELETE FROM chunks_fts WHERE rowid IN (
+                 SELECT fts_rowid FROM chunks WHERE document_id = ?1 AND fts_rowid IS NOT NULL
+             )",
+            params![id],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to delete search entries: {e}")))?;
+        tx.execute("DELETE FROM documents WHERE id = ?1", params![id])
+            .map_err(|e| AppError::storage(format!("Failed to delete document: {e}")))?;
+        Ok(())
+    }
+
+    /// Writes the log into the database file and refreshes query statistics.
+    /// Runs when the app closes.
+    pub fn checkpoint(&self) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute_batch("PRAGMA optimize; PRAGMA wal_checkpoint(TRUNCATE);")
+            .map_err(|e| AppError::storage(format!("Failed to checkpoint the database: {e}")))
+    }
+
+    /// Rebuilds the database file without free pages. Returns the file size
+    /// before and after, in bytes (0 for an in-memory database).
+    pub fn compact(&self) -> Result<(u64, u64), AppError> {
+        let size = || std::fs::metadata(&self.db_path_str).map(|m| m.len()).unwrap_or(0);
+        let before = size();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")
+            .map_err(|e| AppError::storage(format!("Failed to compact the database: {e}")))?;
+        drop(conn);
+        Ok((before, size()))
     }
 
     pub fn insert_or_replace_document(
@@ -212,7 +320,7 @@ impl LibraryDb {
             .transaction()
             .map_err(|e| AppError::storage(format!("Failed to start transaction: {e}")))?;
 
-        // Remove old document chunks from fts table before replacing
+        // Remove the old version of this document first.
         if let Some(existing_id) = tx
             .query_row(
                 "SELECT id FROM documents WHERE path = ?1",
@@ -222,13 +330,7 @@ impl LibraryDb {
             .optional()
             .map_err(|e| AppError::storage(format!("Failed to check existing document: {e}")))?
         {
-            tx.execute(
-                "DELETE FROM chunks_fts WHERE document_id = ?1",
-                params![existing_id],
-            )
-            .map_err(|e| AppError::storage(format!("Failed to clear old FTS entries: {e}")))?;
-            tx.execute("DELETE FROM documents WHERE id = ?1", params![existing_id])
-                .map_err(|e| AppError::storage(format!("Failed to clear old document: {e}")))?;
+            Self::delete_document_rows(&tx, &existing_id)?;
         }
 
         // Insert document
@@ -247,15 +349,24 @@ impl LibraryDb {
             ],
         ).map_err(|e| AppError::storage(format!("Failed to insert document: {e}")))?;
 
-        // Insert chunks & FTS entries
+        // Insert chunks & FTS entries. Each chunk keeps its full-text rowid, so
+        // a later delete finds the row directly.
         for chunk in chunks {
+            tx.execute(
+                "INSERT INTO chunks_fts (chunk_id, document_id, title, text)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![chunk.id, chunk.document_id, doc.title, chunk.text,],
+            )
+            .map_err(|e| AppError::storage(format!("Failed to insert FTS entry: {e}")))?;
+            let fts_rowid = tx.last_insert_rowid();
+
             let blob = chunk
                 .embedding
                 .as_ref()
                 .map(|vec| Self::embedding_to_blob(vec));
             tx.execute(
-                "INSERT INTO chunks (id, document_id, chunk_index, text, token_count, start_char, end_char, embedding)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO chunks (id, document_id, chunk_index, text, token_count, start_char, end_char, embedding, fts_rowid)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     chunk.id,
                     chunk.document_id,
@@ -265,15 +376,9 @@ impl LibraryDb {
                     chunk.start_char as i64,
                     chunk.end_char as i64,
                     blob,
+                    fts_rowid,
                 ],
             ).map_err(|e| AppError::storage(format!("Failed to insert chunk: {e}")))?;
-
-            tx.execute(
-                "INSERT INTO chunks_fts (chunk_id, document_id, title, text)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![chunk.id, chunk.document_id, doc.title, chunk.text,],
-            )
-            .map_err(|e| AppError::storage(format!("Failed to insert FTS entry: {e}")))?;
         }
 
         tx.commit().map_err(|e| {
@@ -302,16 +407,67 @@ impl LibraryDb {
             .map_err(|e| AppError::storage(format!("Failed to query document: {e}")))?;
 
         if let Some(id) = doc_id {
-            tx.execute("DELETE FROM chunks_fts WHERE document_id = ?1", params![id])
-                .map_err(|e| AppError::storage(format!("Failed to delete FTS records: {e}")))?;
-            tx.execute("DELETE FROM documents WHERE id = ?1", params![id])
-                .map_err(|e| AppError::storage(format!("Failed to delete document: {e}")))?;
+            Self::delete_document_rows(&tx, &id)?;
             tx.commit()
                 .map_err(|e| AppError::storage(format!("Failed to commit delete: {e}")))?;
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    /// Removes every document inside `folder`. Used when a watched folder is
+    /// deleted, since the watcher may report only the folder itself. Returns
+    /// how many documents were removed.
+    pub fn delete_documents_under(&self, folder: &str) -> Result<usize, AppError> {
+        let trimmed = folder.trim_end_matches(['/', '\\']);
+        if trimmed.is_empty() {
+            return Ok(0);
+        }
+        // Paths are stored as the system gave them, so try both separators.
+        let prefixes = [format!("{trimmed}/"), format!("{trimmed}\\")];
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| AppError::storage(format!("Failed to start transaction: {e}")))?;
+        let mut ids = Vec::new();
+        {
+            let mut stmt = tx
+                .prepare("SELECT id FROM documents WHERE substr(path, 1, length(?1)) = ?1")
+                .map_err(|e| AppError::storage(format!("Failed to prepare folder query: {e}")))?;
+            for prefix in &prefixes {
+                let rows = stmt
+                    .query_map(params![prefix], |row| row.get::<_, String>(0))
+                    .map_err(|e| AppError::storage(format!("Failed to query folder: {e}")))?;
+                for row in rows {
+                    ids.push(row.map_err(|e| AppError::storage(format!("Row read error: {e}")))?);
+                }
+            }
+        }
+        for id in &ids {
+            Self::delete_document_rows(&tx, id)?;
+        }
+        tx.commit()
+            .map_err(|e| AppError::storage(format!("Failed to commit delete: {e}")))?;
+        Ok(ids.len())
+    }
+
+    /// Records a new change time for a document whose content did not change,
+    /// so the next scan skips it without reading the file.
+    pub fn touch_document(&self, id: &str, modified: u64) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute(
+            "UPDATE documents SET modified = ?1 WHERE id = ?2",
+            params![modified as i64, id],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to update document: {e}")))?;
+        Ok(())
     }
 
     pub fn get_document_by_path(&self, path: &str) -> Result<Option<DbDocument>, AppError> {
@@ -343,7 +499,12 @@ impl LibraryDb {
         Ok(res)
     }
 
-    pub fn list_documents(&self) -> Result<Vec<DbDocument>, AppError> {
+    /// Documents, newest first. `limit` None returns all of them.
+    pub fn list_documents(
+        &self,
+        limit: Option<usize>,
+        offset: usize,
+    ) -> Result<Vec<DbDocument>, AppError> {
         let conn = self
             .conn
             .lock()
@@ -351,12 +512,15 @@ impl LibraryDb {
         let mut stmt = conn
             .prepare(
                 "SELECT id, path, title, content_hash, size, modified, indexed_at, kind
-             FROM documents ORDER BY indexed_at DESC",
+             FROM documents ORDER BY indexed_at DESC, id LIMIT ?1 OFFSET ?2",
             )
             .map_err(|e| AppError::storage(format!("Failed to prepare list statement: {e}")))?;
 
+        // SQLite reads a negative limit as "no limit".
+        let limit = limit.map_or(-1, |n| i64::try_from(n).unwrap_or(i64::MAX));
+        let offset = i64::try_from(offset).unwrap_or(i64::MAX);
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(params![limit, offset], |row| {
                 Ok(DbDocument {
                     id: row.get(0)?,
                     path: row.get(1)?,
@@ -458,41 +622,69 @@ impl LibraryDb {
         Ok(hits)
     }
 
-    pub fn all_chunk_embeddings(&self) -> Result<Vec<ChunkEmbeddingRecord>, AppError> {
+    /// Calls `visit` with each stored chunk vector. Only ids and vectors are
+    /// read, so a search does not copy every chunk's text.
+    pub fn visit_chunk_embeddings(
+        &self,
+        mut visit: impl FnMut(&str, &[f32]),
+    ) -> Result<(), AppError> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
-        let mut stmt = conn.prepare(
-            "SELECT c.id, c.document_id, d.path, d.title, c.text, d.modified, d.size, c.embedding
-             FROM chunks c
-             JOIN documents d ON d.id = c.document_id
-             WHERE c.embedding IS NOT NULL",
-        ).map_err(|e| AppError::storage(format!("Failed to prepare embeddings statement: {e}")))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                let blob: Vec<u8> = row.get(7)?;
-                let embedding = Self::blob_to_embedding(&blob);
-                Ok(ChunkEmbeddingRecord {
-                    chunk_id: row.get(0)?,
-                    document_id: row.get(1)?,
-                    path: row.get(2)?,
-                    title: row.get(3)?,
-                    text: row.get(4)?,
-                    modified: row.get::<_, i64>(5)? as u64,
-                    size: row.get::<_, i64>(6)? as u64,
-                    embedding,
-                })
-            })
+        let mut stmt = conn
+            .prepare("SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL")
+            .map_err(|e| AppError::storage(format!("Failed to prepare embeddings statement: {e}")))?;
+        let mut rows = stmt
+            .query([])
             .map_err(|e| AppError::storage(format!("Failed to query embeddings: {e}")))?;
-
-        let mut records = Vec::new();
-        for r in rows {
-            records
-                .push(r.map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?);
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?
+        {
+            let id: String = row
+                .get(0)
+                .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
+            let blob: Vec<u8> = row
+                .get(1)
+                .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
+            visit(&id, &Self::blob_to_embedding(&blob));
         }
-        Ok(records)
+        Ok(())
+    }
+
+    /// Path, title and text for the given chunks, in the same order. Chunks
+    /// that no longer exist are left out.
+    pub fn chunk_details(&self, chunk_ids: &[String]) -> Result<Vec<ChunkDetail>, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT c.id, d.path, d.title, c.text, d.modified, d.size
+                 FROM chunks c JOIN documents d ON d.id = c.document_id
+                 WHERE c.id = ?1",
+            )
+            .map_err(|e| AppError::storage(format!("Failed to prepare chunk query: {e}")))?;
+        let mut details = Vec::with_capacity(chunk_ids.len());
+        for id in chunk_ids {
+            let detail = stmt
+                .query_row(params![id], |row| {
+                    Ok(ChunkDetail {
+                        chunk_id: row.get(0)?,
+                        path: row.get(1)?,
+                        title: row.get(2)?,
+                        text: row.get(3)?,
+                        modified: row.get::<_, i64>(4)? as u64,
+                        size: row.get::<_, i64>(5)? as u64,
+                    })
+                })
+                .optional()
+                .map_err(|e| AppError::storage(format!("Failed to read chunk: {e}")))?;
+            details.extend(detail);
+        }
+        Ok(details)
     }
 
     /// Chunks that have no stored vector yet, oldest documents first, so a

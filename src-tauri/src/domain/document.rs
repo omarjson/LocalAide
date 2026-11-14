@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 pub struct IndexFolderResponse {
     pub indexed: usize,
     pub skipped: usize,
+    /// True when the folder was too big or too deep and only part was added.
+    #[serde(default)]
+    pub limited: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

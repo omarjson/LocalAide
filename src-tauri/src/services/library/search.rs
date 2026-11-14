@@ -85,36 +85,38 @@ impl HybridSearcher {
     }
 
     fn search_vector_raw(&self, query_vec: &[f32], limit: usize) -> Result<Vec<RawHit>, AppError> {
-        let chunks = self.db.all_chunk_embeddings()?;
-        let mut scored: Vec<RawHit> = chunks
+        // Score every stored vector, but keep only the best `limit`. Text is
+        // read afterwards, for the winners only.
+        let mut best: Vec<(f32, String)> = Vec::with_capacity(limit + 1);
+        self.db.visit_chunk_embeddings(|chunk_id, embedding| {
+            keep_best(&mut best, limit, cosine_similarity(query_vec, embedding), chunk_id);
+        })?;
+
+        let scores: HashMap<String, f32> =
+            best.iter().map(|(score, id)| (id.clone(), *score)).collect();
+        let ids: Vec<String> = best.into_iter().map(|(_, id)| id).collect();
+        let hits = self
+            .db
+            .chunk_details(&ids)?
             .into_iter()
             .map(|chunk| {
-                let score = cosine_similarity(query_vec, &chunk.embedding);
                 let snippet = if chunk.text.chars().count() > 200 {
                     format!("{}...", chunk.text.chars().take(200).collect::<String>())
                 } else {
                     chunk.text
                 };
                 RawHit {
+                    score: scores.get(&chunk.chunk_id).copied().unwrap_or(0.0),
                     chunk_id: chunk.chunk_id,
                     path: chunk.path,
                     title: chunk.title,
                     snippet,
-                    score,
                     modified: chunk.modified,
                     size: chunk.size,
                 }
             })
             .collect();
-
-        // Sort descending by cosine similarity
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        scored.truncate(limit);
-        Ok(scored)
+        Ok(hits)
     }
 
     fn map_fts_to_docs(hits: Vec<FtsHit>, limit: usize) -> Vec<SearchResultDoc> {
@@ -215,6 +217,19 @@ struct RawHit {
     size: u64,
 }
 
+/// Adds `(score, id)` to `best`, which stays sorted from high to low and holds
+/// at most `limit` entries. Scores that are not finite numbers are ignored.
+fn keep_best(best: &mut Vec<(f32, String)>, limit: usize, score: f32, id: &str) {
+    if !score.is_finite() {
+        return;
+    }
+    let position = best.partition_point(|(kept, _)| *kept >= score);
+    if position < limit {
+        best.insert(position, (score, id.to_string()));
+        best.truncate(limit);
+    }
+}
+
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
@@ -229,4 +244,31 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
     if denom > 1e-6 { dot / denom } else { 0.0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_best;
+
+    #[test]
+    fn keep_best_holds_the_top_scores_in_order() {
+        let mut best = Vec::new();
+        let scored = [
+            (0.2, "a"),
+            (0.9, "b"),
+            (f32::NAN, "not a number"),
+            (0.5, "c"),
+            (0.1, "d"),
+            (0.7, "e"),
+        ];
+        for (score, id) in scored {
+            keep_best(&mut best, 3, score, id);
+        }
+        let ids: Vec<&str> = best.iter().map(|(_, id)| id.as_str()).collect();
+        assert_eq!(ids, ["b", "e", "c"]);
+
+        let mut none = Vec::new();
+        keep_best(&mut none, 0, 1.0, "x");
+        assert!(none.is_empty());
+    }
 }

@@ -221,7 +221,8 @@ pub fn model_existing_size(
 #[tauri::command]
 pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     state.model_manager.cancel_download(&id);
-    let _ = state.jobs.cancel_job(&format!("download_{id}"));
+    // Job ids add a random part to "download_<id>", so cancel by kind.
+    state.jobs.cancel_kind(&format!("download_{id}"));
     Ok(())
 }
 
@@ -236,7 +237,7 @@ pub fn model_preset_cancel(state: State<'_, AppState>, id: String) -> Result<(),
         .find(|p| p.id == id)
         .ok_or_else(|| AppError::invalid_input(format!("Unknown preset: {id}")))?;
     for model_id in preset.models {
-        state.jobs.cancel_job(&format!("preset_{model_id}"));
+        state.jobs.cancel_kind(&format!("preset_{model_id}"));
     }
     Ok(())
 }

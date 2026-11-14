@@ -12,6 +12,7 @@ import type {
   ChatStreamEvent,
   ChatStreamRequest,
   ChatThread,
+  CompactResponse,
   CloudConfigStatus,
   CloudModeRequest,
   CloudProviderPreset,
@@ -239,8 +240,14 @@ export class ApiClient {
     });
   }
 
-  async listIndex(): Promise<SearchResultDoc[]> {
-    return invoke<SearchResultDoc[]>("list_index");
+  /** One page of the library, newest first (200 documents unless set). */
+  async listIndex(limit?: number, offset?: number): Promise<SearchResultDoc[]> {
+    return invoke<SearchResultDoc[]>("list_index", { limit, offset });
+  }
+
+  /** Shrinks the library database file. */
+  async compactLibrary(): Promise<CompactResponse> {
+    return invoke<CompactResponse>("library_compact");
   }
 
   async getIndexerStats(): Promise<IndexerStatsResponse> {

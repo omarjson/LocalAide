@@ -11,6 +11,7 @@
   import { api, errorMessage as errMsg } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
   import { openInBrowser } from "../lib/links";
+  import { showToast } from "../lib/toast.svelte";
   import type {
     EmbeddingStatusResponse,
     IndexerStatsResponse,
@@ -125,16 +126,41 @@
     }
   };
 
+  // Every search and library load takes a number. A reply that arrives after
+  // a newer request started is dropped, so old results never replace new ones.
+  let requestSeq = 0;
+  const LIBRARY_PAGE = 200;
+  let libraryHasMore = $state(false);
+  let loadingMore = $state(false);
+
   const loadInitialLibrary = async () => {
+    const seq = ++requestSeq;
     try {
-      const docs = await api.listIndex();
-      if (!query.trim()) {
+      const docs = await api.listIndex(LIBRARY_PAGE, 0);
+      if (seq === requestSeq && !query.trim()) {
         results = docs;
+        libraryHasMore = docs.length === LIBRARY_PAGE;
       }
     } catch (e: unknown) {
-      console.error(e);
+      if (seq === requestSeq) errorMessage = errMsg(e);
     } finally {
       libraryLoaded = true;
+    }
+  };
+
+  const loadMoreLibrary = async () => {
+    loadingMore = true;
+    const seq = requestSeq;
+    try {
+      const more = await api.listIndex(LIBRARY_PAGE, results.length);
+      if (seq === requestSeq && !query.trim()) {
+        results = [...results, ...more];
+        libraryHasMore = more.length === LIBRARY_PAGE;
+      }
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
+    } finally {
+      loadingMore = false;
     }
   };
 
@@ -145,22 +171,28 @@
       searchDurationMs = null;
       return;
     }
+    const seq = ++requestSeq;
     loading = true;
     errorMessage = null;
     const start = performance.now();
     try {
       if (mode === "web") {
+        const hits = await api.webSearch(query);
+        if (seq !== requestSeq) return;
         results = [];
-        webResults = await api.webSearch(query);
+        webResults = hits;
       } else {
+        const docs = await api.searchIndex({ query, mode, limit: 50 });
+        if (seq !== requestSeq) return;
         webResults = [];
-        results = await api.searchIndex({ query, mode, limit: 50 });
+        results = docs;
       }
+      libraryHasMore = false;
       searchDurationMs = Math.round(performance.now() - start);
     } catch (e: unknown) {
-      errorMessage = errMsg(e);
+      if (seq === requestSeq) errorMessage = errMsg(e);
     } finally {
-      loading = false;
+      if (seq === requestSeq) loading = false;
     }
   };
 
@@ -183,7 +215,13 @@
     loading = true;
     errorMessage = null;
     try {
-      await api.indexFolder(folder);
+      const added = await api.indexFolder(folder);
+      const files = `${added.indexed} ${added.indexed === 1 ? "file" : "files"}`;
+      showToast(
+        added.limited
+          ? `Added ${files}. The folder is very large, so only part of it was added.`
+          : `Added ${files}.`,
+      );
       await refreshStats();
       query = "";
       await loadInitialLibrary();
@@ -633,6 +671,13 @@
           </article>
         {/each}
       </div>
+      {#if !query && libraryHasMore}
+        <div class="mt-3 flex justify-center">
+          <Button variant="secondary" disabled={loadingMore} onclick={() => void loadMoreLibrary()}>
+            {loadingMore ? "Loading…" : "Show more documents"}
+          </Button>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

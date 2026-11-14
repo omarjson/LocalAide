@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/omarjson/LocalAide"
 edition = "2024"
 rust-version = "1.90"
 
@@ -45,6 +45,10 @@ piper-rs = { version = "0.2", optional = true }
 hound = { version = "3", optional = true }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 flate2 = "1.1"
+# Library ingest: UTF-16 and Windows-1252 text files, and real PDF text
+# (fonts and encodings). The hand-written PDF reader stays as a fallback.
+encoding_rs = "0.8"
+pdf-extract = "0.12"
 # Encrypted backups (ADR-0009): AES-256-GCM with an argon2id-derived key.
 aes-gcm = "0.11"
 argon2 = "0.6"
@@ -52,5 +56,13 @@ argon2 = "0.6"
 [features]
 default = []
 voice = ["whisper-rs", "piper-rs", "hound"]
+
+# Smaller, faster release builds. Panics keep unwinding (the default), so a
+# damaged PDF caught by `catch_unwind` cannot take the app down, and drop
+# handlers still stop the engine processes.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
 
 

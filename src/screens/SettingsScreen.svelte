@@ -12,6 +12,7 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { formatBytes } from "../lib/format";
   import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
   import { applyTheme, currentTheme } from "../lib/theme";
@@ -438,6 +439,25 @@
     }
   };
 
+  let compacting = $state(false);
+  let compactNotice = $state<string | null>(null);
+
+  const compactLibrary = async () => {
+    compacting = true;
+    settingsNotice = null;
+    try {
+      const result = await api.compactLibrary();
+      const saved = Math.max(result.bytes_before - result.bytes_after, 0);
+      compactNotice = saved > 0
+        ? `Freed ${formatBytes(saved)}. The library now uses ${formatBytes(result.bytes_after)}.`
+        : "There was no unused space to free.";
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      compacting = false;
+    }
+  };
+
   const browseBackupFolder = async () => {
     try {
       const picked = await api.pickFolder();
@@ -719,6 +739,15 @@
             </SettingsRow>
             <SettingsRow icon="download" title="Downloads" description="Downloaded files are checked before they become active." class="border-t border-ink-800">
               {#snippet control()}<StatusBadge label="Checked" tone="ok" dot />{/snippet}
+            </SettingsRow>
+          </SettingsGroup>
+
+          <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Storage</h3>
+          <SettingsGroup>
+            <SettingsRow icon="database" title="Document library" description={compactNotice ?? "After you remove many documents, this frees the space they used."}>
+              {#snippet control()}
+                <Button variant="secondary" disabled={compacting} onclick={() => void compactLibrary()}>{compacting ? "Working…" : "Free up space"}</Button>
+              {/snippet}
             </SettingsRow>
           </SettingsGroup>
         </div>

@@ -145,6 +145,14 @@ export interface ThreadExportResponse {
 export interface IndexFolderResponse {
   indexed: number;
   skipped: number;
+  /** True when the folder was too big or too deep and only part was added. */
+  limited: boolean;
+}
+
+/** Database file size before and after compacting, in bytes. */
+export interface CompactResponse {
+  bytes_before: number;
+  bytes_after: number;
 }
 
 export interface SearchIndexRequest {
