@@ -53,8 +53,9 @@ impl CustomModels {
                 "Community-model registry exceeds the size cap",
             ));
         }
-        serde_json::from_str(&data)
-            .map_err(|e| AppError::invalid_input(format!("Community-model registry is invalid: {e}")))
+        serde_json::from_str(&data).map_err(|e| {
+            AppError::invalid_input(format!("Community-model registry is invalid: {e}"))
+        })
     }
 
     fn persist(&self, entries: &[CatalogEntry]) -> Result<(), AppError> {

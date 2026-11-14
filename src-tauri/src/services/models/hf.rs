@@ -47,8 +47,7 @@ impl HfClient {
             .map_err(|e| AppError::internal(format!("Hugging Face request failed: {e}")))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
-        {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(AppError::new(
                 "HF_GATED",
                 "This repository is gated on Hugging Face and requires a login, which LocalAide does not store. Pick an open repository instead.",
@@ -81,9 +80,8 @@ impl HfClient {
     pub async fn search(&self, query: &str, limit: u32) -> Result<Vec<HfRepo>, AppError> {
         let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
         let q = urlencode(query);
-        let path = format!(
-            "/api/models?search={q}&filter=gguf&sort=downloads&direction=-1&limit={limit}"
-        );
+        let path =
+            format!("/api/models?search={q}&filter=gguf&sort=downloads&direction=-1&limit={limit}");
         let body = self.get_capped(&path).await?;
         parse_repos(&body)
     }
@@ -118,9 +116,9 @@ pub fn validate_repo(repo: &str) -> Result<(), AppError> {
     let ok = !repo.is_empty()
         && repo.len() <= 120
         && repo.contains('/')
-        && repo.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
-        })
+        && repo
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
         && !repo.starts_with('/')
         && !repo.ends_with('/')
         && !repo.contains("..");
@@ -200,8 +198,9 @@ struct HfRepoEntry {
 
 /// Parse a search response. Pure function so tests need no network.
 pub fn parse_repos(body: &str) -> Result<Vec<HfRepo>, AppError> {
-    let entries: Vec<HfRepoEntry> = serde_json::from_str(body)
-        .map_err(|e| AppError::invalid_input(format!("Hugging Face search response is invalid: {e}")))?;
+    let entries: Vec<HfRepoEntry> = serde_json::from_str(body).map_err(|e| {
+        AppError::invalid_input(format!("Hugging Face search response is invalid: {e}"))
+    })?;
     Ok(entries
         .into_iter()
         .map(|e| HfRepo {
@@ -220,8 +219,9 @@ pub fn parse_repos(body: &str) -> Result<Vec<HfRepo>, AppError> {
 
 /// Parse a repo tree response into the GGUF files we can offer. Pure function.
 pub fn parse_files(body: &str) -> Result<Vec<HfFile>, AppError> {
-    let entries: Vec<HfFileEntry> = serde_json::from_str(body)
-        .map_err(|e| AppError::invalid_input(format!("Hugging Face tree response is invalid: {e}")))?;
+    let entries: Vec<HfFileEntry> = serde_json::from_str(body).map_err(|e| {
+        AppError::invalid_input(format!("Hugging Face tree response is invalid: {e}"))
+    })?;
     Ok(entries
         .into_iter()
         .filter(|f| f.path.to_ascii_lowercase().ends_with(".gguf"))

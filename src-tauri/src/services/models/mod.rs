@@ -33,7 +33,11 @@ pub struct ModelService {
 }
 
 impl ModelService {
-    pub fn new(models_dir: PathBuf, cache_path: PathBuf, custom_path: PathBuf) -> Result<Self, AppError> {
+    pub fn new(
+        models_dir: PathBuf,
+        cache_path: PathBuf,
+        custom_path: PathBuf,
+    ) -> Result<Self, AppError> {
         let builtin = CatalogManifest::default_manifest();
         builtin.verify()?;
 
@@ -285,7 +289,8 @@ mod tests {
 
     fn temp_service(tag: &str) -> (ModelService, PathBuf) {
         // Tagged per test: cargo test runs tests in parallel threads.
-        let dir = std::env::temp_dir().join(format!("la-modelservice-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("la-modelservice-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let service = ModelService::new(

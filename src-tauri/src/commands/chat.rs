@@ -64,9 +64,7 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
         .model_service
         .get_model_entry(&id)
         .ok_or_else(|| AppError::model_not_installed(&id))?;
-    let path = state
-        .model_service
-        .model_file_path(&id);
+    let path = state.model_service.model_file_path(&id);
     if !path.is_file() {
         return Err(AppError::model_not_installed(&id));
     }

@@ -6,8 +6,8 @@
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::services::models::catalog::{CatalogCompanion, CatalogEntry};
 use crate::services::models::catalog::MAX_COMPANIONS_PER_MODEL;
+use crate::services::models::catalog::{CatalogCompanion, CatalogEntry};
 use crate::services::models::custom::{community_id, unique_id};
 use crate::services::models::hf::{HfClient, HfFile, HfRepo};
 use serde::{Deserialize, Serialize};
@@ -15,13 +15,13 @@ use tauri::State;
 
 /// Public GGUF repositories matching a search, most-downloaded first.
 #[tauri::command]
-pub async fn hf_search(
-    query: String,
-    limit: Option<u32>,
-) -> Result<Vec<HfRepo>, AppError> {
+pub async fn hf_search(query: String, limit: Option<u32>) -> Result<Vec<HfRepo>, AppError> {
     let client = HfClient::new()?;
     client
-        .search(query.trim(), limit.unwrap_or(crate::services::models::hf::DEFAULT_SEARCH_LIMIT))
+        .search(
+            query.trim(),
+            limit.unwrap_or(crate::services::models::hf::DEFAULT_SEARCH_LIMIT),
+        )
         .await
 }
 
@@ -65,9 +65,7 @@ pub async fn hf_custom_add(
         .iter()
         .find(|f| f.path == path)
         .ok_or_else(|| {
-            AppError::invalid_input(format!(
-                "'{path}' is not a pinned GGUF file in {repo}"
-            ))
+            AppError::invalid_input(format!("'{path}' is not a pinned GGUF file in {repo}"))
         })?
         .clone();
 
@@ -94,10 +92,7 @@ pub async fn hf_custom_add(
     if is_shard_group {
         let prefix = &primary.path[..primary.path.find("-00001-of-").expect("checked above")];
         for f in &files {
-            if f.path != primary.path
-                && f.path.starts_with(prefix)
-                && f.path.ends_with(".gguf")
-            {
+            if f.path != primary.path && f.path.starts_with(prefix) && f.path.ends_with(".gguf") {
                 if companions.len() >= MAX_COMPANIONS_PER_MODEL {
                     return Err(AppError::invalid_input(
                         "This split GGUF has more shards than the companion limit allows",
@@ -200,7 +195,11 @@ fn parent_of(path: &str) -> &str {
 /// F16, …), falling back to "GGUF".
 fn quant_from_filename(filename: &str) -> String {
     let upper = filename.to_ascii_uppercase();
-    for token in ["MXFP4", "F16", "BF16", "F32", "Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S", "Q4_0", "Q3_K_XL", "Q3_K_M", "Q3_K_S", "Q2_K_XL", "Q2_K", "IQ4_XS", "IQ3_XXS", "IQ2_XXS", "IQ1_S", "IQ1_M"] {
+    for token in [
+        "MXFP4", "F16", "BF16", "F32", "Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S",
+        "Q4_0", "Q3_K_XL", "Q3_K_M", "Q3_K_S", "Q2_K_XL", "Q2_K", "IQ4_XS", "IQ3_XXS", "IQ2_XXS",
+        "IQ1_S", "IQ1_M",
+    ] {
         if upper.contains(token) {
             return token.to_string();
         }
