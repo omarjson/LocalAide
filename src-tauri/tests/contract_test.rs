@@ -46,6 +46,7 @@ fn test_model_info_serialization() {
         id: "qwen3-0.6b-q4".to_string(),
         name: "Qwen 3 0.6B".to_string(),
         filename: "qwen3-0.6b-q4.bin".to_string(),
+        kind: "chat".to_string(),
         size_bytes: 400_000_000,
         ram_estimate_gb: 0.8,
         quant: "Q4_K_M".to_string(),
