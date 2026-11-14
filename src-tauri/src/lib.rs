@@ -73,31 +73,18 @@ pub fn run() {
     // counters behind the "save this as a skill?" suggestions.
     let skills = Arc::new(crate::services::skills::SkillsService::new());
 
-    // Local embedding engine for semantic and hybrid search. Starts only on
-    // explicit user action (RAM budget respect); the library uses it for
-    // ingest vectorization and query embedding when it is running.
-    let embedding_engine = Arc::new(crate::services::library::embedding::EmbeddingEngine::new(
-        model_service.clone(),
-    ));
-    library.set_embedding_engine(embedding_engine.clone());
-
-    // Local reranker engine for the search second stage; like the embedding
-    // engine it starts only on explicit user action (RAM budget respect).
-    let rerank_engine = Arc::new(crate::services::library::rerank::RerankEngine::new(
-        model_service.clone(),
-    ));
-    library.set_rerank_engine(rerank_engine.clone());
-
+    // The embedding and reranker sidecar engines are built inside AppState;
+    // the library gets them injected here so search can use both.
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),
-        embedding_engine.clone(),
-        rerank_engine.clone(),
         library.clone(),
         memory.clone(),
         skills.clone(),
         tools.clone(),
     );
+    library.set_embedding_engine(app_state.embedding_engine.clone());
+    library.set_rerank_engine(app_state.rerank_engine.clone());
 
     // Restore the engine mode and previously active model from config. Cloud
     // mode (opt-in) wins if it was left enabled with a valid provider; the
