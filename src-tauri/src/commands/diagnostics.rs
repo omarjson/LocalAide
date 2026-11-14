@@ -17,6 +17,7 @@ pub struct SystemHealthResponse {
     pub catalog_version: u32,
     pub engine: EngineHealth,
     pub embedding: EmbeddingHealth,
+    pub rerank: RerankHealth,
     pub library: LibraryHealth,
     /// True when config.json parsed on this call.
     pub config_ok: bool,
@@ -29,6 +30,12 @@ pub struct EngineHealth {
     pub context_size: i32,
     /// Whether a llama-server binary can be located at all.
     pub sidecar_binary_found: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankHealth {
+    pub ready: bool,
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +56,7 @@ pub struct LibraryHealth {
 pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse, AppError> {
     let engine_status = state.inference_engine.status();
     let embedding_state = state.embedding_engine.state();
+    let rerank_state = state.rerank_engine.state();
     let (total_chunks, embedded_chunks) = state.library.embedding_coverage()?;
     let stats = state.library.stats()?;
     let manifest = state.model_service.manifest();
@@ -75,6 +83,10 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
             dimension: embedding_state.dimension,
             total_chunks,
             embedded_chunks,
+        },
+        rerank: RerankHealth {
+            ready: rerank_state.ready,
+            model_id: rerank_state.model_id,
         },
         library: LibraryHealth {
             doc_count: stats.doc_count as usize,

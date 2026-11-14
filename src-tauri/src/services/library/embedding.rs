@@ -169,11 +169,12 @@ impl EmbeddingEngine {
 
     /// Smallest installed embedding model, or the requested one. Prefers
     /// models by RAM so low-memory machines get the lightest engine.
+    /// Community entries resolve through `all_entries` too.
     fn resolve_model(&self, preferred: Option<&str>) -> Result<(String, PathBuf), AppError> {
-        let catalog = self.models.manifest();
-        let mut candidates: Vec<&crate::services::models::catalog::CatalogEntry> = catalog
+        let mut candidates: Vec<crate::services::models::catalog::CatalogEntry> = self
             .models
-            .iter()
+            .all_entries()
+            .into_iter()
             .filter(|e| e.kind == "embedding")
             .collect();
         // The requested model first, then everything else by RAM estimate.

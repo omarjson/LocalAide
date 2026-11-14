@@ -4,6 +4,7 @@ use crate::model_manager::ModelManager;
 use crate::services::inference::RouterEngine;
 use crate::services::library::LibraryService;
 use crate::services::library::embedding::EmbeddingEngine;
+use crate::services::library::rerank::RerankEngine;
 use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
 use crate::services::skills::SkillsService;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub model_service: Arc<ModelService>,
     pub inference_engine: Arc<RouterEngine>,
     pub embedding_engine: Arc<EmbeddingEngine>,
+    pub rerank_engine: Arc<RerankEngine>,
     pub library: Arc<LibraryService>,
     pub memory: Arc<MemoryService>,
     pub skills: Arc<SkillsService>,
@@ -29,6 +31,7 @@ impl AppState {
         model_manager: Arc<ModelManager>,
         model_service: Arc<ModelService>,
         embedding_engine: Arc<EmbeddingEngine>,
+        rerank_engine: Arc<RerankEngine>,
         library: Arc<LibraryService>,
         memory: Arc<MemoryService>,
         skills: Arc<SkillsService>,
@@ -42,6 +45,7 @@ impl AppState {
             // cloud engine. Starts local; startup restores the last mode.
             inference_engine: Arc::new(RouterEngine::new()),
             embedding_engine,
+            rerank_engine,
             library,
             memory,
             skills,

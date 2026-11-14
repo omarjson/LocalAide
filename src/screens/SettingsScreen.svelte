@@ -764,6 +764,16 @@
                   </div>
                 </div>
                 <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
+                  <div class="text-ink-400 mb-1">Reranker engine</div>
+                  <div class="text-ink-200">
+                    {#if health.rerank.ready}
+                      {health.rerank.model_id}
+                    {:else}
+                      Not running
+                    {/if}
+                  </div>
+                </div>
+                <div class="rounded-xl bg-ink-950/60 border border-ink-800 p-3">
                   <div class="text-ink-400 mb-1">Library vectors</div>
                   <div class="text-ink-200">{health.embedding.embedded_chunks}/{health.embedding.total_chunks} chunks</div>
                 </div>

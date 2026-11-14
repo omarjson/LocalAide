@@ -81,10 +81,17 @@ pub fn run() {
     ));
     library.set_embedding_engine(embedding_engine.clone());
 
+    // Local reranker engine for the search second stage; like the embedding
+    // engine it starts only on explicit user action (RAM budget respect).
+    let rerank_engine = Arc::new(crate::services::library::rerank::RerankEngine::new(
+        model_service.clone(),
+    ));
+
     let app_state = AppState::new(
         model_manager.clone(),
         model_service.clone(),
         embedding_engine.clone(),
+        rerank_engine.clone(),
         library.clone(),
         memory.clone(),
         skills.clone(),
@@ -216,6 +223,9 @@ pub fn run() {
             commands::embedding_start,
             commands::embedding_stop,
             commands::embedding_backfill,
+            commands::rerank_status,
+            commands::rerank_start,
+            commands::rerank_stop,
             commands::cloud_config_get,
             commands::cloud_provider_save,
             commands::cloud_provider_delete,

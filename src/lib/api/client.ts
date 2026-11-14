@@ -18,6 +18,7 @@ import type {
   DownloadProgressEvent,
   EmbeddingStatusResponse,
   ForgetAllResponse,
+  RerankStatusResponse,
   SystemHealthResponse,
   UpdateCheckResponse,
   IndexFolderResponse,
@@ -326,6 +327,20 @@ export class ApiClient {
 
   async backfillEmbeddings(): Promise<BackfillResponse> {
     return invoke<BackfillResponse>("embedding_backfill");
+  }
+
+  // Local reranker engine (search second stage)
+
+  async getRerankStatus(): Promise<RerankStatusResponse> {
+    return invoke<RerankStatusResponse>("rerank_status");
+  }
+
+  async startRerankEngine(modelId?: string): Promise<RerankStatusResponse> {
+    return invoke<RerankStatusResponse>("rerank_start", { modelId });
+  }
+
+  async stopRerankEngine(): Promise<void> {
+    return invoke<void>("rerank_stop");
   }
 
   // Skills (saved prompt templates)

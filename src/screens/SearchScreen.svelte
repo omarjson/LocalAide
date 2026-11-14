@@ -5,6 +5,7 @@
   import type {
     EmbeddingStatusResponse,
     IndexerStatsResponse,
+    RerankStatusResponse,
     SearchResultDoc,
   } from "../lib/api/bindings";
   import { onMount } from "svelte";
@@ -25,13 +26,43 @@
   let singleFile = $state("");
   let embedding = $state<EmbeddingStatusResponse | null>(null);
   let embedBusy = $state(false);
+  // Reranker second stage: re-orders the top search results by relevance
+  // whenever its engine is running; search silently skips it when off.
+  let rerank = $state<RerankStatusResponse | null>(null);
+  let rerankBusy = $state(false);
 
   onMount(async () => {
     await refreshStats();
     await refreshEmbedding();
+    await refreshRerank();
     await loadInitialLibrary();
     searchInputEl?.focus();
   });
+
+  const refreshRerank = async () => {
+    try {
+      rerank = await api.getRerankStatus();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleRerank = async () => {
+    rerankBusy = true;
+    errorMessage = null;
+    try {
+      if (rerank?.ready) {
+        await api.stopRerankEngine();
+      } else {
+        await api.startRerankEngine();
+      }
+      await refreshRerank();
+    } catch (e) {
+      errorMessage = errMsg(e);
+    } finally {
+      rerankBusy = false;
+    }
+  };
 
   const refreshEmbedding = async () => {
     try {
@@ -257,6 +288,18 @@
             {embedBusy ? "Starting…" : "Start embeddings"}
           </button>
         {/if}
+        {#if rerank?.ready}
+          <span class="text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-2.5 py-1">
+            Rerank on · {rerank.model_id}
+          </span>
+          <button onclick={toggleRerank} disabled={rerankBusy} class="text-rose-300 border border-rose-500/30 rounded-full px-2.5 py-1 hover:border-rose-500/60 disabled:opacity-40">
+            Stop rerank
+          </button>
+        {:else}
+          <button onclick={toggleRerank} disabled={rerankBusy} class="text-ember-300 border border-ember-500/40 rounded-full px-2.5 py-1 hover:border-ember-500/70 disabled:opacity-40">
+            {rerankBusy ? "Starting…" : "Start reranker"}
+          </button>
+        {/if}
       </div>
     </div>
     {#if mode !== "keyword" && !embedding?.ready}
@@ -329,7 +372,6 @@
           </button>
         {/if}
       </div>
-      <span class="px-3 py-2 text-xs text-ink-400 font-mono" title="Only keyword search runs in this version">Keyword (BM25)</span>
       <button onclick={search} disabled={loading} class="px-4 py-2 bg-ink-800 hover:bg-ink-700 rounded-lg text-xs font-medium text-ink-200 transition-colors">
         Search
       </button>

@@ -41,9 +41,56 @@ pub fn search_index(
         state.embedding_engine.embed_query(&query).ok()
     };
     let limit_num = limit.unwrap_or(20);
-    state
-        .library
-        .search(&query, query_vector.as_deref(), search_mode, limit_num)
+    let mut results = state.library.search(
+        &query,
+        query_vector.as_deref(),
+        search_mode,
+        limit_num,
+    )?;
+
+    // Reranker second stage: when the engine is running, re-order the top
+    // candidates by true query-document relevance. A rerank failure degrades
+    // to the fused ranking instead of failing the search.
+    if state.rerank_engine.is_running() && results.len() > 1 {
+        let candidates: Vec<SearchResultDoc> = results
+            .into_iter()
+            .take(crate::services::library::rerank::RERANK_CANDIDATES)
+            .collect();
+        let texts: Vec<String> = candidates.iter().map(|d| d.snippet.clone()).collect();
+        match state.rerank_engine.rerank(&query, &texts) {
+            Ok(hits) => {
+                let mut reranked = crate::services::library::rerank::reorder(&candidates, &hits);
+                reranked.truncate(limit_num);
+                results = reranked;
+            }
+            Err(e) => log::warn!("Rerank failed, keeping fused ranking: {e}"),
+        }
+    }
+
+    Ok(results)
+}
+
+/// Start the reranker engine on an installed reranker model. `model_id`
+/// picks a specific one; None picks the smallest installed.
+#[tauri::command]
+pub fn rerank_start(
+    state: State<'_, AppState>,
+    model_id: Option<String>,
+) -> Result<crate::services::library::rerank::RerankState, AppError> {
+    state.rerank_engine.start(model_id.as_deref())
+}
+
+#[tauri::command]
+pub fn rerank_stop(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.rerank_engine.stop();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rerank_status(
+    state: State<'_, AppState>,
+) -> Result<crate::services::library::rerank::RerankState, AppError> {
+    Ok(state.rerank_engine.state())
 }
 
 /// Start the embedding engine on an installed embedding model. `model_id`

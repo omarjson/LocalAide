@@ -1,6 +1,7 @@
 pub mod db;
 pub mod embedding;
 pub mod ingest;
+pub mod rerank;
 pub mod search;
 pub mod watch;
 

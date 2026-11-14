@@ -320,6 +320,12 @@ export interface BackfillResponse {
   embedded_chunks: number;
 }
 
+/** Live state of the local reranker engine (search second stage). */
+export interface RerankStatusResponse {
+  model_id: string | null;
+  ready: boolean;
+}
+
 /** A saved prompt skill: one markdown file under ~/.aiassistant/skills/. */
 export interface Skill {
   name: string;
@@ -359,6 +365,10 @@ export interface SystemHealthResponse {
     dimension: number | null;
     total_chunks: number;
     embedded_chunks: number;
+  };
+  rerank: {
+    ready: boolean;
+    model_id: string | null;
   };
   library: {
     doc_count: number;
