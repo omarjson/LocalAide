@@ -16,6 +16,14 @@ pub struct AppConfig {
     /// Provider used when `cloud_llm_enabled` is true. None = local engine.
     #[serde(default)]
     pub active_cloud_provider: Option<String>,
+    /// Context window the local engine is allowed to allocate. Capped per
+    /// model by the catalog's native context hint when one exists.
+    #[serde(default = "default_context_tokens")]
+    pub context_tokens: u32,
+}
+
+fn default_context_tokens() -> u32 {
+    8192
 }
 
 /// One user-configured OpenAI-compatible provider (OpenAI, OpenRouter,
@@ -49,6 +57,7 @@ impl Default for AppConfig {
             cloud_llm_enabled: false,
             cloud_providers: vec![],
             active_cloud_provider: None,
+            context_tokens: default_context_tokens(),
         }
     }
 }

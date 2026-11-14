@@ -112,7 +112,10 @@ pub fn run() {
         {
             let path = app_state.model_manager.primary_path(active_id);
             if path.exists() {
-                match app_state.inference_engine.load(&path, 2048) {
+                let context = app_state
+                    .model_service
+                    .effective_context(active_id, cfg.context_tokens);
+                match app_state.inference_engine.load(&path, context) {
                     Ok(_) => log::info!("Auto-loaded model: {active_id}"),
                     Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
                 }
@@ -168,6 +171,8 @@ pub fn run() {
             commands::config_load,
             commands::config_save,
             commands::config_compute_ram,
+            commands::settings_context,
+            commands::settings_set_context,
             commands::embedding_status,
             commands::cloud_config_get,
             commands::cloud_provider_save,

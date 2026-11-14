@@ -8,7 +8,9 @@ name: Lockfile Update
 on:
   push:
     branches: [ main ]
-    paths: [ 'package.json' ]
+    paths:
+      - 'package.json'
+      - '.github/workflows/lock-update.yml'
   workflow_dispatch:
 
 permissions:
@@ -29,7 +31,20 @@ jobs:
           node-version: 24
 
       - name: Regenerate lockfile (install-only, no node_modules)
-        run: npm install --package-lock-only --ignore-scripts
+        run: |
+          set +e
+          npm install --package-lock-only --ignore-scripts > npm.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            # Emit the npm error as annotations (readable via the check-run
+            # API), then retry tolerating peer-dependency disagreements.
+            head -c 4000 npm.log | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=npm::$enc"
+            done
+            npm install --package-lock-only --ignore-scripts --legacy-peer-deps
+          fi
 
       - name: Publish lockfile to ci/lock-update
         run: |

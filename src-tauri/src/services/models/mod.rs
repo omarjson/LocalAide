@@ -119,6 +119,22 @@ impl ModelService {
         self.models_dir.join(format!("{id}.gguf"))
     }
 
+    /// Folder where model and companion files are stored.
+    pub fn models_dir(&self) -> &Path {
+        &self.models_dir
+    }
+
+    /// Context size the engine should allocate for a model: the user's
+    /// setting capped by the model's native context hint, when one exists.
+    pub fn effective_context(&self, id: &str, setting: u32) -> i32 {
+        let capped = setting.min(
+            self.get_model_entry(id)
+                .and_then(|e| e.context_tokens)
+                .unwrap_or(u32::MAX),
+        );
+        capped as i32
+    }
+
     pub fn is_installed(&self, id: &str) -> bool {
         self.model_file_path(id).is_file()
     }
@@ -194,9 +210,36 @@ impl ModelService {
             .get_model_entry(id)
             .ok_or_else(|| AppError::invalid_input(format!("Model '{id}' not found in catalog")))?;
 
-        let dest = self.model_file_path(id);
-        self.downloader
-            .download_atomic(&entry.url, &dest, &entry.sha256, cancel, progress_cb)
-            .await
+        // The primary file plus every companion (such as a vision
+        // projector) downloads here; without the companions a vision model
+        // would be unusable even though it is marked installed.
+        let mut files: Vec<(String, String, PathBuf)> =
+            vec![(entry.url.clone(), entry.sha256.clone(), self.model_file_path(id))];
+        for c in &entry.companions {
+            files.push((c.url.clone(), c.sha256.clone(), self.models_dir.join(&c.dest)));
+        }
+
+        // Each file owns an equal slice of the overall percent; the
+        // per-file progress from the downloader is rescaled into its slice.
+        let shared = Arc::new(std::sync::Mutex::new(progress_cb));
+        let weight = 100.0 / files.len() as f32;
+        let mut primary: Option<PathBuf> = None;
+        for (idx, (url, sha, dest)) in files.iter().enumerate() {
+            let base = idx as f32 * weight;
+            let shared = Arc::clone(&shared);
+            let cancel = Arc::clone(&cancel);
+            let downloaded = self
+                .downloader
+                .download_atomic(url, dest, sha, cancel, move |mut p: DownloadProgress| {
+                    p.percent = base + p.percent * weight / 100.0;
+                    let mut cb = shared.lock().expect("download progress lock poisoned");
+                    cb(p);
+                })
+                .await?;
+            if idx == 0 {
+                primary = Some(downloaded);
+            }
+        }
+        Ok(primary.expect("the primary file is always first"))
     }
 }

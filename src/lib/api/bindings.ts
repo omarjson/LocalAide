@@ -30,6 +30,8 @@ export interface ModelInfo {
   license: string;
   sha256: string;
   download_url: string;
+  /** True when the model ships a vision projector and accepts images. */
+  vision: boolean;
   installed: boolean;
   verified: boolean;
   active: boolean;

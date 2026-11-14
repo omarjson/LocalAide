@@ -75,3 +75,27 @@ pub fn config_compute_ram(
         total_ram_gb: total as f64,
     })
 }
+
+/// Current engine context window setting (tokens).
+#[tauri::command]
+pub fn settings_context(state: State<'_, AppState>) -> Result<u32, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    Ok(store.load().map_err(AppError::internal)?.context_tokens)
+}
+
+/// Set the engine context window. Values outside 512..=131072 are clamped;
+/// the effective size is still capped per model by the catalog hint.
+#[tauri::command]
+pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u32, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.context_tokens = tokens.clamp(512, 131_072);
+    store.save(&cfg).map_err(AppError::internal)?;
+    Ok(cfg.context_tokens)
+}

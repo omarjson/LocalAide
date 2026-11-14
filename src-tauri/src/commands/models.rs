@@ -32,6 +32,7 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 license: e.license.clone(),
                 sha256: e.sha256.clone(),
                 download_url: e.url.clone(),
+                vision: !e.companions.is_empty(),
                 installed,
                 verified: installed,
                 active: is_active,
@@ -109,6 +110,19 @@ pub fn model_remove(state: State<'_, AppState>, id: String) -> Result<(), AppErr
     let part = path.with_extension("part");
     if part.exists() {
         let _ = std::fs::remove_file(&part);
+    }
+    // Companion files (vision projectors) go with the model.
+    if let Some(entry) = state.model_service.get_model_entry(&id) {
+        for c in &entry.companions {
+            let dest = state.model_service.models_dir().join(&c.dest);
+            if dest.exists() {
+                let _ = std::fs::remove_file(&dest);
+            }
+            let dest_part = dest.with_extension("part");
+            if dest_part.exists() {
+                let _ = std::fs::remove_file(&dest_part);
+            }
+        }
     }
 
     state.model_manager.remove(&id).map_err(AppError::internal)

@@ -53,6 +53,7 @@ fn test_model_info_serialization() {
         license: "Apache-2.0".to_string(),
         sha256: "abcdef123456".to_string(),
         download_url: "https://example.com/model.bin".to_string(),
+        vision: false,
         installed: true,
         verified: true,
         active: false,

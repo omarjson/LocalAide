@@ -71,9 +71,20 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
     // The engine uses a blocking HTTP client. Run it on a plain thread, not the async runtime.
     let engine = state.inference_engine.clone();
     let load_path = path.clone();
+    // Context is the user's setting capped by the model's native window.
+    let context = {
+        let setting = state
+            .config_store
+            .lock()
+            .map_err(|e| AppError::internal(e.to_string()))
+            .and_then(|s| s.load().map_err(AppError::internal))
+            .map(|c| c.context_tokens)
+            .unwrap_or(8192);
+        state.model_service.effective_context(&id, setting)
+    };
     let (tx, rx) = tokio::sync::oneshot::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(engine.load(&load_path, 2048));
+        let _ = tx.send(engine.load(&load_path, context));
     });
     let res = rx.await.map_err(|e| AppError::internal(e.to_string()))??;
     let _ = state.model_manager.activate(&id);

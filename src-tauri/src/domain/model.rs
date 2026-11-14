@@ -13,6 +13,9 @@ pub struct ModelInfo {
     pub license: String,
     pub sha256: String,
     pub download_url: String,
+    /// True when the catalog lists companion files (a vision projector), so
+    /// the model accepts images once they are downloaded.
+    pub vision: bool,
     pub installed: bool,
     pub verified: bool,
     pub active: bool,

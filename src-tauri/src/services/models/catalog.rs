@@ -63,6 +63,10 @@ pub struct CatalogEntry {
     pub sha256: String,
     pub quant: String,
     pub description: String,
+    /// Native context window in tokens, when the model has one worth
+    /// exposing. `None` falls back to the app-wide context setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_tokens: Option<u32>,
     #[serde(default)]
     pub companions: Vec<CatalogCompanion>,
 }
@@ -162,6 +166,14 @@ impl CatalogManifest {
                     m.id, m.ram_estimate_gb
                 )));
             }
+            if let Some(ctx) = m.context_tokens
+                && !(512..=1_048_576).contains(&ctx)
+            {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has an implausible context hint ({ctx})",
+                    m.id
+                )));
+            }
             require_https(&m.url, "model download")?;
             if m.companions.len() > MAX_COMPANIONS_PER_MODEL {
                 return Err(AppError::invalid_input(format!(
@@ -197,12 +209,13 @@ impl CatalogManifest {
         Ok(())
     }
 
-    /// Built-in catalog, version 5.
+    /// Built-in catalog, version 7.
     ///
-    /// Each entry was checked on 2026-11-13 against the Hugging Face API. The
-    /// repo is public and not gated. The file size and SHA-256 come from the
-    /// file's LFS metadata. The license label is the one on the repo. Sources
-    /// and the rejected list are in `docs/evidence/models-2026-11.md`.
+    /// Each entry was checked against the Hugging Face API (2026-11-13 for
+    /// versions 1-6, 2026-11-14 for version 7). The repo is public and not
+    /// gated. The file size and SHA-256 come from the file's LFS metadata.
+    /// The license label is the one on the repo. Sources and the rejected
+    /// list are in `docs/evidence/models-2026-11.md`.
     #[rustfmt::skip]
     pub fn default_manifest() -> Self {
         let models = vec![
@@ -224,7 +237,7 @@ impl CatalogManifest {
                 396_705_472, 1.0,
                 "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
                 "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
-                "Q4_K_M", "Smallest file in the catalog. Text only.", vec![],
+                "Q4_K_M", "Compact Qwen3 for very small machines. Text only.", vec![],
             ),
             entry(
                 "lfm2.5-230m-q4", "LFM2.5 230M", "230M", "chat", "LFM Open License",
@@ -340,6 +353,20 @@ impl CatalogManifest {
                 "e0406663965846ae22a403456eb826ccce5f450840491f71952f18a7cb78e7d5",
                 "Q4_K_M", "IBM Granite 4.2 3B. Enterprise-oriented, strong at instructions.", vec![],
             ),
+            entry(
+                "llama-3.2-3b-q4", "Llama 3.2 3B Instruct", "3B", "chat", "Llama 3.2",
+                2_019_377_600, 2.8,
+                "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+                "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+                "Q4_K_M", "Meta's small multilingual assistant. Text only.", vec![],
+            ).with_context(131_072),
+            entry(
+                "phi-4-mini-3.8b-q4", "Phi-4-mini 3.8B", "3.8B", "chat", "MIT",
+                2_491_874_272, 3.2,
+                "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+                "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
+                "Q4_K_M", "Microsoft's compact reasoner, strong at math and code for its size. Text only.", vec![],
+            ).with_context(131_072),
             // Desktop: 6 to 9 B
             entry(
                 "gemma4-e4b-qat-q4", "Gemma 4 E4B (QAT)", "4B effective", "chat", "Apache-2.0",
@@ -360,6 +387,13 @@ impl CatalogManifest {
                 "120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4",
                 "Q4_K_M", "Strong general chat model with thinking mode.", vec![],
             ),
+            entry(
+                "deepseek-r1-0528-qwen3-8b-q4", "DeepSeek-R1-0528 Qwen3 8B", "8B", "chat", "MIT",
+                5_027_785_216, 6.5,
+                "https://huggingface.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF/resolve/main/DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
+                "a86349a4180c4e6bb43f874c29c404fa2be3f90b15509bd6d86f697dba724ec1",
+                "Q4_K_M", "DeepSeek reasoning distillation on Qwen3 8B. Thinks step by step before answering. Text only.", vec![],
+            ).with_context(131_072),
             entry(
                 "qwen3.5-9b-q4", "Qwen3.5 9B", "9B", "chat", "Apache-2.0",
                 5_680_522_464, 7.5,
@@ -400,6 +434,20 @@ impl CatalogManifest {
                 )],
             ),
             // Power: 16 GB and up, slow on CPU
+            entry(
+                "gpt-oss-20b-mxfp4", "gpt-oss 20B (MoE)", "21B total, 3.6B active", "chat", "Apache-2.0",
+                12_109_566_624, 13.0,
+                "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-MXFP4.gguf",
+                "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+                "MXFP4", "OpenAI's open-weight mixture-of-experts model with native MXFP4 quantization. Text only. Needs a recent llama.cpp build.", vec![],
+            ).with_context(131_072),
+            entry(
+                "mistral-small-3.2-24b-q4", "Mistral Small 3.2 24B", "24B", "chat", "Apache-2.0",
+                14_333_922_848, 17.0,
+                "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/main/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+                "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c",
+                "Q4_K_M", "Mistral's flagship small dense model. Strong all-round quality. Text only.", vec![],
+            ).with_context(131_072),
             entry(
                 "gemma4-26b-a4b-q4", "Gemma 4 26B-A4B (MoE)", "26B total, 4B active", "chat", "Apache-2.0",
                 16_947_541_728, 20.0,
@@ -497,6 +545,13 @@ impl CatalogManifest {
                 "Q8_0", "Embedding model for library and memory search.", vec![],
             ),
             entry(
+                "bge-m3-560m-q8", "BGE-M3 560M", "560M", "embedding", "MIT",
+                634_553_760, 1.2,
+                "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf",
+                "950f4a8e5e19477a6d3c26d2f162233c20002c601f75e4b002e3239997821167",
+                "Q8_0", "Multilingual embedding model, strong cross-language retrieval. 8k context.", vec![],
+            ).with_context(8_192),
+            entry(
                 "qwen3-embedding-4b-q4", "Qwen3 Embedding 4B", "4B", "embedding", "Apache-2.0",
                 2_496_703_776, 3.6,
                 "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF/resolve/main/Qwen3-Embedding-4B-Q4_K_M.gguf",
@@ -514,8 +569,8 @@ impl CatalogManifest {
 
         let signature = Self::compute_signature(&models);
         Self {
-            version: 6,
-            updated_at: 1794499200,
+            version: 7,
+            updated_at: 1794620687,
             signature,
             models,
         }
@@ -549,7 +604,16 @@ fn entry(
         sha256: sha256.into(),
         quant: quant.into(),
         description: description.into(),
+        context_tokens: None,
         companions,
+    }
+}
+
+impl CatalogEntry {
+    /// Attach a native context window hint to a freshly built entry.
+    fn with_context(mut self, tokens: u32) -> Self {
+        self.context_tokens = Some(tokens);
+        self
     }
 }
 

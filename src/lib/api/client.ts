@@ -262,6 +262,16 @@ export class ApiClient {
     });
   }
 
+  // Engine context window
+
+  async getContext(): Promise<number> {
+    return invoke<number>("settings_context");
+  }
+
+  async setContext(tokens: number): Promise<number> {
+    return invoke<number>("settings_set_context", { tokens: Math.round(tokens) });
+  }
+
   // Online providers (opt-in cloud mode)
 
   async getCloudConfig(): Promise<CloudConfigStatus> {

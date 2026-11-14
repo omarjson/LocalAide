@@ -16,11 +16,13 @@
     progress?: number;
     active?: boolean;
     kind?: string;
+    vision?: boolean;
   };
 
   let models = $state<Model[]>([]);
   let loading = $state(true);
   let query = $state("");
+  let kindFilter = $state("all");
   let presets = $state<ModelPreset[]>([]);
   let activePreset = $state<string | null>(null);
   let presetInstalling = $state(false);
@@ -63,7 +65,8 @@
         quant: m.quant,
         license: m.license,
         active: m.active ?? false,
-        kind: m.kind
+        kind: m.kind,
+        vision: m.vision ?? false
       }));
     } catch {
       models = [];
@@ -205,7 +208,13 @@
     }
   };
 
-  const filtered = $derived(models.filter(m => m.name.toLowerCase().includes(query.toLowerCase())));
+  const filtered = $derived(
+    models.filter(
+      m =>
+        m.name.toLowerCase().includes(query.toLowerCase()) &&
+        (kindFilter === "all" || m.kind === kindFilter)
+    )
+  );
 
   const kindLabel = (k?: string) => {
     switch (k) {
@@ -237,6 +246,20 @@
         />
       </div>
     </div>
+  </div>
+
+  <div class="flex items-center gap-2 flex-wrap">
+    {#each [["all", "All"], ["chat", "Chat"], ["code", "Code"], ["embedding", "Embedding"], ["reranker", "Reranker"]] as [value, label]}
+      <button
+        type="button"
+        onclick={() => kindFilter = value}
+        class="text-xs font-mono px-2.5 py-1 rounded-full border transition-colors {kindFilter === value
+          ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
+          : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-ink-300'}"
+      >
+        {label}
+      </button>
+    {/each}
   </div>
 
   {#if catalog}
@@ -326,6 +349,9 @@
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm text-ink-100">{m.name}</span>
                 <span class="text-xs font-mono px-1.5 rounded border border-ink-700 text-ink-300" title="Model license">{m.license}</span>
+                {#if m.vision}
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30" title="Ships with a vision projector; accepts images">Vision</span>
+                {/if}
                 {#if m.active}
                   <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active</span>
                 {/if}

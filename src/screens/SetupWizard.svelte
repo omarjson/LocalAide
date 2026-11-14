@@ -2,6 +2,7 @@
   import Icon from "../components/Icon.svelte";
   import { onMount } from "svelte";
   import { api } from "../lib/api/client";
+  import type { ModelInfo } from "../lib/api/bindings";
   import { formatBytes } from "../lib/format";
 
   type Step = "detect" | "preset" | "confirm" | "download" | "done";
@@ -15,12 +16,10 @@
     models: string[];
   };
 
-  const presets: Preset[] = [
-    { id: "tiny", name: "Tiny", ram: "~1.0 GB RAM", ramGb: 1.0, fits: "4 GB+ total RAM", models: ["Qwen3.5 0.8B"] },
-    { id: "small", name: "Small", ram: "~4 GB RAM", ramGb: 4.0, fits: "8 GB+ total RAM", models: ["Qwen3.5 2B", "Gemma 4 E2B (QAT)"] },
-    { id: "balanced", name: "Balanced", ram: "~9.5 GB RAM", ramGb: 9.5, fits: "16 GB+ total RAM", models: ["Qwen3.5 9B", "Gemma 4 E4B (QAT)"] },
-    { id: "advanced", name: "Advanced", ram: "~20 GB RAM", ramGb: 20.0, fits: "32 GB total RAM", models: ["Gemma 4 26B-A4B (MoE)", "Qwen3.8 27B"] },
-  ];
+  // Presets come from the backend (the same list the Models screen uses),
+  // with model ids resolved to display names from the catalog.
+  let presets = $state<Preset[]>([]);
+  let presetError = $state(false);
 
   let { onFinished }: { onFinished?: () => void } = $props();
 
@@ -44,10 +43,28 @@
       ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
       budget = probe.budget_gb * 1024 * 1024 * 1024;
       detectError = false;
+
+      // Backend presets are the single source of truth (same list as the
+      // Models screen). Model ids resolve to display names via the catalog.
+      const [backendPresets, catalog] = await Promise.all([
+        api.getModelPresets(),
+        api.listModels(),
+      ]);
+      const nameOf = new Map(catalog.map((m: ModelInfo) => [m.id, m.name]));
+      presets = backendPresets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        ram: `~${p.ram_gb.toFixed(1)} GB RAM`,
+        ramGb: p.ram_gb,
+        fits: p.description.replace(/^Fits /, "") + " total RAM",
+        models: p.models.map((id) => nameOf.get(id) ?? id),
+      }));
+      presetError = false;
       step = "preset";
       status = `Recommended: ${recommended.name} preset fits your ${probe.budget_gb.toFixed(1)} GB budget.`;
     } catch (e: any) {
       detectError = true;
+      presetError = true;
       status = "System probe unavailable: " + (e?.message ?? String(e));
     }
   };
@@ -116,7 +133,13 @@
           <span class="font-mono text-ember-200">{formatBytes(budget)}</span>
         </div>
       </div>
-      <p class="text-sm text-ink-400 mb-4">Presets that fit your budget:</p>
+      <p class="text-sm text-ink-400 mb-4">
+        {#if presetError}
+          Presets could not be loaded; retry detection.
+        {:else}
+          Presets that fit your budget:
+        {/if}
+      </p>
       <div class="space-y-2">
         {#each presets as p}
           {@const fits = p.ramGb <= budgetGb}

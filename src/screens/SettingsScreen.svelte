@@ -13,6 +13,8 @@
   let activeTab = $state<"general" | "security" | "audit">("general");
 
   let ramBudget = $state(70);
+  let contextTokens = $state(8192);
+  let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let modelPriority = $state("local");
   let saving = $state(false);
   let saved = $state(false);
@@ -156,6 +158,9 @@
       modelPriority = cfg.selected_models?.length ? "local" : modelPriority;
     } catch {}
     try {
+      contextTokens = await api.getContext();
+    } catch {}
+    try {
       appVersion = await getVersion();
     } catch {
       appVersion = "";
@@ -188,6 +193,15 @@
   const scheduleSave = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(persistSettings, 500);
+  };
+
+  const scheduleContextSave = () => {
+    if (contextSaveTimer) clearTimeout(contextSaveTimer);
+    contextSaveTimer = setTimeout(async () => {
+      try {
+        await api.setContext(contextTokens);
+      } catch {}
+    }, 500);
   };
 </script>
 
@@ -234,6 +248,28 @@
           <div class="h-full bg-ember-600 transition-all" style={`width:${ramBudget}%`}></div>
         </div>
         <div class="mt-2 text-[11px] text-ink-400 font-mono">≈ {(ramBudget * 0.7).toFixed(0)}% of usable physical RAM</div>
+      </div>
+
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="font-medium text-ink-100">Context Window</div>
+            <div class="text-xs text-ink-400">Tokens of conversation the local model keeps in memory</div>
+          </div>
+          <span class="text-sm font-mono font-semibold text-ember-300">{contextTokens.toLocaleString()}</span>
+        </div>
+        <input
+          type="range"
+          min={512}
+          max={131072}
+          step={512}
+          bind:value={contextTokens}
+          oninput={scheduleContextSave}
+          class="w-full accent-ember-600"
+        />
+        <div class="mt-2 text-[11px] text-ink-400 font-mono">
+          Higher values remember more of the chat but use more RAM. A model's own limit caps this further.
+        </div>
       </div>
 
       <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">

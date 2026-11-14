@@ -60,8 +60,11 @@ impl Preset {
             id: "tiny".into(),
             name: "Tiny".into(),
             fits_ram_gb: "4 GB+".into(),
-            total_ram_gb: 1.0,
-            models: vec!["qwen3.5-0.8b-q4".into()],
+            total_ram_gb: 1.8,
+            models: vec![
+                "qwen3.5-0.8b-q4".into(),
+                "embeddinggemma-300m-qat-q4".into(),
+            ],
         }
     }
     pub fn small() -> Self {
@@ -69,8 +72,12 @@ impl Preset {
             id: "small".into(),
             name: "Small".into(),
             fits_ram_gb: "8 GB+".into(),
-            total_ram_gb: 4.0,
-            models: vec!["qwen3.5-2b-q4".into(), "gemma4-e2b-qat-q4".into()],
+            total_ram_gb: 6.8,
+            models: vec![
+                "qwen3.5-2b-q4".into(),
+                "gemma4-e2b-qat-q4".into(),
+                "embeddinggemma-300m-qat-q4".into(),
+            ],
         }
     }
     pub fn balanced() -> Self {
@@ -78,8 +85,12 @@ impl Preset {
             id: "balanced".into(),
             name: "Balanced".into(),
             fits_ram_gb: "16 GB+".into(),
-            total_ram_gb: 9.5,
-            models: vec!["qwen3.5-9b-q4".into(), "gemma4-e4b-qat-q4".into()],
+            total_ram_gb: 14.5,
+            models: vec![
+                "qwen3.5-9b-q4".into(),
+                "gemma4-e4b-qat-q4".into(),
+                "embeddinggemma-300m-q8".into(),
+            ],
         }
     }
     pub fn advanced() -> Self {
@@ -87,8 +98,12 @@ impl Preset {
             id: "advanced".into(),
             name: "Advanced".into(),
             fits_ram_gb: "32 GB".into(),
-            total_ram_gb: 20.0,
-            models: vec!["gemma4-26b-a4b-q4".into(), "qwen3.8-27b-q4".into()],
+            total_ram_gb: 21.2,
+            models: vec![
+                "gemma4-26b-a4b-q4".into(),
+                "qwen3.8-27b-q4".into(),
+                "bge-m3-560m-q8".into(),
+            ],
         }
     }
 }

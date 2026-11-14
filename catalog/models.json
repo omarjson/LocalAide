@@ -1,7 +1,7 @@
 {
-    "version":  6,
-    "updated_at":  1794499200,
-    "signature":  "fc386c9f802f4ed289fdf562317ec8843588c3b89184a188b9c3ce0ca9d279aa",
+    "version":  7,
+    "updated_at":  1794620687,
+    "signature":  "a70c95c55ca1fadc4cd008072b32a7b495fc724b410a00fd1fae9b0baaecb763",
     "models":  [
                    {
                        "id":  "qwen3.5-0.8b-q4",
@@ -35,7 +35,7 @@
                        "url":  "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
                        "sha256":  "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
                        "quant":  "Q4_K_M",
-                       "description":  "Smallest file in the catalog. Text only.",
+                       "description":  "Compact Qwen3 for very small machines. Text only.",
                        "companions":  [
 
                                       ]
@@ -280,6 +280,40 @@
                                       ]
                    },
                    {
+                       "id":  "llama-3.2-3b-q4",
+                       "name":  "Llama 3.2 3B Instruct",
+                       "params":  "3B",
+                       "kind":  "chat",
+                       "license":  "Llama 3.2",
+                       "file_size":  2019377600,
+                       "ram_estimate_gb":  2.8,
+                       "url":  "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+                       "sha256":  "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+                       "quant":  "Q4_K_M",
+                       "description":  "Meta\u0027s small multilingual assistant. Text only.",
+                       "context_tokens":  131072,
+                       "companions":  [
+
+                                      ]
+                   },
+                   {
+                       "id":  "phi-4-mini-3.8b-q4",
+                       "name":  "Phi-4-mini 3.8B",
+                       "params":  "3.8B",
+                       "kind":  "chat",
+                       "license":  "MIT",
+                       "file_size":  2491874272,
+                       "ram_estimate_gb":  3.2,
+                       "url":  "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+                       "sha256":  "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
+                       "quant":  "Q4_K_M",
+                       "description":  "Microsoft\u0027s compact reasoner, strong at math and code for its size. Text only.",
+                       "context_tokens":  131072,
+                       "companions":  [
+
+                                      ]
+                   },
+                   {
                        "id":  "gemma4-e4b-qat-q4",
                        "name":  "Gemma 4 E4B (QAT)",
                        "params":  "4B effective",
@@ -312,6 +346,23 @@
                        "sha256":  "120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4",
                        "quant":  "Q4_K_M",
                        "description":  "Strong general chat model with thinking mode.",
+                       "companions":  [
+
+                                      ]
+                   },
+                   {
+                       "id":  "deepseek-r1-0528-qwen3-8b-q4",
+                       "name":  "DeepSeek-R1-0528 Qwen3 8B",
+                       "params":  "8B",
+                       "kind":  "chat",
+                       "license":  "MIT",
+                       "file_size":  5027785216,
+                       "ram_estimate_gb":  6.5,
+                       "url":  "https://huggingface.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF/resolve/main/DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
+                       "sha256":  "a86349a4180c4e6bb43f874c29c404fa2be3f90b15509bd6d86f697dba724ec1",
+                       "quant":  "Q4_K_M",
+                       "description":  "DeepSeek reasoning distillation on Qwen3 8B. Thinks step by step before answering. Text only.",
+                       "context_tokens":  131072,
                        "companions":  [
 
                                       ]
@@ -388,6 +439,40 @@
                                               "file_size":  175115616,
                                               "dest":  "gemma4-12b-qat-q4.mmproj.gguf"
                                           }
+                                      ]
+                   },
+                   {
+                       "id":  "gpt-oss-20b-mxfp4",
+                       "name":  "gpt-oss 20B (MoE)",
+                       "params":  "21B total, 3.6B active",
+                       "kind":  "chat",
+                       "license":  "Apache-2.0",
+                       "file_size":  12109566624,
+                       "ram_estimate_gb":  13,
+                       "url":  "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-MXFP4.gguf",
+                       "sha256":  "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+                       "quant":  "MXFP4",
+                       "description":  "OpenAI\u0027s open-weight mixture-of-experts model with native MXFP4 quantization. Text only. Needs a recent llama.cpp build.",
+                       "context_tokens":  131072,
+                       "companions":  [
+
+                                      ]
+                   },
+                   {
+                       "id":  "mistral-small-3.2-24b-q4",
+                       "name":  "Mistral Small 3.2 24B",
+                       "params":  "24B",
+                       "kind":  "chat",
+                       "license":  "Apache-2.0",
+                       "file_size":  14333922848,
+                       "ram_estimate_gb":  17,
+                       "url":  "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/main/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+                       "sha256":  "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c",
+                       "quant":  "Q4_K_M",
+                       "description":  "Mistral\u0027s flagship small dense model. Strong all-round quality. Text only.",
+                       "context_tokens":  131072,
+                       "companions":  [
+
                                       ]
                    },
                    {
@@ -588,6 +673,23 @@
                        "sha256":  "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
                        "quant":  "Q8_0",
                        "description":  "Embedding model for library and memory search.",
+                       "companions":  [
+
+                                      ]
+                   },
+                   {
+                       "id":  "bge-m3-560m-q8",
+                       "name":  "BGE-M3 560M",
+                       "params":  "560M",
+                       "kind":  "embedding",
+                       "license":  "MIT",
+                       "file_size":  634553760,
+                       "ram_estimate_gb":  1.2,
+                       "url":  "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf",
+                       "sha256":  "950f4a8e5e19477a6d3c26d2f162233c20002c601f75e4b002e3239997821167",
+                       "quant":  "Q8_0",
+                       "description":  "Multilingual embedding model, strong cross-language retrieval. 8k context.",
+                       "context_tokens":  8192,
                        "companions":  [
 
                                       ]

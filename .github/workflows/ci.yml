@@ -97,6 +97,23 @@ jobs:
       - name: Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 
+  # Every catalog pin (sha256 + size) is checked against the Hugging Face
+  # API. No model downloads: only repo tree metadata. This is the permanent
+  # integrity gate for catalog/models.json.
+  catalog-pins:
+    name: Catalog pins match Hugging Face
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Verify catalog pins against the HF API
+        run: node scripts/verify-catalog.mjs
+
   # Platform builds (incl. 10x-billed macOS runners) only run for release
   # tags, manual dispatch, or pushes whose commit message contains
   # [build-all]. Routine pushes verify with the quality gate alone.
