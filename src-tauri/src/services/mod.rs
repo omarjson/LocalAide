@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod inference;
 pub mod library;
 pub mod memory;

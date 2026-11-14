@@ -40,6 +40,9 @@ piper-rs = { version = "0.2", optional = true }
 hound = { version = "3", optional = true }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 flate2 = "1.1"
+# Encrypted backups (ADR-0009): AES-256-GCM with an argon2id-derived key.
+aes-gcm = "0.11"
+argon2 = "0.6"
 
 [features]
 default = []

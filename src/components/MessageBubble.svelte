@@ -179,7 +179,7 @@
                 aria-label="View image {i + 1} fullscreen"
                 class="block cursor-zoom-in"
               >
-                <img src={src} alt="Attached image {i + 1}" class="max-h-48 rounded-lg border border-white/20" />
+                <img src={src} alt="Attachment {i + 1}" class="max-h-48 rounded-lg border border-white/20" />
               </button>
             {/each}
           </div>
@@ -282,12 +282,12 @@
     <button
       type="button"
       class="max-h-[85vh] max-w-[92vw] p-0 border-none bg-transparent cursor-zoom-out"
-      title="Click to close the fullscreen image"
+      title="Click to close the fullscreen attachment"
       onclick={(e) => e.stopPropagation()}
     >
       <img
         src={lightbox}
-        alt="Attached image fullscreen"
+        alt=""
         class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700"
       />
     </button>

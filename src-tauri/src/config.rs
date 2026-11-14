@@ -30,6 +30,32 @@ pub struct AppConfig {
     pub chat_max_tokens: Option<u32>,
     #[serde(default)]
     pub chat_persona: Option<String>,
+    /// Encrypted local backup settings (ADR-0009). The passphrase is never
+    /// stored, so backups are user-triggered, not scheduled.
+    #[serde(default)]
+    pub backup: BackupConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackupConfig {
+    /// Where archives are written. None = ~/.aiassistant/backups.
+    #[serde(default)]
+    pub target_dir: Option<String>,
+    /// Include provider API keys in archives (default off).
+    #[serde(default)]
+    pub include_api_keys: bool,
+    #[serde(default)]
+    pub last_backup_at: Option<u64>,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            target_dir: None,
+            include_api_keys: false,
+            last_backup_at: None,
+        }
+    }
 }
 
 fn default_context_tokens() -> u32 {
@@ -72,6 +98,7 @@ impl Default for AppConfig {
             chat_temperature: None,
             chat_max_tokens: None,
             chat_persona: None,
+            backup: BackupConfig::default(),
         }
     }
 }

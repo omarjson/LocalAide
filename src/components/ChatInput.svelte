@@ -150,7 +150,7 @@
     <div class="flex flex-wrap gap-2 mb-3">
       {#each pendingImages as src, i (i)}
         <div class="relative">
-          <img src={src} alt="Attached image {i + 1}" class="h-16 rounded-lg border border-ink-700" />
+          <img src={src} alt="Attachment {i + 1}" class="h-16 rounded-lg border border-ink-700" />
           <button
             type="button"
             onclick={() => onRemoveImage?.(i)}

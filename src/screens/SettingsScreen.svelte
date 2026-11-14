@@ -7,15 +7,30 @@
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
-  import type { SystemHealthResponse, UpdateCheckResponse } from "../lib/api/bindings";
+  import type {
+    BackupConfigDto,
+    BackupEntry,
+    SystemHealthResponse,
+    UpdateCheckResponse,
+  } from "../lib/api/bindings";
 
   let appVersion = $state("");
 
-  let activeTab = $state<"general" | "security" | "audit" | "diagnostics">("general");
+  let activeTab = $state<"general" | "security" | "audit" | "diagnostics" | "backup">("general");
   let health = $state<SystemHealthResponse | null>(null);
   let updateInfo = $state<UpdateCheckResponse | null>(null);
   let logLines = $state<string[]>([]);
   let diagBusy = $state(false);
+  let backupConfig = $state<BackupConfigDto | null>(null);
+  let backups = $state<BackupEntry[]>([]);
+  let backupTargetInput = $state("");
+  let includeKeys = $state(false);
+  let backupPass = $state("");
+  let restorePass = $state("");
+  let restoreConfigFlag = $state(false);
+  let selectedBackup = $state<string | null>(null);
+  let backupBusy = $state(false);
+  let backupNotice = $state<string | null>(null);
 
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
@@ -223,6 +238,79 @@
     } catch {}
     diagBusy = false;
   };
+
+  const loadBackup = async () => {
+    backupBusy = true;
+    try {
+      backupConfig = await api.getBackupConfig();
+      backupTargetInput = backupConfig.target_dir ?? "";
+      includeKeys = backupConfig.include_api_keys;
+      backups = await api.listBackups(backupTargetInput || undefined);
+    } catch (e) {
+      backupNotice = String(e);
+    } finally {
+      backupBusy = false;
+    }
+  };
+
+  const saveBackupConfig = async () => {
+    backupBusy = true;
+    backupNotice = null;
+    try {
+      await api.setBackupConfig(backupTargetInput.trim() || null, includeKeys);
+      backups = await api.listBackups(backupTargetInput.trim() || undefined);
+      backupNotice = "Backup settings saved.";
+    } catch (e) {
+      backupNotice = errMsg(e);
+    } finally {
+      backupBusy = false;
+    }
+  };
+
+  const runBackup = async () => {
+    if (backupPass.length < 8) {
+      backupNotice = "The passphrase needs at least 8 characters.";
+      return;
+    }
+    backupBusy = true;
+    backupNotice = null;
+    try {
+      const res = await api.runBackup(backupPass, includeKeys, backupTargetInput.trim() || undefined);
+      backupNotice = `Backup written: ${res.path} (${res.memories} notes, ${res.conversations} chats).`;
+      backupPass = "";
+      backups = await api.listBackups(backupTargetInput.trim() || undefined);
+    } catch (e) {
+      backupNotice = errMsg(e);
+    } finally {
+      backupBusy = false;
+    }
+  };
+
+  const runRestore = async () => {
+    if (!selectedBackup) return;
+    if (!restorePass) {
+      backupNotice = "Enter the backup passphrase to restore.";
+      return;
+    }
+    backupBusy = true;
+    backupNotice = null;
+    try {
+      const report = await api.restoreBackup(
+        selectedBackup,
+        restorePass,
+        restoreConfigFlag,
+        backupTargetInput.trim() || undefined
+      );
+      backupNotice = `Restored ${report.memories_restored} notes and ${report.conversations_restored} chats.` +
+        (report.config_restored ? " Config restored." : "") +
+        (report.skipped_newer_config ? " A newer config was kept." : "");
+      restorePass = "";
+    } catch (e) {
+      backupNotice = errMsg(e);
+    } finally {
+      backupBusy = false;
+    }
+  };
 </script>
 
 <div class="max-w-4xl mx-auto space-y-6">
@@ -249,6 +337,12 @@
         class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "diagnostics" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
       >
         Diagnostics
+      </button>
+      <button
+        onclick={() => { activeTab = "backup"; loadBackup(); }}
+        class={`px-3 py-1 rounded-lg transition-colors ${activeTab === "backup" ? "bg-ember-600 text-ink-950 font-medium" : "text-ink-400 hover:text-ink-200"}`}
+      >
+        Backup
       </button>
       <button
         onclick={() => { activeTab = "audit"; loadAudits(); }}
@@ -703,6 +797,108 @@
                 <pre class="bg-ink-950 border border-ink-800 rounded-xl p-3 text-[11px] font-mono text-ink-300 overflow-auto max-h-72 whitespace-pre-wrap">{logLines.join("\n")}</pre>
               {/if}
             </div>
+          {/if}
+        </div>
+      {:else if activeTab === "backup"}
+        <div class="space-y-6">
+          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-4">
+            <div>
+              <div class="font-medium text-ink-100">Encrypted backups (ADR-0009)</div>
+              <p class="text-xs text-ink-400 mt-1">
+                One archive file with your config, memory notes, and conversations, encrypted with AES-256-GCM under a
+                passphrase. The passphrase is never stored — lose it and the backup is unreadable. Point the folder at a
+                OneDrive or Drive sync folder for cloud redundancy without any cloud login in this app.
+              </p>
+            </div>
+            <label class="block">
+              <span class="text-xs text-ink-400">Backup folder (empty = ~/.aiassistant/backups)</span>
+              <input
+                bind:value={backupTargetInput}
+                placeholder="D:\Backups\LocalAide or a synced folder path"
+                class="mt-1 w-full bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+              />
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" bind:checked={includeKeys} class="accent-ember-600" />
+              <span class="text-xs text-ink-300">
+                Include provider API keys in archives (default off — keys stay out of backup files)
+              </span>
+            </label>
+            <button
+              onclick={saveBackupConfig}
+              disabled={backupBusy}
+              class="px-3 py-1.5 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+            >
+              Save backup settings
+            </button>
+          </div>
+
+          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+            <div class="font-medium text-ink-100">Create a backup</div>
+            <div class="flex gap-2">
+              <input
+                type="password"
+                bind:value={backupPass}
+                placeholder="Backup passphrase (min 8 characters)"
+                class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+              />
+              <button
+                onclick={runBackup}
+                disabled={backupBusy || backupPass.length < 8}
+                class="px-4 py-2 text-xs font-medium rounded-lg bg-ember-600 hover:bg-ember-500 disabled:opacity-40 text-ink-950 transition-colors"
+              >
+                {backupBusy ? "Working…" : "Back up now"}
+              </button>
+            </div>
+            {#if backupConfig?.last_backup_at}
+              <div class="text-[11px] text-ink-500 font-mono">
+                Last backup: {new Date(backupConfig.last_backup_at * 1000).toLocaleString()}
+              </div>
+            {/if}
+          </div>
+
+          <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60 space-y-3">
+            <div class="font-medium text-ink-100">Restore</div>
+            {#if backups.length === 0}
+              <div class="text-xs text-ink-500 font-mono py-2">No backup archives in the folder yet.</div>
+            {:else}
+              <div class="space-y-1.5 max-h-48 overflow-auto">
+                {#each backups as b (b.file_name)}
+                  <button
+                    type="button"
+                    onclick={() => selectedBackup = b.file_name}
+                    class={`w-full text-left text-xs font-mono px-3 py-2 rounded-lg border transition-colors ${selectedBackup === b.file_name
+                      ? 'border-ember-500/40 bg-ember-500/10 text-ember-200'
+                      : 'border-ink-800 text-ink-300 hover:border-ink-700'}`}
+                  >
+                    {b.file_name} · {(b.size_bytes / 1024).toFixed(0)} KB
+                  </button>
+                {/each}
+              </div>
+              <div class="flex gap-2 items-center">
+                <input
+                  type="password"
+                  bind:value={restorePass}
+                  placeholder="Passphrase of the selected archive"
+                  class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ink-700 font-mono"
+                />
+                <label class="flex items-center gap-2 text-xs text-ink-400 cursor-pointer">
+                  <input type="checkbox" bind:checked={restoreConfigFlag} class="accent-ember-600" />
+                  Also restore config
+                </label>
+                <button
+                  onclick={runRestore}
+                  disabled={backupBusy || !selectedBackup || !restorePass}
+                  class="px-4 py-2 text-xs font-medium rounded-lg border border-ink-700 hover:bg-ink-800 disabled:opacity-40 text-ink-300 transition-colors"
+                >
+                  Restore
+                </button>
+              </div>
+            {/if}
+          </div>
+
+          {#if backupNotice}
+            <div class="text-xs font-mono text-ink-300 border-l-2 border-ember-500/50 pl-2">{backupNotice}</div>
           {/if}
         </div>
       {/if}

@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod chat;
 pub mod cloud;
 pub mod diagnostics;
@@ -9,6 +10,7 @@ pub mod skills;
 pub mod system;
 pub mod tools;
 
+pub use backup::*;
 pub use chat::*;
 pub use cloud::*;
 pub use diagnostics::*;

@@ -349,3 +349,32 @@ export interface UpdateCheckResponse {
   update_available: boolean;
   release_url: string;
 }
+
+/** Encrypted local backup settings (ADR-0009). */
+export interface BackupConfigDto {
+  target_dir: string | null;
+  include_api_keys: boolean;
+  last_backup_at: number | null;
+}
+
+export interface BackupEntry {
+  file_name: string;
+  created_at: number;
+  size_bytes: number;
+  app_version: string;
+}
+
+export interface BackupRunResponse {
+  path: string;
+  created_at: number;
+  memories: number;
+  conversations: number;
+  api_keys_included: boolean;
+}
+
+export interface RestoreReport {
+  memories_restored: number;
+  conversations_restored: number;
+  config_restored: boolean;
+  skipped_newer_config: boolean;
+}

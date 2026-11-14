@@ -3,6 +3,9 @@ import type {
   AppConfigDto,
   AppError,
   BackfillResponse,
+  BackupConfigDto,
+  BackupEntry,
+  BackupRunResponse,
   CatalogStatus,
   ChatPrefs,
   ChatMessage,
@@ -27,6 +30,7 @@ import type {
   ModelPreset,
   ModelVerifyResult,
   RamComputationResponse,
+  RestoreReport,
   SearchIndexRequest,
   Skill,
   SkillSuggestion,
@@ -356,6 +360,49 @@ export class ApiClient {
 
   async getLogTail(lines?: number): Promise<string[]> {
     return invoke<string[]>("logs_tail", { lines });
+  }
+
+  // Encrypted local backups (ADR-0009)
+
+  async getBackupConfig(): Promise<BackupConfigDto> {
+    return invoke<BackupConfigDto>("backup_config_get");
+  }
+
+  async setBackupConfig(targetDir: string | null, includeApiKeys: boolean): Promise<void> {
+    return invoke<void>("backup_config_set", {
+      target_dir: targetDir,
+      include_api_keys: includeApiKeys,
+    });
+  }
+
+  async runBackup(
+    passphrase: string,
+    includeApiKeys?: boolean,
+    targetDir?: string
+  ): Promise<BackupRunResponse> {
+    return invoke<BackupRunResponse>("backup_run", {
+      passphrase,
+      include_api_keys: includeApiKeys,
+      target_dir: targetDir,
+    });
+  }
+
+  async listBackups(targetDir?: string): Promise<BackupEntry[]> {
+    return invoke<BackupEntry[]>("backup_list", { target_dir: targetDir });
+  }
+
+  async restoreBackup(
+    fileName: string,
+    passphrase: string,
+    restoreConfig: boolean,
+    targetDir?: string
+  ): Promise<RestoreReport> {
+    return invoke<RestoreReport>("backup_restore", {
+      file_name: fileName,
+      passphrase,
+      restore_config: restoreConfig,
+      target_dir: targetDir,
+    });
   }
 
   // Online providers (opt-in cloud mode)
