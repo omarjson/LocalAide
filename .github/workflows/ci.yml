@@ -101,26 +101,22 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings > clippy.log 2>&1
           clippy_exit=$?
           set -e
-          # Diagnostics as annotations (readable via the check-run API),
-          # emitted unconditionally so nothing aborts before they land.
-          grep -E "^(warning|error)" clippy.log | head -12 > diag.txt || true
-          while IFS= read -r line; do
+          # Content-agnostic log tail as annotations (readable via the
+          # check-run API), plus the full log to a diagnostics branch.
+          wc -c clippy.log || true
+          tail -c 3000 clippy.log | fold -w 300 | head -10 | while IFS= read -r line; do
             enc=$(printf '%s' "$line" | sed 's/%/%25/g')
-            echo "::error title=clippy::$enc"
-          done < diag.txt
-          if [ "$clippy_exit" -ne 0 ]; then
-            # Publish the full log to a diagnostics branch (public, force-
-            # pushed) so the failing lints are readable without log access.
-            mkdir -p .ci-diagnostics
-            cp clippy.log .ci-diagnostics/clippy.log
-            git config user.name "ci-diagnostics"
-            git config user.email "ci-diagnostics@users.noreply.github.com"
-            (git checkout -b ci/clippy-diag || git checkout ci/clippy-diag)
-            git add -f .ci-diagnostics/clippy.log
-            git commit -m "clippy diagnostics for ${GITHUB_SHA}" || true
-            git push origin ci/clippy-diag --force || true
-            exit 1
-          fi
+            echo "::error title=clippy-log::$enc"
+          done
+          mkdir -p .ci-diagnostics
+          cp clippy.log .ci-diagnostics/clippy.log
+          git config user.name "ci-diagnostics"
+          git config user.email "ci-diagnostics@users.noreply.github.com"
+          (git checkout -b ci/clippy-diag || git checkout ci/clippy-diag)
+          git add -f .ci-diagnostics/clippy.log
+          git commit -m "clippy diagnostics for ${GITHUB_SHA}" || true
+          git push origin ci/clippy-diag --force || true
+          exit "$clippy_exit"
 
       - name: Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets
