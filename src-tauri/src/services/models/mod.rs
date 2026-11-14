@@ -252,15 +252,17 @@ impl ModelService {
         // The primary file plus every companion (such as a vision
         // projector) downloads here; without the companions a vision model
         // would be unusable even though it is marked installed.
-        let mut files: Vec<(String, String, PathBuf)> = vec![(
+        let mut files: Vec<(String, String, u64, PathBuf)> = vec![(
             entry.url.clone(),
             entry.sha256.clone(),
+            entry.file_size,
             self.model_file_path(id),
         )];
         for c in &entry.companions {
             files.push((
                 c.url.clone(),
                 c.sha256.clone(),
+                c.file_size,
                 self.models_dir.join(&c.dest),
             ));
         }
@@ -270,13 +272,13 @@ impl ModelService {
         let shared = Arc::new(std::sync::Mutex::new(progress_cb));
         let weight = 100.0 / files.len() as f32;
         let mut primary: Option<PathBuf> = None;
-        for (idx, (url, sha, dest)) in files.iter().enumerate() {
+        for (idx, (url, sha, size, dest)) in files.iter().enumerate() {
             let base = idx as f32 * weight;
             let shared = Arc::clone(&shared);
             let cancel = Arc::clone(&cancel);
             let downloaded = self
                 .downloader
-                .download_atomic(url, dest, sha, cancel, move |mut p: DownloadProgress| {
+                .download_atomic(url, dest, *size, sha, cancel, move |mut p: DownloadProgress| {
                     p.percent = base + p.percent * weight / 100.0;
                     let mut cb = shared.lock().expect("download progress lock poisoned");
                     cb(p);

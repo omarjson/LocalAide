@@ -31,3 +31,11 @@ pub struct DownloadProgressEvent {
     pub speed_bps: f64,
     pub status: String,
 }
+
+/// Engine startup progress for the chat screen. `state` is "loading", "ready" or "failed".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineStatusEvent {
+    pub state: String,
+    pub model_id: Option<String>,
+    pub message: Option<String>,
+}

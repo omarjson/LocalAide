@@ -140,12 +140,22 @@ impl ConfigStore {
         serde_json::from_str(&data).map_err(|e| e.to_string())
     }
 
+    /// Writes the config atomically. The new file is written to a temp file in
+    /// full, then renamed over the real one, so a crash mid-write keeps the old
+    /// config. The file holds API keys, so it is owner-only on Unix.
     pub fn save(&self, cfg: &AppConfig) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let data = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
-        fs::write(&self.path, data).map_err(|e| e.to_string())
+        let tmp = self.path.with_extension("json.tmp");
+        fs::write(&tmp, data).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+        }
+        fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
     }
 
     pub fn compute_total_ram_gb(
@@ -257,6 +267,22 @@ mod tests {
         assert!(validate_base_url("http://127.0.0.1.nip.io/v1").is_err());
         assert!(validate_base_url("http://0.0.0.0:8080/v1").is_err());
         assert!(validate_base_url("http://localhost.evil.com/v1").is_err());
+    }
+
+    #[test]
+    fn save_replaces_the_file_and_leaves_no_temp_file() {
+        let dir = std::env::temp_dir().join(format!("la-config-save-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let store = ConfigStore {
+            path: dir.join("config.json"),
+        };
+        let mut cfg = AppConfig::default();
+        store.save(&cfg).unwrap();
+        cfg.context_tokens = 4096;
+        store.save(&cfg).unwrap();
+        assert_eq!(store.load().unwrap().context_tokens, 4096);
+        assert!(!dir.join("config.json.tmp").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -10,6 +10,7 @@ use crate::services::models::ModelService;
 use crate::services::skills::SkillsService;
 use crate::services::tools::ToolService;
 use crate::services::websearch::WebSearchEngine;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -26,6 +27,8 @@ pub struct AppState {
     pub tools: Arc<ToolService>,
     pub web: Arc<WebSearchEngine>,
     pub config_store: Arc<Mutex<ConfigStore>>,
+    /// True while the saved model loads at startup.
+    pub engine_loading: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -58,6 +61,7 @@ impl AppState {
             // are read from config per request.
             web: Arc::new(WebSearchEngine::new()),
             config_store: Arc::new(Mutex::new(ConfigStore::new())),
+            engine_loading: Arc::new(AtomicBool::new(false)),
         }
     }
 }

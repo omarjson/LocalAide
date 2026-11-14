@@ -1,3 +1,4 @@
+use crate::app::blocking::with_app_state;
 use crate::app::error::AppError;
 use crate::app::events::DownloadProgressEvent;
 use crate::app::state::AppState;
@@ -144,7 +145,15 @@ pub fn model_remove(state: State<'_, AppState>, id: String) -> Result<(), AppErr
 }
 
 #[tauri::command]
-pub fn model_verify(state: State<'_, AppState>, id: String) -> Result<ModelVerifyResult, AppError> {
+pub async fn model_verify(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ModelVerifyResult, AppError> {
+    with_app_state(&state, move |state| model_verify_work(state, id)).await
+}
+
+/// Hashing a multi-gigabyte model takes a while, so it runs off the UI thread.
+fn model_verify_work(state: AppState, id: String) -> Result<ModelVerifyResult, AppError> {
     let entry = state
         .model_service
         .get_model_entry(&id)

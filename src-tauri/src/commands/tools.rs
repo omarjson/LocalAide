@@ -1,14 +1,16 @@
+use crate::app::blocking::with_app_state;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::tool::{ToolAuditEntry, ToolExecutionRequest, ToolExecutionResponse};
 use tauri::State;
 
 #[tauri::command]
-pub fn tool_execute(
+pub async fn tool_execute(
     state: State<'_, AppState>,
     req: ToolExecutionRequest,
 ) -> Result<ToolExecutionResponse, AppError> {
-    state.tools.execute(req)
+    // Workspace searches can walk many files, so they run off the UI thread.
+    with_app_state(&state, move |state| state.tools.execute(req)).await
 }
 
 #[tauri::command]

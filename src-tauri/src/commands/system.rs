@@ -8,7 +8,12 @@ const OS_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GB
 const BUDGET_SHARE: f64 = 0.7; // 70% of usable RAM
 
 #[tauri::command]
-pub fn system_probe() -> Result<SystemProbeResult, AppError> {
+pub async fn system_probe() -> Result<SystemProbeResult, AppError> {
+    crate::app::blocking::run_blocking(probe_system).await
+}
+
+/// Reads RAM figures. sysinfo can take a moment, so this runs off the UI thread.
+fn probe_system() -> Result<SystemProbeResult, AppError> {
     let mut sys = System::new_all();
     sys.refresh_all();
     let total_ram_bytes = sys.total_memory();

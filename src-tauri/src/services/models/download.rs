@@ -1,4 +1,5 @@
 use super::verify::verify_file_checksum;
+use crate::app::blocking::run_blocking;
 use crate::app::error::AppError;
 use futures::StreamExt;
 use reqwest::header::RANGE;
@@ -28,9 +29,11 @@ impl Default for ModelDownloader {
 
 impl ModelDownloader {
     pub fn new() -> Self {
+        // No total timeout: a multi-gigabyte model can take hours on a slow link.
+        // A stalled connection is what matters, so each read must keep arriving.
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(3600))
             .connect_timeout(Duration::from_secs(30))
+            .read_timeout(Duration::from_secs(60))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         Self { client }
@@ -42,6 +45,7 @@ impl ModelDownloader {
         &self,
         url: &str,
         dest: &Path,
+        expected_size: u64,
         expected_sha256: &str,
         cancel: Arc<AtomicBool>,
         mut on_progress: F,
@@ -70,6 +74,20 @@ impl ModelDownloader {
             0
         };
 
+        // Refuse early when the disk cannot hold the rest of the file.
+        let needed = expected_size
+            .saturating_sub(offset)
+            .saturating_add(DISK_MARGIN_BYTES);
+        if let Some(free) = free_space_bytes(dest)
+            && free < needed
+        {
+            return Err(AppError::storage(format!(
+                "Not enough free disk space. This model needs about {} GB, and {} GB are free.",
+                gigabytes(needed),
+                gigabytes(free)
+            )));
+        }
+
         let mut request = self.client.get(url);
         if offset > 0 {
             request = request.header(RANGE, format!("bytes={offset}-"));
@@ -81,24 +99,24 @@ impl ModelDownloader {
             .map_err(|e| AppError::internal(format!("Network request to {url} failed: {e}")))?;
 
         let status = response.status();
+        // 416 to a Range request: the part file already holds every byte. Check it
+        // and move it into place, instead of writing the server's error page.
+        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && offset > 0 {
+            return finish_partial_file(&part_file, dest, expected_sha256).await;
+        }
+        if !status.is_success() {
+            return Err(AppError::internal(format!(
+                "Download returned HTTP status: {status}"
+            )));
+        }
         let total_size = match response.content_length() {
             Some(len) if status == reqwest::StatusCode::PARTIAL_CONTENT => Some(len + offset),
             Some(len) => Some(len),
             None => None,
         };
-
-        if status == reqwest::StatusCode::OK && offset > 0 {
-            // Server did not support Range, restart from 0
+        if status == reqwest::StatusCode::OK {
+            // The server ignored the Range header and sent the whole file.
             offset = 0;
-        } else if !status.is_success() {
-            if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-                // Offset matches total file size or out of range, restart
-                offset = 0;
-            } else {
-                return Err(AppError::internal(format!(
-                    "Download returned HTTP status: {status}"
-                )));
-            }
         }
 
         let mut file = fs::OpenOptions::new()
@@ -165,21 +183,84 @@ impl ModelDownloader {
             .map_err(|e| AppError::storage(format!("Failed to flush part file: {e}")))?;
         drop(file);
 
-        // Verify SHA-256 before atomic rename
-        if let Err(mismatch_err) = verify_file_checksum(&part_file, expected_sha256) {
-            // Delete corrupt part file to guarantee no corrupted artifact remains
-            let _ = fs::remove_file(&part_file);
-            return Err(mismatch_err);
-        }
+        finish_partial_file(&part_file, dest, expected_sha256).await
+    }
+}
 
-        // Atomically rename .part to dest
-        fs::rename(&part_file, dest).map_err(|e| {
-            AppError::storage(format!(
-                "Failed to rename verified part file to {}: {e}",
-                dest.display()
-            ))
-        })?;
+/// Extra space kept free after a download, so the disk never fills mid-write.
+const DISK_MARGIN_BYTES: u64 = 512 * 1024 * 1024;
 
-        Ok(dest.to_path_buf())
+/// Verifies a finished `.part` file on a worker thread, then moves it into place.
+/// A file that fails the check is deleted, so it can never be used.
+async fn finish_partial_file(
+    part_file: &Path,
+    dest: &Path,
+    expected_sha256: &str,
+) -> Result<PathBuf, AppError> {
+    let checked = part_file.to_path_buf();
+    let expected = expected_sha256.to_string();
+    if let Err(e) = run_blocking(move || verify_file_checksum(&checked, &expected)).await {
+        let _ = fs::remove_file(part_file);
+        return Err(AppError::internal(format!(
+            "The download did not pass its checksum, so it was removed. Start the download again. ({e})"
+        )));
+    }
+    fs::rename(part_file, dest).map_err(|e| {
+        AppError::storage(format!(
+            "Failed to move the verified file to {}: {e}",
+            dest.display()
+        ))
+    })?;
+    Ok(dest.to_path_buf())
+}
+
+/// Free bytes on the disk that holds `path`, or None when the disk is unknown.
+fn free_space_bytes(path: &Path) -> Option<u64> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks
+        .list()
+        .iter()
+        .filter(|disk| path.starts_with(disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().as_os_str().len())
+        .map(|disk| disk.available_space())
+}
+
+fn gigabytes(bytes: u64) -> String {
+    format!("{:.1}", bytes as f64 / 1_000_000_000.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::finish_partial_file;
+    use std::path::PathBuf;
+
+    /// SHA-256 of the three bytes "abc".
+    const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+    fn temp_pair(tag: &str) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("la-download-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        (dir.join("model.part"), dir.join("model.gguf"))
+    }
+
+    #[test]
+    fn a_verified_part_file_becomes_the_model() {
+        let (part, dest) = temp_pair("ok");
+        std::fs::write(&part, b"abc").unwrap();
+        let moved = futures::executor::block_on(finish_partial_file(&part, &dest, ABC_SHA256));
+        assert_eq!(moved.unwrap(), dest);
+        assert!(dest.exists() && !part.exists());
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+    }
+
+    #[test]
+    fn a_damaged_part_file_is_removed() {
+        let (part, dest) = temp_pair("bad");
+        std::fs::write(&part, b"not the model").unwrap();
+        let result = futures::executor::block_on(finish_partial_file(&part, &dest, ABC_SHA256));
+        assert!(result.is_err());
+        assert!(!part.exists() && !dest.exists());
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
     }
 }

@@ -1,4 +1,8 @@
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
+use tauri::Emitter;
 
 pub mod app;
 pub mod commands;
@@ -8,6 +12,7 @@ pub mod model_manager;
 pub mod services;
 
 use app::AppState;
+use app::lifecycle;
 use model_manager::ModelManager;
 use services::inference::InferenceEngine;
 
@@ -16,20 +21,22 @@ pub use app::paths::{
 };
 
 pub fn run() {
+    // A second copy would share the database and start a second set of servers.
+    if !lifecycle::claim_single_instance() {
+        return;
+    }
+
     let model_manager = Arc::new(ModelManager::new().unwrap_or_else(|e| {
-        log::error!("Failed to init model manager: {e}; falling back to temp directory");
-        let fallback = std::env::temp_dir().join("localaide_models");
-        ModelManager::with_dir(fallback)
-            .unwrap_or_else(|_| panic!("Failed even temp model manager"))
+        lifecycle::fatal_startup_error(&format!("The model folder could not be opened: {e}"))
     }));
 
-    let library = Arc::new(crate::services::library::LibraryService::open_default(&index_dir()).unwrap_or_else(|e| {
-        log::error!("Failed to init SQLite library database at standard path: {e}; falling back to temp dir");
-        let fallback = std::env::temp_dir().join("localaide_library_fallback");
-        crate::services::library::LibraryService::open_default(&fallback).unwrap_or_else(|_| {
-            crate::services::library::LibraryService::open_in_memory().expect("In-memory SQLite must always succeed")
-        })
-    }));
+    let library = Arc::new(
+        crate::services::library::LibraryService::open_default(&index_dir()).unwrap_or_else(|e| {
+            lifecycle::fatal_startup_error(&format!(
+                "The document database could not be opened: {e}"
+            ))
+        }),
+    );
 
     let memory = Arc::new(crate::services::memory::MemoryService::new(
         library.db(),
@@ -44,26 +51,16 @@ pub fn run() {
             custom_models_path(),
         )
         .unwrap_or_else(|e| {
-            log::error!(
-                "Failed to init ModelService at standard path: {e}; falling back to temp dir"
-            );
-            let fallback = std::env::temp_dir().join("localaide_models_fallback");
-            crate::services::models::ModelService::new(
-                fallback,
-                catalog_cache_path(),
-                custom_models_path(),
-            )
-            .expect("Fallback model service must initialize")
+            lifecycle::fatal_startup_error(&format!("The model service could not start: {e}"))
         }),
     );
 
     let jail = Arc::new(
         crate::services::tools::sandbox::WorkspaceJail::new(crate::app::paths::workspace_dir())
             .unwrap_or_else(|e| {
-                log::error!("Failed to init WorkspaceJail: {e}; falling back to temp dir");
-                let fallback = std::env::temp_dir().join("localaide_workspace_fallback");
-                crate::services::tools::sandbox::WorkspaceJail::new(fallback)
-                    .expect("Fallback workspace jail must initialize")
+                lifecycle::fatal_startup_error(&format!(
+                    "The workspace folder could not be opened: {e}"
+                ))
             }),
     );
 
@@ -86,11 +83,11 @@ pub fn run() {
     library.set_embedding_engine(app_state.embedding_engine.clone());
     library.set_rerank_engine(app_state.rerank_engine.clone());
 
-    // Restore the engine mode and previously active model from config. Cloud
-    // mode (opt-in) wins if it was left enabled with a valid provider; the
-    // local sidecar auto-loads its model in every other case, including when
-    // the stored provider was deleted or has an invalid base URL.
+    // Restore the engine mode from config. Cloud mode (opt-in) wins if it was
+    // left enabled with a valid provider. Otherwise the saved local model loads
+    // in the background once the window is open.
     let mut restored_cloud = false;
+    let mut pending_load: Option<(String, PathBuf, i32)> = None;
     if let Ok(store) = app_state.config_store.lock()
         && let Ok(cfg) = store.load()
     {
@@ -122,8 +119,8 @@ pub fn run() {
             }
         }
         if !restored_cloud {
-            // Prefer the model the user last loaded. Otherwise use the newest
-            // chat model in the selection, since embedding models never chat.
+            // Prefer the model the user last loaded. Otherwise use the newest chat
+            // model in the selection, since embedding models never chat.
             let startup_model = app_state
                 .model_manager
                 .active_model_id()
@@ -138,15 +135,37 @@ pub fn run() {
                 let context = app_state
                     .model_service
                     .effective_context(&active_id, cfg.context_tokens);
-                match app_state.inference_engine.load(&path, context) {
-                    Ok(_) => log::info!("Auto-loaded model: {active_id}"),
-                    Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),
-                }
+                pending_load = Some((active_id, path, context));
             }
         }
     }
 
+    // Handles for the background load and the exit handler. AppState holds only
+    // shared handles, so cloning it is cheap.
+    let startup_state = app_state.clone();
+    let shutdown_state = app_state.clone();
+    let engine_loading = app_state.engine_loading.clone();
+
+    // Logs go to a rotated file in the app folder in every build, so a user can
+    // send that file when something goes wrong.
+    let log_dir = app::paths::app_dir().join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_plugin = tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .level(log::LevelFilter::Info)
+        .max_file_size(5_000_000)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+        .targets([
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
+                path: log_dir,
+                file_name: Some("localaide".to_string()),
+            }),
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+        ])
+        .build();
+
     tauri::Builder::default()
+        .plugin(log_plugin)
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::system_probe,
@@ -168,6 +187,7 @@ pub fn run() {
             commands::model_catalog_reset,
             commands::inference_load,
             commands::inference_unload,
+            commands::inference_status,
             commands::chat_stream,
             commands::chat_cancel,
             commands::chat_thread_list,
@@ -235,16 +255,52 @@ pub fn run() {
             commands::web_set_key,
             commands::web_set_default,
         ])
-        .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
+        .setup(move |setup_app| {
+            if let Some((model_id, path, context)) = pending_load {
+                let handle = setup_app.handle().clone();
+                engine_loading.store(true, Ordering::SeqCst);
+                let _ = handle.emit(
+                    "engine-status",
+                    app::events::EngineStatusEvent {
+                        state: "loading".to_string(),
+                        model_id: Some(model_id.clone()),
+                        message: None,
+                    },
+                );
+                std::thread::spawn(move || {
+                    let result = startup_state.inference_engine.load(&path, context);
+                    engine_loading.store(false, Ordering::SeqCst);
+                    let payload = match result {
+                        Ok(_) => {
+                            log::info!("Auto-loaded model: {model_id}");
+                            app::events::EngineStatusEvent {
+                                state: "ready".to_string(),
+                                model_id: Some(model_id),
+                                message: None,
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("Could not auto-load model {model_id}: {e}");
+                            app::events::EngineStatusEvent {
+                                state: "failed".to_string(),
+                                model_id: Some(model_id),
+                                message: Some(e.message),
+                            }
+                        }
+                    };
+                    let _ = handle.emit("engine-status", payload);
+                });
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(move |_app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                // Stop the engines. The job object ends any child that is left.
+                let _ = shutdown_state.inference_engine.unload();
+                shutdown_state.embedding_engine.stop();
+                shutdown_state.rerank_engine.stop();
+            }
+        });
 }

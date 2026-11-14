@@ -5,6 +5,7 @@
 //! talks to the network beyond 127.0.0.1.
 
 use crate::app::error::AppError;
+use crate::app::lifecycle;
 use crate::services::inference::sidecar::{free_port, locate_binary, new_api_key, open_log};
 use crate::services::models::ModelService;
 use serde::{Deserialize, Serialize};
@@ -127,9 +128,11 @@ impl RerankEngine {
             }
         }
 
+        lifecycle::hide_console_window(&mut cmd);
         let child = cmd.spawn().map_err(|e| {
             AppError::model_load_failed(&model_id, &format!("failed to start llama-server: {e}"))
         })?;
+        lifecycle::tie_child_to_app(&child);
 
         let mut running = Running {
             child,

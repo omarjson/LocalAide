@@ -27,6 +27,7 @@ import type {
   UpdateCheckResponse,
   IndexFolderResponse,
   IndexerStatsResponse,
+  InferenceStatus,
   MemoryCreateRequest,
   MemoryCreateResponse,
   MemoryNote,
@@ -434,6 +435,10 @@ export class ApiClient {
 
   async getSystemHealth(): Promise<SystemHealthResponse> {
     return invoke<SystemHealthResponse>("system_health");
+  }
+
+  async getInferenceStatus(): Promise<InferenceStatus> {
+    return invoke<InferenceStatus>("inference_status");
   }
 
   async checkForUpdate(): Promise<UpdateCheckResponse> {

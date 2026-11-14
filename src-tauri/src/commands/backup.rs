@@ -2,6 +2,7 @@
 //! a user-chosen folder — copyable to any synced drive by the user. The
 //! passphrase is never persisted, so there is nothing to leak.
 
+use crate::app::blocking::with_app_state;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::services::backup::{BackupEngine, BackupEntry, RestoreReport};
@@ -76,6 +77,19 @@ pub async fn backup_run(
     passphrase: String,
     include_api_keys: Option<bool>,
 ) -> Result<BackupRunResponse, AppError> {
+    with_app_state(&state, move |state| {
+        backup_run_work(state, target_dir, passphrase, include_api_keys)
+    })
+    .await
+}
+
+/// Key derivation and encryption are CPU and disk work. They run through `backup_run`.
+fn backup_run_work(
+    state: AppState,
+    target_dir: Option<String>,
+    passphrase: String,
+    include_api_keys: Option<bool>,
+) -> Result<BackupRunResponse, AppError> {
     let engine = BackupEngine::new(crate::app::paths::app_dir());
     let include_keys = include_api_keys.unwrap_or(false);
 
@@ -115,8 +129,15 @@ pub async fn backup_run(
 }
 
 #[tauri::command]
-pub fn backup_list(
+pub async fn backup_list(
     state: State<'_, AppState>,
+    target_dir: Option<String>,
+) -> Result<Vec<BackupEntry>, AppError> {
+    with_app_state(&state, move |state| backup_list_work(state, target_dir)).await
+}
+
+fn backup_list_work(
+    state: AppState,
     target_dir: Option<String>,
 ) -> Result<Vec<BackupEntry>, AppError> {
     let target = backup_target(&state, target_dir);
@@ -126,6 +147,20 @@ pub fn backup_list(
 #[tauri::command]
 pub async fn backup_restore(
     state: State<'_, AppState>,
+    file_name: String,
+    passphrase: String,
+    restore_config: Option<bool>,
+    target_dir: Option<String>,
+) -> Result<RestoreReport, AppError> {
+    with_app_state(&state, move |state| {
+        backup_restore_work(state, file_name, passphrase, restore_config, target_dir)
+    })
+    .await
+}
+
+/// Reading, decrypting and restoring an archive runs through `backup_restore`.
+fn backup_restore_work(
+    state: AppState,
     file_name: String,
     passphrase: String,
     restore_config: Option<bool>,

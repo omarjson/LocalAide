@@ -1,14 +1,15 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
-  import { api, errorMessage } from "../lib/api/client";
+  import { listen } from "@tauri-apps/api/event";
+import { api, errorMessage } from "../lib/api/client";
   import { dur } from "../lib/motion";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import PageHeader from "../components/PageHeader.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ChatMessage, ChatThread, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ChatMessage, ChatThread, EngineStatusEvent, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
@@ -65,6 +66,37 @@
   let modelsChecked = $state(false);
 
   let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
+
+  // The saved model loads in the background at startup. Show progress, and show a
+  // failed load in the chat so the user knows why nothing answers.
+  let engineLoading = $state(false);
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+    let closed = false;
+    void (async () => {
+      try {
+        engineLoading = (await api.getInferenceStatus()).loading;
+        const stop = await listen<EngineStatusEvent>("engine-status", (event) => {
+          const { state, message } = event.payload;
+          engineLoading = state === "loading";
+          if (state === "failed") {
+            chatError = message ?? "The model did not load. Try again from Models.";
+          }
+        });
+        if (closed) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      } catch (e: unknown) {
+        console.error("Engine status could not load", e);
+      }
+    })();
+    return () => {
+      closed = true;
+      unlisten?.();
+    };
+  });
 
   onMount(async () => {
     try {
@@ -658,7 +690,11 @@
             {/if}
           {:else}
             <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
-            <p class="text-xs text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
+            {#if engineLoading}
+              <p class="text-xs text-ink-400" role="status">Loading {activeModelName}. This can take a minute.</p>
+            {:else}
+              <p class="text-xs text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
+            {/if}
           {/if}
         </div>
 

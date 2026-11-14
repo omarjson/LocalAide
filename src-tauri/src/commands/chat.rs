@@ -1,3 +1,4 @@
+use crate::app::blocking::{run_blocking, with_app_state};
 use crate::app::error::AppError;
 use crate::app::events::ChatStreamEvent;
 use crate::app::paths::conversations_dir;
@@ -10,6 +11,8 @@ use crate::services::inference::InferenceEngine;
 use crate::services::inference::PromptMessage;
 use crate::services::inference::context::ContextBudget;
 use std::fs;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tauri::State;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -24,6 +27,8 @@ struct StoredThread {
 
 const MAX_IMAGES: usize = 4;
 const MAX_IMAGES_BYTES: usize = 20 * 1024 * 1024;
+/// How long a chat waits for the query embedding before it falls back to keyword recall.
+const RECALL_EMBED_LIMIT: Duration = Duration::from_secs(3);
 
 /// Reject unsupported or oversized attachments before any model work starts.
 fn validate_images(images: &[String]) -> Result<(), AppError> {
@@ -67,6 +72,34 @@ fn validate_thread_id(thread_id: &str) -> Result<(), AppError> {
         Ok(())
     } else {
         Err(AppError::invalid_input("That conversation id is not valid."))
+    }
+}
+
+/// Runs `work` on a helper thread and waits at most `limit` for its answer. A
+/// slow answer returns None, and the helper finishes in the background.
+fn answer_within<T: Send + 'static>(
+    limit: Duration,
+    work: impl FnOnce() -> Option<T> + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    rx.recv_timeout(limit).ok().flatten()
+}
+
+/// What the chat screen needs to know about the local engine.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InferenceStatusDto {
+    pub loaded: bool,
+    pub loading: bool,
+}
+
+#[tauri::command]
+pub fn inference_status(state: State<'_, AppState>) -> InferenceStatusDto {
+    InferenceStatusDto {
+        loaded: state.inference_engine.status().loaded,
+        loading: state.engine_loading.load(Ordering::SeqCst),
     }
 }
 
@@ -129,12 +162,15 @@ pub(crate) async fn load_and_activate(state: &AppState, id: String) -> Result<St
 /// Stop the local engine, free the model's RAM and forget the active model.
 /// The model file stays installed. Loading it again restarts the engine.
 #[tauri::command]
-pub fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError> {
-    state.inference_engine.unload()?;
-    if let Err(e) = state.model_manager.clear_active() {
-        log::warn!("Could not clear the active model: {e}");
-    }
-    Ok(())
+pub async fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError> {
+    with_app_state(&state, |state| {
+        state.inference_engine.unload()?;
+        if let Err(e) = state.model_manager.clear_active() {
+            log::warn!("Could not clear the active model: {e}");
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -158,15 +194,25 @@ pub async fn chat_stream(
     // RAG Recall: Retrieve context from MemoryService / LibraryService. The
     // query embeds against the local engine when it is running, so hybrid
     // ranking uses vectors; without it recall is keyword-ranked.
-    let query_vector = state.embedding_engine.embed_query(&req.message).ok();
-    let rag_res = state
-        .memory
-        .recall(&req.message, query_vector.as_deref(), Some(512))
-        .unwrap_or_else(|_| crate::services::memory::rag::RagRecallResult {
-            citations: Vec::new(),
-            context_prompt: String::new(),
-            total_tokens: 0,
+    // Recall runs on a worker thread, so a busy engine cannot stall the window.
+    // The embedding is used only if it answers in time; otherwise recall is keyword-ranked.
+    let recall_text = req.message.clone();
+    let rag_res = with_app_state(&state, move |owned| {
+        let engine = owned.embedding_engine.clone();
+        let vector_text = recall_text.clone();
+        let query_vector = answer_within(RECALL_EMBED_LIMIT, move || {
+            engine.embed_query(&vector_text).ok()
         });
+        Ok(owned
+            .memory
+            .recall(&recall_text, query_vector.as_deref(), Some(512))
+            .unwrap_or_else(|_| crate::services::memory::rag::RagRecallResult {
+                citations: Vec::new(),
+                context_prompt: String::new(),
+                total_tokens: 0,
+            }))
+    })
+    .await?;
 
     // Send citation events to frontend channel before generation
     for cit in &rag_res.citations {
@@ -302,7 +348,11 @@ pub async fn summarize(
 }
 
 #[tauri::command]
-pub fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
+pub async fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
+    run_blocking(chat_thread_list_work).await
+}
+
+fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
     let dir = conversations_dir();
     if !dir.exists() {
         return Ok(vec![]);
@@ -331,7 +381,16 @@ pub fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
 }
 
 #[tauri::command]
-pub fn chat_thread_save(
+pub async fn chat_thread_save(
+    thread_id: String,
+    title: String,
+    system_prompt: Option<String>,
+    messages: Vec<ChatMessage>,
+) -> Result<(), AppError> {
+    run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages)).await
+}
+
+fn chat_thread_save_work(
     thread_id: String,
     title: String,
     system_prompt: Option<String>,
@@ -374,7 +433,11 @@ pub fn chat_thread_save(
 }
 
 #[tauri::command]
-pub fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
+pub async fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
+    run_blocking(move || chat_thread_load_work(thread_id)).await
+}
+
+fn chat_thread_load_work(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if !path.exists() {
@@ -386,7 +449,11 @@ pub fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, AppError>
 }
 
 #[tauri::command]
-pub fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
+pub async fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
+    run_blocking(move || chat_thread_delete_work(thread_id)).await
+}
+
+fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if path.exists() {
@@ -396,7 +463,11 @@ pub fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
+pub async fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
+    run_blocking(move || chat_thread_export_work(req)).await
+}
+
+fn chat_thread_export_work(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
     validate_thread_id(&req.thread_id)?;
     let path = conversations_dir().join(format!("{}.json", req.thread_id));
     if !path.exists() {
@@ -435,7 +506,18 @@ pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportRespon
 
 #[cfg(test)]
 mod tests {
-    use super::validate_thread_id;
+    use super::{answer_within, validate_thread_id};
+    use std::time::Duration;
+
+    #[test]
+    fn answer_within_gives_up_on_slow_work() {
+        assert_eq!(answer_within(Duration::from_secs(5), || Some(7)), Some(7));
+        let slow = answer_within(Duration::from_millis(50), || {
+            std::thread::sleep(Duration::from_millis(500));
+            Some(7)
+        });
+        assert_eq!(slow, None);
+    }
 
     #[test]
     fn thread_ids_must_be_plain_tokens() {

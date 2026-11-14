@@ -9,7 +9,8 @@ use std::io::{BufRead, BufReader};
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -17,6 +18,7 @@ use serde_json::{Value, json};
 
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken, PromptMessage};
 use crate::app::error::AppError;
+use crate::app::lifecycle;
 
 /// Environment variable that overrides the server binary path. Used in development.
 const ENV_BIN: &str = "LOCALAIDE_LLAMA_SERVER";
@@ -25,6 +27,13 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(180);
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// Whole-request timeout for chat. Generation can run for minutes on a large model.
 const CHAT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+/// How often the reply loop checks the cancel flag while the server is busy.
+const STREAM_POLL: Duration = Duration::from_millis(200);
+/// Longest silence from the server before a reply counts as stuck. Prompt
+/// processing on a large context can take minutes, so the limit is generous.
+const STREAM_STALL_LIMIT: Duration = Duration::from_secs(10 * 60);
+/// The server log is rotated once it passes this size. One old copy is kept.
+const MAX_SERVER_LOG_BYTES: u64 = 5 * 1024 * 1024;
 
 struct Running {
     child: Child,
@@ -39,6 +48,10 @@ struct Running {
 pub struct SidecarEngine {
     running: Mutex<Option<Running>>,
     client: reqwest::blocking::Client,
+    /// Held for a whole load, so two loads never run two servers at once.
+    load_lock: Mutex<()>,
+    /// Bumped by `unload`. A load that started before the bump discards its server.
+    epoch: AtomicU64,
 }
 
 impl SidecarEngine {
@@ -51,6 +64,8 @@ impl SidecarEngine {
         Self {
             running: Mutex::new(None),
             client,
+            load_lock: Mutex::new(()),
+            epoch: AtomicU64::new(0),
         }
     }
 
@@ -87,6 +102,9 @@ impl Drop for SidecarEngine {
 
 impl InferenceEngine for SidecarEngine {
     fn load(&self, model_path: &Path, context_size: i32) -> Result<String, AppError> {
+        // One load at a time: two servers at once would double the RAM use.
+        let _serial = self.load_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let epoch = self.epoch.load(Ordering::SeqCst);
         self.stop();
 
         let bin = locate_binary()?;
@@ -125,9 +143,11 @@ impl InferenceEngine for SidecarEngine {
             }
         }
 
+        lifecycle::hide_console_window(&mut cmd);
         let child = cmd.spawn().map_err(|e| {
             AppError::model_load_failed(&model_id, &format!("failed to start llama-server: {e}"))
         })?;
+        lifecycle::tie_child_to_app(&child);
 
         let mut running = Running {
             child,
@@ -162,12 +182,23 @@ impl InferenceEngine for SidecarEngine {
             std::thread::sleep(POLL_INTERVAL);
         }
 
+        // An unload during this load means the user wants no model: drop the new server.
+        if self.epoch.load(Ordering::SeqCst) != epoch {
+            let _ = running.child.kill();
+            let _ = running.child.wait();
+            return Err(AppError::cancelled());
+        }
         let mut guard = self.running.lock().unwrap_or_else(|e| e.into_inner());
-        *guard = Some(running);
+        // Replacing a running server would orphan it, so stop the old one first.
+        if let Some(mut previous) = guard.replace(running) {
+            let _ = previous.child.kill();
+            let _ = previous.child.wait();
+        }
         Ok(format!("Successfully loaded {}", model_path.display()))
     }
 
     fn unload(&self) -> Result<(), AppError> {
+        self.epoch.fetch_add(1, Ordering::SeqCst);
         self.stop();
         Ok(())
     }
@@ -225,11 +256,39 @@ impl InferenceEngine for SidecarEngine {
         let mut ttft: Option<Duration> = None;
         let mut cancelled = false;
 
-        for line in BufReader::new(resp).lines() {
+        // A helper thread reads the stream, so this loop can check the cancel flag
+        // every STREAM_POLL. Without it, Stop does nothing while the server is still
+        // processing the prompt and has sent no line. When this function returns, the
+        // receiver is dropped. The helper then stops at its next line and closes the
+        // connection, which tells the server to stop generating.
+        let (lines_tx, lines_rx) = std::sync::mpsc::channel::<std::io::Result<String>>();
+        std::thread::spawn(move || {
+            for line in BufReader::new(resp).lines() {
+                if lines_tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut last_activity = Instant::now();
+        loop {
             if cancel_flag.load(Ordering::Relaxed) {
                 cancelled = true;
                 break;
             }
+            let line = match lines_rx.recv_timeout(STREAM_POLL) {
+                Ok(line) => line,
+                Err(RecvTimeoutError::Timeout) => {
+                    if last_activity.elapsed() > STREAM_STALL_LIMIT {
+                        return Err(AppError::internal(
+                            "The model stopped responding. Try again, or load the model again.",
+                        ));
+                    }
+                    continue;
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
+            last_activity = Instant::now();
             let line = line.map_err(|e| AppError::internal(format!("stream read failed: {e}")))?;
             let Some(data) = line.strip_prefix("data: ") else {
                 continue;
@@ -359,10 +418,15 @@ fn mmproj_for(model_path: &Path) -> Option<PathBuf> {
 pub(crate) fn open_log() -> Option<(File, File)> {
     let dir = crate::app::paths::app_dir().join("logs");
     std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("llama-server.log");
+    // One old copy is kept, so a long session cannot grow the log without limit.
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_SERVER_LOG_BYTES) {
+        let _ = std::fs::rename(&path, dir.join("llama-server.log.old"));
+    }
     let file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(dir.join("llama-server.log"))
+        .open(&path)
         .ok()?;
     let second = file.try_clone().ok()?;
     Some((file, second))

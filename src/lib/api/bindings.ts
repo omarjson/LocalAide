@@ -446,3 +446,17 @@ export interface RestoreReport {
   config_restored: boolean;
   skipped_newer_config: boolean;
 }
+
+/** What the chat screen needs to know about the local engine. */
+export interface InferenceStatus {
+  loaded: boolean;
+  loading: boolean;
+}
+
+/** Sent on the "engine-status" event while the saved model loads at startup. */
+export interface EngineStatusEvent {
+  /** One of: "loading", "ready", "failed". */
+  state: string;
+  model_id: string | null;
+  message: string | null;
+}

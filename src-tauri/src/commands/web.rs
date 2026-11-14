@@ -2,6 +2,7 @@
 //! search/crawl providers; API keys come from the local config file and
 //! travel only to their own provider.
 
+use crate::app::blocking::with_app_state;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::config::AppConfig;
@@ -21,7 +22,7 @@ pub struct WebProviderStatus {
     pub is_default: bool,
 }
 
-fn load_web(state: &State<'_, AppState>) -> Result<(AppConfig, WebSearchKeys), AppError> {
+fn load_web(state: &AppState) -> Result<(AppConfig, WebSearchKeys), AppError> {
     let store = state
         .config_store
         .lock()
@@ -60,8 +61,21 @@ pub fn web_providers(state: State<'_, AppState>) -> Result<Vec<WebProviderStatus
 }
 
 #[tauri::command]
-pub fn web_search(
+pub async fn web_search(
     state: State<'_, AppState>,
+    query: String,
+    provider: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<WebHit>, AppError> {
+    with_app_state(&state, move |state| {
+        web_search_work(state, query, provider, limit)
+    })
+    .await
+}
+
+/// Network searches block for seconds, so this runs off the UI thread.
+fn web_search_work(
+    state: AppState,
     query: String,
     provider: Option<String>,
     limit: Option<u32>,
@@ -80,8 +94,17 @@ pub fn web_search(
 /// Read one page as text. Default: Firecrawl when its key is configured
 /// (it renders markdown), otherwise the keyless Jina Reader.
 #[tauri::command]
-pub fn web_crawl(
+pub async fn web_crawl(
     state: State<'_, AppState>,
+    url: String,
+    provider: Option<String>,
+) -> Result<WebPage, AppError> {
+    with_app_state(&state, move |state| web_crawl_work(state, url, provider)).await
+}
+
+/// Fetching a page blocks for seconds, so this runs off the UI thread.
+fn web_crawl_work(
+    state: AppState,
     url: String,
     provider: Option<String>,
 ) -> Result<WebPage, AppError> {
