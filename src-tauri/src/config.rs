@@ -274,8 +274,14 @@ mod tests {
             model_memory_percent: Some(percent),
             ..AppConfig::default()
         };
-        assert_eq!(with(5).memory_percent_for_models(), MIN_MODEL_MEMORY_PERCENT);
-        assert_eq!(with(100).memory_percent_for_models(), MAX_MODEL_MEMORY_PERCENT);
+        assert_eq!(
+            with(5).memory_percent_for_models(),
+            MIN_MODEL_MEMORY_PERCENT
+        );
+        assert_eq!(
+            with(100).memory_percent_for_models(),
+            MAX_MODEL_MEMORY_PERCENT
+        );
         assert_eq!(with(55).memory_percent_for_models(), 55);
     }
 

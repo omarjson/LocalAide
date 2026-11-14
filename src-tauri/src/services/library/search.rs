@@ -89,11 +89,18 @@ impl HybridSearcher {
         // read afterwards, for the winners only.
         let mut best: Vec<(f32, String)> = Vec::with_capacity(limit + 1);
         self.db.visit_chunk_embeddings(|chunk_id, embedding| {
-            keep_best(&mut best, limit, cosine_similarity(query_vec, embedding), chunk_id);
+            keep_best(
+                &mut best,
+                limit,
+                cosine_similarity(query_vec, embedding),
+                chunk_id,
+            );
         })?;
 
-        let scores: HashMap<String, f32> =
-            best.iter().map(|(score, id)| (id.clone(), *score)).collect();
+        let scores: HashMap<String, f32> = best
+            .iter()
+            .map(|(score, id)| (id.clone(), *score))
+            .collect();
         let ids: Vec<String> = best.into_iter().map(|(_, id)| id).collect();
         let hits = self
             .db

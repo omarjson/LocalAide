@@ -350,8 +350,7 @@ impl FileIngester {
 
                     let content_bytes = if is_flate {
                         // Capped, so a tiny file cannot unpack to gigabytes.
-                        let mut decoder =
-                            ZlibDecoder::new(stream_bytes).take(MAX_PDF_STREAM_BYTES);
+                        let mut decoder = ZlibDecoder::new(stream_bytes).take(MAX_PDF_STREAM_BYTES);
                         let mut decompressed = Vec::new();
                         if decoder.read_to_end(&mut decompressed).is_ok() {
                             decompressed

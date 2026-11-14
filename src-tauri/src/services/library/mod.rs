@@ -126,7 +126,8 @@ impl LibraryService {
         if let Some(doc) = &stored
             && doc.content_hash == ingested.document.content_hash
         {
-            self.db.touch_document(&doc.id, ingested.document.modified)?;
+            self.db
+                .touch_document(&doc.id, ingested.document.modified)?;
             return Ok(stored_result(doc));
         }
 

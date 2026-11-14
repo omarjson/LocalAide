@@ -240,10 +240,14 @@ impl LibraryDb {
             let has_column = tx
                 .prepare("SELECT 1 FROM pragma_table_info('chunks') WHERE name = 'fts_rowid'")
                 .and_then(|mut stmt| stmt.exists([]))
-                .map_err(|e| AppError::storage(format!("Failed to inspect the chunks table: {e}")))?;
+                .map_err(|e| {
+                    AppError::storage(format!("Failed to inspect the chunks table: {e}"))
+                })?;
             if !has_column {
                 tx.execute_batch("ALTER TABLE chunks ADD COLUMN fts_rowid INTEGER;")
-                    .map_err(|e| AppError::storage(format!("Failed to add chunks.fts_rowid: {e}")))?;
+                    .map_err(|e| {
+                        AppError::storage(format!("Failed to add chunks.fts_rowid: {e}"))
+                    })?;
             }
             tx.execute_batch(
                 "DELETE FROM chunks_fts;
@@ -295,14 +299,20 @@ impl LibraryDb {
     /// Rebuilds the database file without free pages. Returns the file size
     /// before and after, in bytes (0 for an in-memory database).
     pub fn compact(&self) -> Result<(u64, u64), AppError> {
-        let size = || std::fs::metadata(&self.db_path_str).map(|m| m.len()).unwrap_or(0);
+        let size = || {
+            std::fs::metadata(&self.db_path_str)
+                .map(|m| m.len())
+                .unwrap_or(0)
+        };
         let before = size();
         let conn = self
             .conn
             .lock()
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
-        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")
-            .map_err(|e| AppError::storage(format!("Failed to compact the database: {e}")))?;
+        conn.execute_batch(
+            "PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);",
+        )
+        .map_err(|e| AppError::storage(format!("Failed to compact the database: {e}")))?;
         drop(conn);
         Ok((before, size()))
     }
@@ -634,7 +644,9 @@ impl LibraryDb {
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
         let mut stmt = conn
             .prepare("SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL")
-            .map_err(|e| AppError::storage(format!("Failed to prepare embeddings statement: {e}")))?;
+            .map_err(|e| {
+                AppError::storage(format!("Failed to prepare embeddings statement: {e}"))
+            })?;
         let mut rows = stmt
             .query([])
             .map_err(|e| AppError::storage(format!("Failed to query embeddings: {e}")))?;
