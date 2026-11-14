@@ -16,7 +16,10 @@ pub async fn index_file(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<SearchResultDoc, AppError> {
-    with_app_state(&state, move |state| state.library.index_file(Path::new(&path))).await
+    with_app_state(&state, move |state| {
+        state.library.index_file(Path::new(&path))
+    })
+    .await
 }
 
 #[tauri::command]

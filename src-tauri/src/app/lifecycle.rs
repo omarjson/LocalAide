@@ -96,7 +96,12 @@ fn show_message_box(title: &str, message: &str) {
     // SAFETY: both buffers end in a NUL and live until the call returns. A null
     // owner window makes the box a top-level window.
     unsafe {
-        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_ICONERROR);
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            caption.as_ptr(),
+            MB_ICONERROR,
+        );
     }
 }
 

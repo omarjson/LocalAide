@@ -278,11 +278,18 @@ impl ModelService {
             let cancel = Arc::clone(&cancel);
             let downloaded = self
                 .downloader
-                .download_atomic(url, dest, *size, sha, cancel, move |mut p: DownloadProgress| {
-                    p.percent = base + p.percent * weight / 100.0;
-                    let mut cb = shared.lock().expect("download progress lock poisoned");
-                    cb(p);
-                })
+                .download_atomic(
+                    url,
+                    dest,
+                    *size,
+                    sha,
+                    cancel,
+                    move |mut p: DownloadProgress| {
+                        p.percent = base + p.percent * weight / 100.0;
+                        let mut cb = shared.lock().expect("download progress lock poisoned");
+                        cb(p);
+                    },
+                )
                 .await?;
             if idx == 0 {
                 primary = Some(downloaded);

@@ -21,7 +21,9 @@ where
     });
     match rx.await {
         Ok(result) => result,
-        Err(_) => Err(AppError::internal("A background task stopped unexpectedly.")),
+        Err(_) => Err(AppError::internal(
+            "A background task stopped unexpectedly.",
+        )),
     }
 }
 

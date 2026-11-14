@@ -34,7 +34,9 @@ impl NotesManager {
         if in_notes_folder && is_markdown {
             Ok(())
         } else {
-            Err(AppError::invalid_input(format!("Not a memory note: {path_str}")))
+            Err(AppError::invalid_input(format!(
+                "Not a memory note: {path_str}"
+            )))
         }
     }
 

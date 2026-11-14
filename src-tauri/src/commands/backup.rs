@@ -168,7 +168,9 @@ fn backup_restore_work(
 ) -> Result<RestoreReport, AppError> {
     // The file name must be a bare file name inside the backup folder — no
     // traversal into arbitrary paths.
-    let bare_name = Path::new(&file_name).file_name().and_then(|name| name.to_str());
+    let bare_name = Path::new(&file_name)
+        .file_name()
+        .and_then(|name| name.to_str());
     if bare_name != Some(file_name.as_str()) || !file_name.ends_with(".labak") {
         return Err(AppError::invalid_input(
             "Restore takes a backup file name from the backup folder",

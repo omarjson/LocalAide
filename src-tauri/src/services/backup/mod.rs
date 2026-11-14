@@ -590,7 +590,10 @@ mod restore_path_tests {
             "memory/a/b.md",
             "memory",
         ] {
-            assert!(restore_destination(app, bad).is_err(), "{bad} must be refused");
+            assert!(
+                restore_destination(app, bad).is_err(),
+                "{bad} must be refused"
+            );
         }
     }
 }

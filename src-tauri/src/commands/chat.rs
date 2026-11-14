@@ -71,7 +71,9 @@ fn validate_thread_id(thread_id: &str) -> Result<(), AppError> {
     if plain {
         Ok(())
     } else {
-        Err(AppError::invalid_input("That conversation id is not valid."))
+        Err(AppError::invalid_input(
+            "That conversation id is not valid.",
+        ))
     }
 }
 
@@ -463,7 +465,9 @@ fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
+pub async fn chat_thread_export(
+    req: ThreadExportRequest,
+) -> Result<ThreadExportResponse, AppError> {
     run_blocking(move || chat_thread_export_work(req)).await
 }
 

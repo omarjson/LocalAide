@@ -851,10 +851,18 @@ mod tests {
         e.id = "../escape".into();
         assert!(e.validate_entry().is_err());
 
-        for dest in ["../escape.gguf", "sub/model.gguf", "C:model.gguf", "model.json"] {
+        for dest in [
+            "../escape.gguf",
+            "sub/model.gguf",
+            "C:model.gguf",
+            "model.json",
+        ] {
             let mut e = sample_entry("test-1b");
             e.dest = Some(dest.into());
-            assert!(e.validate_entry().is_err(), "dest {dest:?} must be rejected");
+            assert!(
+                e.validate_entry().is_err(),
+                "dest {dest:?} must be rejected"
+            );
         }
 
         // A companion may not overwrite the primary file or leave the folder.
