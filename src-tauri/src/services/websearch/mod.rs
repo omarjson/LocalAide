@@ -78,7 +78,9 @@ pub struct WebSearchKeys {
 }
 
 impl WebSearchKeys {
-    fn for_provider(&self, id: &str) -> Result<&str, AppError> {
+    /// The stored key for a provider, or `WEB_NO_KEY` when it is missing or
+    /// blank. Keyless providers return an empty string.
+    pub(crate) fn for_provider(&self, id: &str) -> Result<&str, AppError> {
         let key = match id {
             "exa" => self.exa_api_key.as_deref(),
             "firecrawl" => self.firecrawl_api_key.as_deref(),
@@ -284,7 +286,8 @@ impl WebSearchEngine {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
         check_status(status)?;
-        read_capped(response)
+        let body = read_capped(response)?;
+        Ok((body, title))
     }
 
     fn get_capped(&self, url: &str) -> Result<String, AppError> {
