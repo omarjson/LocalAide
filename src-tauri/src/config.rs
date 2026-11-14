@@ -36,7 +36,7 @@ pub struct AppConfig {
     pub backup: BackupConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct BackupConfig {
     /// Where archives are written. None = ~/.aiassistant/backups.
     #[serde(default)]
@@ -46,16 +46,6 @@ pub struct BackupConfig {
     pub include_api_keys: bool,
     #[serde(default)]
     pub last_backup_at: Option<u64>,
-}
-
-impl Default for BackupConfig {
-    fn default() -> Self {
-        Self {
-            target_dir: None,
-            include_api_keys: false,
-            last_backup_at: None,
-        }
-    }
 }
 
 fn default_context_tokens() -> u32 {

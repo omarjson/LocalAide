@@ -60,7 +60,7 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Skills + honest adaptation:** markdown skill files with a slash-menu in chat and a full editor screen; persisted chat prefs (prompt/temperature/persona/context); a local usage counter suggests saving prompts you keep re-typing. No profiles, no network, no fake learning claims.
 - **Diagnostics:** Settings → Diagnostics tab (subsystem health, llama-server log tail, display-only update check); a11y fix for the lightbox image that newer svelte-check flags as an error.
 - **Deferred:** light theme (needs visual verification — no local Node toolchain), cloud backup (needs operator app registrations), reranker second stage.
-- **CI:** gate cycles during this round were diagnosed through check-run annotations (svelte-check output, npm ERESOLVE logs); the diagnostics emitters stay in ci.yml as permanent failure reporting.
+- **CI:** gate cycles during this round were diagnosed through check-run annotations (svelte-check output, npm ERESOLVE logs); the diagnostics emitters stay in ci.yml as permanent failure reporting. The gate surfaced 10+ rustfmt diffs from the round's new code — applied via a temporary ubuntu-only fmt workflow (same push-to-branch trick as the lockfile) rather than hand-transcribed diffs — and then 7 real clippy/compile findings (missing trait import, u64/usize mismatch, deprecated `Nonce::from_slice` in aes-gcm 0.11, a test fixture behind the new field, a missing `mut`). Full job logs are readable with the stored git credential, which beats annotation caps.
 
 ## 2026-11-14 — Model catalog refresh (ADR-0008)
 
@@ -74,5 +74,5 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - macOS/package bundling in CI (see the status line in README.md). Platform builds are now gated to release tags, manual dispatch, or `[build-all]` commits — they no longer run on every push.
 - Image input exercised against a real vision model end to end (companions now download with the model, so this is testable for the first time).
 - Light theme (needs visual verification, which requires a local Node toolchain).
-- Cloud backup providers (OneDrive/Drive need operator app registrations; ADR-0009 planned with the backup track).
+- Cloud backup providers (OneDrive/Drive need operator app registrations; local-folder backups shipped with ADR-0009).
 - Binary code signing / notarization (ADR-0005).

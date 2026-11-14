@@ -7,7 +7,6 @@ use crate::app::error::AppError;
 use crate::services::inference::sidecar::{free_port, locate_binary, new_api_key, open_log};
 use crate::services::models::ModelService;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;

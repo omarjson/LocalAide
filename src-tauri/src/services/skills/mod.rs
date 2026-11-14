@@ -112,7 +112,7 @@ impl SkillsService {
                 use_count: *count,
             })
             .collect();
-        out.sort_by(|a, b| b.use_count.cmp(&a.use_count));
+        out.sort_by_key(|item| std::cmp::Reverse(item.use_count));
         Ok(out)
     }
 
@@ -277,18 +277,18 @@ impl Default for SkillsService {
 fn split_frontmatter(raw: &str) -> (BTreeMap<String, String>, String) {
     let mut front = BTreeMap::new();
     let rest = raw.trim_start();
-    if let Some(after) = rest.strip_prefix("---") {
-        if let Some(end) = after.find("\n---") {
-            let block = &after[..end];
-            for line in block.lines() {
-                if let Some((key, value)) = line.split_once(':') {
-                    front.insert(key.trim().to_string(), value.trim().to_string());
-                }
+    if let Some(after) = rest.strip_prefix("---")
+        && let Some(end) = after.find("\n---")
+    {
+        let block = &after[..end];
+        for line in block.lines() {
+            if let Some((key, value)) = line.split_once(':') {
+                front.insert(key.trim().to_string(), value.trim().to_string());
             }
-            let body_start = end + 4; // past "\n---"
-            let body = after.get(body_start..).unwrap_or("");
-            return (front, body.trim_start_matches(['\n', '\r']).to_string());
         }
+        let body_start = end + 4; // past "\n---"
+        let body = after.get(body_start..).unwrap_or("");
+        return (front, body.trim_start_matches(['\n', '\r']).to_string());
     }
     (front, raw.to_string())
 }

@@ -239,7 +239,7 @@ impl BackupEngine {
                 app_version: String::new(),
             });
         }
-        out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        out.sort_by_key(|item| std::cmp::Reverse(item.created_at));
         Ok(out)
     }
 
