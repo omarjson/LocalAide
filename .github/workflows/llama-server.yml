@@ -40,29 +40,39 @@ jobs:
           - os: ubuntu-22.04
             triple: x86_64-unknown-linux-gnu
             ext: ''
+          # Static C runtime, so the server starts on a clean Windows without
+          # the Visual C++ Redistributable.
           - os: windows-2022
             triple: x86_64-pc-windows-msvc
             ext: '.exe'
+            cmake_extra: '-DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
     steps:
       - name: Check out llama.cpp at the pinned tag
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: ggml-org/llama.cpp
           ref: ${{ inputs.llama_cpp_tag }}
           path: llama.cpp
           fetch-depth: 1
 
-      - name: Configure (server only, static, no OpenSSL)
+      # GGML_NATIVE=OFF: build for a common CPU baseline (AVX2 on x86_64),
+      # not for the CI machine's own CPU, so the server runs on users' PCs.
+      # GGML_OPENMP=OFF: ggml's own thread pool, so no OpenMP runtime
+      # library (vcomp140.dll, libgomp) has to be on the user's machine.
+      - name: Configure (server only, static, portable CPU, no OpenSSL)
         shell: bash
         working-directory: llama.cpp
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
             -DLLAMA_BUILD_SERVER=ON \
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF \
             -DLLAMA_OPENSSL=OFF \
+            -DLLAMA_CURL=OFF \
             ${{ matrix.cmake_extra }}
 
       - name: Build llama-server
@@ -70,7 +80,9 @@ jobs:
         working-directory: llama.cpp
         run: cmake --build build --config Release --target llama-server -j
 
-      - name: Stage sidecar binary
+      # The binary must start here, or the release would ship a server that
+      # cannot run. The x86_64 macOS build needs Rosetta on Apple Silicon runners.
+      - name: Stage sidecar binary and check that it runs
         shell: bash
         working-directory: llama.cpp
         run: |
@@ -81,11 +93,16 @@ jobs:
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/sidecar"
-          cp "$SRC" "$RUNNER_TEMP/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}"
-          "$RUNNER_TEMP/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}" --version || true
+          BIN="$RUNNER_TEMP/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}"
+          cp "$SRC" "$BIN"
+          if [ "${{ matrix.triple }}" = "x86_64-apple-darwin" ] && ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "::warning::Rosetta is missing on this runner, so the x86_64 macOS server was not started."
+          else
+            "$BIN" --version
+          fi
 
       - name: Upload sidecar artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: llama-server-${{ matrix.triple }}
           path: ${{ runner.temp }}/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}

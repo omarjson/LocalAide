@@ -39,9 +39,9 @@ Remote scripts and arbitrary inline script execution are blocked; frontend netwo
 
 ## 6. Reporting a Vulnerability
 
-Report security vulnerabilities privately:
-
-- Email: `security@localaide.dev`
-- Or open a private GitHub Security Advisory at `https://github.com/omarjson/LocalAide/security/advisories/new`
+Report security vulnerabilities privately, through a GitHub security advisory:
+`https://github.com/omarjson/LocalAide/security/advisories/new`
 
 Do not open public GitHub issues for security vulnerabilities.
+
+(An earlier version of this file named `security@localaide.dev`. That domain does not exist, so mail sent there is lost. Use the advisory link.)

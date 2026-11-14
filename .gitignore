@@ -20,3 +20,5 @@ Thumbs.db
 src-tauri/binaries/
 # Browser profiles captured by UI automation hold cookies and saved logins. Never commit them.
 docs/evidence/**/profile/
+# Made by `cargo about` during release builds (see .github/workflows/ci.yml).
+/THIRD_PARTY_LICENSES.html

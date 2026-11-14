@@ -1,5 +1,8 @@
 {
   "bundle": {
-    "externalBin": ["binaries/llama-server"]
+    "externalBin": ["binaries/llama-server"],
+    "resources": {
+      "../THIRD_PARTY_LICENSES.html": "THIRD_PARTY_LICENSES.html"
+    }
   }
 }

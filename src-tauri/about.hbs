@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LocalAide third-party licenses</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    pre { white-space: pre-wrap; background: #f4f4f5; padding: 1rem; border-radius: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Third-party licenses</h1>
+  <p>LocalAide is built with these open-source Rust packages. Each license is shown once, with the packages that use it.</p>
+  <ul>
+    {{#each overview}}
+    <li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+    {{/each}}
+  </ul>
+  {{#each licenses}}
+  <h2 id="{{id}}">{{name}}</h2>
+  <p>Used by:</p>
+  <ul>
+    {{#each used_by}}
+    <li>{{crate.name}} {{crate.version}}</li>
+    {{/each}}
+  </ul>
+  <pre>{{text}}</pre>
+  {{/each}}
+</body>
+</html>

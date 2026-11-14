@@ -1,0 +1,50 @@
+name: Dependency audit
+
+# Checks Cargo.lock against the RustSec advisory database and the npm
+# runtime packages against the npm advisory database. Runs weekly, on
+# demand, and when a lock file changes.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src-tauri/Cargo.lock'
+      - 'package-lock.json'
+      - '.github/workflows/audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    name: Rust advisories (cargo audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
+        with:
+          tool: cargo-audit@0.23.0
+
+      # Warnings (unmaintained or yanked crates) are printed; known
+      # vulnerabilities fail the job.
+      - name: Audit Cargo.lock
+        run: cargo audit --file src-tauri/Cargo.lock
+
+  npm-audit:
+    name: npm advisories (runtime packages)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      # Dev-only tools never ship in the app, so only runtime packages count.
+      - name: Audit package-lock.json
+        run: npm audit --omit=dev --audit-level=high

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Publish release artifacts to GitHub Releases'
+        description: 'Create a draft GitHub Release with the built installers'
         required: false
         type: boolean
         default: false
@@ -21,20 +21,30 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Pinned, so a new Rust release cannot add lints or change behaviour in the
+  # middle of a release. Raise it on purpose, with any clippy fixes it needs.
+  RUST_TOOLCHAIN: '1.100.0'
+  CARGO_ABOUT_VERSION: '0.9.3'
+
+# Third-party actions are pinned to commit SHAs (the comment names the tag).
+# Dependabot (.github/dependabot.yml) proposes updates.
+
 jobs:
   quality-gate:
     name: Quality Gate (Lint, Typecheck, Test, Smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install Rust Stable Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: 'npm'
@@ -47,7 +57,7 @@ jobs:
       # Saved even when the job fails, so the next fix does not rebuild
       # every dependency.
       - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
@@ -121,21 +131,22 @@ jobs:
     name: Rust on Windows (Clippy, Test)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install Rust Stable Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: 'npm'
 
       - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
@@ -164,11 +175,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install Rust Stable Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt
 
       - name: Format and refresh the lockfile
@@ -194,19 +206,64 @@ jobs:
     name: Catalog pins match Hugging Face
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
       - name: Verify catalog pins against the HF API
         run: node scripts/verify-catalog.mjs
 
-  # Platform builds (incl. 10x-billed macOS runners) only run for release
-  # tags, manual dispatch, or pushes whose commit message contains
-  # [build-all]. Routine pushes verify with the quality gate alone.
+  # package.json, Cargo.toml and tauri.conf.json must carry one version, and
+  # on a tag build it must match the tag.
+  version-gate:
+    name: Version numbers agree
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Compare the versions
+        id: versions
+        run: node scripts/ci/check-versions.mjs
+
+  # Every Rust package's license must be on the list in src-tauri/about.toml.
+  # Release builds ship the generated file inside the app.
+  licenses:
+    name: Third-party licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
+        with:
+          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
+
+      - name: Generate THIRD_PARTY_LICENSES.html
+        working-directory: src-tauri
+        run: |
+          set -o pipefail
+          if ! cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html 2> about.log; then
+            head -c 4000 about.log | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=licenses::$enc"
+            done
+            exit 1
+          fi
+          ls -l ../THIRD_PARTY_LICENSES.html
+
+  # Platform builds only run for release tags, manual dispatch, or pushes
+  # whose commit message contains [build-all]. Routine pushes verify with the
+  # checks above.
   llama-server:
     name: llama-server sidecar
     needs: quality-gate
@@ -217,36 +274,32 @@ jobs:
 
   build-macos:
     name: Build macOS (${{ matrix.target }})
-    needs: [quality-gate, llama-server]
+    needs: [quality-gate, licenses, llama-server]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: macos-latest
     strategy:
       matrix:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: 'npm'
 
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
 
       - name: Install npm deps
         run: npm ci
@@ -255,7 +308,7 @@ jobs:
         run: npm run build
 
       - name: Download llama-server sidecar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: llama-server-${{ matrix.target }}
           path: sidecar
@@ -264,47 +317,79 @@ jobs:
         shell: bash
         run: scripts/prepare-sidecar.sh sidecar ${{ matrix.target }}
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
+        with:
+          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
+
+      - name: Write THIRD_PARTY_LICENSES.html
+        working-directory: src-tauri
+        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
+
+      # Signing and notarization turn on when the repository has these
+      # secrets. Without them the build is unsigned. See docs/release.md.
+      - name: Use the Apple signing secrets when they exist
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::No Apple certificate is set, so this macOS build is not signed."
+            exit 0
+          fi
+          # The delimiter form keeps a value that spans lines (wrapped base64) intact.
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!name}" ]; then
+              {
+                echo "$name<<LOCALAIDE_SECRET_END"
+                printf '%s\n' "${!name}"
+                echo "LOCALAIDE_SECRET_END"
+              } >> "$GITHUB_ENV"
+            fi
+          done
+
       - name: Build Tauri Package
         run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
-    needs: [quality-gate, llama-server]
+    needs: [quality-gate, windows-check, licenses, llama-server]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: windows-latest
     strategy:
       matrix:
         target: [x86_64-pc-windows-msvc]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: 'npm'
 
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            C:\Users\runner\.cargo\registry
-            C:\Users\runner\.cargo\git
-            src-tauri\target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
 
       - name: Install npm deps
         run: npm ci
@@ -313,7 +398,7 @@ jobs:
         run: npm run build
 
       - name: Download llama-server sidecar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: llama-server-${{ matrix.target }}
           path: sidecar
@@ -322,28 +407,70 @@ jobs:
         shell: bash
         run: scripts/prepare-sidecar.sh sidecar ${{ matrix.target }}
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
+        with:
+          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
+
+      - name: Write THIRD_PARTY_LICENSES.html
+        shell: bash
+        working-directory: src-tauri
+        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
+
+      # Code signing turns on when the WINDOWS_SIGN_COMMAND secret exists: a
+      # command that signs the file named by %1, for example Azure Trusted
+      # Signing or a signtool call. Without it the build is unsigned. See
+      # docs/release.md.
+      - name: Use the Windows signing command when it exists
+        shell: pwsh
+        env:
+          WINDOWS_SIGN_COMMAND: ${{ secrets.WINDOWS_SIGN_COMMAND }}
+        run: |
+          if (-not $env:WINDOWS_SIGN_COMMAND) {
+            Write-Output "::warning::No Windows signing command is set, so this Windows build is not signed."
+            exit 0
+          }
+          $path = Join-Path $env:RUNNER_TEMP 'signing.conf.json'
+          @{ bundle = @{ windows = @{ signCommand = $env:WINDOWS_SIGN_COMMAND } } } |
+            ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 -Path $path
+          "SIGNING_CONFIG=$path" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+
       - name: Build Tauri Package
-        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
+        shell: pwsh
+        env:
+          # Credentials a signing command may need. Empty when not set.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          $cliArgs = @('tauri', 'build', '--target', '${{ matrix.target }}', '--config', 'src-tauri/tauri.sidecar.conf.json')
+          if ($env:SIGNING_CONFIG) { $cliArgs += @('--config', $env:SIGNING_CONFIG) }
+          npx @cliArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-${{ matrix.target }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
 
+  # Built on the oldest supported Ubuntu, so the .deb and AppImage run on
+  # older distributions too (a newer glibc would lock them out).
   build-linux:
     name: Build Linux (x86_64)
-    needs: [quality-gate, llama-server]
+    needs: [quality-gate, licenses, llama-server]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install Rust Stable Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: 'npm'
@@ -354,15 +481,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev
 
       - name: Cache Cargo Dependencies
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-linux-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-linux-build-
+          workspaces: src-tauri -> target
+          key: linux-release
 
       - name: Install npm deps
         run: npm ci
@@ -371,7 +493,7 @@ jobs:
         run: npm run build
 
       - name: Download llama-server sidecar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: llama-server-x86_64-unknown-linux-gnu
           path: sidecar
@@ -379,43 +501,73 @@ jobs:
       - name: Place llama-server sidecar
         run: scripts/prepare-sidecar.sh sidecar x86_64-unknown-linux-gnu
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
+        with:
+          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
+
+      - name: Write THIRD_PARTY_LICENSES.html
+        working-directory: src-tauri
+        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
+
       - name: Build Tauri Package
         run: npx tauri build --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-x86_64
           path: src-tauri/target/release/bundle/
 
+  # Releases start as drafts: a person checks the files, then publishes.
+  # Each release carries SHA256SUMS.txt and an SPDX software bill of materials.
   publish-release:
-    name: Publish GitHub Release
-    needs: [build-macos, build-windows, build-linux]
+    name: Draft GitHub Release
+    needs: [build-macos, build-windows, build-linux, catalog-pins, version-gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: release-artifacts/
 
-      - name: List downloaded release assets
-        run: ls -R release-artifacts/
+      - name: Collect the installers
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find release-artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} release/ \;
+          ls -l release
+          if [ -z "$(ls -A release)" ]; then
+            echo "::error title=release::No installers were found in the build artifacts."
+            exit 1
+          fi
 
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v2
+      - name: Write the software bill of materials
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          files: |
-            release-artifacts/**/*.dmg
-            release-artifacts/**/*.app.tar.gz
-            release-artifacts/**/*.msi
-            release-artifacts/**/*.exe
-            release-artifacts/**/*.deb
-            release-artifacts/**/*.AppImage
+          path: .
+          format: spdx-json
+          output-file: release/localaide-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Write SHA256SUMS.txt
+        working-directory: release
+        run: |
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.version-gate.outputs.version) }}
+          files: release/*
+          fail_on_unmatched_files: true
           generate_release_notes: true
-          draft: false
+          draft: true
           prerelease: false

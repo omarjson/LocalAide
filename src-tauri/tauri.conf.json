@@ -26,7 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "app", "dmg", "deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,10 +34,19 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "category": "DeveloperTool",
-    "copyright": "MIT",
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
+    "category": "Productivity",
+    "copyright": "Copyright (c) 2025 Omar",
     "shortDescription": "Local-first AI desktop assistant",
-    "longDescription": "Open-source Rust + Tauri desktop AI assistant with local models",
-    "publisher": "LocalAide"
+    "longDescription": "A private AI assistant that runs language models on your own computer.",
+    "publisher": "LocalAide",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
   }
 }

@@ -21,7 +21,7 @@
 
 ---
 
-**Status:** `main` is the branch of record. The CI quality gate (rustfmt, clippy, cargo test, svelte-check, frontend build, smoke test) is green on `main`, and **all platform stages are verified**: macOS (Apple Silicon + Intel), Windows, and Linux sidecar and bundle builds completed green in CI on `e81a99b`, producing installable `.dmg`/`.msi`/`.deb`/`.AppImage` artifacts — the macOS stages that had only ever been cancelled (over a now-void minutes concern) are proven, not assumed. What remains unverified is running the installers on real machines (a human demo run). Everything else in this README is matched to the code and re-checked against the standing honesty audit in [docs/evidence/audit-2026-11-13.md](docs/evidence/audit-2026-11-13.md).
+**Status:** `main` is the branch of record. CI checks every branch: rustfmt, clippy with `-D warnings` and `cargo test` on Ubuntu and on Windows, svelte-check, the frontend build, the smoke test, the catalog pins, the version numbers and the third-party licenses. Platform builds (macOS Apple Silicon and Intel, Windows, Linux) run for tags and `[build-all]` commits. The production-readiness work and what is still open are tracked in [docs/evidence/audit-2026-11-14.md](docs/evidence/audit-2026-11-14.md). The installers have not been run on real machines yet.
 
 ## Table of Contents
 
@@ -86,10 +86,21 @@ Grab a package from the [Releases page](https://github.com/omarjson/LocalAide/re
 
 - **macOS (Apple Silicon)**: `LocalAide_<version>_aarch64.dmg`
 - **macOS (Intel)**: `LocalAide_<version>_x64.dmg`
-- **Windows (x64)**: `LocalAide_<version>_x64_en-US.msi` or the NSIS installer (`.exe`)
-- **Linux (x64)**: `LocalAide_<version>_amd64.deb` or `LocalAide_<version>_amd64.AppImage`
+- **Windows (x64)**: the installer ending in `-setup.exe`
+- **Linux (x64)**: the `.deb` package or the `.AppImage`
 
-Every platform stage above is verified in CI (sidecar + bundle builds green on `e81a99b`); the installers themselves have not yet been run on real machines — that is part of the demo-run open item.
+The local engine needs a 64-bit CPU with AVX2 (most PCs from 2013 on) or an Apple Silicon Mac.
+
+**Check your download.** Each release has `SHA256SUMS.txt`. On Linux or macOS run `sha256sum -c SHA256SUMS.txt --ignore-missing` in the download folder. On Windows run `Get-FileHash <file>` in PowerShell and compare the result with the line for that file.
+
+**Warnings on first start.** Release builds are not code-signed yet, so the system warns before the first start:
+
+- **Windows**: SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
+- **macOS**: Gatekeeper says the app cannot be checked. Open **System Settings → Privacy & Security**, then choose **Open Anyway** for LocalAide.
+
+**Updates.** LocalAide does not update itself. Open **Settings → About → Check for updates**; it asks GitHub for the newest release and links to its download page. Nothing is checked unless you press the button.
+
+How releases are built, and what signing needs, is in [docs/release.md](docs/release.md).
 
 ### Option B: build from source
 
@@ -133,12 +144,12 @@ Every platform stage above is verified in CI (sidecar + bundle builds green on `
 
 ## Verification & Quality Gates
 
-CI runs on every push to `main`: rustfmt, `clippy --all-targets -- -D warnings`, the full `cargo test --all-targets` suite (unit, contract, fault-injection, inference, library, memory/RAG, and tools/sandbox tests), `svelte-check`, the frontend production build, and the smoke test. Release builds compile for macOS (Apple Silicon and Intel), Windows x64, and Linux x64, each bundling the matching `llama-server` sidecar.
+CI runs on every push: rustfmt, `clippy --all-targets -- -D warnings`, the full `cargo test --all-targets` suite (unit, contract, fault-injection, inference, library, memory/RAG, and tools/sandbox tests) on Ubuntu and Windows, `svelte-check`, the frontend production build, the smoke test, the version gate and the license check. A weekly job audits `Cargo.lock` and the npm runtime packages for known vulnerabilities, and Dependabot proposes updates. Release builds compile for macOS (Apple Silicon and Intel), Windows x64, and Linux x64, each bundling the matching `llama-server` sidecar, and go to a draft release with checksums and a software bill of materials.
 
 Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md). Known open items, kept visible on purpose:
 
 - Border contrast is fixed at the token level (a dedicated `edge` ramp clears 3:1 in both themes), but nothing has been re-measured on a real screen yet ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
-- The installers (`.dmg`/`.msi`/`.deb`/`.AppImage`) have not been run on real machines yet (demo-run open item); CI builds them green on every `[build-all]`, and the `v0.1.0` GitHub Release attaches them.
+- The installers (`.dmg`/`-setup.exe`/`.deb`/`.AppImage`) have not been run on real machines yet (demo-run open item). They are not code-signed yet ([docs/release.md](docs/release.md)).
 - The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)) — including the new light theme.
 - Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest, and refreshed catalogs are validated structurally with anti-rollback ([ADR-0005](docs/adr/0005-updates.md), [ADR-0008](docs/adr/0008-catalog-refresh.md)).
 
@@ -156,9 +167,11 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 - [ADR-0002: Storage Engine Migration to SQLite WAL](docs/adr/0002-storage.md)
 - [ADR-0003: Isolated llama.cpp Worker Engine (superseded by ADR-0007)](docs/adr/0003-inference.md)
 - [ADR-0004: Capability Workspace Jail](docs/adr/0004-sandbox.md)
-- [ADR-0005: Atomic Updates & Verification](docs/adr/0005-updates.md)
+- [ADR-0005: Cryptographic Verification of App Updates and Model Catalog](docs/adr/0005-updates.md)
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
 - [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
+- [ADR-0008: Model Catalog Refresh](docs/adr/0008-catalog-refresh.md)
+- [ADR-0009: Encrypted Local Backups](docs/adr/0009-encrypted-backups.md)
 - [ADR-0010: Community Models from the Hugging Face Hub](docs/adr/0010-community-models.md)
 - [ADR-0011: Web Search and Page Reading](docs/adr/0011-web-search.md)
 
@@ -169,4 +182,4 @@ Found a security vulnerability? Follow the [Security Policy](SECURITY.md) and re
 ## License
 
 LocalAide is open-source software licensed under the [MIT License](LICENSE).
-Copyright © 2026 LocalAide Contributors.
+Copyright (c) 2025 Omar. Bundled third-party software is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
