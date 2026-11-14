@@ -220,14 +220,15 @@ impl LibraryService {
             _ => return Ok(results),
         };
 
+        // Snippets are cloned so the fused order survives a rerank failure
+        // unchanged.
         let candidates: Vec<SearchResultDoc> =
-            results.into_iter().take(RERANK_CANDIDATES).collect();
+            results.iter().take(RERANK_CANDIDATES).cloned().collect();
         let texts: Vec<String> = candidates.iter().map(|d| d.snippet.clone()).collect();
         match engine.rerank(query, &texts) {
             Ok(hits) => {
-                let mut reranked = reorder(&candidates, &hits);
-                reranked.truncate(limit);
-                results = reranked;
+                results = reorder(&candidates, &hits);
+                results.truncate(limit);
             }
             Err(e) => log::warn!("Rerank failed, keeping fused ranking: {e}"),
         }
