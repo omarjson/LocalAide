@@ -33,7 +33,7 @@ jobs:
       - name: Apply rustfmt and publish to ci/fmt-update
         run: |
           set -euo pipefail
-          cargo fmt --all
+          cargo fmt --manifest-path src-tauri/Cargo.toml
           git config user.name "ci-fmt-update"
           git config user.email "ci-fmt-update@users.noreply.github.com"
           git checkout -b ci/fmt-update || git checkout ci/fmt-update
