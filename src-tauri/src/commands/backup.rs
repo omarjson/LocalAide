@@ -4,7 +4,7 @@
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::services::backup::{BackupEntry, BackupEngine, RestoreReport};
+use crate::services::backup::{BackupEngine, BackupEntry, RestoreReport};
 use std::path::PathBuf;
 use tauri::State;
 
@@ -149,5 +149,10 @@ pub async fn backup_restore(
 
     let engine = BackupEngine::new(crate::app::paths::app_dir());
     let payload = engine.decrypt_payload(&bytes, &passphrase)?;
-    engine.restore(&payload, &passphrase, &bytes, restore_config.unwrap_or(false))
+    engine.restore(
+        &payload,
+        &passphrase,
+        &bytes,
+        restore_config.unwrap_or(false),
+    )
 }

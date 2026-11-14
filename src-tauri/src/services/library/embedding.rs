@@ -217,9 +217,9 @@ impl EmbeddingEngine {
     pub fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, AppError> {
         let (port, api_key, model_id) = {
             let guard = self.running.lock().unwrap_or_else(|e| e.into_inner());
-            let r = guard
-                .as_ref()
-                .ok_or_else(|| AppError::new("EMBEDDING_NOT_READY", "The embedding engine is not running"))?;
+            let r = guard.as_ref().ok_or_else(|| {
+                AppError::new("EMBEDDING_NOT_READY", "The embedding engine is not running")
+            })?;
             (r.port, r.api_key.clone(), r.model_id.clone())
         };
 

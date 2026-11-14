@@ -39,7 +39,9 @@ impl RagEngine {
 
         // Query library hybrid search; the vector ranks when the embedding
         // engine provided one, otherwise this is BM25 keyword ranking.
-        let raw_hits = self.library.search(query, query_vector, SearchMode::Hybrid, 10)?;
+        let raw_hits = self
+            .library
+            .search(query, query_vector, SearchMode::Hybrid, 10)?;
 
         let mut citations = Vec::new();
         let mut context_chunks = Vec::new();

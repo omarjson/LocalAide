@@ -216,9 +216,8 @@ impl SkillsService {
     /// Only files inside the skills folder are addressable — no traversal.
     fn guard_path(&self, path: &str) -> Result<PathBuf, AppError> {
         let requested = Path::new(path);
-        let canonical_dir = std::fs::canonicalize(&self.dir).map_err(|e| {
-            AppError::storage(format!("Skills folder is unavailable: {e}"))
-        })?;
+        let canonical_dir = std::fs::canonicalize(&self.dir)
+            .map_err(|e| AppError::storage(format!("Skills folder is unavailable: {e}")))?;
         let canonical = if requested.is_absolute() {
             std::fs::canonicalize(requested)
         } else {
@@ -327,7 +326,8 @@ mod tests {
 
     #[test]
     fn frontmatter_and_body_split() {
-        let raw = "---\nname: review\ndescription: Review code\ntags: code, quality\n---\n\nBody here.";
+        let raw =
+            "---\nname: review\ndescription: Review code\ntags: code, quality\n---\n\nBody here.";
         let (front, body) = split_frontmatter(raw);
         assert_eq!(front.get("name").map(String::as_str), Some("review"));
         assert_eq!(front.get("tags").map(String::as_str), Some("code, quality"));

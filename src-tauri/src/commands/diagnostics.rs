@@ -141,7 +141,10 @@ fn version_newer(current: &str, latest: &str) -> bool {
     };
     let (a, b) = (parse(current), parse(latest));
     for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         if y > x {
             return true;
         }
@@ -155,7 +158,9 @@ fn version_newer(current: &str, latest: &str) -> bool {
 /// Tail of the llama-server log for the Settings diagnostics panel.
 #[tauri::command]
 pub fn logs_tail(lines: Option<usize>) -> Result<Vec<String>, AppError> {
-    let path = crate::app::paths::app_dir().join("logs").join("llama-server.log");
+    let path = crate::app::paths::app_dir()
+        .join("logs")
+        .join("llama-server.log");
     let data = match std::fs::read(&path) {
         Ok(data) => data,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

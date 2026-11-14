@@ -213,10 +213,17 @@ impl ModelService {
         // The primary file plus every companion (such as a vision
         // projector) downloads here; without the companions a vision model
         // would be unusable even though it is marked installed.
-        let mut files: Vec<(String, String, PathBuf)> =
-            vec![(entry.url.clone(), entry.sha256.clone(), self.model_file_path(id))];
+        let mut files: Vec<(String, String, PathBuf)> = vec![(
+            entry.url.clone(),
+            entry.sha256.clone(),
+            self.model_file_path(id),
+        )];
         for c in &entry.companions {
-            files.push((c.url.clone(), c.sha256.clone(), self.models_dir.join(&c.dest)));
+            files.push((
+                c.url.clone(),
+                c.sha256.clone(),
+                self.models_dir.join(&c.dest),
+            ));
         }
 
         // Each file owns an equal slice of the overall percent; the

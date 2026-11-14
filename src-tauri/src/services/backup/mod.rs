@@ -83,7 +83,10 @@ impl BackupEngine {
         {
             for provider in providers {
                 if let Some(obj) = provider.as_object_mut() {
-                    obj.insert("api_key".to_string(), serde_json::Value::String(String::new()));
+                    obj.insert(
+                        "api_key".to_string(),
+                        serde_json::Value::String(String::new()),
+                    );
                 }
             }
         }
@@ -106,7 +109,11 @@ impl BackupEngine {
     }
 
     /// Encrypt a payload into archive bytes.
-    pub fn encrypt_payload(&self, payload: &BackupPayload, passphrase: &str) -> Result<Vec<u8>, AppError> {
+    pub fn encrypt_payload(
+        &self,
+        payload: &BackupPayload,
+        passphrase: &str,
+    ) -> Result<Vec<u8>, AppError> {
         if passphrase.len() < 8 {
             return Err(AppError::invalid_input(
                 "A backup passphrase needs at least 8 characters — there is no recovery without it",
@@ -125,7 +132,13 @@ impl BackupEngine {
         let key = derive_key(passphrase, &salt);
         let cipher = Aes256Gcm::new((&key).into());
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: &plaintext, aad: MAGIC })
+            .encrypt(
+                Nonce::from_slice(&nonce_bytes),
+                Payload {
+                    msg: &plaintext,
+                    aad: MAGIC,
+                },
+            )
             .map_err(|_| AppError::internal("Backup encryption failed"))?;
 
         let mut out = Vec::with_capacity(MAGIC.len() + SALT_LEN + NONCE_LEN + ciphertext.len());
@@ -137,10 +150,16 @@ impl BackupEngine {
     }
 
     /// Decrypt archive bytes back into a payload.
-    pub fn decrypt_payload(&self, bytes: &[u8], passphrase: &str) -> Result<BackupPayload, AppError> {
+    pub fn decrypt_payload(
+        &self,
+        bytes: &[u8],
+        passphrase: &str,
+    ) -> Result<BackupPayload, AppError> {
         let head = MAGIC.len() + SALT_LEN + NONCE_LEN;
         if bytes.len() <= head || !bytes.starts_with(MAGIC) {
-            return Err(AppError::invalid_input("This file is not a LocalAide backup"));
+            return Err(AppError::invalid_input(
+                "This file is not a LocalAide backup",
+            ));
         }
         let salt = &bytes[MAGIC.len()..MAGIC.len() + SALT_LEN];
         let nonce_bytes = &bytes[MAGIC.len() + SALT_LEN..head];
@@ -151,7 +170,10 @@ impl BackupEngine {
         let plaintext = cipher
             .decrypt(
                 Nonce::from_slice(nonce_bytes),
-                Payload { msg: ciphertext, aad: MAGIC },
+                Payload {
+                    msg: ciphertext,
+                    aad: MAGIC,
+                },
             )
             .map_err(|_| {
                 AppError::invalid_input(
@@ -169,9 +191,8 @@ impl BackupEngine {
         payload: &BackupPayload,
         passphrase: &str,
     ) -> Result<PathBuf, AppError> {
-        std::fs::create_dir_all(target_dir).map_err(|e| {
-            AppError::storage(format!("Could not create the backup folder: {e}"))
-        })?;
+        std::fs::create_dir_all(target_dir)
+            .map_err(|e| AppError::storage(format!("Could not create the backup folder: {e}")))?;
         let bytes = self.encrypt_payload(payload, passphrase)?;
         let file_name = format!(
             "localaide-backup-{}.{}",
@@ -189,7 +210,11 @@ impl BackupEngine {
         let entries = match std::fs::read_dir(target_dir) {
             Ok(entries) => entries,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(AppError::storage(format!("Could not read backup folder: {e}"))),
+            Err(e) => {
+                return Err(AppError::storage(format!(
+                    "Could not read backup folder: {e}"
+                )));
+            }
         };
         let mut out = Vec::new();
         for entry in entries.flatten() {
@@ -243,8 +268,9 @@ impl BackupEngine {
                 }
                 _ => continue,
             }
-            std::fs::write(&dest, &file.content)
-                .map_err(|e| AppError::storage(format!("Could not restore {}: {e}", file.rel_path)))?;
+            std::fs::write(&dest, &file.content).map_err(|e| {
+                AppError::storage(format!("Could not restore {}: {e}", file.rel_path))
+            })?;
             memories_restored += 1;
         }
 
@@ -253,8 +279,9 @@ impl BackupEngine {
             let dest = self.app_dir.join(&file.rel_path);
             std::fs::create_dir_all(dest.parent().unwrap_or(&self.app_dir))
                 .map_err(|e| AppError::storage(format!("Could not create restore folder: {e}")))?;
-            std::fs::write(&dest, &file.content)
-                .map_err(|e| AppError::storage(format!("Could not restore {}: {e}", file.rel_path)))?;
+            std::fs::write(&dest, &file.content).map_err(|e| {
+                AppError::storage(format!("Could not restore {}: {e}", file.rel_path))
+            })?;
             conversations_restored += 1;
         }
 
@@ -272,8 +299,11 @@ impl BackupEngine {
                 .and_then(|v| v.get("backup_taken_at").and_then(|t| t.as_u64()))
                 .unwrap_or(0);
             if backup_time >= current_time {
-                std::fs::write(&config_path, serde_json::to_string_pretty(config).unwrap_or_default())
-                    .map_err(|e| AppError::storage(format!("Could not restore config: {e}")))?;
+                std::fs::write(
+                    &config_path,
+                    serde_json::to_string_pretty(config).unwrap_or_default(),
+                )
+                .map_err(|e| AppError::storage(format!("Could not restore config: {e}")))?;
                 config_restored = true;
             } else {
                 skipped_newer_config = true;
@@ -364,7 +394,9 @@ fn collect_dir(dir: &Path, prefix: &str) -> Result<Vec<BackupFile>, AppError> {
         {
             continue;
         }
-        let meta = entry.metadata().map_err(|e| AppError::storage(e.to_string()))?;
+        let meta = entry
+            .metadata()
+            .map_err(|e| AppError::storage(e.to_string()))?;
         if meta.len() > 8 * 1024 * 1024 {
             continue;
         }
@@ -375,7 +407,9 @@ fn collect_dir(dir: &Path, prefix: &str) -> Result<Vec<BackupFile>, AppError> {
         out.push(BackupFile {
             rel_path: format!(
                 "{prefix}/{}",
-                path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+                path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default()
             ),
             content,
         });
@@ -407,7 +441,9 @@ mod tests {
         assert_eq!(payload.memories.len(), 1);
         assert_eq!(payload.conversations.len(), 1);
 
-        let bytes = engine.encrypt_payload(&payload, "long-enough-pass").unwrap();
+        let bytes = engine
+            .encrypt_payload(&payload, "long-enough-pass")
+            .unwrap();
         assert!(bytes.starts_with(MAGIC));
 
         let back = engine.decrypt_payload(&bytes, "long-enough-pass").unwrap();
@@ -442,7 +478,9 @@ mod tests {
         let engine = BackupEngine::new(dir.clone());
         let payload = engine.build_payload(serde_json::json!({}), false).unwrap();
         let target = dir.parent().unwrap().join("la-backup-target");
-        let path = engine.write_backup(&target, &payload, "long-enough-pass").unwrap();
+        let path = engine
+            .write_backup(&target, &payload, "long-enough-pass")
+            .unwrap();
         assert!(path.is_file());
 
         let listed = engine.list_backups(&target).unwrap();
@@ -454,7 +492,9 @@ mod tests {
         std::fs::create_dir_all(&fresh).unwrap();
         let fresh_engine = BackupEngine::new(fresh.clone());
         let bytes = std::fs::read(&path).unwrap();
-        let decoded = fresh_engine.decrypt_payload(&bytes, "long-enough-pass").unwrap();
+        let decoded = fresh_engine
+            .decrypt_payload(&bytes, "long-enough-pass")
+            .unwrap();
         let report = fresh_engine
             .restore(&decoded, "long-enough-pass", &bytes, false)
             .unwrap();
@@ -471,7 +511,10 @@ mod tests {
     fn timestamp_roundtrip() {
         for secs in [0u64, 86_399, 1_000_000_000, 1_794_620_687] {
             let stamp = timestamp_name(secs);
-            assert_eq!(parse_timestamp(&format!("localaide-backup-{stamp}.labak")), Some(secs));
+            assert_eq!(
+                parse_timestamp(&format!("localaide-backup-{stamp}.labak")),
+                Some(secs)
+            );
         }
     }
 }

@@ -77,6 +77,7 @@ impl MemoryService {
         query: &str,
         query_vector: Option<&[f32]>,
     ) -> Result<Vec<SearchResultDoc>, AppError> {
-        self.library.search(query, query_vector, SearchMode::Hybrid, 20)
+        self.library
+            .search(query, query_vector, SearchMode::Hybrid, 20)
     }
 }

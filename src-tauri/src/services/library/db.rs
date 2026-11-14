@@ -519,9 +519,7 @@ impl LibraryDb {
 
         let rows = stmt
             .query_map([limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(|e| {
-                AppError::storage(format!("Failed to query missing embeddings: {e}"))
-            })?;
+            .map_err(|e| AppError::storage(format!("Failed to query missing embeddings: {e}")))?;
 
         let mut out = Vec::new();
         for r in rows {

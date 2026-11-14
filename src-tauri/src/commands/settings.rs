@@ -133,9 +133,7 @@ pub fn chat_prefs_set(state: State<'_, AppState>, prefs: ChatPrefs) -> Result<()
         .map_err(|e| AppError::internal(e.to_string()))?;
     let mut cfg = store.load().map_err(AppError::internal)?;
     cfg.chat_system_prompt = prefs.system_prompt.filter(|s| !s.trim().is_empty());
-    cfg.chat_temperature = prefs
-        .temperature
-        .map(|t| t.clamp(0.0, 2.0));
+    cfg.chat_temperature = prefs.temperature.map(|t| t.clamp(0.0, 2.0));
     cfg.chat_max_tokens = prefs.max_tokens.map(|t| t.clamp(64, 8192));
     cfg.chat_persona = prefs.persona.filter(|s| !s.trim().is_empty());
     store.save(&cfg).map_err(AppError::internal)?;
