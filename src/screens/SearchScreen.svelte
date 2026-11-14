@@ -9,6 +9,8 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage as errMsg } from "../lib/api/client";
+  import { popover } from "../lib/actions/popover";
+  import { openInBrowser } from "../lib/links";
   import type {
     EmbeddingStatusResponse,
     IndexerStatsResponse,
@@ -261,14 +263,52 @@
     if (path) await removeDoc(path);
   };
 
-  const focusFolder = () => {
+  // The header buttons open the system picker and add the choice right away.
+  // The panel below stays open for typing a path or watching the folder.
+  const pickAndAddFolder = async () => {
     showIndexing = true;
-    requestAnimationFrame(() => folderInputEl?.focus());
+    errorMessage = null;
+    try {
+      const picked = await api.pickFolder();
+      if (!picked) return;
+      folder = picked;
+      await indexFolder();
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
+    }
   };
 
-  const focusFile = () => {
+  const pickAndAddFile = async () => {
     showIndexing = true;
-    requestAnimationFrame(() => singleFileInputEl?.focus());
+    errorMessage = null;
+    try {
+      const picked = await api.pickDocument();
+      if (!picked) return;
+      singleFile = picked;
+      await indexSingleFile();
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
+    }
+  };
+
+  const browseFolder = async () => {
+    errorMessage = null;
+    try {
+      const picked = await api.pickFolder();
+      if (picked) folder = picked;
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
+    }
+  };
+
+  const browseFile = async () => {
+    errorMessage = null;
+    try {
+      const picked = await api.pickDocument();
+      if (picked) singleFile = picked;
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
+    }
   };
 
   const setSearchTab = (value: string) => {
@@ -321,11 +361,11 @@
     description="Find things in the folders you add. Your files stay on this computer."
   >
     {#snippet actions()}
-      <Button variant="secondary" onclick={focusFile}>
+      <Button variant="secondary" disabled={loading} onclick={() => void pickAndAddFile()}>
         <Icon name="file-plus" class="h-[18px] w-[18px]" />
         Add a file
       </Button>
-      <Button variant="primary" onclick={focusFolder}>
+      <Button variant="primary" disabled={loading} onclick={() => void pickAndAddFolder()}>
         <Icon name="folder-plus" class="h-[18px] w-[18px]" />
         Add a folder
       </Button>
@@ -455,7 +495,7 @@
           <Icon name="close" class="h-4 w-4" />
         </Button>
       </div>
-      <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+      <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
         <input
           bind:this={folderInputEl}
           type="text"
@@ -464,6 +504,7 @@
           bind:value={folder}
           class="h-10 min-w-0 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge"
         />
+        <Button variant="secondary" disabled={loading} onclick={() => void browseFolder()}>Browse…</Button>
         <Button variant="primary" disabled={loading || !folder.trim()} onclick={indexFolder}>
           <Icon name="folder-plus" class="h-[18px] w-[18px]" />
           {loading ? "Adding…" : "Add folder"}
@@ -472,7 +513,7 @@
           {watching ? "Watching" : "Watch folder"}
         </Button>
       </div>
-      <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">
+      <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
         <input
           bind:this={singleFileInputEl}
           type="text"
@@ -481,6 +522,7 @@
           bind:value={singleFile}
           class="h-10 min-w-0 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge"
         />
+        <Button variant="secondary" disabled={loading} onclick={() => void browseFile()}>Browse…</Button>
         <Button variant="secondary" disabled={loading || !singleFile.trim()} onclick={indexSingleFile}>
           <Icon name="file-plus" class="h-[18px] w-[18px]" />
           Add file
@@ -524,7 +566,7 @@
                   <Icon name="globe" class="h-[18px] w-[18px]" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <a href={hit.url} target="_blank" rel="noreferrer" class="font-semibold text-ink-50 hover:text-ember-300 hover:underline">{hit.title}</a>
+                  <a href={hit.url} rel="noreferrer" onclick={(e) => openInBrowser(e, hit.url)} onauxclick={(e) => openInBrowser(e, hit.url)} class="font-semibold text-ink-50 hover:text-ember-300 hover:underline">{hit.title}</a>
                   <div class="mt-1 truncate text-sm text-ink-400">{hit.url}</div>
                   <p class="mt-2 text-sm leading-6 text-ink-200">{hit.snippet}</p>
                   <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -554,7 +596,7 @@
         description={query ? "Try fewer or different words." : "Add a folder of notes, documents, or code. Your files stay on this computer."}
       >
         {#snippet action()}
-          {#if !query}<Button variant="primary" onclick={focusFolder}>Add a folder</Button>{/if}
+          {#if !query}<Button variant="primary" disabled={loading} onclick={() => void pickAndAddFolder()}>Add a folder</Button>{/if}
         {/snippet}
       </EmptyState>
     {:else}
@@ -568,18 +610,20 @@
               <p class="mt-1 text-sm leading-6 text-ink-200">{doc.snippet}</p>
               <div class="mt-2 text-sm text-ink-400">Relevance {doc.score.toFixed(2)} · {(doc.size / 1024).toFixed(1)} KB</div>
             </div>
-            <div class="relative self-start justify-self-end">
+            <div class="relative self-start justify-self-end" use:popover={{ open: openMenuPath === doc.path, onClose: () => openMenuPath = null }}>
               <Button
                 variant="subtle"
                 class="h-8 w-8 px-0"
                 ariaLabel={`More actions for ${doc.title}`}
+                ariaExpanded={openMenuPath === doc.path}
+                ariaHaspopup="menu"
                 onclick={() => openMenuPath = openMenuPath === doc.path ? null : doc.path}
               >
                 <Icon name="more" class="h-[18px] w-[18px]" />
               </Button>
               {#if openMenuPath === doc.path}
-                <div class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
-                  <button type="button" onclick={() => askRemoveDoc(doc.path)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10">
+                <div role="menu" aria-label={`Actions for ${doc.title}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                  <button type="button" role="menuitem" onclick={() => askRemoveDoc(doc.path)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none">
                     <Icon name="trash" class="h-4 w-4" />
                     Remove from library
                   </button>

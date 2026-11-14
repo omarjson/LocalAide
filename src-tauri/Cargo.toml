@@ -24,6 +24,11 @@ thiserror = "2"
 log = "0.4"
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-log = "2"
+# Native folder, file and save pickers (commands/desktop.rs, chat export).
+tauri-plugin-dialog = "2"
+# Opens http(s) links in the user's browser. Only its `open_url` function is
+# used; the plugin is not registered, so the web page cannot call it directly.
+tauri-plugin-opener = "2"
 sysinfo = "0.32"
 reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 url = "2"

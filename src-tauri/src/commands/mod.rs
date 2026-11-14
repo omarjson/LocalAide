@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod chat;
 pub mod cloud;
+pub mod desktop;
 pub mod diagnostics;
 pub mod hf;
 pub mod library;
@@ -15,6 +16,7 @@ pub mod web;
 pub use backup::*;
 pub use chat::*;
 pub use cloud::*;
+pub use desktop::*;
 pub use diagnostics::*;
 pub use hf::*;
 pub use library::*;

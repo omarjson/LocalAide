@@ -158,6 +158,8 @@
 
   $effect(() => {
     if (!query.trim() || query.length < 3) {
+      // A search cut short by editing the query must not stay "searching".
+      searching = false;
       if (notesDirty) {
         notesDirty = false;
         void load();

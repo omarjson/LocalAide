@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
-  import { api } from "./lib/api/client";
+  import { api, errorMessage } from "./lib/api/client";
   import { dur } from "./lib/motion";
   import { formatBytes } from "./lib/format";
+  import { applyTheme } from "./lib/theme";
+  import { dismissToast, showToast, toast } from "./lib/toast.svelte";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
@@ -28,16 +30,28 @@
   let cmdOpen = $state(false);
   let cmdQuery = $state("");
   let cmdInput = $state<HTMLInputElement>();
-  let toast = $state<string | null>(null);
   let mobileNav = $state(false);
   let showHelp = $state(false);
-  let fatalError = $state<string | null>(null);
+  // Set when the settings file cannot be read at startup. Showing setup then
+  // would hide the real problem, so the app says what failed instead.
+  let startupError = $state<string | null>(null);
+  // True while setup downloads a model. Leaving setup then would hide the
+  // download, so navigation waits until it ends or is cancelled.
+  let setupBusy = $state(false);
   // Bumped by Ctrl/Cmd+N so ChatScreen starts a fresh thread even when it is
   // already on screen.
   let chatResetTick = $state(0);
 
-  const navigate = (s: Screen) => {
+  /** Shows a screen. Returns false when setup is busy and the screen stays. */
+  const navigate = (s: Screen): boolean => {
+    if (setupBusy && s !== "setup") {
+      showToast("Wait for the download to finish, or cancel it first.");
+      return false;
+    }
+    // The memory share for models can change in Settings, so read it again.
+    if (screen === "settings" && s !== "settings") void refreshProbe();
     screen = s;
+    return true;
   };
 
   $effect(() => {
@@ -46,11 +60,7 @@
     }
   });
 
-  const showToast = (msg: string) => {
-    toast = msg;
-    setTimeout(() => toast = null, 2500);
-  };
-
+  // The developer screen is for builds made with `npm run dev` only.
   const screens = [
     { id: "chat", label: "Chat" },
     { id: "search", label: "Search" },
@@ -58,35 +68,44 @@
     { id: "skills", label: "Skills" },
     { id: "models", label: "Models" },
     { id: "settings", label: "Settings" },
-    { id: "dev", label: "Developer config" },
+    ...(import.meta.env.DEV ? [{ id: "dev", label: "Developer config" } as const] : []),
   ] as const;
 
   const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "settings"];
+
+  const refreshProbe = async () => {
+    try {
+      const probe = await api.systemProbe();
+      ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
+      ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
+      budget = probe.budget_gb * 1024 * 1024 * 1024;
+    } catch (e: unknown) {
+      console.error("System details could not load", e);
+    }
+  };
+
+  const decideStartScreen = async () => {
+    startupError = null;
+    try {
+      const cfg = await api.loadConfig();
+      screen = cfg.selected_models?.length ? "chat" : "setup";
+    } catch (e: unknown) {
+      startupError = errorMessage(e);
+    }
+  };
 
   onMount(() => {
     void (async () => {
       try {
         const theme = await api.getTheme();
         if (theme === "light" || theme === "dark") {
-          document.documentElement.dataset.theme = theme;
+          applyTheme(theme);
         }
       } catch (e: unknown) {
         console.error("Theme could not load", e);
       }
-      try {
-        const cfg = await api.loadConfig();
-        screen = cfg.selected_models?.length ? "chat" : "setup";
-      } catch {
-        screen = "setup";
-      }
-      try {
-        const probe = await api.systemProbe();
-        ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
-        ramUsable = probe.available_ram_gb * 1024 * 1024 * 1024;
-        budget = probe.budget_gb * 1024 * 1024 * 1024;
-      } catch (e: unknown) {
-        console.error("System details could not load", e);
-      }
+      await decideStartScreen();
+      await refreshProbe();
     })();
 
     const onKey = (e: KeyboardEvent) => {
@@ -98,9 +117,10 @@
         cmdOpen = !cmdOpen;
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        navigate("chat");
-        chatResetTick += 1;
-        showToast("New chat ready");
+        if (navigate("chat")) {
+          chatResetTick += 1;
+          showToast("New chat ready");
+        }
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         navigate("settings");
@@ -123,12 +143,15 @@
       }
     };
 
+    // An unexpected error shows a message and leaves the screen as it was.
     const onError = (e: ErrorEvent) => {
-      fatalError = e.message || "An unhandled error occurred";
+      console.error(e.error ?? e.message);
+      showToast(`Something went wrong: ${errorMessage(e.error ?? e.message)}`, "error");
     };
 
     const onRejection = (e: PromiseRejectionEvent) => {
-      fatalError = String(e.reason) || "An unhandled async failure occurred";
+      console.error(e.reason);
+      showToast(`Something went wrong: ${errorMessage(e.reason)}`, "error");
     };
 
     window.addEventListener("keydown", onKey);
@@ -183,14 +206,14 @@
     <div class="min-h-full p-6 md:p-10">
       {#key screen}
         <div in:fade={{ duration: dur(120) }}>
-      {#if fatalError}
-        <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center">
+      {#if startupError}
+        <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center" role="alert">
           <div class="text-rose-300 mb-3 flex justify-center"><Icon name="alert" class="w-7 h-7" /></div>
-          <h2 class="text-lg font-semibold text-rose-200 mb-2">LocalAide recovered from an unexpected error</h2>
-          <p class="text-sm text-ink-400 mb-6 font-mono text-left bg-ink-950 p-4 rounded-xl border border-edge break-words">{fatalError}</p>
+          <h2 class="text-lg font-semibold text-rose-200 mb-2">LocalAide could not read its settings</h2>
+          <p class="text-sm text-ink-300 mb-6 break-words">{startupError}</p>
           <div class="flex justify-center gap-3">
-            <button onclick={() => fatalError = null} class="px-4 py-2 rounded-xl bg-veil/10 hover:bg-veil/20 text-sm font-medium transition-colors">Dismiss and Continue</button>
-            <button onclick={() => navigator.clipboard.writeText(fatalError ?? "")} class="px-4 py-2 rounded-xl border border-edge hover:bg-veil/5 text-sm text-ink-300 transition-colors">Copy Diagnostics</button>
+            <button onclick={() => void decideStartScreen()} class="px-4 py-2 rounded-xl bg-veil/10 hover:bg-veil/20 text-sm font-medium transition-colors">Try again</button>
+            <button onclick={() => { startupError = null; screen = "chat"; }} class="px-4 py-2 rounded-xl border border-edge hover:bg-veil/5 text-sm text-ink-300 transition-colors">Continue anyway</button>
           </div>
         </div>
       {:else if screen === null}
@@ -199,7 +222,7 @@
           <p class="text-sm text-ink-400">Starting LocalAide…</p>
         </div>
       {:else if screen === "setup"}
-        <SetupWizard onFinished={() => navigate("chat")} />
+        <SetupWizard onFinished={() => { setupBusy = false; navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => navigate("chat")} />
       {:else if screen === "chat"}
         <ChatScreen onOpenModels={() => navigate("models")} newThreadTick={chatResetTick} />
       {:else if screen === "search"}
@@ -212,7 +235,7 @@
         <ModelManagerScreen />
       {:else if screen === "settings"}
         <SettingsScreen />
-      {:else if screen === "dev"}
+      {:else if screen === "dev" && import.meta.env.DEV}
         <DevConfigScreen />
       {/if}
         </div>
@@ -253,11 +276,21 @@
     </div>
   {/if}
 
-  {#if toast}
-    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" role="status" in:fly={{ y: 10, duration: dur(160) }} out:fade={{ duration: dur(100) }}>
-      <div class="px-4 py-2 rounded-xl bg-ink-900 border border-edge shadow-lg text-sm text-ink-100">{toast}</div>
-    </div>
-  {/if}
+  <!-- Always in the page, so screen readers hear each new message. -->
+  <div class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
+    {#if toast.message}
+      <div
+        in:fly={{ y: 10, duration: dur(160) }}
+        out:fade={{ duration: dur(100) }}
+        class={`flex max-w-[min(36rem,90vw)] items-start gap-3 rounded-xl border px-4 py-2 text-sm shadow-lg ${toast.tone === "error" ? "border-rose-500/40 bg-ink-900 text-rose-200" : "border-edge bg-ink-900 text-ink-100"}`}
+      >
+        <span class="min-w-0 break-words">{toast.message}</span>
+        {#if toast.tone === "error"}
+          <button type="button" aria-label="Dismiss message" onclick={dismissToast} class="shrink-0 rounded p-0.5 hover:bg-veil/10"><Icon name="close" class="h-3.5 w-3.5" /></button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 
   {#if showHelp}
     <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>

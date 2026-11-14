@@ -471,19 +471,81 @@ pub async fn chat_thread_export(
     run_blocking(move || chat_thread_export_work(req)).await
 }
 
+/// Asks where to save the chat, then writes it there. Returns the saved path,
+/// or `None` when the user closes the save window.
+#[tauri::command]
+pub async fn chat_thread_export_save(
+    app: tauri::AppHandle,
+    req: ThreadExportRequest,
+) -> Result<Option<String>, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    run_blocking(move || {
+        let export = chat_thread_export_work(req)?;
+        let (label, extension) = if export.filename.ends_with(".json") {
+            ("JSON", "json")
+        } else {
+            ("Markdown", "md")
+        };
+        // The save window blocks until the user answers, so this runs on a
+        // worker thread.
+        let Some(picked) = app
+            .dialog()
+            .file()
+            .set_title("Save chat")
+            .set_file_name(&export.filename)
+            .add_filter(label, &[extension])
+            .blocking_save_file()
+        else {
+            return Ok(None);
+        };
+        let path = picked
+            .into_path()
+            .map_err(|e| AppError::invalid_input(format!("That location cannot be used: {e}")))?;
+        fs::write(&path, export.content)
+            .map_err(|e| AppError::storage(format!("The chat could not be saved there: {e}")))?;
+        Ok(Some(path.to_string_lossy().into_owned()))
+    })
+    .await
+}
+
+/// Turns a chat title into a file name that every system accepts.
+fn export_file_stem(title: &str) -> String {
+    let cleaned: String = title
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(60)
+        .collect();
+    let trimmed = cleaned.trim_matches('_');
+    if trimmed.is_empty() {
+        "chat".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 fn chat_thread_export_work(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
     validate_thread_id(&req.thread_id)?;
     let path = conversations_dir().join(format!("{}.json", req.thread_id));
     if !path.exists() {
-        return Err(AppError::invalid_input("Thread not found"));
+        return Err(AppError::invalid_input(
+            "Save the chat first. It has no messages yet.",
+        ));
     }
     let data = fs::read_to_string(&path)?;
     let stored: StoredThread = serde_json::from_str(&data).map_err(AppError::from)?;
+    let stem = export_file_stem(&stored.title);
 
     if req.format.to_lowercase() == "json" {
         Ok(ThreadExportResponse {
             content: data,
-            filename: format!("{}.json", stored.title.replace(' ', "_")),
+            filename: format!("{stem}.json"),
         })
     } else {
         // Markdown format
@@ -503,14 +565,14 @@ fn chat_thread_export_work(req: ThreadExportRequest) -> Result<ThreadExportRespo
         }
         Ok(ThreadExportResponse {
             content: md,
-            filename: format!("{}.md", stored.title.replace(' ', "_")),
+            filename: format!("{stem}.md"),
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{answer_within, validate_thread_id};
+    use super::{answer_within, export_file_stem, validate_thread_id};
     use std::time::Duration;
 
     #[test]
@@ -531,5 +593,14 @@ mod tests {
             assert!(validate_thread_id(bad).is_err(), "{bad:?} must be rejected");
         }
         assert!(validate_thread_id(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn export_file_names_are_safe_everywhere() {
+        assert_eq!(export_file_stem("Plan my week"), "Plan_my_week");
+        assert_eq!(export_file_stem("a/b\\c:d?*\"<>|"), "a_b_c_d");
+        assert_eq!(export_file_stem("..."), "chat");
+        assert_eq!(export_file_stem(""), "chat");
+        assert_eq!(export_file_stem(&"x".repeat(200)).len(), 60);
     }
 }

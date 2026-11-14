@@ -10,6 +10,8 @@
     onclick,
     title,
     ariaLabel,
+    ariaExpanded,
+    ariaHaspopup,
     class: className = "",
     children,
   }: {
@@ -19,6 +21,9 @@
     onclick?: (event: MouseEvent) => void;
     title?: string;
     ariaLabel?: string;
+    /** Set on a button that opens a menu, so the menu can find it again. */
+    ariaExpanded?: boolean;
+    ariaHaspopup?: "menu" | "listbox" | "dialog";
     class?: string;
     children?: Snippet;
   } = $props();
@@ -36,6 +41,8 @@
   {disabled}
   {title}
   aria-label={ariaLabel}
+  aria-expanded={ariaExpanded}
+  aria-haspopup={ariaHaspopup}
   onclick={onclick}
   class={`inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-sm whitespace-nowrap transition-colors disabled:cursor-default disabled:opacity-50 ${variants[variant]} ${className}`}
 >

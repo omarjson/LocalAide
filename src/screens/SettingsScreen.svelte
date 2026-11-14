@@ -12,7 +12,9 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
+  import { applyTheme, currentTheme } from "../lib/theme";
   import type {
     BackupConfigDto,
     BackupEntry,
@@ -67,12 +69,10 @@
   let backupBusy = $state(false);
   let backupNotice = $state<string | null>(null);
 
+  // Percent of memory, after the system reserve, that models may use.
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
   let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  let modelPriority = $state("local");
-  let saving = $state(false);
-  let saved = $state(false);
   let settingsNotice = $state<string | null>(null);
 
   let audits = $state<ToolAuditEntry[]>([]);
@@ -99,11 +99,11 @@
   const appliedPreset = $derived(webPresets.find((preset) => preset.id === appliedPresetId) ?? null);
   let confirmation = $state<Confirmation | null>(null);
 
-  let theme = $state<"dark" | "light">("dark");
+  let theme = $state<"dark" | "light">(currentTheme());
 
   const setTheme = async (value: "dark" | "light") => {
     theme = value;
-    document.documentElement.dataset.theme = value;
+    applyTheme(value);
     try {
       await api.setTheme(value);
     } catch (e: unknown) {
@@ -314,23 +314,13 @@
     }
   };
 
+  // Memory for models: the Models screen and setup flag models above this share.
   const persistSettings = async () => {
-    saving = true;
     settingsNotice = null;
     try {
-      const current = await api.loadConfig();
-      await api.saveConfig({
-        ram_budget_mb: Math.round(ramBudget * 0.7 * 1024),
-        cloud_llm_enabled: current.cloud_llm_enabled,
-        selected_models: current.selected_models ?? [],
-        presets: current.presets ?? [],
-      });
-      saved = true;
-      setTimeout(() => saved = false, 1500);
+      ramBudget = await api.setModelMemory(ramBudget);
     } catch (e: unknown) {
       settingsNotice = errorMessage(e);
-    } finally {
-      saving = false;
     }
   };
 
@@ -448,6 +438,15 @@
     }
   };
 
+  const browseBackupFolder = async () => {
+    try {
+      const picked = await api.pickFolder();
+      if (picked) backupTargetInput = picked;
+    } catch (e: unknown) {
+      backupNotice = errorMessage(e);
+    }
+  };
+
   const runConfirmation = async () => {
     const request = confirmation;
     confirmation = null;
@@ -458,17 +457,17 @@
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
+    // A setting that fails to load shows a message, so it never looks empty.
+    const failed: string[] = [];
     try {
-      const config = await api.loadConfig();
-      ramBudget = config.ram_budget_mb ? Math.round((config.ram_budget_mb / 1024) / 0.7) : 70;
-      modelPriority = config.selected_models?.length ? "local" : modelPriority;
+      ramBudget = await api.getModelMemory();
     } catch (e: unknown) {
-      console.error(e);
+      failed.push(`memory for models (${errorMessage(e)})`);
     }
     try {
       contextTokens = await api.getContext();
     } catch (e: unknown) {
-      console.error(e);
+      failed.push(`conversation memory (${errorMessage(e)})`);
     }
     try {
       appVersion = await getVersion();
@@ -477,7 +476,8 @@
     }
     try {
       const probe = await api.systemProbe();
-      usableRamGb = probe.available_ram_gb;
+      // Models get a share of memory after 2 GB is kept for the system.
+      usableRamGb = Math.max(probe.total_ram_gb - 2, 0);
     } catch (e: unknown) {
       console.error(e);
     }
@@ -485,10 +485,13 @@
       const stored = await api.getTheme();
       if (stored === "light" || stored === "dark") {
         theme = stored;
-        document.documentElement.dataset.theme = stored;
+        applyTheme(stored);
       }
     } catch (e: unknown) {
-      console.error(e);
+      failed.push(`theme (${errorMessage(e)})`);
+    }
+    if (failed.length > 0) {
+      settingsNotice = `Some settings could not load: ${failed.join(", ")}.`;
     }
     await loadCloud();
     await loadWebProviders();
@@ -652,7 +655,7 @@
                 </select>
               </label>
               {#if appliedPreset}
-                <p class="mt-2 text-sm text-ink-400">{appliedPreset.note} {#if appliedPreset.key_url}<a class="text-ember-300 hover:underline" href={appliedPreset.key_url} target="_blank" rel="noreferrer">Get a key</a>{/if}</p>
+                <p class="mt-2 text-sm text-ink-400">{appliedPreset.note} {#if appliedPreset.key_url}<a class="text-ember-300 hover:underline" href={appliedPreset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, appliedPreset?.key_url ?? "")}>Get a key</a>{/if}</p>
               {/if}
               <div class="mt-4 grid gap-3 sm:grid-cols-2">
                 <label class="text-sm text-ink-400">Name<input bind:value={providerLabel} placeholder="A name for this provider" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
@@ -724,7 +727,7 @@
           <h2 class="text-xl font-semibold text-ink-50">Backups</h2>
           <p class="mt-1 text-sm text-ink-400">Save your notes, chats and settings in an encrypted local file.</p>
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-4">
-            <label class="block text-sm text-ink-400">Backup folder<input bind:value={backupTargetInput} placeholder="Leave empty for the default folder" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
+            <label class="block text-sm text-ink-400" for="backup-folder">Backup folder</label><div class="mt-1 flex gap-2"><input id="backup-folder" bind:value={backupTargetInput} placeholder="Leave empty for the default folder" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /><Button variant="secondary" class="h-10" disabled={backupBusy} onclick={() => void browseBackupFolder()}>Browse…</Button></div>
             <label class="mt-4 flex items-center gap-3 text-sm text-ink-300"><input type="checkbox" bind:checked={includeKeys} class="accent-ember-600" />Include provider keys in the backup</label>
             <p class="mt-2 text-sm text-ink-400">Keys stay out unless you choose this option.</p>
             <Button variant="secondary" class="mt-4" disabled={backupBusy} onclick={() => void saveBackupConfig()}>Save backup settings</Button>
@@ -766,7 +769,7 @@
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Updates</h3>
           <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3"><div class="font-semibold text-ink-50">Release check</div><Button variant="secondary" disabled={updateBusy} onclick={() => void checkForUpdates()}>{updateBusy ? "Checking…" : "Check for updates"}</Button></div>
-            {#if updateInfo?.update_available}<div class="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Version {updateInfo.latest_version} is available. LocalAide never installs updates by itself.</div>{:else}<p class="mt-3 text-sm text-ink-400">{updateInfo ? `You have the latest version, ${updateInfo.current_version}.` : "Not checked yet. LocalAide contacts GitHub only when you press Check for updates."}</p>{/if}
+            {#if updateInfo?.update_available}<div class="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Version {updateInfo.latest_version} is available. LocalAide never installs updates by itself. <a href={updateInfo.release_url} class="font-semibold underline" onclick={(e) => openInBrowser(e, updateInfo?.release_url ?? "")}>Open the download page</a></div>{:else}<p class="mt-3 text-sm text-ink-400">{updateInfo ? `You have the latest version, ${updateInfo.current_version}.` : "Not checked yet. LocalAide contacts GitHub only when you press Check for updates."}</p>{/if}
           </div>
           {#if health}
             <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Local systems</h3>

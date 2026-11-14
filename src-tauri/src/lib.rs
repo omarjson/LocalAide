@@ -166,6 +166,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(log_plugin)
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::system_probe,
@@ -195,6 +196,10 @@ pub fn run() {
             commands::chat_thread_load,
             commands::chat_thread_delete,
             commands::chat_thread_export,
+            commands::chat_thread_export_save,
+            commands::pick_folder,
+            commands::pick_document,
+            commands::open_link,
             commands::summarize,
             commands::index_file,
             commands::index_folder,
@@ -221,6 +226,8 @@ pub fn run() {
             commands::settings_set_context,
             commands::settings_theme,
             commands::settings_set_theme,
+            commands::settings_model_memory,
+            commands::settings_set_model_memory,
             commands::chat_prefs_get,
             commands::chat_prefs_set,
             commands::skills_list,

@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage } from "../lib/api/client";
+  import { api, errorMessage } from "../lib/api/client";
+  import { popover } from "../lib/actions/popover";
   import { dur } from "../lib/motion";
+  import { showToast } from "../lib/toast.svelte";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
@@ -60,7 +62,13 @@ import { api, errorMessage } from "../lib/api/client";
   let pickerOpen = $state(false);
   let switchingModel = $state(false);
   let switchError = $state<string | null>(null);
+  // Whether a local model is loaded in the engine right now.
+  let engineLoaded = $state(false);
   let chatError = $state<string | null>(null);
+  // True when chatError came from a failed answer, so Retry resends it.
+  let sendFailed = $state(false);
+  // Read by screen readers once per answer, instead of every streamed token.
+  let liveStatus = $state("");
   let showMoreActions = $state(false);
   let pendingDeleteThreadId = $state<string | null>(null);
   let modelsChecked = $state(false);
@@ -75,11 +83,16 @@ import { api, errorMessage } from "../lib/api/client";
     let closed = false;
     void (async () => {
       try {
-        engineLoading = (await api.getInferenceStatus()).loading;
+        const status = await api.getInferenceStatus();
+        engineLoading = status.loading;
+        engineLoaded = status.loaded;
         const stop = await listen<EngineStatusEvent>("engine-status", (event) => {
           const { state, message } = event.payload;
           engineLoading = state === "loading";
+          if (state === "ready") engineLoaded = true;
           if (state === "failed") {
+            engineLoaded = false;
+            sendFailed = false;
             chatError = message ?? "The model did not load. Try again from Models.";
           }
         });
@@ -198,8 +211,11 @@ import { api, errorMessage } from "../lib/api/client";
     }
   };
 
+  // Follow the answer while it streams: the last message grows without the
+  // message count changing, so its length is tracked too.
   $effect(() => {
-    if (messages.length > 0) {
+    const lastLength = messages.at(-1)?.content.length ?? 0;
+    if (messages.length > 0 && lastLength >= 0) {
       scrollToBottom();
     }
   });
@@ -257,8 +273,7 @@ import { api, errorMessage } from "../lib/api/client";
     }
   };
 
-  const askDeleteThread = (id: string, event: MouseEvent) => {
-    event.stopPropagation();
+  const askDeleteThread = (id: string) => {
     pendingDeleteThreadId = id;
   };
 
@@ -279,10 +294,13 @@ import { api, errorMessage } from "../lib/api/client";
       activeThreadTitle = firstLine.length < messages[0].content.length ? `${firstLine}…` : firstLine;
     }
 
+    // Saved chats keep text only. Images would be sent and then dropped.
+    const textOnly = $state.snapshot(messages).map(({ images: _images, ...rest }) => rest);
     try {
-      await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, $state.snapshot(messages));
+      await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, textOnly);
       await loadThreads();
     } catch (e: unknown) {
+      sendFailed = false;
       chatError = `The chat could not be saved: ${errorMessage(e)}`;
     }
   };
@@ -290,16 +308,11 @@ import { api, errorMessage } from "../lib/api/client";
   const exportCurrentThread = async (format: "markdown" | "json") => {
     if (!activeThreadId) return;
     try {
-      const res = await api.exportChatThread({ thread_id: activeThreadId, format });
-      const blob = new Blob([res.content], { type: format === "json" ? "application/json" : "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = res.filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      const savedTo = await api.saveChatExport({ thread_id: activeThreadId, format });
+      if (savedTo) showToast(`Chat saved to ${savedTo}`);
     } catch (e: unknown) {
-      chatError = `The chat could not be exported: ${errorMessage(e)}`;
+      sendFailed = false;
+      chatError = `The chat could not be saved as a file: ${errorMessage(e)}`;
     }
   };
 
@@ -317,6 +330,8 @@ import { api, errorMessage } from "../lib/api/client";
     pendingImages = [];
     messages.push({ role: "user", content: userMsg, ts: Date.now(), images });
     streaming = true;
+    sendFailed = false;
+    liveStatus = "LocalAide is answering.";
     userScrolledUp = false;
     void savePrefs();
 
@@ -345,12 +360,15 @@ import { api, errorMessage } from "../lib/api/client";
           } else if (event.type === "done") {
             streaming = false;
             activeJobId = null;
+            liveStatus = "Answer ready.";
             persistCurrentThread();
           } else if (event.type === "error") {
             messages[assistantIdx].content = "I could not answer that. Try again.";
-            chatError = event.payload.error;
+            chatError = errorMessage(event.payload.error);
+            sendFailed = true;
             streaming = false;
             activeJobId = null;
+            liveStatus = "LocalAide could not answer.";
             persistCurrentThread();
           }
         }
@@ -358,8 +376,10 @@ import { api, errorMessage } from "../lib/api/client";
     } catch (e: unknown) {
       messages[assistantIdx].content = "I could not answer that. Try again.";
       chatError = errorMessage(e);
+      sendFailed = true;
       streaming = false;
       activeJobId = null;
+      liveStatus = "LocalAide could not answer.";
       persistCurrentThread();
     }
   };
@@ -375,17 +395,24 @@ import { api, errorMessage } from "../lib/api/client";
     }
     streaming = false;
     activeJobId = null;
+    liveStatus = "Answer stopped.";
     persistCurrentThread();
   };
 
+  // Ask the last question again. The old question and answer are removed
+  // first, so the question does not appear twice.
   const retryLast = () => {
-    if (streaming || messages.length < 2) return;
-    const lastUser = [...messages].reverse().find((message) => message.role === "user");
-    if (!lastUser) return;
+    if (streaming) return;
+    let userIdx = messages.length - 1;
+    while (userIdx >= 0 && messages[userIdx].role !== "user") userIdx -= 1;
+    if (userIdx < 0) return;
+    const lastUser = messages[userIdx];
     chatError = null;
-    if (messages[messages.length - 1]?.role === "assistant") messages.pop();
+    sendFailed = false;
+    messages = messages.slice(0, userIdx);
     input = lastUser.content;
-    send();
+    pendingImages = [...(lastUser.images ?? [])];
+    void send();
   };
 
   const editTurn = (newText: string, index: number) => {
@@ -498,6 +525,7 @@ import { api, errorMessage } from "../lib/api/client";
     try {
       await api.loadInferenceModel(id);
       activeModelName = name;
+      engineLoaded = true;
     } catch (e: unknown) {
       switchError = errorMessage(e);
     } finally {
@@ -505,9 +533,36 @@ import { api, errorMessage } from "../lib/api/client";
     }
   };
 
+  const togglePicker = () => {
+    switchError = null;
+    pickerOpen = !pickerOpen;
+  };
+
   onMount(() => {
     activeThreadId = `t_${Date.now()}`;
     loadThreads();
+  });
+
+  // Escape stops an answer even when the message box does not have focus.
+  // The message box and open menus handle Escape first and mark it handled.
+  onMount(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && streaming && !event.defaultPrevented) {
+        event.preventDefault();
+        void stopGenerating();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // Leaving Chat while an answer streams stops it and keeps what arrived.
+  onDestroy(() => {
+    if (!streaming) return;
+    if (activeJobId) void api.cancelChat(activeJobId).catch(() => undefined);
+    streaming = false;
+    activeJobId = null;
+    void persistCurrentThread();
   });
 </script>
 
@@ -518,16 +573,16 @@ import { api, errorMessage } from "../lib/api/client";
   >
     {#snippet actions()}
       <Button variant="primary" onclick={newChat}><Icon name="plus" class="h-[18px] w-[18px]" />New chat</Button>
-      <div class="relative">
-        <Button variant="subtle" ariaLabel="More chat actions" onclick={() => showMoreActions = !showMoreActions}>
+      <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
+        <Button variant="subtle" ariaLabel="More chat actions" ariaExpanded={showMoreActions} ariaHaspopup="menu" onclick={() => showMoreActions = !showMoreActions}>
           <Icon name="more" class="h-[18px] w-[18px]" />
           More
         </Button>
         {#if showMoreActions}
-          <div class="absolute right-0 top-10 z-30 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
-            <button type="button" onclick={() => { showSystem = !showSystem; showMoreActions = false; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5">Response style</button>
-            <button type="button" onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 disabled:opacity-40">Export chat</button>
-            <button type="button" onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 disabled:opacity-40">Summarize chat</button>
+          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+            <button type="button" role="menuitem" onclick={() => { showSystem = !showSystem; showMoreActions = false; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">Response style</button>
+            <button type="button" role="menuitem" onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none disabled:opacity-40">Save chat as a file</button>
+            <button type="button" role="menuitem" onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none disabled:opacity-40">Summarize last answer</button>
           </div>
         {/if}
       </div>
@@ -535,40 +590,97 @@ import { api, errorMessage } from "../lib/api/client";
   </PageHeader>
 
   <div class="relative mb-3 flex items-center justify-between gap-3 border-b border-ink-800 pb-3">
-    <button
-      type="button"
-      aria-expanded={showThreads}
-      onclick={() => showThreads = !showThreads}
-      class="flex min-w-0 items-center gap-2 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm font-semibold text-ink-200 hover:bg-ink-800"
-    >
-      <Icon name="chat" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
-      <span class="max-w-[180px] truncate">{activeThreadTitle}</span>
-      <span class="text-sm text-ink-400">({threads.length})</span>
-    </button>
+    <div class="relative min-w-0" use:popover={{ open: showThreads, onClose: () => showThreads = false }}>
+      <button
+        type="button"
+        aria-expanded={showThreads}
+        aria-haspopup="dialog"
+        onclick={() => showThreads = !showThreads}
+        class="flex min-w-0 items-center gap-2 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm font-semibold text-ink-200 hover:bg-ink-800"
+      >
+        <Icon name="chat" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
+        <span class="max-w-[180px] truncate">{activeThreadTitle}</span>
+        <span class="text-sm text-ink-400">({threads.length})</span>
+      </button>
+
+      <!-- Saved chats. Each row has its own open and delete buttons. -->
+      {#if showThreads}
+        <div
+          role="dialog"
+          aria-label="Saved chats"
+          class="absolute left-0 top-12 z-20 w-72 bg-ink-900 border border-edge rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
+          transition:fly={{ y: -6, duration: dur(120) }}
+        >
+          <div class="flex items-center justify-between pb-2 border-b border-edge text-xs font-semibold text-ink-300">
+            <span>Saved chats</span>
+            <button type="button" onclick={() => { newChat(); showThreads = false; }} class="text-xs text-ember-400 hover:underline">+ New</button>
+          </div>
+          {#if threads.length === 0}
+            <div class="text-xs text-ink-400 py-3 text-center">No saved chats yet.</div>
+          {:else}
+            {#each threads as t (t.id)}
+              <div class={`group flex items-center gap-1 rounded-xl text-xs transition-colors ${t.id === activeThreadId ? 'bg-ember-500/10 border border-ember-500/30 text-ink-100' : 'hover:bg-ink-800/50 text-ink-300'}`}>
+                <button
+                  type="button"
+                  data-popover-item
+                  aria-current={t.id === activeThreadId ? "true" : undefined}
+                  onclick={() => selectThread(t)}
+                  class="min-w-0 flex-1 rounded-xl p-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ember-500"
+                >
+                  <div class="font-medium truncate">{t.title}</div>
+                  <div class="text-sm text-ink-400">{t.message_count} messages</div>
+                </button>
+                <button
+                  type="button"
+                  onclick={() => askDeleteThread(t.id)}
+                  class="mr-1 shrink-0 rounded p-1 text-ink-400 opacity-0 transition-opacity hover:text-rose-400 focus:opacity-100 group-hover:opacity-100"
+                  title="Delete chat"
+                  aria-label={`Delete chat ${t.title}`}
+                >
+                  <Icon name="close" class="w-3 h-3" />
+                </button>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <div class="hidden items-center gap-2 sm:flex">
       {#if cloudChat}
         <span class="text-sm text-amber-300" title="Chat uses your chosen online provider.">Online: {cloudChat.model} · {cloudChat.label}</span>
-      {:else}
-        <span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
-        <div class="relative">
+      {:else if installedModels.length > 0}
+        <span class={`h-2 w-2 rounded-full ${engineLoaded ? 'bg-emerald-500' : 'bg-ink-600'}`} aria-hidden="true"></span>
+        <div class="relative" use:popover={{ open: pickerOpen, onClose: () => pickerOpen = false }}>
           <button
             type="button"
             aria-expanded={pickerOpen}
-            onclick={() => pickerOpen = !pickerOpen}
-            disabled={switchingModel}
+            aria-haspopup="menu"
+            onclick={togglePicker}
+            disabled={switchingModel || engineLoading}
             class="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-200 disabled:opacity-50"
-            title="Switch the local chat model"
+            title="Choose the model that answers"
           >
-            {switchingModel ? "Loading…" : (activeModelName ?? model)}
-            {#if installedModels.length > 1}<Icon name="chevron-right" class={`h-4 w-4 transition-transform ${pickerOpen ? 'rotate-90' : ''}`} />{/if}
+            {#if switchingModel || engineLoading}Loading…{:else if engineLoaded && activeModelName}{activeModelName}{:else}Load a model{/if}
+            <Icon name="chevron-right" class={`h-4 w-4 transition-transform ${pickerOpen ? 'rotate-90' : ''}`} />
           </button>
           {#if switchError}
-            <div class="absolute left-0 top-9 z-20 max-w-[280px] rounded-md border border-rose-500/40 bg-rose-950/90 px-3 py-2 text-sm text-rose-200" role="alert">{switchError}</div>
-          {:else if pickerOpen && installedModels.length > 1}
-            <div class="absolute left-0 top-9 z-20 max-h-64 min-w-[240px] overflow-y-auto rounded-md border border-edge bg-ink-950 py-1 shadow-xl">
+            <div class="absolute right-0 top-9 z-20 flex w-[300px] items-start gap-2 rounded-md border border-rose-500/40 bg-rose-950/90 px-3 py-2 text-sm text-rose-200" role="alert">
+              <span class="min-w-0 flex-1 break-words">{switchError}</span>
+              <button type="button" aria-label="Dismiss" onclick={() => switchError = null} class="shrink-0 rounded p-0.5 hover:bg-rose-500/20"><Icon name="close" class="h-3.5 w-3.5" /></button>
+            </div>
+          {:else if pickerOpen}
+            <div role="menu" aria-label="Models on this computer" class="absolute right-0 top-9 z-20 max-h-64 min-w-[240px] overflow-y-auto rounded-md border border-edge bg-ink-950 py-1 shadow-xl">
               {#each installedModels as installed (installed.id)}
-                <button type="button" onclick={() => void switchModel(installed.id, installed.name)} class={`w-full px-3 py-2 text-left text-sm hover:bg-ink-900 ${activeModelName === installed.name ? 'text-ember-300' : 'text-ink-300'}`}>{installed.name}</button>
+                {@const current = engineLoaded && activeModelName === installed.name}
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={current}
+                  data-popover-item
+                  onclick={() => void switchModel(installed.id, installed.name)}
+                  class={`w-full px-3 py-2 text-left text-sm hover:bg-ink-900 focus:bg-ink-900 focus:outline-none ${current ? 'text-ember-300' : 'text-ink-300'}`}
+                >{installed.name}</button>
               {/each}
             </div>
           {/if}
@@ -576,45 +688,6 @@ import { api, errorMessage } from "../lib/api/client";
       {/if}
     </div>
   </div>
-
-  <!-- Threads Drawer -->
-  {#if showThreads}
-    <div
-      class="absolute top-14 left-2 z-20 w-72 bg-ink-900 border border-edge rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
-      transition:fly={{ y: -6, duration: dur(120) }}
-    >
-      <div class="flex items-center justify-between pb-2 border-b border-edge text-xs font-semibold text-ink-300">
-        <span>Saved Conversations</span>
-        <button onclick={newChat} class="text-xs text-ember-400 hover:underline">+ New</button>
-      </div>
-      {#if threads.length === 0}
-        <div class="text-xs text-ink-400 py-3 text-center">No saved chats yet.</div>
-      {:else}
-        {#each threads as t}
-          <div
-            role="button"
-            tabindex="0"
-            onclick={() => selectThread(t)}
-            onkeydown={(e) => { if (e.key === 'Enter') selectThread(t); }}
-            class={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between group transition-colors cursor-pointer ${t.id === activeThreadId ? 'bg-ember-500/10 border border-ember-500/30 text-ink-100' : 'hover:bg-ink-800/50 text-ink-300'}`}
-          >
-            <div class="truncate pr-2">
-              <div class="font-medium truncate">{t.title}</div>
-              <div class="text-sm text-ink-400">{t.message_count} messages</div>
-            </div>
-            <button
-              onclick={(event) => askDeleteThread(t.id, event)}
-              class="opacity-0 group-hover:opacity-100 p-1 text-ink-400 hover:text-rose-400 transition-opacity"
-              title="Delete thread"
-              aria-label="Delete thread {t.title}"
-            >
-              <Icon name="close" class="w-3 h-3" />
-            </button>
-          </div>
-        {/each}
-      {/if}
-    </div>
-  {/if}
 
   <!-- Response style / System Prompt Selector -->
   {#if showSystem}
@@ -654,16 +727,19 @@ import { api, errorMessage } from "../lib/api/client";
   {/if}
 
   {#if chatError}
-    <div class="mb-3"><ErrorBanner message={chatError} onRetry={retryLast} onDismiss={() => chatError = null} /></div>
+    <div class="mb-3"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
   {/if}
+
+  <!-- One short status per answer for screen readers. The stream itself is not
+       a live region, so tokens are not read out one by one. -->
+  <p class="sr-only" aria-live="polite">{liveStatus}</p>
 
   <!-- Message Stream Container -->
   <div
     bind:this={scrollEl}
     onscroll={handleScroll}
     role="region"
-    aria-live="polite"
-    aria-label="Conversation message stream"
+    aria-label="Conversation"
     class="flex-1 overflow-y-auto p-4 space-y-2 relative"
   >
     {#if messages.length === 0}
@@ -692,6 +768,8 @@ import { api, errorMessage } from "../lib/api/client";
             <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
             {#if engineLoading}
               <p class="text-xs text-ink-400" role="status">Loading {activeModelName}. This can take a minute.</p>
+            {:else if !engineLoaded}
+              <p class="text-xs text-ink-400">{activeModelName} is not loaded. Choose it in the model menu above.</p>
             {:else}
               <p class="text-xs text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
             {/if}

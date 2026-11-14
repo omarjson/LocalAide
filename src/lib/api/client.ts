@@ -204,6 +204,28 @@ export class ApiClient {
     return invoke<ThreadExportResponse>("chat_thread_export", { req });
   }
 
+  /** Asks where to save the chat and writes it. Null when the user cancels. */
+  async saveChatExport(req: ThreadExportRequest): Promise<string | null> {
+    return invoke<string | null>("chat_thread_export_save", { req });
+  }
+
+  // Desktop: native pickers and web links
+
+  /** Shows the folder picker. Null when the user closes it. */
+  async pickFolder(): Promise<string | null> {
+    return invoke<string | null>("pick_folder");
+  }
+
+  /** Shows the file picker for document types the library reads. */
+  async pickDocument(): Promise<string | null> {
+    return invoke<string | null>("pick_document");
+  }
+
+  /** Opens an http(s) link in the user's browser. Other links are refused. */
+  async openLink(url: string): Promise<void> {
+    return invoke<void>("open_link", { url });
+  }
+
   // Library & Search
   async indexFolder(folder: string): Promise<IndexFolderResponse> {
     return invoke<IndexFolderResponse>("index_folder", { folder });
@@ -314,6 +336,15 @@ export class ApiClient {
 
   async setContext(tokens: number): Promise<number> {
     return invoke<number>("settings_set_context", { tokens: Math.round(tokens) });
+  }
+
+  /** Share of memory models may use, in percent (20 to 90). */
+  async getModelMemory(): Promise<number> {
+    return invoke<number>("settings_model_memory");
+  }
+
+  async setModelMemory(percent: number): Promise<number> {
+    return invoke<number>("settings_set_model_memory", { percent: Math.round(percent) });
   }
 
   // Local embedding engine (semantic / hybrid search)
@@ -514,15 +545,29 @@ export class ApiClient {
 export const api = new ApiClient();
 export default api;
 
+/** Plain words for error codes whose backend text is too technical. */
+const FRIENDLY_ERRORS: Record<string, string> = {
+  DB_BUSY: "LocalAide is busy. Try again in a moment.",
+  CHECKSUM_MISMATCH: "The download was damaged. Download it again.",
+};
+
+/** Text made from a Rust error reads "[CODE] message". Keep the message. */
+const withoutCode = (text: string): string => text.replace(/^\[[A-Z0-9_]+\]\s*/, "");
+
 /**
  * Extract a readable message from a Tauri rejection, which can be a string,
  * an Error, or the serialized AppError object from the backend.
  */
 export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  if (typeof e === "object" && e !== null && "message" in e) {
-    return String((e as { message: unknown }).message);
+  if (typeof e === "string") return withoutCode(e) || "Something went wrong. Try again.";
+  if (e instanceof Error) return withoutCode(e.message) || "Something went wrong. Try again.";
+  if (typeof e === "object" && e !== null) {
+    if ("code" in e && typeof e.code === "string" && FRIENDLY_ERRORS[e.code]) {
+      return FRIENDLY_ERRORS[e.code];
+    }
+    if ("message" in e && typeof e.message === "string" && e.message.trim()) {
+      return withoutCode(e.message);
+    }
   }
-  return String(e);
+  return "Something went wrong. Try again.";
 }

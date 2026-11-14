@@ -10,6 +10,7 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { popover } from "../lib/actions/popover";
   import type { CatalogStatus, HfFileInfo, HfRepo, ModelInfo, ModelPreset } from "../lib/api/bindings";
   import { formatBytes } from "../lib/format";
 
@@ -416,22 +417,24 @@
         </div>
         <div class="flex items-center gap-2">
           <Button variant="secondary" onclick={unloadModel}>Stop using</Button>
-          <div class="relative">
+          <div class="relative" use:popover={{ open: openModelMenu === activeModel.id, onClose: () => openModelMenu = null }}>
             <Button
               variant="subtle"
               class="h-8 w-8 px-0"
               ariaLabel="More options for active model"
+              ariaExpanded={openModelMenu === activeModel.id}
+              ariaHaspopup="menu"
               onclick={() => openModelMenu = openModelMenu === activeModel.id ? null : activeModel.id}
             >
               <Icon name="more" class="h-[18px] w-[18px]" />
             </Button>
             {#if openModelMenu === activeModel.id}
-              <div class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
-                <button type="button" onclick={() => void verifyModel(activeModel.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5">
+              <div role="menu" aria-label="Options for the active model" class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                <button type="button" role="menuitem" onclick={() => void verifyModel(activeModel.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">
                   <Icon name="check" class="h-4 w-4" />
                   {verifying === activeModel.id ? "Checking…" : "Check file"}
                 </button>
-                <button type="button" onclick={() => askRemoveModel(activeModel.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10">
+                <button type="button" role="menuitem" onclick={() => askRemoveModel(activeModel.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none">
                   <Icon name="trash" class="h-4 w-4" />
                   Remove model
                 </button>
@@ -543,7 +546,7 @@
                     </div>
                   {/if}
                 </div>
-                <div class="relative flex shrink-0 items-center gap-2">
+                <div class="relative flex shrink-0 items-center gap-2" use:popover={{ open: openModelMenu === model.id, onClose: () => openModelMenu = null }}>
                   {#if model.ramGb > budgetGb && budgetGb > 0}
                     <StatusBadge label="May be too big" tone="warn" />
                   {/if}
@@ -569,28 +572,31 @@
                       Download
                     </Button>
                   {/if}
-                  <Button
-                    variant="subtle"
-                    class="h-8 w-8 px-0"
-                    ariaLabel={`More options for ${model.name}`}
-                    onclick={() => openModelMenu = openModelMenu === model.id ? null : model.id}
-                  >
-                    <Icon name="more" class="h-[18px] w-[18px]" />
-                  </Button>
-                  {#if openModelMenu === model.id}
-                    <div class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
-                      {#if model.status === "installed" && !verifyStatus[model.id]}
-                        <button type="button" onclick={() => { openModelMenu = null; void verifyModel(model.id); }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5">
+                  {#if model.status === "installed"}
+                    <!-- Only installed models have file options. -->
+                    <Button
+                      variant="subtle"
+                      class="h-8 w-8 px-0"
+                      ariaLabel={`More options for ${model.name}`}
+                      ariaExpanded={openModelMenu === model.id}
+                      ariaHaspopup="menu"
+                      onclick={() => openModelMenu = openModelMenu === model.id ? null : model.id}
+                    >
+                      <Icon name="more" class="h-[18px] w-[18px]" />
+                    </Button>
+                  {/if}
+                  {#if openModelMenu === model.id && model.status === "installed"}
+                    <div role="menu" aria-label={`Options for ${model.name}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                      {#if !verifyStatus[model.id]}
+                        <button type="button" role="menuitem" onclick={() => { openModelMenu = null; void verifyModel(model.id); }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">
                           <Icon name="check" class="h-4 w-4" />
                           {verifying === model.id ? "Checking…" : "Check file"}
                         </button>
                       {/if}
-                      {#if model.status === "installed"}
-                        <button type="button" onclick={() => askRemoveModel(model.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10">
-                          <Icon name="trash" class="h-4 w-4" />
-                          Remove model
-                        </button>
-                      {/if}
+                      <button type="button" role="menuitem" onclick={() => askRemoveModel(model.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none">
+                        <Icon name="trash" class="h-4 w-4" />
+                        Remove model
+                      </button>
                     </div>
                   {/if}
                 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import FocusTrap from "./FocusTrap.svelte";
   import Icon from "./Icon.svelte";
+  import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
   import { fade, scale } from "svelte/transition";
   import type { Citation } from "../lib/api/bindings";
@@ -200,7 +201,7 @@
             {#if seg.type === "text"}
               <div class="whitespace-pre-wrap">
                 {#each parseInline(seg.text) as tok, ti (ti)}
-                  {#if tok.t === "code"}<code class="px-1 py-0.5 rounded bg-ink-950 border border-edge/60 text-[0.85em] font-mono text-ember-200">{tok.v}</code>{:else if tok.t === "bold"}<strong class="font-semibold text-ink-50">{tok.v}</strong>{:else if tok.t === "italic"}<em class="italic">{tok.v}</em>{:else if tok.t === "link"}<a href={tok.href} target="_blank" rel="noopener noreferrer" class="underline decoration-ember-500/50 hover:decoration-ember-400 text-ember-300 break-all">{tok.v}</a>{:else}{tok.v}{/if}
+                  {#if tok.t === "code"}<code class="px-1 py-0.5 rounded bg-ink-950 border border-edge/60 text-[0.85em] font-mono text-ember-200">{tok.v}</code>{:else if tok.t === "bold"}<strong class="font-semibold text-ink-50">{tok.v}</strong>{:else if tok.t === "italic"}<em class="italic">{tok.v}</em>{:else if tok.t === "link"}<a href={tok.href} rel="noopener noreferrer" onclick={(e) => openInBrowser(e, tok.href)} onauxclick={(e) => openInBrowser(e, tok.href)} class="underline decoration-ember-500/50 hover:decoration-ember-400 text-ember-300 break-all">{tok.v}</a>{:else}{tok.v}{/if}
                 {/each}
               </div>
             {:else}

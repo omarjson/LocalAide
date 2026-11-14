@@ -100,6 +100,35 @@ pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u
     Ok(cfg.context_tokens)
 }
 
+/// Share of memory models may use, in percent (Settings → Memory for models).
+#[tauri::command]
+pub fn settings_model_memory(state: State<'_, AppState>) -> Result<u8, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    Ok(store
+        .load()
+        .map_err(AppError::internal)?
+        .memory_percent_for_models())
+}
+
+/// Saves the memory share. Values outside 20..=90 are clamped. The next system
+/// probe uses it, so the Models screen and setup flag models that do not fit.
+#[tauri::command]
+pub fn settings_set_model_memory(state: State<'_, AppState>, percent: u8) -> Result<u8, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.model_memory_percent = Some(percent);
+    let applied = cfg.memory_percent_for_models();
+    cfg.model_memory_percent = Some(applied);
+    store.save(&cfg).map_err(AppError::internal)?;
+    Ok(applied)
+}
+
 /// The UI theme the user last chose. None = the dark default.
 #[tauri::command]
 pub fn settings_theme(state: State<'_, AppState>) -> Result<Option<String>, AppError> {

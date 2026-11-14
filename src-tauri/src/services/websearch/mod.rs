@@ -162,8 +162,21 @@ impl WebSearchEngine {
         Self { client, bases }
     }
 
-    /// Search the web with the chosen provider.
+    /// Search the web with the chosen provider. Results become links the user
+    /// can open, so only plain http(s) addresses are kept.
     pub fn search(
+        &self,
+        provider: &str,
+        query: &str,
+        limit: u32,
+        keys: &WebSearchKeys,
+    ) -> Result<Vec<WebHit>, AppError> {
+        let mut hits = self.search_unfiltered(provider, query, limit, keys)?;
+        hits.retain(|hit| validate_crawl_url(&hit.url).is_ok());
+        Ok(hits)
+    }
+
+    fn search_unfiltered(
         &self,
         provider: &str,
         query: &str,

@@ -23,7 +23,17 @@
   let presets = $state<Preset[]>([]);
   let presetError = $state(false);
 
-  let { onFinished }: { onFinished?: () => void } = $props();
+  let {
+    onFinished,
+    onBusyChange,
+    onSkip,
+  }: {
+    onFinished?: () => void;
+    /** Told when a download starts and ends, so the app can hold navigation. */
+    onBusyChange?: (busy: boolean) => void;
+    /** Leaves setup without a model, for example when offline. */
+    onSkip?: () => void;
+  } = $props();
 
   let step = $state<Step>("detect");
   let ramTotal = $state(0);
@@ -34,6 +44,12 @@
   let status = $state("Detecting system memory...");
   let detectError = $state(false);
   let setupError = $state<string | null>(null);
+
+  // Navigation waits while a download runs, so it stays in view.
+  $effect(() => {
+    onBusyChange?.(step === "download");
+  });
+  $effect(() => () => onBusyChange?.(false));
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));
@@ -171,8 +187,15 @@
         progress = Math.round(evt.percent);
         status = `Downloading ${label} (${Math.round(evt.percent)}%)...`;
       });
+      // Downloads do not start a model by themselves, so load it for chat now.
+      status = `Starting ${label}...`;
+      try {
+        await api.activateModel(res.id);
+        status = `${label} is ready. You can switch models any time on the Models screen.`;
+      } catch (e: unknown) {
+        status = `${label} is installed but did not start: ${errorMessage(e)} Try it from the Models screen.`;
+      }
       step = "done";
-      status = `${label} installed. You can switch models any time on the Models screen.`;
     } catch (e: unknown) {
       const message = errorMessage(e);
       wfError = /cancel/i.test(message) ? null : `The model could not be installed: ${message}`;
@@ -233,7 +256,7 @@
           <span class="text-ink-200">{formatBytes(ramUsable)}</span>
         </div>
         <div class="px-3 py-2 rounded-xl border border-ember-500/30 bg-ember-500/10">
-          <span class="block text-xs text-ember-300">70% budget</span>
+          <span class="block text-xs text-ember-300">For models</span>
           <span class="text-ember-200">{formatBytes(budget)}</span>
         </div>
       </div>
@@ -270,12 +293,17 @@
 
       <div class="mt-6 border-t border-edge pt-4">
         {#if !communityOpen}
-          <button
-            onclick={() => (communityOpen = true)}
-            class="text-xs text-ember-300 hover:underline"
-          >
-            Or grab a community model from Hugging Face →
-          </button>
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              onclick={() => (communityOpen = true)}
+              class="text-xs text-ember-300 hover:underline"
+            >
+              Or grab a community model from Hugging Face →
+            </button>
+            {#if onSkip}
+              <button onclick={onSkip} class="ml-auto text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
+            {/if}
+          </div>
         {:else}
           <div class="text-xs font-semibold text-ink-300 mb-2">Community models (Hugging Face)</div>
           <div class="flex gap-2">
@@ -352,10 +380,14 @@
         <div class="text-sm text-ink-400">{selected?.models.join(", ")}</div>
       </div>
       <p class="text-sm text-ink-400 mb-6">{status}</p>
-      <div class="flex gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-veil/5 border border-edge text-sm text-ink-300 hover:bg-veil/10">Change preset</button>
         <button onclick={install} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Install</button>
+        {#if onSkip}
+          <button onclick={onSkip} class="ml-auto text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
+        {/if}
       </div>
+      <p class="mt-4 text-xs text-ink-400">Installing needs an internet connection. If you are offline, choose Set up later and download a model from the Models screen when you are back online.</p>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
       <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>

@@ -66,6 +66,9 @@ fn test_workspace_jail_blocks_absolute_paths_outside_root() {
     assert_eq!(res.unwrap_err().code, "SANDBOX_DENIED");
 }
 
+// Creating a symlink on Windows needs admin rights or Developer Mode, so the
+// two symlink tests run on Unix only.
+#[cfg(unix)]
 #[test]
 fn test_workspace_jail_blocks_symlinks_pointing_outside() {
     let outside_dir = TempTestDir::new("jail_outside");
@@ -75,38 +78,33 @@ fn test_workspace_jail_blocks_symlinks_pointing_outside() {
     let jail_dir = TempTestDir::new("jail_inside");
     let symlink_path = jail_dir.path().join("leak_link.txt");
 
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&secret_file, &symlink_path).expect("create symlink");
-        let jail = WorkspaceJail::new(jail_dir.path()).expect("jail init");
+    std::os::unix::fs::symlink(&secret_file, &symlink_path).expect("create symlink");
+    let jail = WorkspaceJail::new(jail_dir.path()).expect("jail init");
 
-        let res = jail.read_file("leak_link.txt");
-        assert!(
-            res.is_err(),
-            "Symlink pointing outside jail must be blocked"
-        );
-        let err = res.unwrap_err();
-        assert_eq!(err.code, "SANDBOX_DENIED");
-    }
+    let res = jail.read_file("leak_link.txt");
+    assert!(
+        res.is_err(),
+        "Symlink pointing outside jail must be blocked"
+    );
+    let err = res.unwrap_err();
+    assert_eq!(err.code, "SANDBOX_DENIED");
 }
 
+#[cfg(unix)]
 #[test]
 fn test_workspace_jail_detects_symlink_loops() {
     let jail_dir = TempTestDir::new("jail_loop");
     let link_a = jail_dir.path().join("loop_a");
     let link_b = jail_dir.path().join("loop_b");
 
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&link_b, &link_a).expect("create link a");
-        std::os::unix::fs::symlink(&link_a, &link_b).expect("create link b");
+    std::os::unix::fs::symlink(&link_b, &link_a).expect("create link a");
+    std::os::unix::fs::symlink(&link_a, &link_b).expect("create link b");
 
-        let jail = WorkspaceJail::new(jail_dir.path()).expect("jail init");
-        let res = jail.resolve_path("loop_a");
-        assert!(res.is_err(), "Symlink loop must be caught and rejected");
-        let err = res.unwrap_err();
-        assert_eq!(err.code, "SANDBOX_DENIED");
-    }
+    let jail = WorkspaceJail::new(jail_dir.path()).expect("jail init");
+    let res = jail.resolve_path("loop_a");
+    assert!(res.is_err(), "Symlink loop must be caught and rejected");
+    let err = res.unwrap_err();
+    assert_eq!(err.code, "SANDBOX_DENIED");
 }
 
 #[test]

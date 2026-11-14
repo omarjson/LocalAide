@@ -42,6 +42,24 @@ pub struct AppConfig {
     /// UI theme: Some("dark") | Some("light"). None = dark (the default).
     #[serde(default)]
     pub theme: Option<String>,
+    /// Share of this computer's memory, after a reserve for the system, that
+    /// models may use, in percent (Settings → Memory for models). None = 70.
+    #[serde(default)]
+    pub model_memory_percent: Option<u8>,
+}
+
+/// Default and limits for `AppConfig::model_memory_percent`.
+pub const DEFAULT_MODEL_MEMORY_PERCENT: u8 = 70;
+pub const MIN_MODEL_MEMORY_PERCENT: u8 = 20;
+pub const MAX_MODEL_MEMORY_PERCENT: u8 = 90;
+
+impl AppConfig {
+    /// The memory share for models, kept inside the allowed range.
+    pub fn memory_percent_for_models(&self) -> u8 {
+        self.model_memory_percent
+            .unwrap_or(DEFAULT_MODEL_MEMORY_PERCENT)
+            .clamp(MIN_MODEL_MEMORY_PERCENT, MAX_MODEL_MEMORY_PERCENT)
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -111,6 +129,7 @@ impl Default for AppConfig {
             backup: BackupConfig::default(),
             web_search: WebSearchConfig::default(),
             theme: None,
+            model_memory_percent: None,
         }
     }
 }
@@ -243,6 +262,18 @@ mod tests {
         let cfg: AppConfig = serde_json::from_str(old).unwrap();
         assert!(cfg.cloud_providers.is_empty());
         assert!(cfg.active_cloud_provider.is_none());
+        assert_eq!(cfg.memory_percent_for_models(), DEFAULT_MODEL_MEMORY_PERCENT);
+    }
+
+    #[test]
+    fn memory_share_stays_in_range() {
+        let mut cfg = AppConfig::default();
+        cfg.model_memory_percent = Some(5);
+        assert_eq!(cfg.memory_percent_for_models(), MIN_MODEL_MEMORY_PERCENT);
+        cfg.model_memory_percent = Some(100);
+        assert_eq!(cfg.memory_percent_for_models(), MAX_MODEL_MEMORY_PERCENT);
+        cfg.model_memory_percent = Some(55);
+        assert_eq!(cfg.memory_percent_for_models(), 55);
     }
 
     #[test]

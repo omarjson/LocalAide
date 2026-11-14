@@ -18,38 +18,19 @@ pub struct IngestedFile {
 
 pub struct FileIngester;
 
+/// File types the library can read, in lowercase. The file picker offers the
+/// same list.
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "md", "markdown", "txt", "text", "log", "rs", "py", "js", "ts", "svelte", "html", "css",
+    "json", "csv", "toml", "yaml", "yml", "sh", "sql", "c", "cpp", "h", "go", "pdf",
+];
+
 impl FileIngester {
     pub fn is_supported_extension(path: &Path) -> bool {
-        matches!(
-            path.extension()
-                .and_then(|e| e.to_str())
-                .map(|s| s.to_lowercase())
-                .as_deref(),
-            Some("md")
-                | Some("markdown")
-                | Some("txt")
-                | Some("text")
-                | Some("log")
-                | Some("rs")
-                | Some("py")
-                | Some("js")
-                | Some("ts")
-                | Some("svelte")
-                | Some("html")
-                | Some("css")
-                | Some("json")
-                | Some("csv")
-                | Some("toml")
-                | Some("yaml")
-                | Some("yml")
-                | Some("sh")
-                | Some("sql")
-                | Some("c")
-                | Some("cpp")
-                | Some("h")
-                | Some("go")
-                | Some("pdf")
-        )
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+            .is_some_and(|ext| SUPPORTED_EXTENSIONS.contains(&ext.as_str()))
     }
 
     pub fn should_ignore_path(path: &Path) -> bool {

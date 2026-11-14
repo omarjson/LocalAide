@@ -42,6 +42,14 @@
   let skillCursor = $state(0);
   onMount(() => textareaEl?.focus());
 
+  // The box stays focusable while an answer streams (read-only, not disabled),
+  // so Escape still stops it. Focus comes back when the answer ends.
+  let wasStreaming = false;
+  $effect(() => {
+    if (wasStreaming && !streaming) textareaEl?.focus();
+    wasStreaming = streaming;
+  });
+
   // Slash menu: typing "/word" filters the skill list; Enter or click
   // inserts the skill body as the message text (the user can edit it).
   const slashMatch = $derived(
@@ -114,9 +122,9 @@
     <div class="space-y-2 mb-3">
       <div class="flex gap-2">
         <input
-          aria-label="Workspace file path"
+          aria-label="File name in the workspace folder"
           bind:value={toolPath}
-          placeholder="Workspace file path to inspect or write…"
+          placeholder="File name in the workspace folder, like notes.txt"
           class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 font-mono"
         />
         <button
@@ -130,7 +138,7 @@
           type="button"
           onclick={onWriteFile}
           disabled={!toolContent.trim()}
-          title="write_file always requires explicit approval in the sandbox"
+          title="LocalAide asks you before it writes a file"
           class="px-3 rounded-xl bg-veil/5 border border-edge hover:bg-veil/10 text-xs text-ink-300 disabled:opacity-40"
         >
           Write
@@ -140,7 +148,7 @@
         aria-label="File content to write"
         bind:value={toolContent}
         rows={3}
-        placeholder="Content to write into the file above. Writes are jailed to the workspace and need your approval."
+        placeholder="Text to write into the file above. Files stay in the LocalAide workspace folder, and LocalAide asks you first."
         class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 resize-none"
       ></textarea>
     </div>
@@ -199,8 +207,9 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Generating response…" : "Type a message… / for skills"}
-      disabled={streaming}
+      placeholder={streaming ? "Answering… press Esc to stop" : "Type a message… / for skills"}
+      readonly={streaming}
+      aria-busy={streaming}
       rows={1}
       onkeydown={handleKeydown}
       class="flex-1 bg-ink-900 border border-edge rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
