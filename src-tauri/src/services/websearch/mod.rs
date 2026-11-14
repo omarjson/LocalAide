@@ -795,7 +795,7 @@ mod tests {
     #[test]
     fn parses_firecrawl_scrape() {
         let body =
-            r#"{"success":true,"data":{"markdown":"# Rust\nHello","metadata":{"title":"Rust"}}}"#;
+            r##"{"success":true,"data":{"markdown":"# Rust\nHello","metadata":{"title":"Rust"}}}"##;
         let page = parse_firecrawl_scrape_json(body, "https://www.rust-lang.org/").unwrap();
         assert_eq!(page.title.as_deref(), Some("Rust"));
         assert!(page.content.starts_with("# Rust"));
@@ -906,7 +906,7 @@ mod tests {
 
     #[test]
     fn firecrawl_scrape_end_to_end() {
-        let body = br#"{"success":true,"data":{"markdown":"# Page","metadata":{"title":"Page"}}}"#;
+        let body = br##"{"success":true,"data":{"markdown":"# Page","metadata":{"title":"Page"}}}"##;
         let bases = spawn_mock("200 OK", "application/json", "", body);
         let engine = WebSearchEngine::with_bases(bases);
         let keys = WebSearchKeys {
@@ -922,7 +922,7 @@ mod tests {
 
     #[test]
     fn jina_read_end_to_end_json() {
-        let body = br#"{"code":200,"data":{"title":"Example Page","url":"https://example.com","content":"# Example\n\nHello world"}}"#;
+        let body = br##"{"code":200,"data":{"title":"Example Page","url":"https://example.com","content":"# Example\n\nHello world"}}"##;
         let bases = spawn_mock("200 OK", "application/json", "", body);
         let engine = WebSearchEngine::with_bases(bases);
         let page = engine
