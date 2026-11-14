@@ -125,7 +125,7 @@ impl ModelService {
 
     /// Fetch the manifest from the project repository, validate it against
     /// the currently active catalog, persist it, and swap it in.
-    pub async fn refresh_catalog(&self) -> Result<CatalogManifest, AppError> {
+    pub async fn refresh_catalog(&self) -> Result<Arc<CatalogManifest>, AppError> {
         let fetched = self.refresher.fetch().await?;
         let current = self.manifest();
         fetched.validate(current.version)?;
@@ -144,7 +144,7 @@ impl ModelService {
     }
 
     /// Delete the cache and fall back to the list compiled into the app.
-    pub fn reset_catalog(&self) -> Result<CatalogManifest, AppError> {
+    pub fn reset_catalog(&self) -> Result<Arc<CatalogManifest>, AppError> {
         if let Err(e) = std::fs::remove_file(&self.cache_path)
             && e.kind() != std::io::ErrorKind::NotFound
         {
