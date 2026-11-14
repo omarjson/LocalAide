@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 - Toolchain currency pass: Node 20 → 24 (removed from GitHub runners 2026-09-23), GitHub Actions checkout/setup-node v4 → v5, Vite 6 → 8, vite-plugin-svelte 5 → 7, vite-plugin-checker 0.8 → 1.0, svelte-check 4.1 → 4.7, TypeScript → 5.9, notify 6 → 8, and the llama.cpp sidecar pin v0.9.0 → v1.0.0 (the semver milestone). Unused `autoprefixer`/`postcss` devDependencies were removed and an `engines` field pins Node ≥ 24.
-- Platform builds (sidecar, macOS/Windows/Linux bundles) now run only for release tags, manual dispatch, or commits marked `[build-all]` — routine pushes verify with the quality gate alone, honoring the macOS 10× runner cost.
+- Platform builds (sidecar, macOS/Windows/Linux bundles) run only for release tags, manual dispatch, or commits marked `[build-all]` — routine pushes verify with the quality gate alone, keeping pushes fast. (The original "10× macOS minutes" rationale was wrong for this repo: standard runners are free on public repositories; the gate remains for build-time economy.)
 
 ## [0.1.0] - 2026-11-13
 
