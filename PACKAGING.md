@@ -5,12 +5,12 @@ LocalAide packages native desktop bundles with the Tauri v2 CLI.
 ## Prerequisites
 
 - Rust stable 1.90+ (`rustup`, with `rustfmt` and `clippy`; the crate declares MSRV 1.90)
-- Node.js 20+
+- Node.js 24+
 - Platform build dependencies:
   - **macOS**: Xcode Command Line Tools
   - **Windows**: Visual Studio C++ Build Tools (MSVC)
   - **Linux**: `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libasound2-dev`
-- **The `llama-server` sidecar binary.** The app chats through a local `llama-server` child process (ADR-0007), so the package must bundle it. Build it from the pinned llama.cpp tag (v0.9.0) and stage it with `scripts/prepare-sidecar.sh` into `src-tauri/binaries/`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml).
+- **The `llama-server` sidecar binary.** The app chats through a local `llama-server` child process (ADR-0007), so the package must bundle it. Build it from the pinned llama.cpp tag (v1.0.0) and stage it with `scripts/prepare-sidecar.sh` into `src-tauri/binaries/`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml).
 
 ## Local packaging commands
 

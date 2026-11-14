@@ -20,7 +20,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
    - Text-only models reject image input with a readable error.
    - Runtime verification against a real vision model is still outstanding; see the status line in [README.md](../README.md).
 3. **Model management**:
-   - Curated catalog of 36 verified GGUF models: Qwen 3/3.5/3.8, Gemma 4 (QAT), Granite 4.x, LFM, MiniCPM5, SmolLM3, plus coding, embedding, and reranking entries.
+   - Curated catalog of 42 verified GGUF models: Qwen 3/3.5/3.8, Gemma 4 (QAT), Granite 4.x, LFM, MiniCPM5, SmolLM3, gpt-oss, DeepSeek-R1, Mistral Small 3.2, Llama 3.2, Phi-4-mini, plus coding, embedding, and reranking entries; every pin checked against the Hugging Face API by a CI job.
    - Atomic streaming downloads to `.part` files. Downloads can be cancelled; a cancelled or interrupted download keeps its `.part` file and resumes via HTTP Range on the next attempt (there is no separate pause control).
    - Mandatory SHA-256 integrity verification against the catalog before installation.
    - Inference runs in a `llama-server` child process, with clean load, unload, and model switching.
@@ -28,11 +28,11 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
    - User-specified folder indexing into embedded SQLite with WAL mode.
    - Content hashing, deduplication, incremental scanning skipping unchanged files by mtime/size.
    - Bounded file reading and natural-boundary chunking (1500 characters, 250 overlap).
-   - Keyword search over SQLite FTS5 (BM25). Vector search is deferred until embeddings are wired.
+   - Keyword search over SQLite FTS5 (BM25), plus semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running; existing indexes get a one-click embedding backfill.
 5. **Memory & RAG**:
    - Personal Markdown memory notes under a fixed memory root at `~/.aiassistant/memory/`.
    - Full atomic CRUD operations with slug management.
-   - Memory search delegates to the whole-library keyword search (`MemoryService.search` calls `LibraryService.search`): notes are indexed into the unified SQLite index alongside documents, so results are not scoped to the memory root and there is no recency biasing.
+   - Memory search delegates to the whole-library search (`MemoryService.search` calls `LibraryService.search`, hybrid when the embedding engine is running): notes are indexed into the unified SQLite index alongside documents, so results are not scoped to the memory root and there is no recency biasing.
    - Chat retrieval-augmented generation with numbered, clickable citations linking to source notes.
 6. **Safe tools & workspace jail**:
    - Workspace directory isolation at `~/.aiassistant/workspace/` via `std::fs::canonicalize` plus lexical path checks, rejecting traversal and symlink escapes.
@@ -55,7 +55,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
 The following are out of scope for this release. UI controls, dependencies, and doc claims for them are disabled or removed until implemented end-to-end:
 
 - **Speech (STT / TTS)**: needs a second runtime. Deferred per ADR-0006; findings recorded in `.kiro/specs/engine-upgrade/tasks.md` Phase 5.
-- **Vector / semantic search**: no embeddings are written and no query vector is passed; the search path is BM25 keyword only.
+- **Reranker second stage**: the catalog ships a reranking model and llama-server exposes `/v1/rerank`, but hybrid results are fused by RRF only today; a second-stage rerank pass is future work.
 - **Modular component hot-swapping**: deferred; updates ship as whole packages (updater signing is future work, ADR-0005).
 - **Telemetry / remote analytics**: zero background telemetry, analytics, or user profiling.
 

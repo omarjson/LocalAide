@@ -131,9 +131,11 @@ impl BackupEngine {
 
         let key = derive_key(passphrase, &salt);
         let cipher = Aes256Gcm::new((&key).into());
+        let nonce = Nonce::try_from(&nonce_bytes[..])
+            .map_err(|_| AppError::internal("backup nonce construction failed"))?;
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce_bytes),
+                &nonce,
                 Payload {
                     msg: &plaintext,
                     aad: MAGIC,
@@ -167,9 +169,11 @@ impl BackupEngine {
 
         let key = derive_key(passphrase, salt);
         let cipher = Aes256Gcm::new((&key).into());
+        let nonce = Nonce::try_from(nonce_bytes)
+            .map_err(|_| AppError::invalid_input("Backup header is corrupted"))?;
         let plaintext = cipher
             .decrypt(
-                Nonce::from_slice(nonce_bytes),
+                &nonce,
                 Payload {
                     msg: ciphertext,
                     aad: MAGIC,

@@ -644,6 +644,7 @@ mod tests {
             quant: "Q4_K_M".into(),
             description: "test".into(),
             companions: vec![],
+            context_tokens: None,
         }
     }
 

@@ -3,6 +3,7 @@
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
+use crate::services::inference::InferenceEngine;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -76,7 +77,7 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
             embedded_chunks,
         },
         library: LibraryHealth {
-            doc_count: stats.doc_count,
+            doc_count: stats.doc_count as usize,
         },
         config_ok,
     })
@@ -171,7 +172,7 @@ pub fn logs_tail(lines: Option<usize>) -> Result<Vec<String>, AppError> {
     let start = data.len().saturating_sub(TAIL_CAP);
     let text = String::from_utf8_lossy(&data[start..]);
     let keep = lines.unwrap_or(200).min(1000);
-    let collected: Vec<String> = text
+    let mut collected: Vec<String> = text
         .lines()
         .rev()
         .take(keep)

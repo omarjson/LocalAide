@@ -23,7 +23,7 @@ LocalAide is a local-first desktop AI assistant built on Tauri v2, Rust (edition
 │  Chat & Memory   │         │  LibraryService   │         │   ToolService    │
 │  RouterEngine    │         │   SQLite (WAL)    │         │  Workspace Jail  │
 │  Token Budgeting │         │   FTS5 BM25       │         │  User Approval   │
-│  RAG Citations   │         │   Keyword Search  │         │  Audit Log       │
+│  RAG Citations   │         │  Keyword+Vector   │         │  Audit Log       │
 └────────┬─────────┘         └─────────┬─────────┘         └────────┬─────────┘
          │                             │                            │
          ▼                             ▼                            ▼
@@ -37,19 +37,20 @@ LocalAide is a local-first desktop AI assistant built on Tauri v2, Rust (edition
 ## 2. Core Service Boundaries
 
 ### Single AppState (`src-tauri/src/app/state.rs`)
-One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelManager`, `ModelService`, `RouterEngine`, `LibraryService`, `MemoryService`, `ToolService`, and `ConfigStore`. There is no distributed state and no ad-hoc file cache.
+One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelManager`, `ModelService`, `RouterEngine`, `LibraryService`, `MemoryService`, `ToolService`, `SkillsService`, `BackupEngine`, `EmbeddingEngine`, and `ConfigStore`. There is no distributed state and no ad-hoc file cache.
 
 ### Inference (`src-tauri/src/services/inference/`)
 - `RouterEngine` is the one `InferenceEngine` the rest of the app talks to. It forwards to the local sidecar by default and to the remote engine only while cloud mode is on; loading a model always returns to local.
-- `SidecarEngine` runs `llama-server` (llama.cpp v0.9.0) as a child process on `127.0.0.1` on a free port with a random 256-bit API key. It streams from `/v1/chat/completions`, passes `--mmproj` for vision models, and is killed on unload, model switch, or exit. See [ADR-0007](docs/adr/0007-sidecar-engine.md).
+- `SidecarEngine` runs `llama-server` (llama.cpp v1.0.0) as a child process on `127.0.0.1` on a free port with a random 256-bit API key. It streams from `/v1/chat/completions`, passes `--mmproj` for vision models, and is killed on unload, model switch, or exit. See [ADR-0007](docs/adr/0007-sidecar-engine.md).
 - `RemoteEngine` (opt-in) streams from the user-configured OpenAI-compatible provider over HTTPS — or over HTTP for a loopback proxy. It is enabled only from Settings with a user-supplied key; the chat header shows a cloud badge while it is active.
 - Cancellation is an atomic flag checked per streamed token; Stop or `Esc` halts generation at the next token.
 - `ContextBudget` trims the oldest turns when history exceeds the model's context, preserving the system prompt, the RAG block, and the latest user message.
 
 ### Document library (`src-tauri/src/services/library/`)
 - One transactional store: `~/.aiassistant/index/library.db`, SQLite in WAL mode (`journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 5000`).
-- Ingest: natural paragraph/sentence chunking (1500 characters, 250 overlap), pure-Rust PDF text extraction via `flate2`, content hashing for deduplication.
-- Search: keyword BM25 over FTS5 only. The vector and RRF code paths exist (`search.rs`) but production queries never pass a query vector, because chunk embeddings are never written. They are kept for when embeddings are wired.
+- Ingest: natural paragraph/sentence chunking (1500 characters, 250 overlap), pure-Rust PDF text extraction via `flate2`, content hashing for deduplication. When the embedding engine is running, chunk vectors are written at index time; a backfill command vectorizes indexes built without it.
+- `EmbeddingEngine` runs a second `llama-server --embedding` instance for an installed embedding model (EmbeddingGemma by default) and serves `/v1/embeddings` locally; `Drop` stops it.
+- Search: three modes — keyword BM25 over FTS5, semantic cosine over chunk vectors, and hybrid with reciprocal-rank fusion of both rankings. Semantic and hybrid quietly fall back to keyword while the embedding engine is off.
 
 ### Memory & RAG (`src-tauri/src/services/memory/`)
 - Markdown notes in `~/.aiassistant/memory/` are synchronized with the SQLite `notes` index.

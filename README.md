@@ -38,11 +38,11 @@
 
 ## What is LocalAide?
 
-LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2, Rust, Svelte 5, and SQLite. It runs quantized open-weights models (GGUF) through a `llama-server` sidecar process built from llama.cpp v0.9.0, talking to it over `127.0.0.1` — there is no browser runtime and no bundled Electron shell.
+LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2, Rust, Svelte 5, and SQLite. It runs quantized open-weights models (GGUF) through a `llama-server` sidecar process built from llama.cpp v1.0.0, talking to it over `127.0.0.1` — there is no browser runtime and no bundled Electron shell.
 
 With cloud mode off — the default — it runs fully offline and collects no telemetry. Documents, conversations, and memory notes stay under `~/.aiassistant/` on your machine. If you add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS with your own API key, and the chat header shows a cloud badge the whole time.
 
-Search is BM25 keyword search over SQLite FTS5. Vector search and rank fusion are not wired in this release. See [ARCHITECTURE.md](ARCHITECTURE.md) for how each subsystem works.
+Search is BM25 keyword search over SQLite FTS5 by default; with the local embedding engine running, semantic and hybrid retrieval with reciprocal-rank fusion rank by vector similarity. See [ARCHITECTURE.md](ARCHITECTURE.md) for how each subsystem works.
 
 ## Key Features
 
@@ -55,7 +55,7 @@ Search is BM25 keyword search over SQLite FTS5. Vector search and rank fusion ar
 - **Memory notes with citations**: Markdown notes in `~/.aiassistant/memory/` are indexed into SQLite; chat recalls notes above a relevance score of 0.010 and renders clickable citation pills with the snippet, path, and score.
 - **Capability-rooted workspace jail**: file tools are confined to `~/.aiassistant/workspace/`. Paths are checked lexically and canonically; traversal escapes, outside symlinks, and symlink loops are rejected with `SANDBOX_DENIED`.
 - **Explicit tool consent**: reads, listings, and searches run without prompts; file writes require an approval modal ("Allow Once", "Allow for Session", "Deny"). Every tool call lands in a SQLite audit log you can view and clear in Settings.
-- **Verified model downloads**: a 36-model catalog with an integrity digest over ids, sizes, and hashes; resumable HTTP downloads to `.part` files; SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
+- **Verified model downloads**: a 42-model catalog with an integrity digest over ids, sizes, and hashes; resumable HTTP downloads to `.part` files (companion projector files for vision models included); SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
 - **Catalog refresh, fail-closed**: the Models screen can fetch the newest catalog from this repository over HTTPS ([ADR-0008](docs/adr/0008-catalog-refresh.md)). Refreshes are explicit, validated structurally, checked against the integrity digest, and blocked from rolling back to an older version; Reset restores the list compiled into the app. A CI job verifies every catalog pin against the Hugging Face API.
 - **Encrypted backups**: one `.labak` archive of your config, memory notes, and conversations under AES-256-GCM with an argon2id passphrase that is never stored ([ADR-0009](docs/adr/0009-encrypted-backups.md)). Point the folder at a OneDrive or Drive sync folder for cloud redundancy without any cloud login in the app; provider API keys are excluded by default.
 - **Keyboard-complete navigation**: see the matrix below.
@@ -91,7 +91,7 @@ Note the status line above: the macOS packages come from a CI stage that has not
 
 ### Option B: build from source
 
-1. **Prerequisites**: Node.js 20+ (`nvm use 20`), a Rust stable toolchain with `rustfmt` and `clippy` (`rustup update stable`; the crate declares MSRV 1.90), and a C/C++ compiler:
+1. **Prerequisites**: Node.js 24+ (`nvm use 24`), a Rust stable toolchain with `rustfmt` and `clippy` (`rustup update stable`; the crate declares MSRV 1.90), and a C/C++ compiler:
    - macOS: Xcode Command Line Tools (`xcode-select --install`)
    - Linux: `sudo apt install build-essential libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`
    - Windows: Visual Studio 2022 C++ Build Tools (MSVC)
@@ -110,7 +110,7 @@ Note the status line above: the macOS packages come from a CI stage that has not
    ```bash
    npx tauri dev   # or `npm run dev` for the frontend alone
    ```
-5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Build it from the pinned llama.cpp tag (v0.9.0) and stage it with `scripts/prepare-sidecar.sh`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml) and [PACKAGING.md](PACKAGING.md). Then:
+5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Build it from the pinned llama.cpp tag (v1.0.0) and stage it with `scripts/prepare-sidecar.sh`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml) and [PACKAGING.md](PACKAGING.md). Then:
    ```bash
    npx tauri build --config src-tauri/tauri.sidecar.conf.json
    ```
@@ -144,7 +144,7 @@ Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md
 
 LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs/scope.md](docs/scope.md). In brief:
 
-- **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager, the SQLite WAL document library with keyword search, Markdown memory notes with RAG citations, safe file tools in the workspace jail, and opt-in online providers.
+- **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager, the SQLite WAL document library with keyword/semantic/hybrid search, Markdown memory notes with RAG citations, local skills, encrypted backups, safe file tools in the workspace jail, and opt-in online providers.
 - **Deferred**: speech (STT/TTS) — it needs a second runtime (`.kiro/specs/engine-upgrade/tasks.md`); vision runtime verification — image input is wired but has not been exercised against a real vision model end to end.
 - **Non-goals**: telemetry of any kind, silent cloud failover, and in-app component hot-swapping (updates ship as whole packages; updater signing is future work per ADR-0005).
 
