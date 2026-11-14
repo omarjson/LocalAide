@@ -261,7 +261,7 @@
       backups = await api.listBackups(backupTargetInput.trim() || undefined);
       backupNotice = "Backup settings saved.";
     } catch (e) {
-      backupNotice = errMsg(e);
+      backupNotice = errorMessage(e);
     } finally {
       backupBusy = false;
     }
@@ -280,7 +280,7 @@
       backupPass = "";
       backups = await api.listBackups(backupTargetInput.trim() || undefined);
     } catch (e) {
-      backupNotice = errMsg(e);
+      backupNotice = errorMessage(e);
     } finally {
       backupBusy = false;
     }
@@ -306,7 +306,7 @@
         (report.skipped_newer_config ? " A newer config was kept." : "");
       restorePass = "";
     } catch (e) {
-      backupNotice = errMsg(e);
+      backupNotice = errorMessage(e);
     } finally {
       backupBusy = false;
     }
