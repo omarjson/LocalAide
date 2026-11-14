@@ -102,7 +102,7 @@ impl Preset {
             models: vec![
                 "gemma4-26b-a4b-q4".into(),
                 "qwen3.8-27b-q4".into(),
-                "bge-m3-560m-q8".into(),
+                "nomic-embed-v2-moe-q8".into(),
             ],
         }
     }

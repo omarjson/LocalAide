@@ -43,35 +43,53 @@ async function checkPin(label, url, expectedSha, expectedSize) {
   if (!match) {
     console.error(`FAIL ${label}: URL is not an HF resolve link: ${url}`);
     failures += 1;
-    return;
+    return null;
   }
   const [, org, repo, path] = match;
   try {
     const tree = await repoTree(org, repo);
     const meta = lfsMeta(findFile(tree, path));
     checked += 1;
-    const sizeOk = meta.size === expectedSize;
+    // expectedSize === null skips the size comparison (split-shard primaries
+    // are verified via the total check below instead).
+    const sizeOk = expectedSize === null || meta.size === expectedSize;
     const shaOk = meta.sha256 === null || meta.sha256.toLowerCase() === expectedSha.toLowerCase();
     if (!sizeOk || !shaOk) {
       console.error(
         `FAIL ${label}: catalog pin drifted from HF\n` +
-          `  size: catalog=${expectedSize} hf=${meta.size} (${sizeOk ? "ok" : "MISMATCH"})\n` +
+          `  size: catalog=${expectedSize ?? "(total check)"} hf=${meta.size} (${sizeOk ? "ok" : "MISMATCH"})\n` +
           `  sha256: catalog=${expectedSha} hf=${meta.sha256 ?? "(non-lfs)"} (${shaOk ? "ok" : "MISMATCH"})`
       );
       failures += 1;
-    } else {
-      console.log(`ok   ${label}`);
+      return meta.sha256 === null ? null : meta.size;
     }
+    console.log(`ok   ${label}`);
+    return meta.size;
   } catch (e) {
     console.error(`FAIL ${label}: ${e.message}`);
     failures += 1;
+    return null;
   }
 }
 
+// Split GGUF shards follow the llama.cpp naming convention; companions
+// like an mmproj projector must not be counted into the shard total.
+const isShard = (dest) => /-\d{5}-of-\d{5}\.gguf$/.test(dest);
+
 for (const m of catalog.models) {
-  await checkPin(m.id, m.url, m.sha256, m.file_size);
+  const split = Boolean(m.dest);
+  const primarySize = await checkPin(m.id, m.url, m.sha256, split ? null : m.file_size);
+  let total = primarySize ?? 0;
   for (const c of m.companions ?? []) {
-    await checkPin(`${m.id} :: ${c.dest}`, c.url, c.sha256, c.file_size);
+    const size = await checkPin(`${m.id} :: ${c.dest}`, c.url, c.sha256, c.file_size);
+    if (split && size !== null && isShard(c.dest)) total += size;
+  }
+  if (split && total !== m.file_size) {
+    console.error(
+      `FAIL ${m.id}: split-shard total mismatch\n` +
+        `  catalog total=${m.file_size} hf sum=${total}`
+    );
+    failures += 1;
   }
 }
 

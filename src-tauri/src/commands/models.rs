@@ -20,7 +20,10 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
             let path = state.model_service.model_file_path(&e.id);
             let installed = path.is_file() || state.model_manager.is_installed(&e.id);
             let is_active = active_id.as_deref() == Some(&e.id);
-            let filename = format!("{}.gguf", e.id);
+            let filename = e
+                .dest
+                .clone()
+                .unwrap_or_else(|| format!("{}.gguf", e.id));
             ModelInfo {
                 id: e.id.clone(),
                 name: e.name.clone(),
@@ -32,7 +35,9 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 license: e.license.clone(),
                 sha256: e.sha256.clone(),
                 download_url: e.url.clone(),
-                vision: !e.companions.is_empty(),
+                // Split shards are companions too; only an mmproj projector
+                // makes a model accept images.
+                vision: e.companions.iter().any(|c| c.dest.contains("mmproj")),
                 installed,
                 verified: installed,
                 active: is_active,

@@ -67,6 +67,11 @@ pub struct CatalogEntry {
     /// exposing. `None` falls back to the app-wide context setting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_tokens: Option<u32>,
+    /// Primary file name inside the models folder. Defaults to `{id}.gguf`.
+    /// Split GGUFs keep their upstream shard name so llama.cpp discovers the
+    /// remaining shards next to it by the `-00001-of-000NN` pattern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dest: Option<String>,
     #[serde(default)]
     pub companions: Vec<CatalogCompanion>,
 }
@@ -174,6 +179,18 @@ impl CatalogManifest {
                     m.id
                 )));
             }
+            if let Some(dest) = &m.dest
+                && (dest.is_empty()
+                    || dest.contains('/')
+                    || dest.contains('\\')
+                    || dest.contains("..")
+                    || !dest.ends_with(".gguf"))
+            {
+                return Err(AppError::invalid_input(format!(
+                    "Catalog model '{}' has an unsafe dest '{}': it must be a plain .gguf file name",
+                    m.id, dest
+                )));
+            }
             require_https(&m.url, "model download")?;
             if m.companions.len() > MAX_COMPANIONS_PER_MODEL {
                 return Err(AppError::invalid_input(format!(
@@ -209,7 +226,7 @@ impl CatalogManifest {
         Ok(())
     }
 
-    /// Built-in catalog, version 7.
+    /// Built-in catalog, version 8.
     ///
     /// Each entry was checked against the Hugging Face API (2026-11-13 for
     /// versions 1-6, 2026-11-14 for version 7). The repo is public and not
@@ -354,19 +371,19 @@ impl CatalogManifest {
                 "Q4_K_M", "IBM Granite 4.2 3B. Enterprise-oriented, strong at instructions.", vec![],
             ),
             entry(
-                "llama-3.2-3b-q4", "Llama 3.2 3B Instruct", "3B", "chat", "Llama 3.2",
-                2_019_377_600, 2.8,
-                "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-                "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
-                "Q4_K_M", "Meta's small multilingual assistant. Text only.", vec![],
-            ).with_context(131_072),
+                "spark-x2.6-4b-q4", "Spark-X2.6 4B", "4B", "chat", "Apache-2.0",
+                3_543_441_312, 3.8,
+                "https://huggingface.co/XHToken/Spark-X2.6-4B-GGUF/resolve/main/Spark-X2.6-4B-Q4_K_M.gguf",
+                "91cb2811aebb47ac916aa619d27d4cdd7f4143106b7917accb8ead4cd7f5cbd9",
+                "Q4_K_M", "October 2026 on-device agent model tuned for tool use and real-world tasks. Text only.", vec![],
+            ),
             entry(
-                "phi-4-mini-3.8b-q4", "Phi-4-mini 3.8B", "3.8B", "chat", "MIT",
-                2_491_874_272, 3.2,
-                "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
-                "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
-                "Q4_K_M", "Microsoft's compact reasoner, strong at math and code for its size. Text only.", vec![],
-            ).with_context(131_072),
+                "spark-x2.6-1.7b-q8", "Spark-X2.6 1.7B", "1.7B", "chat", "Apache-2.0",
+                1_820_113_440, 2.2,
+                "https://huggingface.co/XHToken/Spark-X2.6-1.7B-GGUF/resolve/main/Spark-X2.6-1.7B-Q8_0.gguf",
+                "8d96279c95ae2be111576f3f599880598be0922efee15069b4d7e4dd96ef6ed4",
+                "Q8_0", "October 2026, the smallest 2026-generation agent model. Runs on almost any machine. Text only.", vec![],
+            ),
             // Desktop: 6 to 9 B
             entry(
                 "gemma4-e4b-qat-q4", "Gemma 4 E4B (QAT)", "4B effective", "chat", "Apache-2.0",
@@ -388,12 +405,34 @@ impl CatalogManifest {
                 "Q4_K_M", "Strong general chat model with thinking mode.", vec![],
             ),
             entry(
-                "deepseek-r1-0528-qwen3-8b-q4", "DeepSeek-R1-0528 Qwen3 8B", "8B", "chat", "MIT",
-                5_027_785_216, 6.5,
-                "https://huggingface.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF/resolve/main/DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
-                "a86349a4180c4e6bb43f874c29c404fa2be3f90b15509bd6d86f697dba724ec1",
-                "Q4_K_M", "DeepSeek reasoning distillation on Qwen3 8B. Thinks step by step before answering. Text only.", vec![],
-            ).with_context(131_072),
+                "glm-5.3-flash-iq2xxs", "GLM-5.3 Flash (MoE)", "320B total, 18B active", "chat", "MIT",
+                101_844_951_904, 97.0,
+                "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf",
+                "337870cefce5fb34b2aa3ade54a0fbf61676697f7f9a906670c20edde74561f4",
+                "UD-IQ2_XXS", "Z.ai's frontier mixture-of-experts with vision input (August 2026). Ships as four split GGUF shards llama.cpp loads together; only 18B parameters run per token, so a workstation RAM or expert offload is expected.",
+                vec![
+                    companion(
+                        "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf",
+                        "d51a3d9ca05022d53e71753df75ee64ed5fd4e47655650ae023e9717b3ec158d",
+                        49_896_298_080, "GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf",
+                    ),
+                    companion(
+                        "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf",
+                        "89180f13784dc1128586b98adf1ca876279881a20bc4f01747703ce352563372",
+                        49_248_507_840, "GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf",
+                    ),
+                    companion(
+                        "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf",
+                        "9e0ef47daa1fdffce3cf2ac1594ce4634d176ad018be6e692729757f38d5fbf6",
+                        2_690_716_000, "GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf",
+                    ),
+                    companion(
+                        "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/mmproj-F16.gguf",
+                        "922b809664d6a89cc1e40bfeaa63618000edc6651baf4082ce0718a784adf947",
+                        1_128_047_296, "glm-5.3-flash.mmproj.gguf",
+                    ),
+                ],
+            ).with_dest("GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf"),
             entry(
                 "qwen3.5-9b-q4", "Qwen3.5 9B", "9B", "chat", "Apache-2.0",
                 5_680_522_464, 7.5,
@@ -435,19 +474,29 @@ impl CatalogManifest {
             ),
             // Power: 16 GB and up, slow on CPU
             entry(
-                "gpt-oss-20b-mxfp4", "gpt-oss 20B (MoE)", "21B total, 3.6B active", "chat", "Apache-2.0",
-                12_109_566_624, 13.0,
-                "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-MXFP4.gguf",
-                "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
-                "MXFP4", "OpenAI's open-weight mixture-of-experts model with native MXFP4 quantization. Text only. Needs a recent llama.cpp build.", vec![],
-            ).with_context(131_072),
-            entry(
-                "mistral-small-3.2-24b-q4", "Mistral Small 3.2 24B", "24B", "chat", "Apache-2.0",
-                14_333_922_848, 17.0,
-                "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/main/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
-                "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c",
-                "Q4_K_M", "Mistral's flagship small dense model. Strong all-round quality. Text only.", vec![],
-            ).with_context(131_072),
+                "mistral-small-4-119b-mxfp4", "Mistral Small 4 (MoE)", "119B total, ~6B active", "chat", "Apache-2.0",
+                71_812_829_184, 69.0,
+                "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf",
+                "a46511af19832459a6a967c5a259d5b824c808017d33683d281fa0144c690009",
+                "MXFP4_MOE", "Mistral's 2026 flagship: 128 experts with native MXFP4 quantization, vision input, 256k context (March 2026). Ships as three split GGUF shards llama.cpp loads together.",
+                vec![
+                    companion(
+                        "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00002-of-00003.gguf",
+                        "89ab81ea411fff16829a2b79632225f844ca4b4386d5c5d25f1bc7d8d418a484",
+                        48_912_374_208, "Mistral-Small-4-119B-2603-MXFP4_MOE-00002-of-00003.gguf",
+                    ),
+                    companion(
+                        "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00003-of-00003.gguf",
+                        "492313b6d897651cf917968d2e3b5ee66793a20cb35144752ffe7ca560679743",
+                        22_892_579_360, "Mistral-Small-4-119B-2603-MXFP4_MOE-00003-of-00003.gguf",
+                    ),
+                    companion(
+                        "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/mmproj-F16.gguf",
+                        "8afb53096537664e248a0b4a9240c25677bb0f8a8cb5a5aad3cd1d608776a4e7",
+                        857_078_496, "mistral-small-4-119b.mmproj.gguf",
+                    ),
+                ],
+            ).with_dest("Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf"),
             entry(
                 "gemma4-26b-a4b-q4", "Gemma 4 26B-A4B (MoE)", "26B total, 4B active", "chat", "Apache-2.0",
                 16_947_541_728, 20.0,
@@ -545,12 +594,12 @@ impl CatalogManifest {
                 "Q8_0", "Embedding model for library and memory search.", vec![],
             ),
             entry(
-                "bge-m3-560m-q8", "BGE-M3 560M", "560M", "embedding", "MIT",
-                634_553_760, 1.2,
-                "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf",
-                "950f4a8e5e19477a6d3c26d2f162233c20002c601f75e4b002e3239997821167",
-                "Q8_0", "Multilingual embedding model, strong cross-language retrieval. 8k context.", vec![],
-            ).with_context(8_192),
+                "nomic-embed-v2-moe-q8", "Nomic Embed Text v2 MoE", "475M", "embedding", "Apache-2.0",
+                512_225_120, 0.7,
+                "https://huggingface.co/nomic-ai/nomic-embed-text-v2-moe-GGUF/resolve/main/nomic-embed-text-v2-moe.Q8_0.gguf",
+                "06e7a7e594a26985523c18383aba4aad39fe6e14f08ffc6ab5b554e1ccdc3cff",
+                "Q8_0", "Official llama.cpp quantization. Multilingual mixture-of-experts embeddings with Matryoshka dimensions.", vec![],
+            ),
             entry(
                 "qwen3-embedding-4b-q4", "Qwen3 Embedding 4B", "4B", "embedding", "Apache-2.0",
                 2_496_703_776, 3.6,
@@ -569,8 +618,8 @@ impl CatalogManifest {
 
         let signature = Self::compute_signature(&models);
         Self {
-            version: 7,
-            updated_at: 1794620687,
+            version: 8,
+            updated_at: 1795027200,
             signature,
             models,
         }
@@ -605,6 +654,7 @@ fn entry(
         quant: quant.into(),
         description: description.into(),
         context_tokens: None,
+        dest: None,
         companions,
     }
 }
@@ -613,6 +663,13 @@ impl CatalogEntry {
     /// Attach a native context window hint to a freshly built entry.
     fn with_context(mut self, tokens: u32) -> Self {
         self.context_tokens = Some(tokens);
+        self
+    }
+
+    /// Name the primary file explicitly — required for split GGUFs so the
+    /// shard pattern survives on disk.
+    fn with_dest(mut self, dest: &str) -> Self {
+        self.dest = Some(dest.into());
         self
     }
 }
@@ -645,6 +702,7 @@ mod tests {
             description: "test".into(),
             companions: vec![],
             context_tokens: None,
+            dest: None,
         }
     }
 

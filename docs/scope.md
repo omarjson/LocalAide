@@ -20,7 +20,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
    - Text-only models reject image input with a readable error.
    - Runtime verification against a real vision model is still outstanding; see the status line in [README.md](../README.md).
 3. **Model management**:
-   - Curated catalog of 42 verified GGUF models: Qwen 3/3.5/3.8, Gemma 4 (QAT), Granite 4.x, LFM, MiniCPM5, SmolLM3, gpt-oss, DeepSeek-R1, Mistral Small 3.2, Llama 3.2, Phi-4-mini, plus coding, embedding, and reranking entries; every pin checked against the Hugging Face API by a CI job.
+   - Curated catalog of 41 verified GGUF models: Spark-X2.6, GLM-5.3 Flash, Mistral Small 4, Qwen 3/3.5/3.8, Gemma 4 (QAT), Granite 4.x, LFM, MiniCPM5, SmolLM3, plus coding, embedding, and reranking entries; every pin (including split-shard files and vision projectors) checked against the Hugging Face API by a CI job.
    - Atomic streaming downloads to `.part` files. Downloads can be cancelled; a cancelled or interrupted download keeps its `.part` file and resumes via HTTP Range on the next attempt (there is no separate pause control).
    - Mandatory SHA-256 integrity verification against the catalog before installation.
    - Inference runs in a `llama-server` child process, with clean load, unload, and model switching.

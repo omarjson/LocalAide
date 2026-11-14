@@ -1,7 +1,7 @@
 {
-    "version":  7,
-    "updated_at":  1794620687,
-    "signature":  "a70c95c55ca1fadc4cd008072b32a7b495fc724b410a00fd1fae9b0baaecb763",
+    "version":  8,
+    "updated_at":  1795027200,
+    "signature":  "d2f8040e94373771ba580e61a3ebb23b52eb3132117c0db31d27a81a58b1a819",
     "models":  [
                    {
                        "id":  "qwen3.5-0.8b-q4",
@@ -280,35 +280,33 @@
                                       ]
                    },
                    {
-                       "id":  "llama-3.2-3b-q4",
-                       "name":  "Llama 3.2 3B Instruct",
-                       "params":  "3B",
+                       "id":  "spark-x2.6-4b-q4",
+                       "name":  "Spark-X2.6 4B",
+                       "params":  "4B",
                        "kind":  "chat",
-                       "license":  "Llama 3.2",
-                       "file_size":  2019377600,
-                       "ram_estimate_gb":  2.8,
-                       "url":  "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-                       "sha256":  "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+                       "license":  "Apache-2.0",
+                       "file_size":  3543441312,
+                       "ram_estimate_gb":  3.8,
+                       "url":  "https://huggingface.co/XHToken/Spark-X2.6-4B-GGUF/resolve/main/Spark-X2.6-4B-Q4_K_M.gguf",
+                       "sha256":  "91cb2811aebb47ac916aa619d27d4cdd7f4143106b7917accb8ead4cd7f5cbd9",
                        "quant":  "Q4_K_M",
-                       "description":  "Meta\u0027s small multilingual assistant. Text only.",
-                       "context_tokens":  131072,
+                       "description":  "October 2026 on-device agent model tuned for tool use and real-world tasks. Text only.",
                        "companions":  [
 
                                       ]
                    },
                    {
-                       "id":  "phi-4-mini-3.8b-q4",
-                       "name":  "Phi-4-mini 3.8B",
-                       "params":  "3.8B",
+                       "id":  "spark-x2.6-1.7b-q8",
+                       "name":  "Spark-X2.6 1.7B",
+                       "params":  "1.7B",
                        "kind":  "chat",
-                       "license":  "MIT",
-                       "file_size":  2491874272,
-                       "ram_estimate_gb":  3.2,
-                       "url":  "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
-                       "sha256":  "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
-                       "quant":  "Q4_K_M",
-                       "description":  "Microsoft\u0027s compact reasoner, strong at math and code for its size. Text only.",
-                       "context_tokens":  131072,
+                       "license":  "Apache-2.0",
+                       "file_size":  1820113440,
+                       "ram_estimate_gb":  2.2,
+                       "url":  "https://huggingface.co/XHToken/Spark-X2.6-1.7B-GGUF/resolve/main/Spark-X2.6-1.7B-Q8_0.gguf",
+                       "sha256":  "8d96279c95ae2be111576f3f599880598be0922efee15069b4d7e4dd96ef6ed4",
+                       "quant":  "Q8_0",
+                       "description":  "October 2026, the smallest 2026-generation agent model. Runs on almost any machine. Text only.",
                        "companions":  [
 
                                       ]
@@ -351,20 +349,43 @@
                                       ]
                    },
                    {
-                       "id":  "deepseek-r1-0528-qwen3-8b-q4",
-                       "name":  "DeepSeek-R1-0528 Qwen3 8B",
-                       "params":  "8B",
+                       "id":  "glm-5.3-flash-iq2xxs",
+                       "name":  "GLM-5.3 Flash (MoE)",
+                       "params":  "320B total, 18B active",
                        "kind":  "chat",
                        "license":  "MIT",
-                       "file_size":  5027785216,
-                       "ram_estimate_gb":  6.5,
-                       "url":  "https://huggingface.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF/resolve/main/DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
-                       "sha256":  "a86349a4180c4e6bb43f874c29c404fa2be3f90b15509bd6d86f697dba724ec1",
-                       "quant":  "Q4_K_M",
-                       "description":  "DeepSeek reasoning distillation on Qwen3 8B. Thinks step by step before answering. Text only.",
-                       "context_tokens":  131072,
+                       "file_size":  101844951904,
+                       "ram_estimate_gb":  97,
+                       "url":  "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf",
+                       "sha256":  "337870cefce5fb34b2aa3ade54a0fbf61676697f7f9a906670c20edde74561f4",
+                       "quant":  "UD-IQ2_XXS",
+                       "description":  "Z.ai\u0027s frontier mixture-of-experts with vision input (August 2026). Ships as four split GGUF shards llama.cpp loads together; only 18B parameters run per token, so a workstation RAM or expert offload is expected.",
+                       "dest":  "GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf",
                        "companions":  [
-
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf",
+                                              "sha256":  "d51a3d9ca05022d53e71753df75ee64ed5fd4e47655650ae023e9717b3ec158d",
+                                              "file_size":  49896298080,
+                                              "dest":  "GLM-5.3-Flash-UD-IQ2_XXS-00002-of-00004.gguf"
+                                          },
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf",
+                                              "sha256":  "89180f13784dc1128586b98adf1ca876279881a20bc4f01747703ce352563372",
+                                              "file_size":  49248507840,
+                                              "dest":  "GLM-5.3-Flash-UD-IQ2_XXS-00003-of-00004.gguf"
+                                          },
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf",
+                                              "sha256":  "9e0ef47daa1fdffce3cf2ac1594ce4634d176ad018be6e692729757f38d5fbf6",
+                                              "file_size":  2690716000,
+                                              "dest":  "GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf"
+                                          },
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF/resolve/main/mmproj-F16.gguf",
+                                              "sha256":  "922b809664d6a89cc1e40bfeaa63618000edc6651baf4082ce0718a784adf947",
+                                              "file_size":  1128047296,
+                                              "dest":  "glm-5.3-flash.mmproj.gguf"
+                                          }
                                       ]
                    },
                    {
@@ -442,37 +463,37 @@
                                       ]
                    },
                    {
-                       "id":  "gpt-oss-20b-mxfp4",
-                       "name":  "gpt-oss 20B (MoE)",
-                       "params":  "21B total, 3.6B active",
+                       "id":  "mistral-small-4-119b-mxfp4",
+                       "name":  "Mistral Small 4 (MoE)",
+                       "params":  "119B total, ~6B active",
                        "kind":  "chat",
                        "license":  "Apache-2.0",
-                       "file_size":  12109566624,
-                       "ram_estimate_gb":  13,
-                       "url":  "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-MXFP4.gguf",
-                       "sha256":  "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
-                       "quant":  "MXFP4",
-                       "description":  "OpenAI\u0027s open-weight mixture-of-experts model with native MXFP4 quantization. Text only. Needs a recent llama.cpp build.",
-                       "context_tokens":  131072,
+                       "file_size":  71812829184,
+                       "ram_estimate_gb":  69,
+                       "url":  "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf",
+                       "sha256":  "a46511af19832459a6a967c5a259d5b824c808017d33683d281fa0144c690009",
+                       "quant":  "MXFP4_MOE",
+                       "description":  "Mistral\u0027s 2026 flagship: 128 experts with native MXFP4 quantization, vision input, 256k context (March 2026). Ships as three split GGUF shards llama.cpp loads together.",
+                       "dest":  "Mistral-Small-4-119B-2603-MXFP4_MOE-00001-of-00003.gguf",
                        "companions":  [
-
-                                      ]
-                   },
-                   {
-                       "id":  "mistral-small-3.2-24b-q4",
-                       "name":  "Mistral Small 3.2 24B",
-                       "params":  "24B",
-                       "kind":  "chat",
-                       "license":  "Apache-2.0",
-                       "file_size":  14333922848,
-                       "ram_estimate_gb":  17,
-                       "url":  "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/main/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
-                       "sha256":  "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c",
-                       "quant":  "Q4_K_M",
-                       "description":  "Mistral\u0027s flagship small dense model. Strong all-round quality. Text only.",
-                       "context_tokens":  131072,
-                       "companions":  [
-
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00002-of-00003.gguf",
+                                              "sha256":  "89ab81ea411fff16829a2b79632225f844ca4b4386d5c5d25f1bc7d8d418a484",
+                                              "file_size":  48912374208,
+                                              "dest":  "Mistral-Small-4-119B-2603-MXFP4_MOE-00002-of-00003.gguf"
+                                          },
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/MXFP4_MOE/Mistral-Small-4-119B-2603-MXFP4_MOE-00003-of-00003.gguf",
+                                              "sha256":  "492313b6d897651cf917968d2e3b5ee66793a20cb35144752ffe7ca560679743",
+                                              "file_size":  22892579360,
+                                              "dest":  "Mistral-Small-4-119B-2603-MXFP4_MOE-00003-of-00003.gguf"
+                                          },
+                                          {
+                                              "url":  "https://huggingface.co/unsloth/Mistral-Small-4-119B-2603-GGUF/resolve/main/mmproj-F16.gguf",
+                                              "sha256":  "8afb53096537664e248a0b4a9240c25677bb0f8a8cb5a5aad3cd1d608776a4e7",
+                                              "file_size":  857078496,
+                                              "dest":  "mistral-small-4-119b.mmproj.gguf"
+                                          }
                                       ]
                    },
                    {
@@ -678,18 +699,17 @@
                                       ]
                    },
                    {
-                       "id":  "bge-m3-560m-q8",
-                       "name":  "BGE-M3 560M",
-                       "params":  "560M",
+                       "id":  "nomic-embed-v2-moe-q8",
+                       "name":  "Nomic Embed Text v2 MoE",
+                       "params":  "475M",
                        "kind":  "embedding",
-                       "license":  "MIT",
-                       "file_size":  634553760,
-                       "ram_estimate_gb":  1.2,
-                       "url":  "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf",
-                       "sha256":  "950f4a8e5e19477a6d3c26d2f162233c20002c601f75e4b002e3239997821167",
+                       "license":  "Apache-2.0",
+                       "file_size":  512225120,
+                       "ram_estimate_gb":  0.7,
+                       "url":  "https://huggingface.co/nomic-ai/nomic-embed-text-v2-moe-GGUF/resolve/main/nomic-embed-text-v2-moe.Q8_0.gguf",
+                       "sha256":  "06e7a7e594a26985523c18383aba4aad39fe6e14f08ffc6ab5b554e1ccdc3cff",
                        "quant":  "Q8_0",
-                       "description":  "Multilingual embedding model, strong cross-language retrieval. 8k context.",
-                       "context_tokens":  8192,
+                       "description":  "Official llama.cpp quantization. Multilingual mixture-of-experts embeddings with Matryoshka dimensions.",
                        "companions":  [
 
                                       ]

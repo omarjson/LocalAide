@@ -116,7 +116,11 @@ impl ModelService {
     }
 
     pub fn model_file_path(&self, id: &str) -> PathBuf {
-        self.models_dir.join(format!("{id}.gguf"))
+        let name = self
+            .get_model_entry(id)
+            .and_then(|e| e.dest)
+            .unwrap_or_else(|| format!("{id}.gguf"));
+        self.models_dir.join(name)
     }
 
     /// Folder where model and companion files are stored.

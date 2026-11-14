@@ -62,6 +62,13 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Deferred:** light theme (needs visual verification — no local Node toolchain), cloud backup (needs operator app registrations), reranker second stage.
 - **CI:** gate cycles during this round were diagnosed through check-run annotations (svelte-check output, npm ERESOLVE logs); the diagnostics emitters stay in ci.yml as permanent failure reporting. The gate surfaced 10+ rustfmt diffs from the round's new code — applied via a temporary ubuntu-only fmt workflow (same push-to-branch trick as the lockfile) rather than hand-transcribed diffs — and then 7 real clippy/compile findings (missing trait import, u64/usize mismatch, deprecated `Nonce::from_slice` in aes-gcm 0.11, a test fixture behind the new field, a missing `mut`). Full job logs are readable with the stored git credential, which beats annotation caps.
 
+## 2026-11-14 — Catalog v8: the operator rejected the v7 additions as outdated
+
+- The v7 additions filled missing families with old generations (Llama 3.2 Sep 2024, Phi-4-mini Feb 2025, DeepSeek-R1-0528 May 2025, Mistral Small 3.2 Jun 2025, gpt-oss Aug 2025, BGE-M3 Jan 2024). The operator reviewed and rejected them; late-2026 research found newer, superior models in every role.
+- v8 replaces all six: Spark-X2.6 4B/1.7B (Oct 2026, on-device agent models, Apache-2.0), GLM-5.3 Flash (Aug 2026, 320B-A18B MoE, vision, MIT), Mistral Small 4 (Mar 2026, 119B MoE, native MXFP4, vision, Apache-2.0), and Nomic Embed v2 MoE (official llama.cpp quantization). DeepSeek's V4.1-Flash was rejected on size — its smallest quant is 217 GB — and no small V4-family distill exists; Qwen3-VL-Embedding was rejected pending llama.cpp embedding-support verification.
+- Split-GGUF support: the catalog entry gained an optional primary `dest` override plus shard companions, so llama.cpp's `-00001-of-000NN` shard naming survives download and the engine loads all shards; the ModelInfo vision flag now requires an actual mmproj companion (shard companions are not vision); `verify-catalog.mjs` verifies shard totals against the hub.
+- The catalog generator now lives in the repo (`scripts/gen-catalog.ps1`): it parses catalog.rs into models.json and recomputes the integrity digest, replacing the session-local script from the v7 round.
+
 ## 2026-11-14 — Model catalog refresh (ADR-0008)
 
 - **Kiro artifact:** the open-gap list this log tracks; ADR-0008 records the trust model.
