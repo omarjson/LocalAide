@@ -1,5 +1,8 @@
 name: CI & Release Pipeline
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main ]
@@ -106,8 +109,17 @@ jobs:
             (git checkout -b ci/clippy-diag || git checkout ci/clippy-diag)
             git add .ci-diagnostics/clippy.log
             git commit -m "clippy diagnostics for ${GITHUB_SHA}"
-            git push origin ci/clippy-diag --force
-            echo "::error title=clippy::failed; full log pushed to ci/clippy-diag (.ci-diagnostics/clippy.log)"
+            git push origin ci/clippy-diag --force || true
+            # Belt and suspenders: lint headlines and locations as
+            # API-readable annotations.
+            grep -E "^warning: " .ci-diagnostics/clippy.log | head -10 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=clippy-w::$enc"
+            done
+            grep -E "^\s+--> " .ci-diagnostics/clippy.log | head -10 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=clippy-loc::$enc"
+            done
             exit 1
           fi
 
