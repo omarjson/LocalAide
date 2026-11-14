@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LocalAide mockup D: Plush</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Plush: the ghost is a sewn soft toy, and the app is made of the same stuff.
+     Flat fills, thick plum outlines, hard offset shadows like layered felt.
+     The memorable thing: every surface looks cut out and stacked. */
+  :root {
+    --blush: #f1dde4;   /* page */
+    --pillow: #fff8fa;  /* surfaces */
+    --lilac: #d9c8ef;   /* user message, selected */
+    --plum: #3a2346;    /* outlines, text, shadows */
+    --plum-2: #6b5577;  /* muted text, 6.1:1 on pillow */
+    --ember: #ff7a1a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden; background: var(--blush); color: var(--plum);
+    font: 600 16px/1.55 "Nunito", system-ui, sans-serif;
+    display: grid; grid-template-columns: 112px 1fr; gap: 22px; padding: 22px;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .felt { background: var(--pillow); border: 2.5px solid var(--plum); border-radius: 24px; box-shadow: 5px 5px 0 var(--plum); }
+  svg.i { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+  nav { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 0; }
+  nav .logo { width: 58px; height: 58px; margin-bottom: 10px; }
+  nav button { width: 84px; display: grid; justify-items: center; gap: 2px; padding: 8px 0; border-radius: 16px; font-size: 13px; font-weight: 700; color: var(--plum-2); border: 2.5px solid transparent; }
+  nav button.on { background: var(--lilac); color: var(--plum); border-color: var(--plum); }
+  nav .awake { margin-top: auto; font-size: 12px; text-align: center; line-height: 1.25; color: var(--plum-2); display: grid; justify-items: center; gap: 6px; }
+  nav .awake i { width: 16px; height: 16px; border-radius: 50%; background: var(--ember); border: 2.5px solid var(--plum); }
+
+  main { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; padding: 22px 30px 24px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 26px; font-weight: 800; }
+  .pill { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border: 2.5px solid var(--plum); border-radius: 999px; font-size: 14px; font-weight: 700; background: var(--pillow); }
+  .pill.ml { margin-left: auto; }
+  .pill.dark { background: var(--plum); color: var(--pillow); }
+  .pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--ember); }
+
+  .log { overflow: hidden; padding: 26px 0 0; }
+  .col { max-width: 760px; display: grid; gap: 22px; }
+  .me { justify-self: end; max-width: 70%; background: var(--lilac); border: 2.5px solid var(--plum); border-radius: 22px 22px 6px 22px; padding: 12px 18px; }
+  .ai { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: start; }
+  .ai > svg { width: 64px; height: 64px; }
+  .say { background: var(--pillow); border: 2.5px solid var(--plum); border-radius: 6px 22px 22px 22px; padding: 16px 20px; box-shadow: 4px 4px 0 var(--plum); font-weight: 500; }
+  .say b { font-weight: 800; }
+  .say ul { margin: 10px 0; padding-left: 22px; }
+  .say li { margin: 5px 0; }
+  .n { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 5px; border-radius: 7px; background: var(--ember); color: var(--plum); font-size: 12px; font-weight: 800; border: 2px solid var(--plum); vertical-align: 1px; }
+  .docs { display: flex; gap: 10px; margin-top: 14px; }
+  .docs span { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; padding: 5px 12px 5px 6px; border: 2px dashed var(--plum); border-radius: 12px; }
+  .docs .n { margin: 0; }
+  .acts { display: flex; gap: 8px; margin: 12px 0 0 80px; }
+  .acts button { font-size: 14px; font-weight: 700; padding: 5px 14px; border-radius: 999px; border: 2.5px solid var(--plum); background: var(--pillow); }
+
+  .box { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 22px; }
+  .box .att { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; border: 2.5px solid var(--plum); }
+  .box .ph { flex: 1; color: var(--plum-2); font-size: 17px; }
+  .send { padding: 11px 24px; border-radius: 16px; background: var(--ember); border: 2.5px solid var(--plum); box-shadow: 3px 3px 0 var(--plum); font-weight: 800; font-size: 16px; }
+  .hint { margin-top: 10px; font-size: 13.5px; color: var(--plum-2); }
+</style>
+</head>
+<body>
+<nav class="felt">
+  <svg class="logo" viewBox="0 0 512 512" aria-label="LocalAide"><path d="M256 70c-96 0-166 72-166 170v186c0 16 16 25 29 17l35-23 35 23c8 5 16 5 24 0l29-22 29 22c8 5 16 5 24 0l35-23 35 23c13 8 29-1 29-17V240c0-98-70-170-166-170z" fill="#fff8fa" stroke="#3a2346" stroke-width="20"/><path d="M170 330q86-28 172 0" fill="none" stroke="#3a2346" stroke-width="10" stroke-linecap="round" stroke-dasharray="14 16"/><circle cx="208" cy="230" r="22" fill="#3a2346"/><circle cx="304" cy="230" r="24" fill="#3a2346"/><circle cx="304" cy="230" r="12" fill="#ff7a1a"/></svg>
+  <button class="on"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat</button>
+  <button><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search</button>
+  <button><svg class="i" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6"/></svg>Memory</button>
+  <button><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>Skills</button>
+  <button><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg>Models</button>
+  <button><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</button>
+  <div class="awake"><i></i>Awake on<br>this computer</div>
+</nav>
+
+<main class="felt">
+  <header>
+    <h1>Landlord letter</h1>
+    <span class="pill ml"><i></i>Llama 3.2 3B</span>
+    <button class="pill dark">New chat</button>
+    <button class="pill" aria-label="More">More</button>
+  </header>
+  <div class="log"><div class="col">
+    <div class="me">Can you sum up the letter from my landlord? It's in my Documents folder.</div>
+    <div>
+      <div class="ai">
+        <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 70c-96 0-166 72-166 170v186c0 16 16 25 29 17l35-23 35 23c8 5 16 5 24 0l29-22 29 22c8 5 16 5 24 0l35-23 35 23c13 8 29-1 29-17V240c0-98-70-170-166-170z" fill="#fff8fa" stroke="#3a2346" stroke-width="20"/><circle cx="208" cy="230" r="22" fill="#3a2346"/><circle cx="304" cy="230" r="24" fill="#3a2346"/><circle cx="304" cy="230" r="12" fill="#ff7a1a"/><ellipse cx="256" cy="300" rx="22" ry="14" fill="#3a2346"/></svg>
+        <div class="say">
+          <p><b>Here is the short version.</b> Your lease ends on 31 May, and they would like you to stay.</p>
+          <ul>
+            <li>To renew, sign the form and send it back by 3 May.<span class="n">1</span></li>
+            <li>Rent goes up from £950 to £985 a month.<span class="n">1</span></li>
+            <li>If you plan to leave, you must give two months' notice.<span class="n">2</span></li>
+          </ul>
+          <p>Want me to draft a short reply?</p>
+          <div class="docs"><span><span class="n">1</span>Landlord letter, April.pdf</span><span><span class="n">2</span>Tenancy agreement 2024.pdf</span></div>
+        </div>
+      </div>
+      <div class="acts"><button>Copy</button><button>Retry</button></div>
+    </div>
+  </div></div>
+  <div>
+    <div class="box felt">
+      <button class="att" aria-label="Attach image"><svg class="i" viewBox="0 0 24 24"><path d="M20 12l-8 8a5 5 0 01-7-7l8-8a3.5 3.5 0 015 5l-8 8a2 2 0 01-3-3l7-7"/></svg></button>
+      <span class="ph">Ask anything</span>
+      <button class="send">Send</button>
+    </div>
+    <p class="hint">Enter sends. Esc stops a reply. Nothing leaves this computer.</p>
+  </div>
+</main>
+</body>
+</html>

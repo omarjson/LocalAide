@@ -5,7 +5,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::services::backup::{BackupEngine, BackupEntry, RestoreReport};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -133,11 +133,8 @@ pub async fn backup_restore(
 ) -> Result<RestoreReport, AppError> {
     // The file name must be a bare file name inside the backup folder — no
     // traversal into arbitrary paths.
-    if file_name.contains('\\')
-        || file_name.contains('/')
-        || file_name.contains("..")
-        || !file_name.ends_with(".labak")
-    {
+    let bare_name = Path::new(&file_name).file_name().and_then(|name| name.to_str());
+    if bare_name != Some(file_name.as_str()) || !file_name.ends_with(".labak") {
         return Err(AppError::invalid_input(
             "Restore takes a backup file name from the backup folder",
         ));

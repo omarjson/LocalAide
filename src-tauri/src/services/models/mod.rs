@@ -171,6 +171,13 @@ impl ModelService {
         self.model_file_path(id).is_file()
     }
 
+    /// True for models that can hold a chat. Embedding and reranker models
+    /// only score text, so they never serve as the chat engine.
+    pub fn is_chat_model(&self, id: &str) -> bool {
+        self.get_model_entry(id)
+            .is_some_and(|e| matches!(e.kind.as_str(), "chat" | "code"))
+    }
+
     /// Fetch the manifest from the project repository, validate it against
     /// the currently active catalog, persist it, and swap it in.
     pub async fn refresh_catalog(&self) -> Result<Arc<CatalogManifest>, AppError> {

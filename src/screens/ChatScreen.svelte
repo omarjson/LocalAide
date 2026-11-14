@@ -3,6 +3,10 @@
   import { fade, fly } from "svelte/transition";
   import { api, errorMessage } from "../lib/api/client";
   import { dur } from "../lib/motion";
+  import Button from "../components/Button.svelte";
+  import ConfirmDialog from "../components/ConfirmDialog.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
   import type { ChatMessage, ChatThread, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
@@ -55,6 +59,9 @@
   let pickerOpen = $state(false);
   let switchingModel = $state(false);
   let switchError = $state<string | null>(null);
+  let chatError = $state<string | null>(null);
+  let showMoreActions = $state(false);
+  let pendingDeleteThreadId = $state<string | null>(null);
   let modelsChecked = $state(false);
 
   let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
@@ -66,8 +73,9 @@
       installedModels = models
         .filter((m) => m.installed)
         .map((m) => ({ id: m.id, name: m.name }));
-    } catch {
+    } catch (e: unknown) {
       activeModelName = null;
+      chatError = errorMessage(e);
     } finally {
       modelsChecked = true;
     }
@@ -75,8 +83,9 @@
       const cloud = await api.getCloudConfig();
       const provider = cloud.providers.find((p) => p.id === cloud.active_provider_id);
       cloudChat = cloud.cloud_enabled && provider ? { label: provider.label, model: provider.model } : null;
-    } catch {
+    } catch (e: unknown) {
       cloudChat = null;
+      chatError = `Online settings could not load: ${errorMessage(e)}`;
     }
     // Restore the chat preferences from the last session (honest local
     // adaptation: what the user chose, not a profile).
@@ -86,11 +95,15 @@
       if (prefs.temperature !== null) temperature = prefs.temperature;
       if (prefs.max_tokens !== null) maxTokens = prefs.max_tokens;
       if (prefs.persona) persona = prefs.persona;
-    } catch {}
+    } catch (e: unknown) {
+      chatError = `Chat settings could not load: ${errorMessage(e)}`;
+    }
     // Skills for the "/" slash menu in the input box.
     try {
       skills = await api.skillsList();
-    } catch {}
+    } catch (e: unknown) {
+      chatError = `Saved skills could not load: ${errorMessage(e)}`;
+    }
   });
 
   // Persist the chosen chat preferences for the next session. The backend
@@ -103,7 +116,9 @@
         max_tokens: maxTokens,
         persona,
       });
-    } catch {}
+    } catch (e: unknown) {
+      chatError = `Chat settings could not save: ${errorMessage(e)}`;
+    }
   };
   let systemPrompt = $state("You are a helpful local AI assistant.");
   let temperature = $state(0.7);
@@ -131,10 +146,10 @@
   ];
 
   const starterPrompts = [
-    "Explain Rust's borrow checker with a real-world analogy.",
-    "Write a TypeScript helper to debounce async function calls.",
-    "Draft a release checklist for a local desktop application.",
-    "Summarize how retrieval-augmented generation works locally.",
+    "Help me plan my week.",
+    "Draft a polite email about a late payment.",
+    "Summarize this note in five short points.",
+    "Compare these two choices and explain the trade-offs.",
   ];
 
   const handleScroll = () => {
@@ -160,8 +175,9 @@
   const loadThreads = async () => {
     try {
       threads = await api.listChatThreads();
-    } catch {
+    } catch (e: unknown) {
       threads = [];
+      chatError = `Saved chats could not load: ${errorMessage(e)}`;
     }
   };
 
@@ -191,22 +207,33 @@
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(t.id);
-    } catch {
+    } catch (e: unknown) {
       messages = [];
+      chatError = `That chat could not load: ${errorMessage(e)}`;
     }
     showThreads = false;
     scrollToBottom(true);
   };
 
-  const deleteThread = async (id: string, e: MouseEvent) => {
-    e.stopPropagation();
+  const deleteThread = async (id: string) => {
     try {
       await api.deleteChatThread(id);
-      if (activeThreadId === id) {
-        newChat();
-      }
+      if (activeThreadId === id) newChat();
       await loadThreads();
-    } catch {}
+    } catch (e: unknown) {
+      chatError = `That chat could not be deleted: ${errorMessage(e)}`;
+    }
+  };
+
+  const askDeleteThread = (id: string, event: MouseEvent) => {
+    event.stopPropagation();
+    pendingDeleteThreadId = id;
+  };
+
+  const confirmDeleteThread = async () => {
+    const id = pendingDeleteThreadId;
+    pendingDeleteThreadId = null;
+    if (id) await deleteThread(id);
   };
 
   const persistCurrentThread = async () => {
@@ -223,7 +250,9 @@
     try {
       await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, $state.snapshot(messages));
       await loadThreads();
-    } catch {}
+    } catch (e: unknown) {
+      chatError = `The chat could not be saved: ${errorMessage(e)}`;
+    }
   };
 
   const exportCurrentThread = async (format: "markdown" | "json") => {
@@ -237,8 +266,8 @@
       a.download = res.filename;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      alert("Export failed: " + (e?.message ?? String(e)));
+    } catch (e: unknown) {
+      chatError = `The chat could not be exported: ${errorMessage(e)}`;
     }
   };
 
@@ -286,15 +315,17 @@
             activeJobId = null;
             persistCurrentThread();
           } else if (event.type === "error") {
-            messages[assistantIdx].content = `[Chat Error: ${event.payload.error}]`;
+            messages[assistantIdx].content = "I could not answer that. Try again.";
+            chatError = event.payload.error;
             streaming = false;
             activeJobId = null;
             persistCurrentThread();
           }
         }
       );
-    } catch (e: any) {
-      messages[assistantIdx].content = `[Chat Error: ${e?.message ?? String(e)}]`;
+    } catch (e: unknown) {
+      messages[assistantIdx].content = "I could not answer that. Try again.";
+      chatError = errorMessage(e);
       streaming = false;
       activeJobId = null;
       persistCurrentThread();
@@ -306,7 +337,9 @@
     if (activeJobId) {
       try {
         await api.cancelChat(activeJobId);
-      } catch {}
+      } catch (e: unknown) {
+        chatError = `The response could not stop: ${errorMessage(e)}`;
+      }
     }
     streaming = false;
     activeJobId = null;
@@ -315,12 +348,10 @@
 
   const retryLast = () => {
     if (streaming || messages.length < 2) return;
-    const lastUser = [...messages].reverse().find(m => m.role === "user");
+    const lastUser = [...messages].reverse().find((message) => message.role === "user");
     if (!lastUser) return;
-    // Pop off last assistant turn
-    if (messages[messages.length - 1]?.role === "assistant") {
-      messages.pop();
-    }
+    chatError = null;
+    if (messages[messages.length - 1]?.role === "assistant") messages.pop();
     input = lastUser.content;
     send();
   };
@@ -342,8 +373,9 @@
       const res = await api.summarize({ text: last.content });
       messages[summaryIdx].content = res.summary;
       persistCurrentThread();
-    } catch (e: any) {
-      messages[summaryIdx].content = `[Summarize error: ${e?.message ?? String(e)}]`;
+    } catch (e: unknown) {
+      messages[summaryIdx].content = "I could not make a summary. Try again.";
+      chatError = `The summary could not be made: ${errorMessage(e)}`;
     } finally {
       streaming = false;
     }
@@ -364,8 +396,9 @@
       const out = res.success ? (res.truncated ? `${res.output.slice(0, 4000)}\n... [truncated at 1MB]` : res.output.slice(0, 4000)) : `Error: ${res.error}`;
       messages.push({ role: "assistant", content: `File contents:\n\`\`\`\n${out}\n\`\`\``, ts: Date.now() });
       persistCurrentThread();
-    } catch (e: any) {
-      messages.push({ role: "assistant", content: `[tool error: ${e?.message ?? String(e)}]`, ts: Date.now() });
+    } catch (e: unknown) {
+      chatError = `The file action failed: ${errorMessage(e)}`;
+      messages.push({ role: "assistant", content: "The file action failed. See the message above and try again.", ts: Date.now() });
     }
     toolPath = "";
   };
@@ -388,8 +421,9 @@
         return;
       }
       pushToolResponse(res, "executed");
-    } catch (e: any) {
-      messages.push({ role: "assistant", content: `[tool error: ${e?.message ?? String(e)}]`, ts: Date.now() });
+    } catch (e: unknown) {
+      chatError = `The file action failed: ${errorMessage(e)}`;
+      messages.push({ role: "assistant", content: "The file action failed. See the message above and try again.", ts: Date.now() });
     }
   };
 
@@ -406,8 +440,9 @@
         session_token: token,
       });
       pushToolResponse(res, approved ? "approved" : "denied");
-    } catch (e: any) {
-      messages.push({ role: "assistant", content: `[tool error: ${e?.message ?? String(e)}]`, ts: Date.now() });
+    } catch (e: unknown) {
+      chatError = `The file action failed: ${errorMessage(e)}`;
+      messages.push({ role: "assistant", content: "The file action failed. See the message above and try again.", ts: Date.now() });
     }
   };
 
@@ -431,8 +466,8 @@
     try {
       await api.loadInferenceModel(id);
       activeModelName = name;
-    } catch (e: any) {
-      switchError = e?.message ?? "Could not load the model.";
+    } catch (e: unknown) {
+      switchError = errorMessage(e);
     } finally {
       switchingModel = false;
     }
@@ -445,86 +480,68 @@
 </script>
 
 <div class="max-w-4xl mx-auto h-full flex flex-col relative">
-  <!-- Header Bar -->
-  <div class="flex items-center justify-between px-2 py-3 border-b border-edge">
-    <div class="flex items-center gap-3">
-      <button
-        onclick={() => showThreads = !showThreads}
-        class="flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 text-ink-300 font-medium transition-colors"
-      >
-        <span class="text-ink-400 inline-flex"><Icon name="chat" class="w-4 h-4" /></span>
-        <span class="max-w-[140px] truncate">{activeThreadTitle}</span>
-        <span class="text-xs text-ink-400 font-mono">({threads.length})</span>
-      </button>
-
-      <div class="hidden sm:flex items-center gap-2">
-        {#if cloudChat}
-          <span class="text-xs font-mono text-amber-300" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">Cloud: {cloudChat.model} · {cloudChat.label}</span>
-        {:else}
-          <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          <div class="relative">
-            <button
-              type="button"
-              onclick={() => (pickerOpen = !pickerOpen)}
-              disabled={switchingModel}
-              class="text-xs font-mono text-ink-400 hover:text-ink-200 disabled:opacity-50 flex items-center gap-1.5"
-              title="Switch the local chat model"
-            >
-              {switchingModel ? "Loading…" : (activeModelName ?? model)}
-              {#if installedModels.length > 1}
-                <span class="text-[10px] text-ink-500">▾</span>
-              {/if}
-            </button>
-            {#if switchError}
-              <div class="absolute left-0 top-6 z-20 max-w-[280px] bg-rose-950/90 border border-rose-500/40 rounded-lg px-3 py-1.5 text-[11px] text-rose-200 font-mono" role="alert">
-                {switchError}
-              </div>
-            {:else if pickerOpen && installedModels.length > 1}
-              <div class="absolute left-0 top-6 z-20 min-w-[240px] max-h-64 overflow-y-auto bg-ink-950 border border-edge rounded-xl shadow-xl py-1">
-                {#each installedModels as m (m.id)}
-                  <button
-                    type="button"
-                    onclick={() => switchModel(m.id, m.name)}
-                    class="w-full text-left px-3 py-1.5 text-xs hover:bg-ink-900 transition-colors {(activeModelName === m.name ? 'text-ember-300' : 'text-ink-300')}"
-                  >
-                    {m.name}
-                  </button>
-                {/each}
-              </div>
-            {/if}
+  <PageHeader
+    title="Chat"
+    description={cloudChat ? `Online provider: ${cloudChat.label}.` : "Ask questions on this computer. Your messages stay here."}
+  >
+    {#snippet actions()}
+      <Button variant="primary" onclick={newChat}><Icon name="plus" class="h-[18px] w-[18px]" />New chat</Button>
+      <div class="relative">
+        <Button variant="subtle" ariaLabel="More chat actions" onclick={() => showMoreActions = !showMoreActions}>
+          <Icon name="more" class="h-[18px] w-[18px]" />
+          More
+        </Button>
+        {#if showMoreActions}
+          <div class="absolute right-0 top-10 z-30 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+            <button type="button" onclick={() => { showSystem = !showSystem; showMoreActions = false; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5">Response style</button>
+            <button type="button" onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 disabled:opacity-40">Export chat</button>
+            <button type="button" onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 disabled:opacity-40">Summarize chat</button>
           </div>
         {/if}
       </div>
-    </div>
+    {/snippet}
+  </PageHeader>
 
-    <div class="flex items-center gap-2">
-      <button
-        onclick={newChat}
-        class="px-2.5 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 text-ink-200 font-medium transition-colors"
-      >
-        + New chat
-      </button>
-      <button
-        onclick={() => showSystem = !showSystem}
-        class="px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 text-ink-300 transition-colors"
-      >
-        Persona
-      </button>
-      <button
-        onclick={() => exportCurrentThread("markdown")}
-        disabled={messages.length === 0}
-        class="px-2.5 py-1 text-xs rounded-lg border border-edge hover:bg-ink-800/60 disabled:opacity-30 text-ink-400 transition-colors"
-        title="Export conversation as Markdown"
-      >
-        Export
-      </button>
-      <button
-        onclick={summarizeLast}
-        disabled={streaming || messages.length < 2}
-        class="px-2.5 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 disabled:opacity-40 text-ink-300 transition-colors"
-      >
-        Summarize
-      </button>
+  <div class="relative mb-3 flex items-center justify-between gap-3 border-b border-ink-800 pb-3">
+    <button
+      type="button"
+      aria-expanded={showThreads}
+      onclick={() => showThreads = !showThreads}
+      class="flex min-w-0 items-center gap-2 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm font-semibold text-ink-200 hover:bg-ink-800"
+    >
+      <Icon name="chat" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
+      <span class="max-w-[180px] truncate">{activeThreadTitle}</span>
+      <span class="text-sm text-ink-400">({threads.length})</span>
+    </button>
+
+    <div class="hidden items-center gap-2 sm:flex">
+      {#if cloudChat}
+        <span class="text-sm text-amber-300" title="Chat uses your chosen online provider.">Online: {cloudChat.model} · {cloudChat.label}</span>
+      {:else}
+        <span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+        <div class="relative">
+          <button
+            type="button"
+            aria-expanded={pickerOpen}
+            onclick={() => pickerOpen = !pickerOpen}
+            disabled={switchingModel}
+            class="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-200 disabled:opacity-50"
+            title="Switch the local chat model"
+          >
+            {switchingModel ? "Loading…" : (activeModelName ?? model)}
+            {#if installedModels.length > 1}<Icon name="chevron-right" class={`h-4 w-4 transition-transform ${pickerOpen ? 'rotate-90' : ''}`} />{/if}
+          </button>
+          {#if switchError}
+            <div class="absolute left-0 top-9 z-20 max-w-[280px] rounded-md border border-rose-500/40 bg-rose-950/90 px-3 py-2 text-sm text-rose-200" role="alert">{switchError}</div>
+          {:else if pickerOpen && installedModels.length > 1}
+            <div class="absolute left-0 top-9 z-20 max-h-64 min-w-[240px] overflow-y-auto rounded-md border border-edge bg-ink-950 py-1 shadow-xl">
+              {#each installedModels as installed (installed.id)}
+                <button type="button" onclick={() => void switchModel(installed.id, installed.name)} class={`w-full px-3 py-2 text-left text-sm hover:bg-ink-900 ${activeModelName === installed.name ? 'text-ember-300' : 'text-ink-300'}`}>{installed.name}</button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -536,10 +553,10 @@
     >
       <div class="flex items-center justify-between pb-2 border-b border-edge text-xs font-semibold text-ink-300">
         <span>Saved Conversations</span>
-        <button onclick={newChat} class="text-[11px] text-ember-400 hover:underline">+ New</button>
+        <button onclick={newChat} class="text-xs text-ember-400 hover:underline">+ New</button>
       </div>
       {#if threads.length === 0}
-        <div class="text-[11px] text-ink-400 py-3 text-center">No saved chats yet.</div>
+        <div class="text-xs text-ink-400 py-3 text-center">No saved chats yet.</div>
       {:else}
         {#each threads as t}
           <div
@@ -551,10 +568,10 @@
           >
             <div class="truncate pr-2">
               <div class="font-medium truncate">{t.title}</div>
-              <div class="text-xs text-ink-400 font-mono">{t.message_count} messages</div>
+              <div class="text-sm text-ink-400">{t.message_count} messages</div>
             </div>
             <button
-              onclick={(e) => deleteThread(t.id, e)}
+              onclick={(event) => askDeleteThread(t.id, event)}
               class="opacity-0 group-hover:opacity-100 p-1 text-ink-400 hover:text-rose-400 transition-opacity"
               title="Delete thread"
               aria-label="Delete thread {t.title}"
@@ -567,21 +584,21 @@
     </div>
   {/if}
 
-  <!-- Persona / System Prompt Selector -->
+  <!-- Response style / System Prompt Selector -->
   {#if showSystem}
     <div class="p-3 bg-ink-900/60 border-b border-edge text-xs space-y-2">
       <div class="flex items-center gap-2 flex-wrap">
-        <span class="text-ink-400">Presets:</span>
+        <span class="text-ink-400">Styles:</span>
         {#each systemPresets as p}
           <button
             onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }}
-            class={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-on-ember font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
+            class={`px-2 py-1 rounded text-sm transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-on-ember font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
           >
             {p.label}
           </button>
         {/each}
         <span class="ml-auto flex items-center gap-2 text-ink-400">
-          Temp
+          Creativity
           <input
             type="range"
             min="0"
@@ -592,16 +609,20 @@
             class="w-24 accent-ember-600"
             aria-label="Sampling temperature"
           />
-          <span class="font-mono text-ink-300">{temperature.toFixed(1)}</span>
+          <span class="text-sm text-ink-300">{temperature.toFixed(1)}</span>
         </span>
       </div>
       <textarea
         bind:value={systemPrompt}
         rows={2}
         onblur={savePrefs}
-        class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-ink-200 font-mono text-xs focus:outline-none focus:border-ink-600"
+        class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-ink-200 text-sm leading-6 focus:outline-none focus:border-ink-600"
       ></textarea>
     </div>
+  {/if}
+
+  {#if chatError}
+    <div class="mb-3"><ErrorBanner message={chatError} onRetry={retryLast} onDismiss={() => chatError = null} /></div>
   {/if}
 
   <!-- Message Stream Container -->
@@ -709,4 +730,14 @@
     onApproveSession={() => runApprovedTool(true, sessionToken)}
     onDeny={() => runApprovedTool(false)}
   />
+
+  {#if pendingDeleteThreadId}
+    <ConfirmDialog
+      title="Delete this chat?"
+      message="This removes the saved conversation from this computer. You cannot undo it."
+      confirmLabel="Delete chat"
+      onConfirm={() => void confirmDeleteThread()}
+      onCancel={() => pendingDeleteThreadId = null}
+    />
+  {/if}
 </div>

@@ -301,7 +301,7 @@ export class ApiClient {
 
   async computeRam(modelIds: string[]): Promise<RamComputationResponse> {
     return invoke<RamComputationResponse>("config_compute_ram", {
-      model_ids: modelIds,
+      modelIds,
     });
   }
 
@@ -452,8 +452,8 @@ export class ApiClient {
 
   async setBackupConfig(targetDir: string | null, includeApiKeys: boolean): Promise<void> {
     return invoke<void>("backup_config_set", {
-      target_dir: targetDir,
-      include_api_keys: includeApiKeys,
+      targetDir,
+      includeApiKeys,
     });
   }
 
@@ -464,13 +464,13 @@ export class ApiClient {
   ): Promise<BackupRunResponse> {
     return invoke<BackupRunResponse>("backup_run", {
       passphrase,
-      include_api_keys: includeApiKeys,
-      target_dir: targetDir,
+      includeApiKeys,
+      targetDir,
     });
   }
 
   async listBackups(targetDir?: string): Promise<BackupEntry[]> {
-    return invoke<BackupEntry[]>("backup_list", { target_dir: targetDir });
+    return invoke<BackupEntry[]>("backup_list", { targetDir });
   }
 
   async restoreBackup(
@@ -480,10 +480,10 @@ export class ApiClient {
     targetDir?: string
   ): Promise<RestoreReport> {
     return invoke<RestoreReport>("backup_restore", {
-      file_name: fileName,
+      fileName,
       passphrase,
-      restore_config: restoreConfig,
-      target_dir: targetDir,
+      restoreConfig,
+      targetDir,
     });
   }
 

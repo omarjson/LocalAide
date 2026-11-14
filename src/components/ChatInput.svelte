@@ -103,9 +103,9 @@
     <button
       type="button"
       onclick={() => showTools = !showTools}
-      class="text-[11px] px-2 py-1 rounded-md bg-white/5 border border-edge text-ink-400 hover:text-ink-200"
+      class="text-xs px-2 py-1 rounded-md bg-veil/5 border border-edge text-ink-400 hover:text-ink-200"
     >
-      {showTools ? 'Hide tool panel' : 'File tool'}
+      {showTools ? 'Hide file tools' : 'File tools'}
     </button>
     <div class="text-xs text-ink-400">Enter to send • Shift+Enter for newline • Esc to cancel • / for skills</div>
   </div>
@@ -117,12 +117,12 @@
           aria-label="Workspace file path"
           bind:value={toolPath}
           placeholder="Workspace file path to inspect or write…"
-          class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500"
+          class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 font-mono"
         />
         <button
           type="button"
           onclick={onReadFile}
-          class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300"
+          class="px-3 rounded-xl bg-veil/5 border border-edge hover:bg-veil/10 text-xs text-ink-300"
         >
           Read
         </button>
@@ -131,7 +131,7 @@
           onclick={onWriteFile}
           disabled={!toolContent.trim()}
           title="write_file always requires explicit approval in the sandbox"
-          class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300 disabled:opacity-40"
+          class="px-3 rounded-xl bg-veil/5 border border-edge hover:bg-veil/10 text-xs text-ink-300 disabled:opacity-40"
         >
           Write
         </button>
@@ -141,7 +141,7 @@
         bind:value={toolContent}
         rows={3}
         placeholder="Content to write into the file above. Writes are jailed to the workspace and need your approval."
-        class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-xs text-ink-200 placeholder-ink-600 focus:outline-none focus:border-ember-500 font-mono resize-none"
+        class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 resize-none"
       ></textarea>
     </div>
   {/if}
@@ -170,7 +170,7 @@
           role="option"
           aria-selected={i === skillCursor}
           onclick={() => pickSkill(skill)}
-          class={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${i === skillCursor ? 'bg-white/10' : 'hover:bg-white/5'}`}
+          class={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${i === skillCursor ? 'bg-veil/10' : 'hover:bg-veil/5'}`}
         >
           <Icon name="skills" class="w-3.5 h-3.5 text-ember-400 shrink-0" />
           <span class="font-mono text-ink-100 shrink-0">/{skill.name}</span>
@@ -182,7 +182,7 @@
 
   <form onsubmit={(e) => { e.preventDefault(); if (streaming) onCancel?.(); else onSend(); }} class="flex gap-2">
     <label
-      class="px-3 rounded-xl bg-white/5 border border-edge hover:bg-white/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
+      class="px-3 rounded-xl bg-veil/5 border border-edge hover:bg-veil/10 text-xs text-ink-300 flex items-center cursor-pointer {streaming ? 'opacity-40 pointer-events-none' : ''}"
       title="Attach an image. Needs a vision model."
     >
       Image

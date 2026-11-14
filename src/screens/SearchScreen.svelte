@@ -1,6 +1,13 @@
 <script lang="ts">
-  import Icon from "../components/Icon.svelte";
+  import { onMount } from "svelte";
+  import Button from "../components/Button.svelte";
+  import ConfirmDialog from "../components/ConfirmDialog.svelte";
+  import EmptyState from "../components/EmptyState.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
+  import Icon from "../components/Icon.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
+  import StatusBadge from "../components/StatusBadge.svelte";
+  import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage as errMsg } from "../lib/api/client";
   import type {
     EmbeddingStatusResponse,
@@ -10,13 +17,11 @@
     WebHit,
     WebPage,
   } from "../lib/api/bindings";
-  import { onMount } from "svelte";
+
+  type SearchMode = "keyword" | "semantic" | "hybrid" | "web";
 
   let query = $state("");
-  // Keyword is BM25-only. Semantic and hybrid rank with vectors from the
-  // local embedding engine and quietly fall back to keyword when it is off.
-  // Web searches the open internet through the configured provider.
-  let mode = $state<"keyword" | "semantic" | "hybrid" | "web">("keyword");
+  let mode = $state<SearchMode>("keyword");
   let results = $state<SearchResultDoc[]>([]);
   let webResults = $state<WebHit[]>([]);
   let webPages = $state<Record<string, WebPage>>({});
@@ -29,13 +34,23 @@
   let searchDurationMs = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
+  let folderInputEl = $state<HTMLInputElement | null>(null);
+  let singleFileInputEl = $state<HTMLInputElement | null>(null);
   let singleFile = $state("");
   let embedding = $state<EmbeddingStatusResponse | null>(null);
   let embedBusy = $state(false);
-  // Reranker second stage: re-orders the top search results by relevance
-  // whenever its engine is running; search silently skips it when off.
   let rerank = $state<RerankStatusResponse | null>(null);
   let rerankBusy = $state(false);
+  let showSearchSettings = $state(false);
+  let showIndexing = $state(false);
+  let openMenuPath = $state<string | null>(null);
+  let pendingDeletePath = $state<string | null>(null);
+
+  const localSearchTabs = [
+    { value: "keyword", label: "Exact words" },
+    { value: "hybrid", label: "Words + meaning" },
+    { value: "semantic", label: "Meaning" },
+  ];
 
   onMount(async () => {
     await refreshStats();
@@ -48,7 +63,7 @@
   const refreshRerank = async () => {
     try {
       rerank = await api.getRerankStatus();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
     }
   };
@@ -63,7 +78,7 @@
         await api.startRerankEngine();
       }
       await refreshRerank();
-    } catch (e) {
+    } catch (e: unknown) {
       errorMessage = errMsg(e);
     } finally {
       rerankBusy = false;
@@ -73,7 +88,7 @@
   const refreshEmbedding = async () => {
     try {
       embedding = await api.getEmbeddingStatus();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
     }
   };
@@ -88,7 +103,7 @@
         await api.startEmbeddingEngine();
       }
       await refreshEmbedding();
-    } catch (e) {
+    } catch (e: unknown) {
       errorMessage = errMsg(e);
     } finally {
       embedBusy = false;
@@ -101,7 +116,7 @@
     try {
       await api.backfillEmbeddings();
       await refreshEmbedding();
-    } catch (e) {
+    } catch (e: unknown) {
       errorMessage = errMsg(e);
     } finally {
       embedBusy = false;
@@ -114,7 +129,7 @@
       if (!query.trim()) {
         results = docs;
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
     } finally {
       libraryLoaded = true;
@@ -135,21 +150,18 @@
       if (mode === "web") {
         results = [];
         webResults = await api.webSearch(query);
-        searchDurationMs = Math.round(performance.now() - start);
       } else {
         webResults = [];
         results = await api.searchIndex({ query, mode, limit: 50 });
-        searchDurationMs = Math.round(performance.now() - start);
       }
-    } catch (e: any) {
-      errorMessage = e?.message || "Search failed";
+      searchDurationMs = Math.round(performance.now() - start);
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     } finally {
       loading = false;
     }
   };
 
-  // Read a web result's page as text (Jina Reader keyless by default,
-  // Firecrawl when its key is configured).
   const readPage = async (url: string) => {
     if (webPages[url]) return;
     readingUrl = url;
@@ -157,8 +169,8 @@
     try {
       const page = await api.webCrawl(url);
       webPages = { ...webPages, [url]: page };
-    } catch (e: any) {
-      errorMessage = e?.message || "Could not read that page";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     } finally {
       readingUrl = null;
     }
@@ -169,12 +181,12 @@
     loading = true;
     errorMessage = null;
     try {
-      const resp = await api.indexFolder(folder);
+      await api.indexFolder(folder);
       await refreshStats();
       query = "";
       await loadInitialLibrary();
-    } catch (e: any) {
-      errorMessage = e?.message || "Folder indexing failed";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     } finally {
       loading = false;
     }
@@ -183,7 +195,7 @@
   const refreshStats = async () => {
     try {
       stats = await api.getIndexerStats();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
     }
   };
@@ -194,8 +206,8 @@
     try {
       await api.watchFolder(folder);
       watching = true;
-    } catch (e: any) {
-      errorMessage = e?.message || "File watch failed";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     }
   };
 
@@ -203,8 +215,8 @@
     errorMessage = null;
     try {
       await api.stopWatchingFolder();
-    } catch (e: any) {
-      errorMessage = e?.message || "Failed to stop the folder watcher";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
       return;
     }
     watching = false;
@@ -220,298 +232,373 @@
       await refreshStats();
       query = "";
       await loadInitialLibrary();
-    } catch (e: any) {
-      errorMessage = e?.message || "File indexing failed";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     } finally {
       loading = false;
     }
   };
 
   const removeDoc = async (path: string) => {
+    errorMessage = null;
     try {
       await api.removeIndexedDoc(path);
-      results = results.filter(r => r.path !== path);
+      results = results.filter((result) => result.path !== path);
       await refreshStats();
-    } catch (e: any) {
-      errorMessage = e?.message || "Failed to remove document";
+    } catch (e: unknown) {
+      errorMessage = errMsg(e);
     }
   };
 
-  const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      search();
-    } else if (e.key === "Escape") {
-      query = "";
-      loadInitialLibrary();
+  const askRemoveDoc = (path: string) => {
+    openMenuPath = null;
+    pendingDeletePath = path;
+  };
+
+  const confirmRemoveDoc = async () => {
+    const path = pendingDeletePath;
+    pendingDeletePath = null;
+    if (path) await removeDoc(path);
+  };
+
+  const focusFolder = () => {
+    showIndexing = true;
+    requestAnimationFrame(() => folderInputEl?.focus());
+  };
+
+  const focusFile = () => {
+    showIndexing = true;
+    requestAnimationFrame(() => singleFileInputEl?.focus());
+  };
+
+  const setSearchTab = (value: string) => {
+    if (value === "web") {
+      // A web query leaves this computer, so it waits for Enter or the button.
+      mode = "web";
+      return;
     }
+    mode = mode === "web" ? "keyword" : mode;
+    if (query.length > 2) void search();
+  };
+
+  const setLocalMode = (value: string) => {
+    if (value === "keyword" || value === "semantic" || value === "hybrid") {
+      mode = value;
+      if (query.length > 2) void search();
+    }
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Enter") {
+      void search();
+    } else if (event.key === "Escape") {
+      query = "";
+      void loadInitialLibrary();
+    }
+  };
+
+  const fileType = (title: string) => {
+    const extension = title.split(".").pop()?.toUpperCase();
+    return extension && extension.length <= 4 ? extension : "FILE";
   };
 
   $effect(() => {
+    // Typing never sends a web query. Only Enter or the button does.
+    if (mode === "web") return;
     if (query.length > 2) {
-      const timer = setTimeout(() => search(), 150);
+      const timer = setTimeout(() => void search(), 150);
       return () => clearTimeout(timer);
     } else if (query.length === 0) {
-      loadInitialLibrary();
+      void loadInitialLibrary();
       searchDurationMs = null;
     }
   });
 </script>
 
-<div class="max-w-4xl mx-auto space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h2 class="text-lg font-semibold tracking-tight text-ink-100">Document Library & Retrieval</h2>
-      <p class="text-xs text-ink-400">Embedded SQLite WAL storage with BM25 keyword retrieval.</p>
-    </div>
-    {#if stats}
-      <div class="flex items-center gap-4 text-xs font-mono text-ink-300 bg-ink-900 border border-edge rounded-lg px-3 py-1.5">
-        <span>Docs: {stats.doc_count}</span>
-        <span>Size: {(stats.total_bytes / 1024).toFixed(1)} KB</span>
-      </div>
-    {/if}
-  </div>
+<div class="mx-auto max-w-5xl pb-10">
+  <PageHeader
+    title="Documents"
+    description="Find things in the folders you add. Your files stay on this computer."
+  >
+    {#snippet actions()}
+      <Button variant="secondary" onclick={focusFile}>
+        <Icon name="file-plus" class="h-[18px] w-[18px]" />
+        Add a file
+      </Button>
+      <Button variant="primary" onclick={focusFolder}>
+        <Icon name="folder-plus" class="h-[18px] w-[18px]" />
+        Add a folder
+      </Button>
+    {/snippet}
+  </PageHeader>
 
   {#if errorMessage}
-    <ErrorBanner message={errorMessage} onDismiss={() => errorMessage = null} />
+    <div class="mb-4">
+      <ErrorBanner
+        message={errorMessage}
+        onRetry={() => void (query.trim() ? search() : loadInitialLibrary())}
+        onDismiss={() => errorMessage = null}
+      />
+    </div>
   {/if}
 
-  <div class="border border-edge rounded-2xl p-4 bg-ink-900/40 space-y-3">
-    <div class="flex items-center justify-between gap-3 flex-wrap">
-      <div>
-        <div class="text-xs font-semibold text-ink-300 mb-1.5">Search mode</div>
-        <div class="flex items-center gap-2">
-          {#each ([["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"], ["web", "Web"]] as const) as [value, label]}
-            <button
-              type="button"
-              onclick={() => { mode = value; if (query.length > 2) search(); }}
-              class="text-xs font-mono px-2.5 py-1 rounded-full border transition-colors {mode === value
-                ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
-                : 'border-edge text-ink-400 hover:border-edge hover:text-ink-300'}"
-            >
-              {label}
-            </button>
-          {/each}
-        </div>
-      </div>
-      <div class="flex items-center gap-3 text-xs font-mono">
-        {#if embedding?.ready}
-          <span class="text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-2.5 py-1">
-            Embeddings on · {embedding.model_id}{#if embedding.dimension} · {embedding.dimension}d{/if}
-          </span>
-          {#if embedding && embedding.embedded_chunks < embedding.total_chunks}
-            <button onclick={backfill} disabled={embedBusy} class="text-ink-300 border border-edge rounded-full px-2.5 py-1 hover:border-ink-600 disabled:opacity-40">
-              {embedBusy ? "Backfilling…" : `Backfill ${embedding.total_chunks - embedding.embedded_chunks} chunks`}
-            </button>
-          {/if}
-          <button onclick={toggleEngine} disabled={embedBusy} class="text-rose-300 border border-rose-500/30 rounded-full px-2.5 py-1 hover:border-rose-500/60 disabled:opacity-40">
-            Stop
-          </button>
-        {:else}
-          <span class="text-ink-400 border border-edge rounded-full px-2.5 py-1">
-            {#if embedding && embedding.total_chunks > 0}
-              Keyword only · {embedding.embedded_chunks}/{embedding.total_chunks} chunks vectorized
-            {:else}
-              Keyword only
-            {/if}
-          </span>
-          <button onclick={toggleEngine} disabled={embedBusy} class="text-ember-300 border border-ember-500/40 rounded-full px-2.5 py-1 hover:border-ember-500/70 disabled:opacity-40">
-            {embedBusy ? "Starting…" : "Start embeddings"}
-          </button>
-        {/if}
-        {#if rerank?.ready}
-          <span class="text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-2.5 py-1">
-            Rerank on · {rerank.model_id}
-          </span>
-          <button onclick={toggleRerank} disabled={rerankBusy} class="text-rose-300 border border-rose-500/30 rounded-full px-2.5 py-1 hover:border-rose-500/60 disabled:opacity-40">
-            Stop rerank
-          </button>
-        {:else}
-          <button onclick={toggleRerank} disabled={rerankBusy} class="text-ember-300 border border-ember-500/40 rounded-full px-2.5 py-1 hover:border-ember-500/70 disabled:opacity-40">
-            {rerankBusy ? "Starting…" : "Start reranker"}
-          </button>
-        {/if}
-      </div>
-    </div>
-    {#if mode !== "keyword" && mode !== "web" && !embedding?.ready}
-      <p class="text-[11px] text-amber-300/90 font-mono">
-        {mode} mode needs the embedding engine — results fall back to keyword ranking until it is running.
-      </p>
-    {/if}
-    {#if mode === "web"}
-      <p class="text-[11px] text-ink-400 font-mono">
-        Web search runs on the provider chosen in Settings → Web search (DuckDuckGo by default — no key needed). Queries leave this machine only when you press Search.
-      </p>
-    {/if}
-  </div>
-
-  <div class="border border-edge rounded-2xl p-4 bg-ink-900/40 space-y-3">
-    <div class="flex items-center justify-between">
-      <div class="text-xs font-semibold text-ink-300">Index Local Directory</div>
-      {#if watching}
+  <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+    <div class="flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-md border border-ink-700 border-b border-b-ember-500 bg-ink-900 px-3">
+      <Icon name="search" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
+      <input
+        bind:this={searchInputEl}
+        type="search"
+        aria-label={mode === "web" ? "Search the web" : "Search documents"}
+        placeholder={mode === "web" ? "Search the web" : "Search your documents"}
+        bind:value={query}
+        onkeydown={handleKeydown}
+        class="min-w-0 flex-1 bg-transparent text-base text-ink-100 outline-none placeholder:text-ink-400"
+      />
+      {#if query}
         <button
-          onclick={stopWatch}
-          class="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50 rounded-full px-2.5 py-1 transition-colors"
-          title="Stop watching this directory"
+          type="button"
+          aria-label="Clear search"
+          onclick={() => { query = ""; void loadInitialLibrary(); }}
+          class="grid h-7 w-7 place-items-center rounded-md text-ink-400 hover:bg-veil/5 hover:text-ink-50"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          Watching — click to stop
+          <Icon name="close" class="h-4 w-4" />
         </button>
       {/if}
     </div>
-    <div class="flex gap-2">
-      <input
-        type="text"
-        placeholder="C:\Users\you\Documents\notes"
-        id="folder-input"
-        bind:value={folder}
-        class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
-      />
-      <button onclick={indexFolder} disabled={loading || !folder.trim()} class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-on-ember transition-colors">
-        {loading ? "Indexing…" : "Index Folder"}
-      </button>
-      <button onclick={startWatch} disabled={watching || !folder.trim()} class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
-        {watching ? "Watching" : "Watch"}
-      </button>
-    </div>
-    <div class="flex gap-2">
-      <input
-        type="text"
-        placeholder="…or index a single file: C:\Users\you\Documents\note.md"
-        bind:value={singleFile}
-        class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
-      />
-      <button onclick={indexSingleFile} disabled={loading || !singleFile.trim()} class="px-4 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-300 transition-colors">
-        Index File
-      </button>
-    </div>
+    <Tabs
+      items={[{ value: "local", label: "My documents" }, { value: "web", label: "The web" }]}
+      value={mode === "web" ? "web" : "local"}
+      onChange={setSearchTab}
+      ariaLabel="Search source"
+    />
+    {#if mode === "web"}
+      <Button variant="primary" disabled={loading || !query.trim()} onclick={() => void search()}>
+        Search the web
+      </Button>
+    {/if}
   </div>
 
-  <div class="space-y-3">
-    <div class="flex gap-2">
-      <div class="relative flex-1">
-        <input
-          bind:this={searchInputEl}
-          type="text"
-          aria-label={mode === "web" ? "Search the web" : "Search documents"}
-          placeholder={mode === "web"
-            ? "Search the web (Enter to search)…"
-            : "Search documents by keyword (Enter to search, Esc to clear)…"}
-          bind:value={query}
-          onkeydown={handleKeydown}
-          class="w-full bg-ink-900 border border-edge rounded-lg pl-3 pr-8 py-2 text-sm text-ink-200 placeholder-ink-500 focus:outline-none focus:border-edge font-mono"
-        />
-        {#if query}
-          <button
-            onclick={() => { query = ""; loadInitialLibrary(); }}
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-400 hover:text-ink-300"
-          >
-            <Icon name="close" class="w-3.5 h-3.5" />
-          </button>
+  <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-400">
+    <span>{stats?.doc_count ?? results.length} {stats?.doc_count === 1 ? "document" : "documents"}</span>
+    {#if stats}
+      <span>{(stats.total_bytes / 1024).toFixed(1)} KB stored</span>
+    {/if}
+    {#if watching}
+      <StatusBadge label="Watching for new files" tone="ok" dot />
+      <Button variant="subtle" class="px-2" onclick={stopWatch}>Stop watching</Button>
+    {/if}
+    <Button
+      variant="subtle"
+      class="ml-auto px-2"
+      ariaLabel="Search settings"
+      onclick={() => showSearchSettings = !showSearchSettings}
+    >
+      <Icon name="sliders" class="h-[18px] w-[18px]" />
+      Search settings
+    </Button>
+  </div>
+
+  {#if showSearchSettings}
+    <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 class="font-semibold text-ink-50">How search works</h2>
+          <p class="mt-1 text-sm text-ink-400">Choose exact words or let a small local model find related ideas.</p>
+        </div>
+        {#if mode !== "web"}
+          <Tabs items={localSearchTabs} value={mode} onChange={setLocalMode} ariaLabel="Document search mode" />
         {/if}
       </div>
-      <button onclick={search} disabled={loading} class="px-4 py-2 bg-ink-800 hover:bg-ink-700 rounded-lg text-xs font-medium text-ink-200 transition-colors">
-        Search
-      </button>
-    </div>
 
-    <div class="flex items-center justify-between text-[11px] font-mono text-ink-400 px-1">
-      <span>{mode === "web"
-        ? `${webResults.length} ${webResults.length === 1 ? "web result" : "web results"}`
-        : `${results.length} ${results.length === 1 ? "document" : "documents"} ${query ? "found" : "in library"}`}</span>
-      {#if searchDurationMs !== null}
-        <span class="text-emerald-400">Query completed in {searchDurationMs}ms</span>
+      <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-ink-800 pt-4">
+        {#if embedding?.ready}
+          <StatusBadge label="Meaning search is on" tone="ok" dot />
+          {#if embedding.embedded_chunks < embedding.total_chunks}
+            <Button variant="secondary" disabled={embedBusy} onclick={backfill}>
+              {embedBusy ? "Updating…" : `Update ${embedding.total_chunks - embedding.embedded_chunks} files`}
+            </Button>
+          {/if}
+          <Button variant="subtle" disabled={embedBusy} onclick={toggleEngine}>Stop meaning search</Button>
+        {:else}
+          <StatusBadge label="Exact words only" tone="idle" />
+          <Button variant="secondary" disabled={embedBusy} onclick={toggleEngine}>
+            {embedBusy ? "Starting…" : "Turn on meaning search"}
+          </Button>
+        {/if}
+        {#if rerank?.ready}
+          <StatusBadge label="Extra ranking on" tone="ok" dot />
+          <Button variant="subtle" disabled={rerankBusy} onclick={toggleRerank}>Stop extra ranking</Button>
+        {:else}
+          <Button variant="subtle" disabled={rerankBusy} onclick={toggleRerank}>
+            {rerankBusy ? "Starting…" : "Turn on extra ranking"}
+          </Button>
+        {/if}
+      </div>
+
+      {#if mode !== "keyword" && mode !== "web" && !embedding?.ready}
+        <p class="mt-3 text-sm text-amber-300">Meaning search needs the local meaning model. Results use exact words until it starts.</p>
+      {/if}
+      {#if mode === "web"}
+        <p class="mt-3 text-sm text-ink-400">Web search uses the provider in Settings. Nothing leaves this computer until you search.</p>
       {/if}
     </div>
+  {/if}
+
+  {#if showIndexing}
+    <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="font-semibold text-ink-50">Add documents</h2>
+          <p class="mt-1 text-sm text-ink-400">Add a folder to keep it up to date, or add one file.</p>
+        </div>
+        <Button variant="subtle" ariaLabel="Close add documents" onclick={() => showIndexing = false}>
+          <Icon name="close" class="h-4 w-4" />
+        </Button>
+      </div>
+      <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+        <input
+          bind:this={folderInputEl}
+          type="text"
+          placeholder="C:\\Users\\you\\Documents"
+          aria-label="Folder path"
+          bind:value={folder}
+          class="h-10 min-w-0 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge"
+        />
+        <Button variant="primary" disabled={loading || !folder.trim()} onclick={indexFolder}>
+          <Icon name="folder-plus" class="h-[18px] w-[18px]" />
+          {loading ? "Adding…" : "Add folder"}
+        </Button>
+        <Button variant="secondary" disabled={watching || !folder.trim()} onclick={startWatch}>
+          {watching ? "Watching" : "Watch folder"}
+        </Button>
+      </div>
+      <div class="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">
+        <input
+          bind:this={singleFileInputEl}
+          type="text"
+          placeholder="C:\\Users\\you\\Documents\\note.md"
+          aria-label="File path"
+          bind:value={singleFile}
+          class="h-10 min-w-0 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge"
+        />
+        <Button variant="secondary" disabled={loading || !singleFile.trim()} onclick={indexSingleFile}>
+          <Icon name="file-plus" class="h-[18px] w-[18px]" />
+          Add file
+        </Button>
+      </div>
+    </div>
+  {/if}
+
+  <div class="mt-5">
+    <p class="mb-1 text-sm text-ink-400">
+      {#if mode === "web"}
+        {webResults.length} {webResults.length === 1 ? "result" : "results"}{query ? ` for “${query}”` : ""}
+      {:else if query}
+        {results.length} {results.length === 1 ? "result" : "results"} for “{query}”
+      {:else}
+        Your document library
+      {/if}
+    </p>
+
+    {#if searchDurationMs !== null}
+      <p class="mb-3 text-sm text-ink-400">Search finished in {searchDurationMs} ms.</p>
+    {/if}
 
     {#if loading}
-      <div class="py-12 text-center text-xs text-ink-400 font-mono">
-        {mode === "web" ? "Searching the web…" : "Searching library index…"}
+      <div class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-14 text-center text-sm text-ink-400">
+        {mode === "web" ? "Searching the web…" : "Searching your documents…"}
       </div>
     {:else if mode === "web"}
       {#if webResults.length === 0}
-        <div class="py-16 max-w-md mx-auto text-center space-y-2">
-          <h3 class="text-sm font-medium text-ink-200">No web results for “{query}”.</h3>
-          <p class="text-xs text-ink-400">Try different words, or pick another provider in Settings → Web search.</p>
-        </div>
+        <EmptyState
+          icon="globe"
+          title="No web results yet"
+          description="Type a question or a few words above, then search."
+        />
       {:else}
-        <div class="space-y-2">
-          {#each webResults as hit}
-            <div class="border border-edge rounded-xl p-3.5 bg-ink-900/30 hover:border-edge transition-colors">
-              <div class="space-y-1.5">
-                <div class="font-medium text-sm text-ink-200">{hit.title}</div>
-                <p class="text-xs text-ink-400 line-clamp-2 leading-relaxed">{hit.snippet}</p>
-                <div class="flex flex-wrap items-center gap-3 text-xs font-mono text-ink-400">
-                  <a href={hit.url} target="_blank" rel="noreferrer" class="truncate text-ember-300 hover:underline">{hit.url}</a>
+        <div class="overflow-hidden rounded-lg border border-ink-700 bg-ink-900">
+          {#each webResults as hit (hit.url)}
+            <article class="p-4 transition-colors hover:bg-veil/5 {hit !== webResults[0] ? 'border-t border-ink-800' : ''}">
+              <div class="flex items-start gap-3">
+                <div class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-200">
+                  <Icon name="globe" class="h-[18px] w-[18px]" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <a href={hit.url} target="_blank" rel="noreferrer" class="font-semibold text-ink-50 hover:text-ember-300 hover:underline">{hit.title}</a>
+                  <div class="mt-1 truncate text-sm text-ink-400">{hit.url}</div>
+                  <p class="mt-2 text-sm leading-6 text-ink-200">{hit.snippet}</p>
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                    {#if webPages[hit.url]}
+                      <Button variant="subtle" onclick={() => { const rest = { ...webPages }; delete rest[hit.url]; webPages = rest; }}>Hide page text</Button>
+                    {:else}
+                      <Button variant="secondary" disabled={readingUrl !== null} onclick={() => void readPage(hit.url)}>
+                        {readingUrl === hit.url ? "Reading…" : "Read page"}
+                      </Button>
+                    {/if}
+                  </div>
+                  {#if webPages[hit.url]}
+                    <pre class="mt-3 max-h-80 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{webPages[hit.url].content}</pre>
+                  {/if}
                 </div>
               </div>
-              <div class="mt-2 flex items-center gap-2">
-                {#if webPages[hit.url]}
-                  <button
-                    onclick={() => { const rest = { ...webPages }; delete rest[hit.url]; webPages = rest; }}
-                    class="text-xs px-2.5 py-1 rounded bg-ink-900 border border-edge hover:bg-ink-800 text-ink-300 transition-colors"
-                  >
-                    Hide page text
-                  </button>
-                {:else}
-                  <button
-                    onclick={() => readPage(hit.url)}
-                    disabled={readingUrl !== null}
-                    class="text-xs px-2.5 py-1 rounded bg-ink-800 hover:bg-ink-700 text-ink-200 transition-colors disabled:opacity-40"
-                  >
-                    {readingUrl === hit.url ? "Reading…" : "Read page"}
-                  </button>
-                {/if}
-                <span class="text-[10px] text-ink-500">Reads through the keyless Jina Reader, or Firecrawl when its key is set</span>
-              </div>
-              {#if webPages[hit.url]}
-                <pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-edge bg-ink-950 p-3 text-[11px] text-ink-300 whitespace-pre-wrap font-mono">{webPages[hit.url].content}</pre>
-              {/if}
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
     {:else if !libraryLoaded}
-      <div class="py-12 text-center text-xs text-ink-400 font-mono">Loading library…</div>
+      <div class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-14 text-center text-sm text-ink-400">Loading your library…</div>
     {:else if results.length === 0}
-      <div class="py-16 max-w-md mx-auto text-center space-y-2">
-        {#if query}
-          <h3 class="text-sm font-medium text-ink-200">No documents match “{query}”.</h3>
-          <p class="text-xs text-ink-400">Try fewer or different words. Search looks for the words you type in indexed files.</p>
-        {:else}
-          <h3 class="text-sm font-medium text-ink-200">Your library is empty.</h3>
-          <p class="text-xs text-ink-400">Index a folder of notes, documents, or code. Only the files in that folder are searched, and nothing leaves this computer.</p>
-          <button
-            type="button"
-            onclick={() => document.getElementById("folder-input")?.focus()}
-            class="mt-3 px-4 py-2 bg-ink-800 hover:bg-ink-700 rounded-lg text-xs font-medium text-ink-200"
-          >
-            Choose a folder to index
-          </button>
-        {/if}
-      </div>
+      <EmptyState
+        icon="file"
+        title={query ? `No documents match “${query}”.` : "Your library is empty."}
+        description={query ? "Try fewer or different words." : "Add a folder of notes, documents, or code. Your files stay on this computer."}
+      >
+        {#snippet action()}
+          {#if !query}<Button variant="primary" onclick={focusFolder}>Add a folder</Button>{/if}
+        {/snippet}
+      </EmptyState>
     {:else}
-      <div class="space-y-2">
-        {#each results as doc}
-          <div class="border border-edge rounded-xl p-3.5 bg-ink-900/30 hover:border-edge transition-colors flex justify-between items-start gap-4">
-            <div class="space-y-1.5 flex-1 min-w-0">
-              <div class="font-medium text-sm text-ink-200 truncate">{doc.title}</div>
-              <p class="text-xs text-ink-400 line-clamp-2 font-mono leading-relaxed">{doc.snippet}</p>
-              <div class="flex flex-wrap items-center gap-3 text-xs font-mono text-ink-400">
-                <span>Score: {doc.score.toFixed(3)}</span>
-                <span class="truncate">Path: {doc.path}</span>
-                <span>{(doc.size / 1024).toFixed(1)} KB</span>
-              </div>
+      <div class="overflow-hidden rounded-lg border border-ink-700 bg-ink-900">
+        {#each results as doc, index (doc.path)}
+          <article class={`group relative grid gap-x-3 gap-y-1 p-4 transition-colors hover:bg-veil/5 sm:grid-cols-[36px_minmax(0,1fr)_auto] ${index > 0 ? 'border-t border-ink-800' : ''}`}>
+            <div class="row-span-3 grid h-9 w-9 place-items-center rounded-md bg-ink-800 text-xs font-semibold text-ink-200">{fileType(doc.title)}</div>
+            <div class="min-w-0">
+              <div class="truncate font-semibold text-ink-50">{doc.title}</div>
+              <div class="truncate text-sm text-ink-400">{doc.path}</div>
+              <p class="mt-1 text-sm leading-6 text-ink-200">{doc.snippet}</p>
+              <div class="mt-2 text-sm text-ink-400">Relevance {doc.score.toFixed(2)} · {(doc.size / 1024).toFixed(1)} KB</div>
             </div>
-            <button
-              onclick={() => removeDoc(doc.path)}
-              class="text-xs text-ink-400 hover:text-rose-400 px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 transition-colors flex-shrink-0"
-              title="Remove from index"
-            >
-              Remove
-            </button>
-          </div>
+            <div class="relative self-start justify-self-end">
+              <Button
+                variant="subtle"
+                class="h-8 w-8 px-0"
+                ariaLabel={`More actions for ${doc.title}`}
+                onclick={() => openMenuPath = openMenuPath === doc.path ? null : doc.path}
+              >
+                <Icon name="more" class="h-[18px] w-[18px]" />
+              </Button>
+              {#if openMenuPath === doc.path}
+                <div class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                  <button type="button" onclick={() => askRemoveDoc(doc.path)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10">
+                    <Icon name="trash" class="h-4 w-4" />
+                    Remove from library
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </article>
         {/each}
       </div>
     {/if}
   </div>
 </div>
+
+{#if pendingDeletePath}
+  <ConfirmDialog
+    title="Remove this document?"
+    message="The file stays on your computer. LocalAide will only remove it from the library."
+    confirmLabel="Remove"
+    onConfirm={() => void confirmRemoveDoc()}
+    onCancel={() => pendingDeletePath = null}
+  />
+{/if}

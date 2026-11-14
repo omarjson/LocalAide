@@ -11,6 +11,8 @@
   aria-label="LocalAide logo"
   xmlns="http://www.w3.org/2000/svg"
 >
+  <!-- App-icon tile, same as public/logo.svg, so the cream ghost reads on the light theme too. -->
+  <rect width="512" height="512" rx="112" fill="#1b1b1f" />
   <path
     d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z"
     fill="#f3ead8"

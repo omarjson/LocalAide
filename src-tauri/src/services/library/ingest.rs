@@ -146,7 +146,12 @@ impl FileIngester {
         hasher.update(&raw_bytes);
         let content_hash = format!("{:x}", hasher.finalize());
 
-        let doc_id = format!("doc_{}", &content_hash[..16]);
+        // The id comes from the path, not the content. Two files with the same
+        // bytes must not share one document row, or the second is never indexed.
+        let mut path_hasher = Sha256::new();
+        path_hasher.update(path.to_string_lossy().as_bytes());
+        let path_hash = format!("{:x}", path_hasher.finalize());
+        let doc_id = format!("doc_{}", &path_hash[..16]);
         let title = path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -426,4 +431,27 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .position(|window| window == needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FileIngester;
+
+    #[test]
+    fn identical_files_get_their_own_document_ids() {
+        let dir = std::env::temp_dir().join(format!("la-ingest-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = dir.join("first.txt");
+        let second = dir.join("second.txt");
+        std::fs::write(&first, "the same words in both files").unwrap();
+        std::fs::write(&second, "the same words in both files").unwrap();
+
+        let a = FileIngester::ingest_file(&first).unwrap();
+        let b = FileIngester::ingest_file(&second).unwrap();
+        assert_ne!(a.document.id, b.document.id);
+        assert_eq!(a.document.content_hash, b.document.content_hash);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

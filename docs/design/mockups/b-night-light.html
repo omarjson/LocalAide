@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LocalAide mockup B: Night-light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Night-light: the ghost is a small lamp left on in a quiet room.
+     Cool lilac-grey daylight, ink for actions. The glow is the only warm thing,
+     and it only appears where the model is working or where an answer came from. */
+  :root {
+    --room: #e7e3ee;     /* page */
+    --sheet: #f8f6fb;    /* reading surface */
+    --wall: #d9d3e3;     /* rail, quiet fills */
+    --ink: #221d2b;      /* text, primary buttons */
+    --ink-2: #5a526a;    /* muted, 6.4:1 on sheet */
+    --line: #8a809b;     /* meaningful borders, 3.4:1 */
+    --glow: #ffc56b;     /* night-light halo, fill only, never text */
+    --glow-soft: #fff1d6;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden;
+    background: var(--room); color: var(--ink);
+    font: 15px/1.6 "Lexend", system-ui, sans-serif; font-weight: 400;
+    display: grid; grid-template-columns: 84px 1fr 320px;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg.i { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Rail: icon with its word under it, so nothing is a guess */
+  .rail { background: var(--wall); display: flex; flex-direction: column; align-items: center; padding: 18px 0; gap: 4px; }
+  .rail .logo { width: 40px; height: 40px; margin-bottom: 18px; }
+  .rail button { width: 68px; display: grid; justify-items: center; gap: 3px; padding: 9px 0 7px; border-radius: 14px; font-size: 12px; color: var(--ink-2); }
+  .rail button.on { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 2px 6px rgba(34,29,43,.10); }
+  .rail .lamp { margin-top: auto; display: grid; justify-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); text-align: center; line-height: 1.3; }
+  .lamp i { width: 14px; height: 14px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 0 6px var(--glow-soft), 0 0 18px var(--glow); }
+
+  /* Reading column */
+  main { background: var(--sheet); display: grid; grid-template-rows: 72px 1fr auto; min-height: 0; border-radius: 22px 0 0 22px; margin: 10px 0 10px 0; box-shadow: -4px 0 18px rgba(34,29,43,.06); }
+  header { display: flex; align-items: center; gap: 10px; padding: 0 36px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .model { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; }
+  header .model i { width: 8px; height: 8px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 0 3px var(--glow-soft); }
+  header .btn { padding: 8px 14px; border-radius: 999px; background: var(--ink); color: var(--sheet); font-size: 14px; font-weight: 500; }
+  header .more { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; color: var(--ink-2); }
+
+  .log { overflow: hidden; padding: 18px 36px; }
+  .col { max-width: 640px; display: grid; gap: 30px; }
+  .me { font-size: 15px; color: var(--ink-2); padding-left: 14px; border-left: 3px solid var(--wall); }
+  .me b { display: block; color: var(--ink); font-weight: 500; font-size: 17px; }
+  .ai { font-size: 17px; line-height: 1.7; }
+  .ai p + p, .ai ul { margin-top: 14px; }
+  .ai ul { padding-left: 22px; }
+  .ai li { margin: 6px 0; }
+  .cite { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--glow-soft); border: 1px solid var(--glow); font-size: 12px; font-weight: 600; vertical-align: 2px; }
+  .cite.hot { background: var(--glow); }
+  .acts { display: flex; gap: 6px; margin-top: 16px; }
+  .acts button { font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
+
+  .dock { padding: 0 36px 24px; }
+  .box { max-width: 640px; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 20px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; }
+  .box .ph { flex: 1; color: var(--ink-2); font-size: 16px; }
+  .box .att { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--ink-2); }
+  .box .send { padding: 10px 22px; border-radius: 999px; background: var(--ink); color: var(--sheet); font-weight: 500; }
+  .note { max-width: 640px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+
+  /* Where this answer came from */
+  .sources { padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .sources h2 { font-size: 16px; font-weight: 600; }
+  .sources > p { font-size: 13px; color: var(--ink-2); margin-top: -8px; }
+  .doc { background: var(--sheet); border-radius: 16px; padding: 14px 16px; font-size: 14px; }
+  .doc.hot { box-shadow: 0 0 0 2px var(--glow), 0 6px 20px rgba(255,197,107,.35); }
+  .doc .t { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-bottom: 6px; }
+  .doc .t .cite { margin-left: 0; }
+  .doc q { display: block; color: var(--ink-2); quotes: none; line-height: 1.55; }
+  .doc mark { background: var(--glow-soft); color: var(--ink); padding: 0 2px; border-radius: 3px; }
+  .doc .open { margin-top: 8px; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: var(--ink); }
+</style>
+</head>
+<body>
+<nav class="rail">
+  <svg class="logo" viewBox="0 0 512 512" aria-label="LocalAide"><rect width="512" height="512" rx="140" fill="#221d2b"/><path d="M256 110c-80 0-138 60-138 142v150c0 13 13 20 23 14l29-19 29 19c6 4 14 4 20 0l25-18 25 18c6 4 14 4 20 0l29-19 29 19c10 6 23-1 23-14V252c0-82-58-142-138-142z" fill="#f8f6fb"/><circle cx="214" cy="240" r="20" fill="#221d2b"/><circle cx="298" cy="240" r="20" fill="#221d2b"/><circle cx="298" cy="240" r="11" fill="#ffc56b"/></svg>
+  <button class="on"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat</button>
+  <button><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search</button>
+  <button><svg class="i" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6"/></svg>Memory</button>
+  <button><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>Skills</button>
+  <button><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg>Models</button>
+  <button><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</button>
+  <div class="lamp"><i></i>On this<br>computer</div>
+</nav>
+
+<main>
+  <header>
+    <h1>Landlord letter</h1>
+    <span class="model"><i></i>Llama 3.2 3B</span>
+    <button class="btn">New chat</button>
+    <button class="more" aria-label="More"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+  </header>
+  <div class="log"><div class="col">
+    <div class="me"><b>Can you sum up the letter from my landlord?</b>It's in my Documents folder.</div>
+    <div class="ai">
+      <p>Here is the short version. Your lease ends on 31 May, and they would like you to stay.</p>
+      <ul>
+        <li>To renew, sign the form and send it back by 3 May.<span class="cite hot">1</span></li>
+        <li>Rent goes up from £950 to £985 a month.<span class="cite">1</span></li>
+        <li>If you plan to leave, you must give two months' notice.<span class="cite">2</span></li>
+      </ul>
+      <p>Want me to draft a short reply?</p>
+      <div class="acts"><button>Copy</button><button>Retry</button></div>
+    </div>
+  </div></div>
+  <div class="dock">
+    <div class="box">
+      <button class="att" aria-label="Attach image"><svg class="i" viewBox="0 0 24 24"><path d="M20 12l-8 8a5 5 0 01-7-7l8-8a3.5 3.5 0 015 5l-8 8a2 2 0 01-3-3l7-7"/></svg></button>
+      <span class="ph">Ask anything</span>
+      <button class="send">Send</button>
+    </div>
+    <p class="note">Your words never leave this computer.</p>
+  </div>
+</main>
+
+<aside class="sources">
+  <h2>Where this came from</h2>
+  <p>2 of your documents</p>
+  <div class="doc hot">
+    <div class="t"><span class="cite hot">1</span>Landlord letter, April.pdf</div>
+    <q>Please <mark>sign and return the enclosed renewal form by 3 May</mark>. From 1 June the monthly rent will be £985.</q>
+    <div class="open">Open document</div>
+  </div>
+  <div class="doc">
+    <div class="t"><span class="cite">2</span>Tenancy agreement 2024.pdf</div>
+    <q>Either party may end this agreement by giving not less than two months' written notice.</q>
+    <div class="open">Open document</div>
+  </div>
+</aside>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LocalAide mockup C: Lantern Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,MONO@0,400..700,0.5,0&family=Recursive:wght,MONO@400,1&display=swap" rel="stylesheet">
+<style>
+  /* Lantern Room: a deep teal room lit by the ghost's ember eye.
+     No sidebar; one focus. The ghost sits on the message box and its eye
+     is the live status: lit while the model works, dim when idle. */
+  :root {
+    --deep: #15393a;    /* page */
+    --pool: #1d4746;    /* panels */
+    --shoal: #285857;   /* raised */
+    --foam: #ebf3ef;    /* text */
+    --sea: #a8c4bd;     /* muted, 7.2:1 on deep */
+    --rim: #5f8e88;     /* borders that mean something, 3.2:1 */
+    --ember: #ff8f45;   /* lantern */
+    --on-ember: #2a1405;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden;
+    background: var(--deep); color: var(--foam);
+    font: 15px/1.6 "Recursive", system-ui, sans-serif; font-variation-settings: "CASL" 0.5;
+    display: grid; grid-template-rows: 64px 1fr auto;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg.i { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+  .past { margin-left: 18px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sea); padding: 6px 12px; border-radius: 10px; background: var(--pool); }
+  .tabs { display: flex; gap: 2px; background: var(--pool); padding: 4px; border-radius: 14px; }
+  .tabs button { padding: 7px 16px; border-radius: 10px; font-size: 14px; color: var(--sea); }
+  .tabs button.on { background: var(--foam); color: var(--deep); font-weight: 600; }
+  .right { justify-self: end; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sea); }
+  .right b { color: var(--foam); font-weight: 600; }
+
+  .stage { overflow: hidden; padding: 36px 0 0; }
+  .col { width: 740px; margin: 0 auto; display: grid; gap: 28px; }
+  .title { display: flex; align-items: baseline; gap: 14px; }
+  .title h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+  .title span { color: var(--sea); font-size: 14px; }
+  .me { justify-self: end; max-width: 72%; background: var(--shoal); padding: 12px 18px; border-radius: 18px; font-size: 16px; }
+  .ai { font-size: 16.5px; line-height: 1.7; padding-left: 22px; border-left: 2px solid var(--ember); }
+  .ai p + p, .ai ul { margin-top: 12px; }
+  .ai ul { padding-left: 20px; }
+  .ai li { margin: 5px 0; }
+  .n { color: var(--ember); font-weight: 700; font-size: 12px; vertical-align: super; margin-left: 2px; }
+  .from { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .from div { background: var(--pool); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; color: var(--sea); }
+  .from b { color: var(--foam); font-weight: 600; display: block; font-size: 14px; }
+  .from .n { vertical-align: 0; font-size: 13px; margin: 0 6px 0 0; }
+  .acts { display: flex; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--sea); }
+
+  /* The ghost perches on the box; its eye is the status light */
+  .dock { padding: 26px 0 24px; }
+  .perch { width: 740px; margin: 0 auto; position: relative; }
+  .ghost { position: absolute; left: 22px; top: -34px; width: 46px; height: 46px; }
+  .box { background: var(--pool); border: 1.5px solid var(--rim); border-radius: 20px; padding: 16px 14px 12px 20px; box-shadow: 0 10px 30px rgba(5,20,20,.35); }
+  .box .ph { color: var(--sea); font-size: 16px; padding: 4px 0 14px 54px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .chip { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 10px; background: var(--deep); font-size: 13.5px; color: var(--sea); }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 10px var(--ember); }
+  .send { margin-left: auto; background: var(--ember); color: var(--on-ember); font-weight: 700; padding: 9px 20px; border-radius: 12px; }
+  .foot { width: 740px; margin: 10px auto 0; font-size: 13px; color: var(--sea); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 512 512" aria-hidden="true"><path d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z" fill="#ebf3ef"/><circle cx="212" cy="236" r="22" fill="#15393a"/><circle cx="300" cy="236" r="22" fill="#15393a"/><circle cx="300" cy="236" r="12" fill="#ff8f45"/></svg>
+      LocalAide
+    </div>
+    <button class="past"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Past chats</button>
+  </div>
+  <nav class="tabs">
+    <button class="on">Chat</button><button>Search</button><button>Memory</button><button>Skills</button><button>Models</button><button>Settings</button>
+  </nav>
+  <div class="right"><button class="past" style="margin:0"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New chat</button></div>
+</header>
+
+<div class="stage"><div class="col">
+  <div class="title"><h1>Landlord letter</h1><span>Today, 17:02</span></div>
+  <div class="me">Can you sum up the letter from my landlord? It's in my Documents folder.</div>
+  <div class="ai">
+    <p>Here is the short version. Your lease ends on 31 May, and they would like you to stay.</p>
+    <ul>
+      <li>To renew, sign the form and send it back by 3 May.<span class="n">1</span></li>
+      <li>Rent goes up from £950 to £985 a month.<span class="n">1</span></li>
+      <li>If you plan to leave, you must give two months' notice.<span class="n">2</span></li>
+    </ul>
+    <p>Want me to draft a short reply?</p>
+    <div class="from">
+      <div><b><span class="n">1</span>Landlord letter, April.pdf</b>Page 1, renewal and rent</div>
+      <div><b><span class="n">2</span>Tenancy agreement 2024.pdf</b>Page 4, ending the lease</div>
+    </div>
+    <div class="acts"><span>Copy</span><span>Retry</span></div>
+  </div>
+</div></div>
+
+<div class="dock">
+  <div class="perch">
+    <svg class="ghost" viewBox="0 0 512 512" aria-hidden="true"><path d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z" fill="#ebf3ef"/><circle cx="212" cy="236" r="22" fill="#15393a"/><circle cx="300" cy="236" r="30" fill="#ff8f45" opacity=".3"/><circle cx="300" cy="236" r="22" fill="#15393a"/><circle cx="300" cy="236" r="12" fill="#ff8f45"/></svg>
+    <div class="box">
+      <div class="ph">Ask anything</div>
+      <div class="row">
+        <span class="chip"><i></i>Llama 3.2 3B, on this computer</span>
+        <button class="chip" aria-label="Attach image"><svg class="i" viewBox="0 0 24 24"><path d="M20 12l-8 8a5 5 0 01-7-7l8-8a3.5 3.5 0 015 5l-8 8a2 2 0 01-3-3l7-7"/></svg>Image</button>
+        <button class="send">Send</button>
+      </div>
+    </div>
+    <div class="foot"><span>Enter sends. Esc stops a reply.</span><span>Nothing leaves this computer.</span></div>
+  </div>
+</div>
+</body>
+</html>

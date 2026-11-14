@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Models mockup</title>
+<link rel="stylesheet" href="shell.css">
+<style>
+  .active { display: flex; align-items: center; gap: 18px; padding: 20px; }
+  .active .big { width: 48px; height: 48px; border-radius: 10px; background: #1b1b1f; display: grid; place-items: center; }
+  .active .big::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #ff7a1a; box-shadow: 0 0 0 5px rgba(255,122,26,.25); }
+  .active .t { font-size: 18px; } .active .txt { flex: 1; }
+  .facts { display: flex; gap: 18px; margin-top: 4px; font-size: 13px; color: var(--ink-400); }
+  .facts b { color: var(--ink-200); font-weight: 600; }
+  .why { color: var(--ink-400); font-size: 13px; }
+  .over .t, .over .d { color: var(--ink-400); }
+  .page { padding-top: 32px; }
+</style></head>
+<body><script src="shell.js"></script><script>
+const more = svg('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>');
+const chip = svg('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3"/>');
+shell("Models", `
+<div class="page">
+  <header class="page-header">
+    <div><h1>Models</h1><p>The AI that runs on this computer. Download one, and it works without the internet.</p></div>
+    <div class="actions"><button class="btn secondary">${svg('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>')}Find more models</button></div>
+  </header>
+
+  <div class="group">
+    <div class="active">
+      <div class="big"></div>
+      <div class="txt">
+        <div class="t" style="font-weight:600;color:var(--ink-50)">Qwen3.5 4B <span class="status ok" style="margin-left:6px"><span class="dot"></span>In use</span></div>
+        <div class="facts"><span>Size <b>2.7 GB</b></span><span>Needs <b>3.6 GB</b> of memory</span><span>Can read <b>images</b></span></div>
+      </div>
+      <div class="end" style="display:flex;gap:8px">
+        <button class="btn secondary">Stop using</button>
+        <button class="icon-btn" aria-label="More options: check file, remove">${more}</button>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec">Recommended for this computer</h2>
+  <div class="group">
+    <div class="row">
+      <div class="ico">${chip}</div>
+      <div class="txt"><div class="t">Qwen3.5 2B</div><div class="d">Faster, for quick questions on older computers. 1.3 GB download.</div></div>
+      <div class="end"><span class="status ok">Fits</span><button class="btn secondary">Download</button></div>
+    </div>
+    <div class="row">
+      <div class="ico">${chip}</div>
+      <div class="txt"><div class="t">Gemma 4 E2B</div><div class="d">Careful, well-written answers. 3.3 GB download.</div></div>
+      <div class="end"><span class="status ok">Fits</span><button class="btn secondary">Download</button></div>
+    </div>
+    <div class="row over">
+      <div class="ico">${chip}</div>
+      <div class="txt"><div class="t">Qwen3.5 9B</div><div class="d">Better answers. Needs 7.5 GB of memory, and this computer allows 6.4 GB.</div></div>
+      <div class="end"><span class="status warn">Too big</span><button class="btn secondary" disabled>Download</button></div>
+    </div>
+  </div>
+
+  <button class="disclose">${svg('<path d="M9 6l6 6-6 6"/>')}Browse all 41 models, including coding models and Hugging Face</button>
+  <h2 class="sec">Helper models</h2>
+  <div class="group">
+    <div class="row">
+      <div class="ico">${svg('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>')}</div>
+      <div class="txt"><div class="t">Smarter document search</div><div class="d">Small extra models that help Search understand meaning, not just exact words. Optional.</div></div>
+      <div class="end"><button class="btn subtle">Show 6 models</button></div>
+    </div>
+  </div>
+</div>`);
+</script></body></html>

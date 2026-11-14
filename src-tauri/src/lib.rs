@@ -121,15 +121,23 @@ pub fn run() {
                 log::warn!("Cloud mode was on but no active provider exists; staying local");
             }
         }
-        if !restored_cloud
-            && let Some(active_id) = cfg.selected_models.last()
-            && app_state.model_service.get_model_entry(active_id).is_some()
-        {
-            let path = app_state.model_service.model_file_path(active_id);
-            if path.exists() {
+        if !restored_cloud {
+            // Prefer the model the user last loaded. Otherwise use the newest
+            // chat model in the selection, since embedding models never chat.
+            let startup_model = app_state
+                .model_manager
+                .active_model_id()
+                .into_iter()
+                .chain(cfg.selected_models.iter().rev().cloned())
+                .find(|id| {
+                    app_state.model_service.is_chat_model(id)
+                        && app_state.model_service.is_installed(id)
+                });
+            if let Some(active_id) = startup_model {
+                let path = app_state.model_service.model_file_path(&active_id);
                 let context = app_state
                     .model_service
-                    .effective_context(active_id, cfg.context_tokens);
+                    .effective_context(&active_id, cfg.context_tokens);
                 match app_state.inference_engine.load(&path, context) {
                     Ok(_) => log::info!("Auto-loaded model: {active_id}"),
                     Err(e) => log::warn!("Could not auto-load model {active_id}: {e}"),

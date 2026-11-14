@@ -14,6 +14,28 @@ fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
+/// Model ids become file and folder names under `models/`, so only a plain
+/// token is accepted: ASCII letters, digits, `-`, `_` and `.`, with no leading
+/// dot and at most 128 characters. Separators, `..`, drive prefixes and `:`
+/// all fail.
+pub fn is_safe_model_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && !id.starts_with('.')
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+}
+
+/// A file name that stays directly inside the models folder: a plain `.gguf`
+/// name with no separators, no `..` and no colon (drive prefix or stream).
+fn is_plain_gguf_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.ends_with(".gguf")
+        && !name.contains(['/', '\\', ':'])
+        && !name.contains("..")
+}
+
 /// Catalog download URLs come from the model list, never from the user, and
 /// must always be HTTPS — the models themselves are additionally pinned by
 /// SHA-256, so a compromised host cannot swap weights silently.
@@ -597,6 +619,12 @@ impl CatalogEntry {
     /// Per-entry structural checks, shared by manifest validation and by the
     /// community-model registry (whose entries never pass through a manifest).
     pub fn validate_entry(&self) -> Result<(), AppError> {
+        if !is_safe_model_id(&self.id) {
+            return Err(AppError::invalid_input(format!(
+                "Model id '{}' may use only letters, digits, '-', '_' and '.'",
+                self.id
+            )));
+        }
         if self.name.is_empty() || self.params.is_empty() || self.quant.is_empty() {
             return Err(AppError::invalid_input(format!(
                 "Catalog model '{}' has an empty name, params, or quant label",
@@ -635,16 +663,14 @@ impl CatalogEntry {
                 self.id
             )));
         }
-        if let Some(dest) = &self.dest
-            && (dest.is_empty()
-                || dest.contains('/')
-                || dest.contains('\\')
-                || dest.contains("..")
-                || !dest.ends_with(".gguf"))
-        {
+        let primary_name = self
+            .dest
+            .clone()
+            .unwrap_or_else(|| format!("{}.gguf", self.id));
+        if !is_plain_gguf_name(&primary_name) {
             return Err(AppError::invalid_input(format!(
                 "Catalog model '{}' has an unsafe dest '{}': it must be a plain .gguf file name",
-                self.id, dest
+                self.id, primary_name
             )));
         }
         require_https(&self.url, "model download")?;
@@ -671,10 +697,13 @@ impl CatalogEntry {
                     self.id
                 )));
             }
-            if c.dest.is_empty() || !seen_dests.insert(c.dest.as_str()) {
+            if !is_plain_gguf_name(&c.dest)
+                || c.dest == primary_name
+                || !seen_dests.insert(c.dest.as_str())
+            {
                 return Err(AppError::invalid_input(format!(
-                    "Companion of '{}' has an empty or duplicated destination name",
-                    self.id
+                    "Companion of '{}' needs a unique plain .gguf destination name, not '{}'",
+                    self.id, c.dest
                 )));
             }
         }
@@ -806,6 +835,46 @@ mod tests {
             },
         ];
         assert!(m.validate(0).is_err());
+    }
+
+    #[test]
+    fn unsafe_ids_and_file_names_are_rejected() {
+        assert!(sample_entry("test-1b").validate_entry().is_ok());
+
+        for id in ["", "..", "../escape", "a/b", "a\\b", "C:evil", ".hidden"] {
+            assert!(!is_safe_model_id(id), "id {id:?} must be rejected");
+        }
+        assert!(is_safe_model_id("qwen3.5-0.8b-q4"));
+        assert!(is_safe_model_id("hf-org-repo-model_q4"));
+
+        let mut e = sample_entry("test-1b");
+        e.id = "../escape".into();
+        assert!(e.validate_entry().is_err());
+
+        for dest in ["../escape.gguf", "sub/model.gguf", "C:model.gguf", "model.json"] {
+            let mut e = sample_entry("test-1b");
+            e.dest = Some(dest.into());
+            assert!(e.validate_entry().is_err(), "dest {dest:?} must be rejected");
+        }
+
+        // A companion may not overwrite the primary file or leave the folder.
+        let mut e = sample_entry("test-1b");
+        e.companions = vec![CatalogCompanion {
+            url: e.url.clone(),
+            sha256: e.sha256.clone(),
+            file_size: 100,
+            dest: "test-1b.gguf".into(),
+        }];
+        assert!(e.validate_entry().is_err());
+
+        let mut e = sample_entry("test-1b");
+        e.companions = vec![CatalogCompanion {
+            url: e.url.clone(),
+            sha256: e.sha256.clone(),
+            file_size: 100,
+            dest: "../outside.gguf".into(),
+        }];
+        assert!(e.validate_entry().is_err());
     }
 
     /// Parity guard: the JSON that `model_catalog_refresh` fetches from the

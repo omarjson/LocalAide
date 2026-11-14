@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings mockup</title>
+<link rel="stylesheet" href="shell.css">
+<style>
+  .split { display: grid; grid-template-columns: 220px 1fr; gap: 32px; max-width: 1000px; margin: 0 auto; padding: 32px 40px; }
+  .sub { display: flex; flex-direction: column; gap: 2px; }
+  .sub h1 { font: 600 28px/1.2 "Segoe UI Variable Display", "Segoe UI", sans-serif; color: var(--ink-50); margin-bottom: 18px; }
+  .sub .nav { height: 36px; }
+  .content h2.sec:first-child { margin-top: 6px; }
+  .val { min-width: 74px; text-align: right; color: var(--ink-200); font-variant-numeric: tabular-nums; }
+  .note { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 12px 14px; border-radius: 6px; background: var(--ink-800); color: var(--ink-200); font-size: 13px; }
+</style></head>
+<body><script src="shell.js"></script><script>
+const sub = (n, on) => `<button class="nav ${on ? "on" : ""}">${n}</button>`;
+shell("Settings", `
+<div class="split">
+  <nav class="sub" aria-label="Settings sections">
+    <h1>Settings</h1>
+    ${sub("General", true)}${sub("Online providers")}${sub("Web search")}${sub("Privacy & files")}${sub("Backups")}${sub("Activity log")}${sub("About")}
+  </nav>
+  <div class="content">
+    <h2 class="sec">Appearance</h2>
+    <div class="group">
+      <div class="row">
+        <div class="ico">${svg('<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/>')}</div>
+        <div class="txt"><div class="t">Theme</div><div class="d">Dark is the default. Your choice is kept when you restart.</div></div>
+        <div class="end"><div class="seg">${theme === "dark" ? '<button class="on">Dark</button><button>Light</button>' : '<button>Dark</button><button class="on">Light</button>'}</div></div>
+      </div>
+    </div>
+
+    <h2 class="sec">Performance</h2>
+    <div class="group">
+      <div class="row">
+        <div class="ico">${svg('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3"/>')}</div>
+        <div class="txt"><div class="t">Memory for models</div><div class="d">How much of this computer's memory the AI may use. More lets you run bigger models.</div></div>
+        <div class="end"><div class="slider"><b style="width:70%"></b><i style="left:calc(70% - 10px)"></i></div><span class="val">6.4 GB</span></div>
+      </div>
+      <div class="row">
+        <div class="ico">${svg('<path d="M4 5h16v11H9l-5 4z"/>')}</div>
+        <div class="txt"><div class="t">Conversation memory</div><div class="d">How much of a chat the AI keeps in mind. Longer uses more memory.</div></div>
+        <div class="end"><div class="slider"><b style="width:12%"></b><i style="left:calc(12% - 10px)"></i></div><span class="val">About 6,000 words</span></div>
+      </div>
+    </div>
+
+    <h2 class="sec">Where chats run</h2>
+    <div class="group">
+      <div class="row">
+        <div class="ico">${svg('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>')}</div>
+        <div class="txt"><div class="t">On this computer only</div><div class="d">Nothing you type is sent anywhere.</div></div>
+        <div class="end"><span class="status ok"><span class="dot"></span>On</span></div>
+      </div>
+      <div class="row">
+        <div class="ico">${svg('<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.5A3.5 3.5 0 1117.5 18z"/>')}</div>
+        <div class="txt"><div class="t">Use an online provider</div><div class="d">Send chats to a service you choose, with your own key. Off until you add one.</div></div>
+        <div class="end"><button class="btn secondary">Add provider</button><span class="toggle"></span></div>
+      </div>
+    </div>
+  </div>
+</div>`);
+</script></body></html>

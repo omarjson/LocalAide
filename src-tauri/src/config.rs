@@ -165,6 +165,18 @@ impl ConfigStore {
     }
 }
 
+/// True when the URL's host is this machine: the name `localhost`, or a
+/// loopback IP address. Comparing the parsed host means `127.evil.com` and
+/// `0.0.0.0` do not pass.
+pub fn is_local_host(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    }
+}
+
 /// Require HTTPS unless the URL points at the user's own machine, where plain
 /// HTTP proxies (Ollama, LM Studio, llama-server itself) are legitimate.
 pub fn validate_base_url(url: &str) -> Result<(), String> {
@@ -179,12 +191,7 @@ pub fn validate_base_url(url: &str) -> Result<(), String> {
     match parsed.scheme() {
         "https" => Ok(()),
         "http" => {
-            let host = parsed.host_str().unwrap_or_default();
-            let loopback = matches!(
-                host,
-                "127.0.0.1" | "localhost" | "::1" | "[::1]" | "0.0.0.0"
-            ) || host.starts_with("127.");
-            if loopback {
+            if is_local_host(&parsed) {
                 Ok(())
             } else {
                 Err("Plain HTTP is only allowed for addresses on this machine (127.0.0.1 or localhost). Use HTTPS for any remote provider.".to_string())
@@ -240,6 +247,16 @@ mod tests {
         assert!(validate_base_url("http://api.example.com/v1").is_err());
         assert!(validate_base_url("ftp://api.example.com").is_err());
         assert!(validate_base_url("not a url").is_err());
+    }
+
+    #[test]
+    fn loopback_check_uses_the_parsed_host() {
+        assert!(validate_base_url("http://[::1]:11434/v1").is_ok());
+        assert!(validate_base_url("http://127.0.0.2:8080/v1").is_ok());
+        assert!(validate_base_url("http://127.evil.com:8080/v1").is_err());
+        assert!(validate_base_url("http://127.0.0.1.nip.io/v1").is_err());
+        assert!(validate_base_url("http://0.0.0.0:8080/v1").is_err());
+        assert!(validate_base_url("http://localhost.evil.com/v1").is_err());
     }
 
     #[test]

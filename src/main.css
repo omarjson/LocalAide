@@ -2,24 +2,45 @@
 
 /*
  * LocalAide design tokens. See DESIGN.md at the repo root.
- * Neutrals are plum-tinted "ink". The accent is "ember". Bone is the body text.
- * Text on ember fills must use `text-on-ember` (the token that flips with
- * the theme), never white: white on ember fails 4.5:1 in the dark theme.
- * Borders that carry meaning use `border-edge`, sized to clear the 3:1
- * non-text contrast floor against the page background (docs/evidence/a11y.md).
+ * Direction: "At Home on Windows" (docs/design/mockups/e-native.html).
+ * The app runs on this computer, so it looks like part of it: neutral Mica
+ * greys, the system UI font, small corners. The brand lives in one place,
+ * the ghost's ember eye, used for the selected-item marker, the live dot
+ * and the main action.
+ *
+ * Neutrals are "ink" (dark is the default theme). Text on ember fills must use
+ * `text-on-ember`, which flips with the theme. Borders that carry meaning use
+ * `border-edge` (>= 3:1 against the page). `veil` is the overlay tint for
+ * hover and quiet fills: white in dark, black in light. Use `bg-veil/5`,
+ * never `bg-white/5`, so the tint stays visible in both themes.
  */
 @theme {
-  --color-ink-50: #fbf7f0;
-  --color-ink-100: #f3ead8;
-  --color-ink-200: #d9d3e0;
-  --color-ink-300: #bdb6c9;
-  --color-ink-400: #aaa2b8;
-  --color-ink-500: #8a819c;
-  --color-ink-600: #5f5673;
-  --color-ink-700: #463d58;
-  --color-ink-800: #241c33;
-  --color-ink-900: #1a1424;
-  --color-ink-950: #120d1a;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+
+  /* Smallest text is 13px (was 12px, with many 10-11px labels). Labels,
+     hints and captions all use text-xs; do not add text-[10px]/text-[11px]. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+
+  /* Windows 11 uses small corners: 4px controls, 8px surfaces. */
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+
+  /* Dark: Windows dark Mica. Contrast on ink-950 (#202020) / ink-900 (#2b2b2b):
+     ink-100 14.7 / 12.8, ink-400 7.1 / 6.2, ink-600 5.3 / 4.6, edge 3.8 / 3.3. */
+  --color-ink-50: #ffffff;
+  --color-ink-100: #f3f3f3;
+  --color-ink-200: #dcdcdc;
+  --color-ink-300: #c4c4c4;
+  --color-ink-400: #ababab;
+  --color-ink-500: #9c9c9c;
+  --color-ink-600: #969696;
+  --color-ink-700: #454545;
+  --color-ink-800: #383838;
+  --color-ink-900: #2b2b2b;
+  --color-ink-950: #202020;
 
   --color-ember-50: #fff5ec;
   --color-ember-100: #ffe7d1;
@@ -33,30 +54,33 @@
   --color-ember-900: #5e2a0a;
   --color-ember-950: #331505;
 
-  /* Semantic: text sitting on ember/amber fills; meaningful borders. */
-  --color-on-ember: #120d1a;
-  --color-edge: #6b6280;
+  --color-on-ember: #1b1b1f;
+  --color-edge: #7a7a7a;
+  --color-veil: #ffffff;
 }
 
-/* Light theme: the ink ramp inverts (bone page, dark ink text) and the
- * light accent-text roles darken so status colors stay readable on light
- * fills. Values were checked with the WCAG 2.x contrast math recorded in
- * docs/evidence/a11y.md (body text ≥ 4.5:1, borders ≥ 3:1). */
+/* Light: Windows light Mica. The ink ramp inverts. Contrast on ink-950
+ * (#eef0f3) / ink-900 (#fbfbfc): ink-100 15.0 / 16.6, ink-400 5.6 / 6.2,
+ * ink-600 4.9 / 5.4, edge 3.3 / 3.6. White on ember-600 5.3, on ember-500 4.6.
+ * Ember fills darken so white text on them clears 4.5:1. */
 :root[data-theme="light"] {
-  --color-ink-50: #2a251e;
-  --color-ink-100: #332d24;
-  --color-ink-200: #3f382c;
-  --color-ink-300: #57503f;
-  --color-ink-400: #6a6155;
-  --color-ink-500: #7f7669;
-  --color-ink-600: #9a9081;
-  --color-ink-700: #d6cab7;
-  --color-ink-800: #e6ddcf;
-  --color-ink-900: #fbf7f0;
-  --color-ink-950: #f6f1e7;
+  --color-ink-50: #111114;
+  --color-ink-100: #1b1b1f;
+  --color-ink-200: #2e3036;
+  --color-ink-300: #44474e;
+  --color-ink-400: #5b5f66;
+  --color-ink-500: #5f636a;
+  --color-ink-600: #64686f;
+  --color-ink-700: #d2d6dc;
+  --color-ink-800: #e3e6ea;
+  --color-ink-900: #fbfbfc;
+  --color-ink-950: #eef0f3;
 
-  --color-ember-200: #a34a08;
-  --color-ember-300: #a34a08;
+  --color-ember-200: #9a3f00;
+  --color-ember-300: #9a3f00;
+  --color-ember-400: #b04800;
+  --color-ember-500: #c2540a;
+  --color-ember-600: #b54a00;
   --color-emerald-300: #047857;
   --color-emerald-400: #047857;
   --color-rose-300: #be123c;
@@ -65,18 +89,31 @@
   --color-amber-600: #b45309;
 
   --color-on-ember: #ffffff;
-  --color-edge: #857a95;
+  --color-edge: #80858d;
+  --color-veil: #000000;
+}
+
+html {
+  color-scheme: dark;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   background: var(--color-ink-950);
   color: var(--color-ink-100);
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: rgb(255 122 26 / 0.35);
+  background: color-mix(in oklab, var(--color-ember-500) 35%, transparent);
   color: var(--color-ink-50);
 }
 
@@ -85,12 +122,10 @@ input {
   caret-color: var(--color-ember-500);
 }
 
-html {
-  scrollbar-color: var(--color-ink-700) var(--color-ink-950);
-}
-
+/* Windows-style focus: a solid ring in the text color, so it reads on every
+ * surface in both themes. */
 :focus-visible {
-  outline: 2px solid #d946ef !important;
+  outline: 2px solid var(--color-ink-50) !important;
   outline-offset: 2px !important;
 }
 

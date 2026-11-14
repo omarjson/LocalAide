@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LocalAide mockup F: Ember Block</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  /* Ember Block: the ember stops being a small accent and becomes the room.
+     The whole left side is the ghost's eye colour; the work area is a calm
+     lilac page. Big confident type does the talking.
+     The memorable thing: one huge field of orange, used once. */
+  :root {
+    --ember: #ff7a1a;
+    --ember-deep: #d45a00;
+    --plum: #2a1733;    /* text on ember (9.0:1) and on page */
+    --page: #f3eff6;
+    --card: #ffffff;
+    --plum-2: #5d4c66;  /* muted, 7.1:1 on page */
+    --line: #8d7f96;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1280px; height: 800px; overflow: hidden; background: var(--page); color: var(--plum);
+    font: 400 16px/1.55 "Bricolage Grotesque", system-ui, sans-serif; font-variation-settings: "opsz" 14;
+    display: grid; grid-template-columns: 300px 1fr; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+  aside { background: var(--ember); color: var(--plum); padding: 30px 26px; display: flex; flex-direction: column; }
+  .word { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variation-settings: "opsz" 96; display: flex; align-items: center; gap: 10px; }
+  .word svg { width: 40px; height: 40px; }
+  nav { margin-top: 40px; display: grid; gap: 2px; }
+  nav button { text-align: left; font-size: 22px; font-weight: 600; padding: 4px 0; letter-spacing: -0.01em; opacity: .72; font-variation-settings: "opsz" 40; }
+  nav button.on { opacity: 1; font-weight: 800; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; }
+  .recent { margin-top: 36px; }
+  .recent h2 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .recent p { font-size: 15px; padding: 3px 0; }
+  .recent p.on { font-weight: 800; }
+  .here { margin-top: auto; background: var(--plum); color: #fff3e8; border-radius: 14px; padding: 14px 16px; font-size: 14px; }
+  .here b { display: block; font-size: 16px; font-weight: 800; color: var(--ember); }
+
+  main { display: grid; grid-template-rows: auto 1fr auto; padding: 34px 56px 28px; min-height: 0; }
+  header { display: flex; align-items: flex-end; gap: 12px; }
+  header h1 { font-size: 46px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; font-variation-settings: "opsz" 96; }
+  .tools { margin-left: auto; display: flex; gap: 8px; }
+  .tools button { font-size: 14px; font-weight: 600; padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--line); }
+  .tools .main { background: var(--plum); color: #fff; border-color: var(--plum); }
+
+  .log { overflow: hidden; padding-top: 34px; }
+  .col { max-width: 760px; display: grid; gap: 26px; }
+  .me { font-size: 18px; color: var(--plum-2); }
+  .me::before { content: "You asked"; display: block; font-size: 13px; font-weight: 600; color: var(--plum); margin-bottom: 2px; }
+  .ai { background: var(--card); border-radius: 18px; padding: 24px 28px; font-size: 18px; line-height: 1.6; box-shadow: 0 2px 0 rgba(42,23,51,.08), 0 12px 30px rgba(42,23,51,.07); }
+  .ai .lead { font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; font-variation-settings: "opsz" 40; margin-bottom: 12px; }
+  .ai ul { padding-left: 22px; }
+  .ai li { margin: 6px 0; }
+  .ai li::marker { color: var(--ember-deep); }
+  .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ember); font-size: 12px; font-weight: 800; margin-left: 6px; vertical-align: 2px; }
+  .ai .end { margin-top: 12px; }
+  .foot { display: flex; align-items: center; gap: 18px; margin-top: 18px; padding-top: 14px; border-top: 1.5px solid var(--page); font-size: 14px; color: var(--plum-2); }
+  .foot .n { margin: 0 6px 0 0; }
+  .foot .acts { margin-left: auto; display: flex; gap: 14px; color: var(--plum); font-weight: 600; }
+
+  .box { max-width: 760px; display: flex; align-items: center; gap: 10px; background: var(--card); border: 2px solid var(--plum); border-radius: 16px; padding: 8px 8px 8px 18px; }
+  .box .ph { flex: 1; font-size: 18px; color: var(--plum-2); }
+  .box .att { font-size: 14px; font-weight: 600; padding: 8px 12px; border-radius: 10px; color: var(--plum-2); }
+  .send { background: var(--ember); font-weight: 800; font-size: 16px; padding: 11px 24px; border-radius: 11px; }
+  .hint { max-width: 760px; margin-top: 8px; font-size: 13.5px; color: var(--plum-2); }
+</style>
+</head>
+<body>
+<aside>
+  <div class="word">
+    <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z" fill="#2a1733"/><circle cx="212" cy="236" r="22" fill="#ff7a1a"/><circle cx="300" cy="236" r="26" fill="#fff3e8"/><circle cx="300" cy="236" r="12" fill="#ff7a1a"/></svg>
+    LocalAide
+  </div>
+  <nav>
+    <button class="on">Chat</button><button>Search</button><button>Memory</button><button>Skills</button><button>Models</button><button>Settings</button>
+  </nav>
+  <div class="recent">
+    <h2>Recent chats</h2>
+    <p class="on">Landlord letter</p><p>Birthday message for Sara</p><p>What does APR mean</p>
+  </div>
+  <div class="here"><b>Running here</b>Llama 3.2 3B, on this computer. Nothing is sent online.</div>
+</aside>
+
+<main>
+  <header>
+    <h1>Landlord letter</h1>
+    <div class="tools"><button>Llama 3.2 3B</button><button class="main">New chat</button><button>More</button></div>
+  </header>
+  <div class="log"><div class="col">
+    <p class="me">Can you sum up the letter from my landlord? It's in my Documents folder.</p>
+    <div class="ai">
+      <p class="lead">Your lease ends on 31 May, and they would like you to stay.</p>
+      <ul>
+        <li>To renew, sign the form and send it back by 3 May.<span class="n">1</span></li>
+        <li>Rent goes up from £950 to £985 a month.<span class="n">1</span></li>
+        <li>If you plan to leave, you must give two months' notice.<span class="n">2</span></li>
+      </ul>
+      <p class="end">Want me to draft a short reply?</p>
+      <div class="foot">
+        <span><span class="n">1</span>Landlord letter, April.pdf</span>
+        <span><span class="n">2</span>Tenancy agreement 2024.pdf</span>
+        <span class="acts"><span>Copy</span><span>Retry</span></span>
+      </div>
+    </div>
+  </div></div>
+  <div>
+    <div class="box"><button class="att">Add image</button><span class="ph">Ask anything</span><button class="send">Send</button></div>
+    <p class="hint">Enter sends. Esc stops a reply.</p>
+  </div>
+</main>
+</body>
+</html>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FocusTrap from "./FocusTrap.svelte";
   import Icon from "./Icon.svelte";
   import { dur } from "../lib/motion";
   import { fade, scale } from "svelte/transition";
@@ -19,6 +20,7 @@
 
   let copied = $state(false);
   let copiedBlock = $state<number | null>(null);
+  let copyError = $state<string | null>(null);
   let isEditing = $state(false);
   let editDraft = $state("");
   let editEl = $state<HTMLTextAreaElement>();
@@ -35,16 +37,22 @@
     try {
       await navigator.clipboard.writeText(content);
       copied = true;
+      copyError = null;
       setTimeout(() => { copied = false; }, 2000);
-    } catch {}
+    } catch {
+      copyError = "Copy failed. Try again.";
+    }
   };
 
   const copyCode = async (code: string, idx: number) => {
     try {
       await navigator.clipboard.writeText(code);
       copiedBlock = idx;
+      copyError = null;
       setTimeout(() => { copiedBlock = null; }, 2000);
-    } catch {}
+    } catch {
+      copyError = "Copy failed. Try again.";
+    }
   };
 
   const startEdit = () => {
@@ -135,11 +143,11 @@
 <div class={role === "user" ? "flex justify-end group mb-4" : "flex justify-start group mb-4"}>
   <div class="max-w-[85%] flex flex-col {role === 'user' ? 'items-end' : 'items-start'}">
     <div class="flex items-center gap-2 mb-1 px-1">
-      <span class="text-xs font-mono uppercase tracking-wider text-ink-400 font-medium">
+      <span class="text-xs uppercase tracking-wider text-ink-400 font-medium">
         {role === "user" ? "You" : "LocalAide"}
       </span>
       {#if ts}
-        <span class="text-xs text-ink-400 font-mono">
+        <span class="text-xs text-ink-400">
           {new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       {/if}
@@ -179,7 +187,7 @@
                 aria-label="View image {i + 1} fullscreen"
                 class="block cursor-zoom-in"
               >
-                <img src={src} alt="Attachment {i + 1}" class="max-h-48 rounded-lg border border-white/20" />
+                <img src={src} alt="Attachment {i + 1}" class="max-h-48 rounded-lg border border-veil/20" />
               </button>
             {/each}
           </div>
@@ -197,7 +205,7 @@
               </div>
             {:else}
               <div class="rounded-xl overflow-hidden border border-edge/60 bg-ink-950 my-2">
-                <div class="flex items-center justify-between px-3 py-1.5 bg-ink-900/90 border-b border-edge text-[11px] font-mono text-ink-400">
+                <div class="flex items-center justify-between px-3 py-1.5 bg-ink-900/90 border-b border-edge text-xs font-mono text-ink-400">
                   <span>{seg.lang}</span>
                   <button
                     type="button"
@@ -218,12 +226,12 @@
 
         {#if citations && citations.length > 0}
           <div class="mt-3 pt-2.5 border-t border-edge/80 flex flex-wrap items-center gap-1.5">
-            <span class="text-xs font-mono uppercase tracking-wider text-ink-400">Sources:</span>
+            <span class="text-xs uppercase tracking-wider text-ink-400">Sources:</span>
             {#each citations as cit}
               <button
                 type="button"
                 onclick={() => activeCitation = cit}
-                class="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-ink-800/80 hover:bg-ink-700/80 text-ember-300 border border-edge/60 transition-colors"
+                class="inline-flex items-center gap-1 text-sm rounded-md bg-ink-800/80 hover:bg-ink-700/80 text-ember-300 border border-edge/60 transition-colors"
               >
                 <span class="text-ember-400 font-semibold">[{cit.index}]</span>
                 <span class="max-w-[120px] truncate">{cit.title}</span>
@@ -234,7 +242,8 @@
       </div>
 
       <!-- Action buttons -->
-      <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1.5 mt-1 text-[11px] text-ink-400">
+      <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1.5 mt-1 text-xs text-ink-400">
+        {#if copyError}<span role="alert" class="text-rose-300">{copyError}</span>{/if}
         <button
           type="button"
           onclick={copyMessage}
@@ -279,6 +288,7 @@
     onclick={() => (lightbox = null)}
     onkeydown={(e) => { if (e.key === 'Escape') lightbox = null; }}
   >
+    <FocusTrap>
     <button
       type="button"
       class="max-h-[85vh] max-w-[92vw] p-0 border-none bg-transparent cursor-zoom-out"
@@ -299,6 +309,7 @@
     >
       <Icon name="close" class="w-4 h-4" />
     </button>
+    </FocusTrap>
   </div>
 {/if}
 
@@ -320,11 +331,12 @@
       out:scale={{ start: 0.97, duration: dur(80) }}
       class="bg-ink-900 border border-edge rounded-2xl max-w-lg w-full p-5 space-y-3 shadow-2xl"
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+      onkeydown={(e) => { if (e.key === 'Escape') activeCitation = null; e.stopPropagation(); }}
     >
+      <FocusTrap>
       <div class="flex items-center justify-between pb-2 border-b border-edge">
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded bg-ember-950 border border-ember-800/50 text-ember-300 font-mono text-xs">
+          <span class="px-2 py-0.5 rounded bg-ember-950 border border-ember-800/50 text-ember-300 text-xs">
             Source [{activeCitation.index}]
           </span>
           <span class="font-medium text-sm text-ink-200">{activeCitation.title}</span>
@@ -333,18 +345,19 @@
           <Icon name="close" class="w-3.5 h-3.5" />
         </button>
       </div>
-      <div class="text-[11px] font-mono text-ink-400 break-all">
+      <div class="text-xs font-mono text-ink-400 break-all">
         {activeCitation.source}
       </div>
       <div class="bg-ink-950 border border-edge/80 rounded-xl p-3 max-h-60 overflow-y-auto">
-        <pre class="text-xs font-mono text-ink-300 whitespace-pre-wrap leading-relaxed">{activeCitation.snippet}</pre>
+        <pre class="text-sm text-ink-300 whitespace-pre-wrap leading-relaxed">{activeCitation.snippet}</pre>
       </div>
-      <div class="flex justify-between items-center text-xs font-mono text-ink-400 pt-1">
+      <div class="flex justify-between items-center text-xs text-ink-400 pt-1">
         <span>Score: {activeCitation.score.toFixed(3)}</span>
         <button onclick={() => activeCitation = null} class="px-3 py-1 bg-ink-800 hover:bg-ink-700 text-ink-200 rounded-lg text-xs">
           Close
         </button>
       </div>
+      </FocusTrap>
     </div>
   </div>
 {/if}

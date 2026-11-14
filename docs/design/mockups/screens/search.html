@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Search mockup</title>
+<link rel="stylesheet" href="shell.css">
+<style>
+  .bar { display: flex; gap: 10px; align-items: center; }
+  .bar .field { flex: 1; }
+  .meta { display: flex; align-items: center; gap: 16px; margin: 12px 0 20px; font-size: 13px; color: var(--ink-400); }
+  .meta .watch { display: flex; align-items: center; gap: 6px; color: var(--ok); }
+  .meta .r { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .res { display: grid; grid-template-columns: 36px 1fr auto; gap: 4px 14px; padding: 14px 12px; border-radius: 6px; }
+  .res + .res { border-top: 1px solid var(--ink-800); }
+  .res.hover { background: rgba(var(--veil), .04); }
+  .res .ico { grid-row: span 3; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 6px; background: var(--ink-800); color: var(--ink-200); font-size: 11px; font-weight: 700; }
+  .res .t { color: var(--ink-50); font-weight: 600; font-size: 15px; }
+  .res .p { font-size: 13px; color: var(--ink-400); }
+  .res .s { color: var(--ink-200); max-width: 72ch; }
+  .res mark { background: var(--warn-bg); color: inherit; padding: 0 2px; border-radius: 2px; font-weight: 600; }
+  .res .end { grid-row: span 3; display: flex; gap: 4px; align-self: center; opacity: 0; }
+  .res.hover .end { opacity: 1; }
+  .count { font-size: 13px; color: var(--ink-400); margin-bottom: 4px; }
+</style></head>
+<body><script src="shell.js"></script><script>
+shell("Search", `
+<div class="page">
+  <header class="page-header">
+    <div><h1>Documents</h1><p>Find things in the folders you add. Your files are read here and never uploaded.</p></div>
+    <div class="actions">
+      <button class="btn secondary">${svg('<path d="M6 3h9l3 3v15H6z"/><path d="M12 10v6M9 13h6"/>')}Add a file</button>
+      <button class="btn primary">${svg('<path d="M3 7h6l2 2h10v10H3z"/><path d="M12 12v5M9.5 14.5h5"/>')}Add a folder</button>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div class="field big">${svg('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>')}<span class="val">rent</span>
+      <button class="icon-btn" aria-label="Clear">${svg('<path d="M6 6l12 12M18 6L6 18"/>')}</button></div>
+    <div class="seg" role="tablist"><button class="on" role="tab">My documents</button><button role="tab">The web</button></div>
+  </div>
+
+  <div class="meta">
+    <span>128 documents in 3 folders</span>
+    <span class="watch"><span class="dot"></span>Watching Documents for new files</span>
+    <button class="btn subtle small">Stop watching</button>
+    <span class="r"><button class="btn subtle">${svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>')}Search settings</button></span>
+  </div>
+
+  <p class="count">3 results for “rent”</p>
+  <div>
+    <div class="res hover">
+      <div class="ico">PDF</div>
+      <div class="t">Landlord letter, April.pdf</div>
+      <div class="end"><button class="btn subtle">Open</button><button class="icon-btn" aria-label="More">${svg('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>')}</button></div>
+      <div class="p">Documents\\Home</div>
+      <div class="s">…please sign and return the enclosed renewal form by 3 May. From 1 June the monthly <mark>rent</mark> will be £985…</div>
+    </div>
+    <div class="res">
+      <div class="ico">PDF</div>
+      <div class="t">Tenancy agreement 2024.pdf</div>
+      <div class="end"></div>
+      <div class="p">Documents\\Home</div>
+      <div class="s">…the <mark>rent</mark> is payable monthly in advance on the first day of each month by standing order…</div>
+    </div>
+    <div class="res">
+      <div class="ico">MD</div>
+      <div class="t">Budget 2026.md</div>
+      <div class="end"></div>
+      <div class="p">Documents\\Money</div>
+      <div class="s">Fixed costs: <mark>rent</mark> £950, council tax £128, internet £32, phone £15…</div>
+    </div>
+  </div>
+</div>`);
+</script></body></html>

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::models_dir;
-use crate::services::models::catalog::{CatalogEntry, CatalogManifest};
+use crate::services::models::catalog::{CatalogEntry, CatalogManifest, is_safe_model_id};
 
 /// A downloadable companion file (config, tokenizer, sidecar json…).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,20 +265,36 @@ impl ModelManager {
             .collect()
     }
 
-    /// Return the currently active model entry (installed and activated).
-    pub fn active_model(&self) -> Option<ModelEntry> {
-        self.list_models().into_iter().find(|m| m.active)
+    /// Id of the model the user last loaded, or `None`. Unlike a catalog
+    /// lookup, this keeps community models that the catalog does not list.
+    pub fn active_model_id(&self) -> Option<String> {
+        match self.state.lock() {
+            Ok(state) => state.active_model.clone(),
+            Err(e) => {
+                log::error!("state mutex poisoned in active_model_id: {e}");
+                None
+            }
+        }
     }
 
-    /// Mark a model active. Deactivates any previously active model.
+    /// Forget the active model. The caller stops the engine.
+    pub fn clear_active(&self) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| format!("state mutex poisoned: {e}"))?;
+        state.active_model = None;
+        drop(state);
+        self.save_state()
+    }
+
+    /// Record a model as the active one. The caller checks that the file is on
+    /// disk first. This only saves the choice.
     pub fn activate(&self, id: &str) -> Result<(), String> {
         let mut state = self
             .state
             .lock()
             .map_err(|e| format!("state mutex poisoned: {e}"))?;
-        if !state.installed.contains_key(id) {
-            return Err(format!("model {id} not installed"));
-        }
         state.active_model = Some(id.to_string());
         drop(state);
         self.save_state()?;
@@ -287,6 +303,11 @@ impl ModelManager {
 
     /// Remove an installed model file and its state entry.
     pub fn remove(&self, id: &str) -> Result<(), String> {
+        // The id becomes a folder path that is deleted recursively below. An id
+        // of `..` would delete the whole app data folder, so reject it first.
+        if !is_safe_model_id(id) {
+            return Err(format!("invalid model id: {id}"));
+        }
         let mut state = self
             .state
             .lock()
@@ -354,5 +375,44 @@ impl ModelManager {
                 false
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_refuses_ids_that_leave_the_models_folder() {
+        let root = std::env::temp_dir().join(format!("la-model-remove-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let models = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        fs::write(root.join("keep.txt"), "data").unwrap();
+
+        let manager = ModelManager::with_dir(models).unwrap();
+        assert!(manager.remove("..").is_err());
+        assert!(manager.remove("../").is_err());
+        assert!(root.join("keep.txt").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn activate_records_the_choice_and_clear_active_forgets_it() {
+        let root = std::env::temp_dir().join(format!("la-model-active-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        let manager = ModelManager::with_dir(root.join("models")).unwrap();
+        assert!(manager.active_model_id().is_none());
+        manager.activate("community-model").unwrap();
+        assert_eq!(
+            manager.active_model_id().as_deref(),
+            Some("community-model")
+        );
+        manager.clear_active().unwrap();
+        assert!(manager.active_model_id().is_none());
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -1,122 +1,119 @@
 <script lang="ts">
-  import { api } from "../lib/api/client";
   import { onMount } from "svelte";
+  import Button from "../components/Button.svelte";
+  import EmptyState from "../components/EmptyState.svelte";
+  import ErrorBanner from "../components/ErrorBanner.svelte";
+  import Icon from "../components/Icon.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
+  import TextField from "../components/TextField.svelte";
+  import { api, errorMessage } from "../lib/api/client";
+
+  type DevModel = { id: string; name: string; ram: number; size: string };
+  type DevPreset = { name: string; data: { ramTotal: number; selected: string[] } };
 
   let ramTotal = $state(16);
   let selected = $state<Set<string>>(new Set(["qwen3-embedding-0.6b-q8"]));
-  let models = $state<{ id: string; name: string; ram: number; size: string }[]>([]);
+  let models = $state<DevModel[]>([]);
   let totalRam = $state(0);
   let overBudget = $state(false);
   let loading = $state(true);
   let presetName = $state("");
+  let presets = $state<DevPreset[]>([]);
+  let actionError = $state<string | null>(null);
 
-  let presets = $state<any[]>([]);
-
-  onMount(async () => {
-    try {
-      const list = await api.listModels();
-      models = list.map(m => ({
-        id: m.id,
-        name: m.name,
-        ram: Number(m.ram_estimate_gb),
-        size: m.size_bytes ? `${(m.size_bytes/1024/1024).toFixed(0)} MB` : "?"
-      }));
-      const cfg = await api.loadConfig();
-      ramTotal = cfg.ram_budget_mb ? Math.round(cfg.ram_budget_mb/1024) : ramTotal;
-      if (cfg.selected_models?.length) selected = new Set(cfg.selected_models);
-      recalc();
-    } catch {}
-    finally { loading = false; }
-    try { presets = JSON.parse(localStorage.getItem("dev-presets") || "[]"); } catch {}
-  });
-
-  async function recalc() {
+  const recalc = async () => {
     if (models.length === 0) return;
     const ids = Array.from(selected);
     try {
-      const res = await api.computeRam(ids);
-      totalRam = res.total_ram_gb;
-    } catch {
-      totalRam = Array.from(selected).reduce((sum, id) => sum + (models.find(m=>m.id===id)?.ram||0), 0);
+      const result = await api.computeRam(ids);
+      totalRam = result.total_ram_gb;
+    } catch (e: unknown) {
+      actionError = `The memory estimate could not update: ${errorMessage(e)}`;
+      totalRam = ids.reduce((sum, id) => sum + (models.find((model) => model.id === id)?.ram || 0), 0);
     }
     overBudget = totalRam > ramTotal * 0.7;
-  }
+  };
 
-  $effect(() => { recalc(); });
+  const load = async () => {
+    loading = true;
+    actionError = null;
+    try {
+      const list = await api.listModels();
+      models = list.map((model) => ({
+        id: model.id,
+        name: model.name,
+        ram: Number(model.ram_estimate_gb),
+        size: model.size_bytes ? `${(model.size_bytes / 1024 / 1024).toFixed(0)} MB` : "Unknown",
+      }));
+      const config = await api.loadConfig();
+      ramTotal = config.ram_budget_mb ? Math.round(config.ram_budget_mb / 1024) : ramTotal;
+      if (config.selected_models?.length) selected = new Set(config.selected_models);
+      await recalc();
+    } catch (e: unknown) {
+      actionError = errorMessage(e);
+    } finally {
+      loading = false;
+    }
+    try {
+      const stored = localStorage.getItem("dev-presets");
+      presets = stored ? JSON.parse(stored) as DevPreset[] : [];
+    } catch (e: unknown) {
+      actionError = `Saved presets could not load: ${errorMessage(e)}`;
+    }
+  };
+
+  onMount(load);
+  $effect(() => { void recalc(); });
 
   const savePreset = () => {
     if (!presetName.trim()) return;
-    const data = { ramTotal, selected: Array.from(selected) };
-    const list = [...presets, { name: presetName.trim(), data }];
-    localStorage.setItem("dev-presets", JSON.stringify(list));
-    presets = list;
-    presetName = "";
+    try {
+      const data = { ramTotal, selected: Array.from(selected) };
+      const list = [...presets, { name: presetName.trim(), data }];
+      localStorage.setItem("dev-presets", JSON.stringify(list));
+      presets = list;
+      presetName = "";
+    } catch (e: unknown) {
+      actionError = `The preset could not be saved: ${errorMessage(e)}`;
+    }
   };
 
-  const loadPreset = (p: { name: string; data: { ramTotal: number; selected: string[] } }) => {
-    ramTotal = p.data.ramTotal;
-    selected = new Set(p.data.selected);
+  const loadPreset = (preset: DevPreset) => {
+    ramTotal = preset.data.ramTotal;
+    selected = new Set(preset.data.selected);
   };
 </script>
 
-<div class="max-w-6xl mx-auto space-y-6">
-  <div>
-    <h2 class="text-lg font-semibold tracking-tight">Dev configurator</h2>
-    <p class="text-xs text-ink-400">Manual model picker with live RAM calculator</p>
-  </div>
+<div class="mx-auto max-w-6xl pb-10">
+  <PageHeader title="Developer config" description="Choose local models and check their memory use.">
+    {#snippet actions()}
+      <Button variant="secondary" onclick={() => void load()}><Icon name="refresh" class="h-[18px] w-[18px]" />Refresh</Button>
+    {/snippet}
+  </PageHeader>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  {#if actionError}<div class="mb-4"><ErrorBanner message={actionError} onRetry={() => void load()} onDismiss={() => actionError = null} /></div>{/if}
+
+  <div class="grid gap-6 lg:grid-cols-2">
     <div class="space-y-4">
-      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
-        <div class="flex items-center justify-between mb-4">
-          <div class="font-medium text-ink-100">Available RAM</div>
-          <div class="flex items-center gap-2">
-            <input bind:value={ramTotal} type="number" class="w-24 bg-ink-950 border border-edge rounded-lg px-2 py-1 text-sm font-mono text-ink-200 focus:outline-none focus:border-ember-500"/>
-            <span class="text-xs text-ink-400">GB</span>
-          </div>
-        </div>
-        <div class="text-xs text-ink-400 mb-3">Budget = 70% of usable RAM</div>
-        <div class="w-full bg-ink-800 rounded-full h-2 mb-3">
-          <div class={`h-2 rounded-full transition-all duration-300 ${!overBudget ? 'bg-emerald-500' : 'bg-rose-500'}`} style="width: {Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%"></div>
-        </div>
-        <div class="text-sm font-mono text-ink-300">
-          Selected: {totalRam.toFixed(2)} GB · budget: {(ramTotal * 0.7).toFixed(2)} GB
-          <span class={`${overBudget ? 'text-rose-400' : 'text-emerald-400'}`}> · {overBudget ? 'over budget' : 'fits'}</span>
-        </div>
+      <div class="rounded-lg border border-ink-700 bg-ink-900 p-5">
+        <div class="flex items-center justify-between gap-4"><h2 class="font-semibold text-ink-50">Available memory</h2><label class="flex items-center gap-2 text-sm text-ink-400"><input bind:value={ramTotal} type="number" class="h-9 w-24 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100 outline-none focus:border-edge" />GB</label></div>
+        <p class="mt-1 text-sm text-ink-400">Local models may use up to 70% of this amount.</p>
+        <div class="my-4 h-2 w-full overflow-hidden rounded-full bg-ink-800"><div class={`h-full transition-all duration-300 ${overBudget ? "bg-rose-500" : "bg-emerald-500"}`} style={`width:${Math.min(100, (totalRam / (ramTotal * 0.7)) * 100)}%`}></div></div>
+        <div class="text-sm text-ink-300">Selected: {totalRam.toFixed(2)} GB · limit: {(ramTotal * 0.7).toFixed(2)} GB <span class={overBudget ? "text-rose-400" : "text-emerald-400"}>· {overBudget ? "over limit" : "fits"}</span></div>
       </div>
 
-      <div class="border border-edge rounded-2xl bg-ink-900/60 divide-y divide-ink-800 overflow-hidden">
-        {#if loading}
-          <div class="py-8 text-center text-xs text-ink-400 font-mono">Loading models…</div>
-        {:else if models.length === 0}
-          <div class="py-8 text-center text-xs text-ink-400">No models available.</div>
-        {:else}
-        {#each models as m}
-          <label class="flex items-center gap-3 p-4 hover:bg-white/[0.02] cursor-pointer transition">
-            <input type="checkbox" bind:group={selected} value={m.id} class="accent-ember-600"/>
-            <div class="flex-1">
-              <div class="text-sm font-medium text-ink-100">{m.name}</div>
-              <div class="text-xs text-ink-400 font-mono">{m.size} · ~{m.ram.toFixed(2)} GB RAM</div>
-            </div>
-          </label>
-        {/each}
-        {/if}
+      <div class="overflow-hidden rounded-lg border border-ink-700 bg-ink-900">
+        {#if loading}<div class="px-4 py-10 text-center text-sm text-ink-400">Loading models…</div>{:else if models.length === 0}<EmptyState icon="models" title="No models available" description="Download a model before using this screen." />{:else}{#each models as model (model.id)}<label class="flex cursor-pointer items-center gap-3 border-b border-ink-800 p-4 last:border-0 hover:bg-veil/5"><input type="checkbox" bind:group={selected} value={model.id} class="accent-ember-600" /><div class="flex-1"><div class="font-semibold text-ink-50">{model.name}</div><div class="text-sm text-ink-400">{model.size} · about {model.ram.toFixed(2)} GB memory</div></div></label>{/each}{/if}
       </div>
     </div>
 
-    <div class="space-y-4">
-      <div class="border border-edge rounded-2xl p-5 bg-ink-900/60">
-        <div class="font-medium text-ink-100 mb-2">Preset actions</div>
-        <div class="flex gap-2 mb-3">
-          <input bind:value={presetName} placeholder="Preset name" class="flex-1 bg-ink-950 border border-edge rounded-lg px-2 py-1.5 text-xs text-ink-200 focus:outline-none focus:border-ember-500"/>
-          <button onclick={savePreset} class="px-3 py-1.5 rounded-lg bg-white/5 border border-edge text-xs text-ink-300 hover:bg-white/10">Save</button>
-        </div>
-        <div class="space-y-1 max-h-32 overflow-auto">
-          {#each presets as p}
-            <button onclick={() => loadPreset(p)} class="w-full text-left px-2 py-1 rounded bg-white/5 border border-edge text-xs text-ink-300 hover:bg-white/10">{p.name}</button>
-          {:else}
-            <div class="text-xs text-ink-400">No saved presets</div>
-          {/each}
+    <div>
+      <div class="rounded-lg border border-ink-700 bg-ink-900 p-5">
+        <h2 class="font-semibold text-ink-50">Saved choices</h2>
+        <p class="mt-1 text-sm text-ink-400">Save a group of models for later.</p>
+        <div class="mt-4 flex gap-2"><TextField bind:value={presetName} ariaLabel="Saved choice name" placeholder="Name this choice" class="flex-1" /><Button variant="secondary" disabled={!presetName.trim()} onclick={savePreset}>Save</Button></div>
+        <div class="mt-3 space-y-2">
+          {#each presets as preset (preset.name)}<button type="button" onclick={() => loadPreset(preset)} class="w-full rounded-md border border-ink-700 bg-ink-950 px-3 py-2 text-left text-sm text-ink-300 hover:bg-veil/5">{preset.name}</button>{:else}<p class="text-sm text-ink-400">No saved choices yet.</p>{/each}
         </div>
       </div>
     </div>

@@ -24,6 +24,20 @@ impl NotesManager {
         }
     }
 
+    /// Note paths come back from the frontend, so only a `.md` file that sits
+    /// directly in the notes folder is accepted. Any other path is refused
+    /// before a file is read, changed or deleted.
+    fn ensure_note_path(&self, path_str: &str) -> Result<(), AppError> {
+        let path = Path::new(path_str);
+        let in_notes_folder = path.parent() == Some(self.notes_dir.as_path());
+        let is_markdown = path.extension().and_then(|e| e.to_str()) == Some("md");
+        if in_notes_folder && is_markdown {
+            Ok(())
+        } else {
+            Err(AppError::invalid_input(format!("Not a memory note: {path_str}")))
+        }
+    }
+
     pub fn create_note(
         &self,
         title: &str,
@@ -124,6 +138,7 @@ impl NotesManager {
         content: &str,
         tags: Option<Vec<String>>,
     ) -> Result<(), AppError> {
+        self.ensure_note_path(path_str)?;
         let p = Path::new(path_str);
         if !p.exists() {
             return Err(AppError::invalid_input(format!(
@@ -192,6 +207,7 @@ impl NotesManager {
     }
 
     pub fn read_note(&self, path_str: &str) -> Result<String, AppError> {
+        self.ensure_note_path(path_str)?;
         let p = Path::new(path_str);
         if !p.exists() {
             return Err(AppError::invalid_input(format!(
@@ -203,6 +219,7 @@ impl NotesManager {
     }
 
     pub fn delete_note(&self, path_str: &str) -> Result<bool, AppError> {
+        self.ensure_note_path(path_str)?;
         let p = Path::new(path_str);
         if p.exists() {
             let _ = fs::remove_file(p);
@@ -249,5 +266,39 @@ impl NotesManager {
         // Clear SQLite notes table
         let _ = self.db.clear_all_notes();
         Ok(count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn note_paths_must_be_markdown_files_in_the_notes_folder() {
+        let root = std::env::temp_dir().join(format!("la-notes-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let notes_dir = root.join("memory");
+        fs::create_dir_all(&notes_dir).unwrap();
+        let library = Arc::new(LibraryService::open_in_memory().unwrap());
+        let manager = NotesManager::new(library.db(), library.clone(), notes_dir.clone());
+
+        let note = notes_dir.join("plan.md");
+        fs::write(&note, "# Plan").unwrap();
+        let outside = root.join("secret.md");
+        fs::write(&outside, "keep").unwrap();
+        let escape = notes_dir.join("..").join("secret.md");
+
+        assert!(manager.read_note(&note.to_string_lossy()).is_ok());
+        assert!(manager.read_note(&outside.to_string_lossy()).is_err());
+        assert!(manager.read_note(&escape.to_string_lossy()).is_err());
+        assert!(
+            manager
+                .update_note(&outside.to_string_lossy(), "changed", None)
+                .is_err()
+        );
+        assert!(manager.delete_note(&outside.to_string_lossy()).is_err());
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "keep");
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import ErrorBanner from "../components/ErrorBanner.svelte";
   import Icon from "../components/Icon.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
   import { onMount } from "svelte";
   import { api, errorMessage } from "../lib/api/client";
   import type { HfFileInfo, HfRepo, ModelInfo } from "../lib/api/bindings";
@@ -31,12 +33,14 @@
   let progress = $state(0);
   let status = $state("Detecting system memory...");
   let detectError = $state(false);
+  let setupError = $state<string | null>(null);
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));
   const recommended = $derived(fittingPresets[fittingPresets.length - 1] ?? presets[0]);
 
   const detect = async () => {
+    setupError = null;
     try {
       const probe = await api.systemProbe();
       ramTotal = probe.total_ram_gb * 1024 * 1024 * 1024;
@@ -62,16 +66,18 @@
       presetError = false;
       step = "preset";
       status = `Recommended: ${recommended.name} preset fits your ${probe.budget_gb.toFixed(1)} GB budget.`;
-    } catch (e: any) {
+    } catch (e: unknown) {
       detectError = true;
       presetError = true;
-      status = "System probe unavailable: " + (e?.message ?? String(e));
+      setupError = errorMessage(e);
+      status = "We could not check this computer.";
     }
   };
 
   const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name} preset (~${p.ram})?`; };
   const install = async () => {
     if (!selected) return;
+    setupError = null;
     const preset = selected;
     step = "download"; status = `Downloading ${preset.name} models...`;
     progress = 0;
@@ -82,9 +88,10 @@
         status = `Downloading ${preset.name} models (${evt.model_id})...`;
       });
       step = "done"; status = `${preset.name} preset installed.`;
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      status = /cancel/i.test(msg) ? "Install cancelled." : `Install failed: ${msg}`;
+    } catch (e: unknown) {
+      const message = errorMessage(e);
+      setupError = /cancel/i.test(message) ? null : message;
+      status = /cancel/i.test(message) ? "Install cancelled." : "The model could not be installed.";
       step = "confirm";
     }
   };
@@ -93,12 +100,12 @@
     if (!selected) return;
     try {
       await api.cancelPresetDownload(selected.id);
-    } catch {}
+    } catch (e: unknown) {
+      setupError = `The download could not stop: ${errorMessage(e)}`;
+    }
   };
 
   // ---- Community models (Hugging Face) ----
-  // The preset path stays the default; this is the Models screen's
-  // community browser, condensed, for picks the catalog does not carry.
 
   let communityOpen = $state(false);
   let wfQuery = $state("");
@@ -119,7 +126,7 @@
     wfExpanded = null;
     try {
       wfRepos = await api.hfSearch(wfQuery.trim(), 10);
-      if (!wfRepos.length) wfError = "No GGUF repositories matched that search.";
+      if (!wfRepos.length) wfError = "No community models matched that search.";
     } catch (e) {
       wfError = errorMessage(e);
     } finally {
@@ -166,10 +173,10 @@
       });
       step = "done";
       status = `${label} installed. You can switch models any time on the Models screen.`;
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      wfError = /cancel/i.test(msg) ? null : `Install failed: ${msg}`;
-      status = /cancel/i.test(msg) ? "Install cancelled." : `Install failed: ${msg}`;
+    } catch (e: unknown) {
+      const message = errorMessage(e);
+      wfError = /cancel/i.test(message) ? null : `The model could not be installed: ${message}`;
+      status = /cancel/i.test(message) ? "Install cancelled." : "The community model could not be installed.";
       step = "preset";
     } finally {
       wfAdding = null;
@@ -181,15 +188,24 @@
     if (!communityModelId) return;
     try {
       await api.cancelModelDownload(communityModelId);
-    } catch {}
+    } catch (e: unknown) {
+      setupError = `The download could not stop: ${errorMessage(e)}`;
+    }
+  };
+
+  const retrySetup = () => {
+    if (step === "detect") return void detect();
+    if (step === "confirm" && selected) return void install();
+    return void detect();
   };
 
   onMount(detect);
 </script>
 
-<div class="max-w-2xl mx-auto">
-  <div class="rounded-2xl border border-edge bg-ink-900/60 p-6 shadow-[0_0_80px_rgba(255,122,26,0.08)]">
-    <h2 class="text-lg font-semibold tracking-tight mb-4">First run — Simple setup</h2>
+<div class="mx-auto max-w-3xl">
+  <PageHeader title="Set up LocalAide" description="Choose a model that fits this computer. It will run locally by default." />
+  {#if setupError}<div class="mb-4"><ErrorBanner message={setupError} onRetry={retrySetup} onDismiss={() => setupError = null} /></div>{/if}
+  <div class="rounded-lg border border-edge bg-ink-900/60 p-6">
 
     {#if step === "detect"}
       <div class="flex flex-col items-center gap-3 py-10">
@@ -210,15 +226,15 @@
       <div class="grid grid-cols-3 gap-2 text-sm mb-6">
         <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Total</span>
-          <span class="font-mono text-ink-200">{formatBytes(ramTotal)}</span>
+          <span class="text-ink-200">{formatBytes(ramTotal)}</span>
         </div>
         <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Usable</span>
-          <span class="font-mono text-ink-200">{formatBytes(ramUsable)}</span>
+          <span class="text-ink-200">{formatBytes(ramUsable)}</span>
         </div>
         <div class="px-3 py-2 rounded-xl border border-ember-500/30 bg-ember-500/10">
           <span class="block text-xs text-ember-300">70% budget</span>
-          <span class="font-mono text-ember-200">{formatBytes(budget)}</span>
+          <span class="text-ember-200">{formatBytes(budget)}</span>
         </div>
       </div>
       <p class="text-sm text-ink-400 mb-4">
@@ -232,7 +248,7 @@
         {#each presets as p}
           {@const fits = p.ramGb <= budgetGb}
           {@const isRec = p.id === recommended.id}
-          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-xl border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-white/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
+          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-xl border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
             <div class="flex items-center justify-between">
               <div>
                 <div class="font-medium text-ink-100 flex items-center gap-2">
@@ -266,7 +282,7 @@
             <input
               type="text"
               bind:value={wfQuery}
-              placeholder="Search public GGUF repositories…"
+              placeholder="Search public community models…"
               onkeydown={(e) => e.key === "Enter" && wfSearch()}
               class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 outline-none focus:border-ember-500/60"
             />
@@ -279,20 +295,20 @@
             </button>
           </div>
           {#if wfError}
-            <p class="mt-2 text-xs text-rose-300">{wfError}</p>
+            <div class="mt-2"><ErrorBanner message={wfError} onRetry={() => void wfSearch()} onDismiss={() => wfError = null} /></div>
           {/if}
           <div class="mt-3 space-y-1.5 max-h-72 overflow-auto">
             {#each wfRepos as repo (repo.id)}
               <div class="rounded-lg border border-edge bg-ink-950/60">
                 <button
                   onclick={() => wfToggleRepo(repo.id)}
-                  class="w-full text-left px-3 py-2 hover:bg-white/[0.02] transition-colors"
+                  class="w-full text-left px-3 py-2 hover:bg-veil/[0.02] transition-colors"
                 >
                   <div class="flex items-center justify-between gap-2">
                     <span class="text-xs text-ink-200 font-medium truncate">{repo.id}</span>
-                    <span class="text-[10px] text-ink-500 font-mono shrink-0">{repo.downloads.toLocaleString()} dl</span>
+                    <span class="text-sm text-ink-400 shrink-0">{repo.downloads.toLocaleString()} downloads</span>
                   </div>
-                  <div class="text-[10px] text-ink-500 font-mono">
+                  <div class="text-sm text-ink-400">
                     {#if repo.license}{repo.license}{/if}
                     {#if repo.gated}<span class="text-amber-300"> · gated — needs a hub login, refused here</span>{/if}
                   </div>
@@ -300,19 +316,19 @@
                 {#if wfExpanded === repo.id}
                   <div class="border-t border-edge px-3 py-2">
                     {#if wfFilesBusy === repo.id}
-                      <div class="text-[11px] text-ink-400 font-mono">Listing files…</div>
+                      <div class="text-sm text-ink-400">Listing files…</div>
                     {:else if (wfFiles[repo.id] ?? []).length === 0}
-                      <div class="text-[11px] text-ink-400">No pinned GGUF files in this repository.</div>
+                      <div class="text-sm text-ink-400">No model files in this folder.</div>
                     {:else}
                       {#each wfFiles[repo.id] as file (file.path)}
                         <div class="flex items-center justify-between gap-2 py-1">
-                          <span class="text-[11px] text-ink-300 font-mono truncate">{file.path}</span>
+                          <span class="text-xs text-ink-300 font-mono truncate">{file.path}</span>
                           <span class="flex items-center gap-2 shrink-0">
-                            <span class="text-[10px] text-ink-500 font-mono">{formatBytes(file.size)}</span>
+                            <span class="text-sm text-ink-400">{formatBytes(file.size)}</span>
                             <button
                               onclick={() => wfInstall(repo.id, file)}
                               disabled={wfAdding !== null}
-                              class="px-2 py-1 rounded bg-ember-600 text-on-ember text-[10px] font-medium disabled:opacity-40"
+                              class="px-2 py-1 rounded bg-ember-600 text-on-ember text-xs font-medium disabled:opacity-40"
                             >
                               {wfAdding === file.path ? "Adding…" : "Install"}
                             </button>
@@ -325,8 +341,8 @@
               </div>
             {/each}
           </div>
-          <p class="mt-2 text-[10px] text-ink-500">
-            Community weights and licenses are not vetted by LocalAide; every download is hash-verified against what the hub serves.
+          <p class="mt-2 text-xs text-ink-500">
+            Community model files and licenses are not checked by LocalAide. Each download is checked against the source file.
           </p>
         {/if}
       </div>
@@ -337,13 +353,13 @@
       </div>
       <p class="text-sm text-ink-400 mb-6">{status}</p>
       <div class="flex gap-3">
-        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-white/5 border border-edge text-sm text-ink-300 hover:bg-white/10">Change preset</button>
+        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-veil/5 border border-edge text-sm text-ink-300 hover:bg-veil/10">Change preset</button>
         <button onclick={install} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Install</button>
       </div>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
       <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>
-      <div class="text-xs font-mono text-ink-400 mb-4">{progress}%</div>
+      <div class="text-sm text-ink-400 mb-4">{progress}%</div>
       <button
         onclick={communityModelId ? cancelCommunity : cancelInstall}
         class="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"

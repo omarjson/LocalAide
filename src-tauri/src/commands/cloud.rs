@@ -5,7 +5,7 @@
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::config::{CloudProvider, validate_base_url};
+use crate::config::{CloudProvider, is_local_host, validate_base_url};
 use crate::domain::cloud::{
     CloudConfigStatus, CloudModeRequest, CloudProviderDto, CloudProviderSaveRequest,
 };
@@ -120,11 +120,7 @@ pub fn cloud_provider_presets() -> Vec<CloudProviderPreset> {
 /// Plain-HTTP proxies on this machine (Ollama, LM Studio, llama-server)
 /// legitimately run without any key.
 fn is_loopback_http(base_url: &str) -> bool {
-    url::Url::parse(base_url).is_ok_and(|u| {
-        u.scheme() == "http"
-            && u.host_str()
-                .is_some_and(|h| h == "localhost" || h.starts_with("127."))
-    })
+    url::Url::parse(base_url).is_ok_and(|u| u.scheme() == "http" && is_local_host(&u))
 }
 
 /// Short hint of a stored key for the frontend: fixed dots plus the last four

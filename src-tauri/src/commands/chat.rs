@@ -55,8 +55,30 @@ fn validate_images(images: &[String]) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Thread ids become file names in the conversations folder, so only a short
+/// plain token is accepted. The app issues ids like `t_1731542400000`.
+fn validate_thread_id(thread_id: &str) -> Result<(), AppError> {
+    let plain = !thread_id.is_empty()
+        && thread_id.len() <= 64
+        && thread_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    if plain {
+        Ok(())
+    } else {
+        Err(AppError::invalid_input("That conversation id is not valid."))
+    }
+}
+
 #[tauri::command]
 pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<String, AppError> {
+    load_and_activate(&state, id).await
+}
+
+/// Load a model into the local engine, then mark it active and remember it in
+/// the selection. The "Use this" button, the chat picker and the preset install
+/// all come through here.
+pub(crate) async fn load_and_activate(state: &AppState, id: String) -> Result<String, AppError> {
     // Filesystem truth: the model must exist in the active catalog or the
     // community registry AND on disk. This keeps freshly downloaded models
     // loadable and honors split-GGUF dest names.
@@ -87,7 +109,9 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
         let _ = tx.send(engine.load(&load_path, context));
     });
     let res = rx.await.map_err(|e| AppError::internal(e.to_string()))??;
-    let _ = state.model_manager.activate(&id);
+    if let Err(e) = state.model_manager.activate(&id) {
+        log::warn!("Could not save the active model {id}: {e}");
+    }
 
     // Persist active model in config for auto-reload
     if let Ok(store) = state.config_store.lock()
@@ -102,11 +126,15 @@ pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<St
     Ok(res)
 }
 
-/// Stop the local engine and free the model's RAM. The model stays installed
-/// and active in the catalog; loading it again restarts the sidecar.
+/// Stop the local engine, free the model's RAM and forget the active model.
+/// The model file stays installed. Loading it again restarts the engine.
 #[tauri::command]
 pub fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError> {
-    state.inference_engine.unload()
+    state.inference_engine.unload()?;
+    if let Err(e) = state.model_manager.clear_active() {
+        log::warn!("Could not clear the active model: {e}");
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -309,6 +337,7 @@ pub fn chat_thread_save(
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
 ) -> Result<(), AppError> {
+    validate_thread_id(&thread_id)?;
     let dir = conversations_dir();
     fs::create_dir_all(&dir)?;
 
@@ -346,6 +375,7 @@ pub fn chat_thread_save(
 
 #[tauri::command]
 pub fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
+    validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if !path.exists() {
         return Ok(vec![]);
@@ -357,6 +387,7 @@ pub fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, AppError>
 
 #[tauri::command]
 pub fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
+    validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if path.exists() {
         fs::remove_file(path)?;
@@ -366,6 +397,7 @@ pub fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportResponse, AppError> {
+    validate_thread_id(&req.thread_id)?;
     let path = conversations_dir().join(format!("{}.json", req.thread_id));
     if !path.exists() {
         return Err(AppError::invalid_input("Thread not found"));
@@ -398,5 +430,20 @@ pub fn chat_thread_export(req: ThreadExportRequest) -> Result<ThreadExportRespon
             content: md,
             filename: format!("{}.md", stored.title.replace(' ', "_")),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_thread_id;
+
+    #[test]
+    fn thread_ids_must_be_plain_tokens() {
+        assert!(validate_thread_id("t_1731542400000").is_ok());
+        assert!(validate_thread_id("a-b_c").is_ok());
+        for bad in ["", "..", "../config", "..\\config", "a.b", "a b", "C:x"] {
+            assert!(validate_thread_id(bad).is_err(), "{bad:?} must be rejected");
+        }
+        assert!(validate_thread_id(&"a".repeat(65)).is_err());
     }
 }

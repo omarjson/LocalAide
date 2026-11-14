@@ -12,7 +12,8 @@ use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use argon2::Argon2;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::path::{Component, Path, PathBuf};
 
 /// Version marker at the head of every archive file.
 const MAGIC: &[u8] = b"LOCALAIDE-BACKUP-v1";
@@ -269,29 +270,40 @@ impl BackupEngine {
             ));
         }
 
+        // Check every destination before writing anything, so a bad archive
+        // restores nothing at all.
+        let memory_dests = payload
+            .memories
+            .iter()
+            .map(|f| restore_destination(&self.app_dir, &f.rel_path))
+            .collect::<Result<Vec<_>, _>>()?;
+        let conversation_dests = payload
+            .conversations
+            .iter()
+            .map(|f| restore_destination(&self.app_dir, &f.rel_path))
+            .collect::<Result<Vec<_>, _>>()?;
+
         let mut memories_restored = 0;
-        for file in &payload.memories {
-            let dest = self.app_dir.join(&file.rel_path);
-            match dest.parent() {
-                Some(parent) if parent.starts_with(&self.app_dir) => {
-                    std::fs::create_dir_all(parent).map_err(|e| {
-                        AppError::storage(format!("Could not create restore folder: {e}"))
-                    })?;
-                }
-                _ => continue,
+        for (file, dest) in payload.memories.iter().zip(&memory_dests) {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    AppError::storage(format!("Could not create restore folder: {e}"))
+                })?;
             }
-            std::fs::write(&dest, &file.content).map_err(|e| {
+            std::fs::write(dest, &file.content).map_err(|e| {
                 AppError::storage(format!("Could not restore {}: {e}", file.rel_path))
             })?;
             memories_restored += 1;
         }
 
         let mut conversations_restored = 0;
-        for file in &payload.conversations {
-            let dest = self.app_dir.join(&file.rel_path);
-            std::fs::create_dir_all(dest.parent().unwrap_or(&self.app_dir))
-                .map_err(|e| AppError::storage(format!("Could not create restore folder: {e}")))?;
-            std::fs::write(&dest, &file.content).map_err(|e| {
+        for (file, dest) in payload.conversations.iter().zip(&conversation_dests) {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    AppError::storage(format!("Could not create restore folder: {e}"))
+                })?;
+            }
+            std::fs::write(dest, &file.content).map_err(|e| {
                 AppError::storage(format!("Could not restore {}: {e}", file.rel_path))
             })?;
             conversations_restored += 1;
@@ -329,6 +341,28 @@ impl BackupEngine {
             skipped_newer_config,
         })
     }
+}
+
+/// Where one archived file may be written. The entry must be exactly
+/// `memory/<name>` or `conversations/<name>`, with a `.md` or `.json` name, as
+/// `collect_dir` writes them. `..`, absolute or drive paths, other folders and
+/// other extensions are refused.
+fn restore_destination(app_dir: &Path, rel_path: &str) -> Result<PathBuf, AppError> {
+    let mut parts = Path::new(rel_path).components();
+    let allowed = match (parts.next(), parts.next(), parts.next()) {
+        (Some(Component::Normal(dir)), Some(Component::Normal(name)), None) => {
+            let folder_ok = dir == OsStr::new("memory") || dir == OsStr::new("conversations");
+            let ext = Path::new(name).extension();
+            folder_ok && (ext == Some(OsStr::new("md")) || ext == Some(OsStr::new("json")))
+        }
+        _ => false,
+    };
+    if !allowed {
+        return Err(AppError::invalid_input(format!(
+            "The backup contains an unexpected file path: {rel_path}"
+        )));
+    }
+    Ok(app_dir.join(rel_path))
 }
 
 fn derive_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
@@ -532,6 +566,31 @@ mod tests {
                 parse_timestamp(&format!("localaide-backup-{stamp}.labak")),
                 Some(secs)
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod restore_path_tests {
+    use super::restore_destination;
+    use std::path::Path;
+
+    #[test]
+    fn restore_accepts_only_memory_and_conversation_files() {
+        let app = Path::new("/app");
+        assert!(restore_destination(app, "memory/notes.md").is_ok());
+        assert!(restore_destination(app, "conversations/t_1.json").is_ok());
+        for bad in [
+            "memory/../../escape.md",
+            "../escape.md",
+            "/etc/passwd",
+            "C:x.md",
+            "memory/notes.txt",
+            "other/a.md",
+            "memory/a/b.md",
+            "memory",
+        ] {
+            assert!(restore_destination(app, bad).is_err(), "{bad} must be refused");
         }
     }
 }

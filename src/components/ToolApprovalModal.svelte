@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { dur } from "../lib/motion";
+  import FocusTrap from "./FocusTrap.svelte";
   import Icon from "./Icon.svelte";
   import type { ToolAction } from "../lib/api/bindings";
 
@@ -41,46 +42,47 @@
       out:scale={{ start: 0.97, duration: dur(80) }}
       class="bg-ink-900 border border-amber-500/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4"
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+      onkeydown={(e) => { if (e.key === 'Escape') onDeny(); e.stopPropagation(); }}
     >
+      <FocusTrap>
       <div class="flex items-start gap-3">
         <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
           <Icon name="shield" class="w-5 h-5" />
         </div>
         <div>
           <h3 id="approval-title" class="text-sm font-semibold text-ink-100">
-            Tool Execution Approval Required
+            Allow this file change?
           </h3>
-          <p class="text-xs text-ink-400 mt-1">
-            The assistant is requesting to perform a filesystem modification inside the workspace sandbox.
+          <p class="text-sm text-ink-400 mt-1">
+            LocalAide wants to change a file inside its safe workspace.
           </p>
         </div>
       </div>
 
-      <div class="bg-ink-950 border border-edge rounded-xl p-3 space-y-2 text-xs font-mono">
+      <div class="bg-ink-950 border border-edge rounded-xl p-3 space-y-2 text-sm">
         <div class="flex justify-between text-ink-400">
-          <span>Tool:</span>
-          <span class="text-ink-300 font-semibold">{toolName}</span>
+          <span>Action:</span>
+          <span class="text-ink-300 font-semibold font-mono">{toolName}</span>
         </div>
         <div class="flex justify-between text-ink-400">
-          <span>Operation:</span>
-          <span class="text-amber-400 uppercase font-semibold">{action.action_type}</span>
+          <span>Change:</span>
+          <span class="text-amber-400 uppercase font-semibold font-mono">{action.action_type}</span>
         </div>
         <div class="flex justify-between text-ink-400">
-          <span>Target Path:</span>
-          <span class="text-cyan-300 truncate max-w-xs">{action.path}</span>
+          <span>File:</span>
+          <span class="text-cyan-300 truncate max-w-xs font-mono">{action.path}</span>
         </div>
       </div>
 
       {#if action.content}
         <div>
-          <div class="text-[11px] font-medium text-ink-400 mb-1">Payload / Content Preview:</div>
+          <div class="text-sm font-medium text-ink-400 mb-1">File content preview:</div>
           <pre class="bg-ink-950 border border-edge rounded-xl p-3 text-xs font-mono text-ink-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{action.content}</pre>
         </div>
       {/if}
 
-      <div class="text-[11px] text-ink-400">
-        Workspace sandbox enforces boundary limits. Files outside the workspace cannot be touched.
+      <div class="text-sm text-ink-400">
+        LocalAide can only change files inside the safe workspace.
       </div>
 
       <div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
@@ -103,6 +105,7 @@
           Allow for Session
         </button>
       </div>
+      </FocusTrap>
     </div>
   </div>
 {/if}

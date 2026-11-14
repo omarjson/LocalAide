@@ -1,9 +1,11 @@
 use crate::app::error::AppError;
 use crate::app::events::DownloadProgressEvent;
 use crate::app::state::AppState;
+use crate::commands::chat::load_and_activate;
 use crate::domain::model::{
     CatalogStatus, ModelInfo, ModelPreset, ModelSizeResult, ModelVerifyResult,
 };
+use crate::services::models::catalog::is_safe_model_id;
 use crate::services::models::refresh::CATALOG_URL;
 use crate::services::models::verify::compute_sha256_streaming;
 use tauri::State;
@@ -11,7 +13,7 @@ use tauri::State;
 #[tauri::command]
 pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError> {
     let entries = state.model_service.all_entries();
-    let active_id = state.model_manager.active_model().map(|m| m.id);
+    let active_id = state.model_manager.active_model_id();
 
     let infos = entries
         .iter()
@@ -100,16 +102,19 @@ pub fn model_presets() -> Vec<ModelPreset> {
         .collect()
 }
 
+/// "Use this": load the model into the engine and mark it active. This is the
+/// same path as the chat picker, so chat works as soon as this returns.
 #[tauri::command]
-pub fn model_activate(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
-    state
-        .model_manager
-        .activate(&id)
-        .map_err(|e| AppError::model_load_failed(&id, &e))
+pub async fn model_activate(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    load_and_activate(&state, id).await.map(|_| ())
 }
 
 #[tauri::command]
 pub fn model_remove(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    // Only a known catalog or community id may name a file to delete.
+    if !is_safe_model_id(&id) || state.model_service.get_model_entry(&id).is_none() {
+        return Err(AppError::model_not_installed(&id));
+    }
     let path = state.model_service.model_file_path(&id);
     if path.exists() {
         let _ = std::fs::remove_file(&path);
@@ -183,6 +188,9 @@ pub fn model_existing_size(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<ModelSizeResult, AppError> {
+    if state.model_service.get_model_entry(&id).is_none() {
+        return Err(AppError::model_not_installed(&id));
+    }
     let path = state.model_service.model_file_path(&id);
     let part_path = path.with_extension("part");
     let size_bytes = if path.exists() {
@@ -252,7 +260,6 @@ pub async fn model_download(
     match res {
         Ok(_path) => {
             state.jobs.complete_job(&job_id);
-            let _ = state.model_manager.activate(&id);
             let _ = channel.send(DownloadProgressEvent {
                 model_id: id,
                 downloaded_bytes: 0,
@@ -318,7 +325,6 @@ pub async fn model_download_preset(
         match res {
             Ok(_path) => {
                 state.jobs.complete_job(&job_id);
-                let _ = state.model_manager.activate(&model_id);
                 installed.push(model_id);
             }
             Err(e) => {
@@ -335,6 +341,19 @@ pub async fn model_download_preset(
                 return Err(e);
             }
         }
+    }
+
+    // The first chat model in the preset loads now, so chat works right after
+    // setup. Embedding models only serve search, so they are skipped. A failed
+    // load keeps the downloads, and "Use this" retries the load.
+    let first_chat = installed
+        .iter()
+        .find(|id| state.model_service.is_chat_model(id.as_str()))
+        .cloned();
+    if let Some(chat_id) = first_chat
+        && let Err(e) = load_and_activate(&state, chat_id.clone()).await
+    {
+        log::warn!("Could not load {chat_id} after the preset install: {e}");
     }
 
     // Record what was installed so returning users skip the setup wizard

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LocalAide mockup E: At Home on Windows</title>
+<style>
+  /* At Home on Windows: the app runs on this computer, so it should look like it
+     belongs to this computer. Windows 11 manners: Segoe UI Variable, Mica-grey
+     window, a nav pane with the pill indicator, a status bar.
+     The brand lives in one place only: the ghost's ember eye, which is also the
+     live status light. Everything else is quiet on purpose. */
+  :root {
+    --mica: #eef0f3;    /* window */
+    --layer: #fbfbfc;   /* content layer */
+    --hover: #e3e6ea;
+    --text: #1b1b1f;
+    --text-2: #5b5f66;  /* 6.4:1 on layer */
+    --stroke: #c9cdd3;  /* decorative */
+    --stroke-2: #8b9098;/* meaningful, 3.2:1 */
+    --ember: #e8680c;
+    --ember-ink: #9a3f00;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1280px; height: 800px; overflow: hidden; background: var(--mica); color: var(--text);
+    font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    display: grid; grid-template-rows: 40px 1fr 30px; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+  .titlebar { display: flex; align-items: center; gap: 10px; padding: 0 0 0 14px; font-size: 12px; }
+  .titlebar svg { width: 18px; height: 18px; }
+  .caps { margin-left: auto; display: flex; }
+  .caps span { width: 46px; height: 40px; display: grid; place-items: center; color: var(--text-2); }
+
+  .win { display: grid; grid-template-columns: 260px 1fr; min-height: 0; }
+  .pane { padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
+  .pane button { position: relative; display: flex; align-items: center; gap: 14px; height: 38px; padding: 0 12px; border-radius: 5px; text-align: left; }
+  .pane button.on { background: var(--hover); font-weight: 600; }
+  .pane button.on::before { content: ""; position: absolute; left: 0; top: 11px; width: 3px; height: 16px; border-radius: 2px; background: var(--ember); }
+  .pane hr { border: 0; border-top: 1px solid var(--stroke); margin: 8px 6px; }
+  .pane h2 { font-size: 12px; font-weight: 600; color: var(--text-2); padding: 4px 12px; }
+  .pane .t { height: 32px; font-size: 13.5px; color: var(--text-2); }
+  .pane .t.cur { color: var(--text); }
+  .pane .bottom { margin-top: auto; }
+
+  .layer { background: var(--layer); border: 1px solid var(--stroke); border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; display: grid; grid-template-rows: 56px 1fr auto; min-height: 0; }
+  .cmd { display: flex; align-items: center; gap: 4px; padding: 0 20px 0 28px; border-bottom: 1px solid var(--stroke); }
+  .cmd h1 { font: 600 20px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; margin-right: auto; }
+  .cmd button { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border-radius: 4px; }
+  .cmd .combo { border: 1px solid var(--stroke); border-bottom-color: var(--stroke-2); background: #fff; min-width: 170px; justify-content: space-between; }
+
+  .log { overflow: hidden; padding: 28px; }
+  .col { max-width: 720px; margin: 0 auto; display: grid; gap: 20px; }
+  .me { justify-self: end; max-width: 75%; background: var(--hover); padding: 10px 14px; border-radius: 8px; }
+  .ai { display: grid; grid-template-columns: 28px 1fr; gap: 12px; font-size: 15px; line-height: 1.6; }
+  .ai > svg { width: 28px; height: 28px; margin-top: 2px; }
+  .ai ul { margin: 8px 0; padding-left: 20px; }
+  .ai li { margin: 3px 0; }
+  .ref { color: var(--ember-ink); font-size: 11px; font-weight: 600; vertical-align: super; margin-left: 1px; }
+  .refs { margin-top: 12px; border: 1px solid var(--stroke); border-radius: 6px; }
+  .refs div { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 13px; }
+  .refs div + div { border-top: 1px solid var(--stroke); }
+  .refs b { color: var(--ember-ink); width: 12px; }
+  .refs span { color: var(--text-2); margin-left: auto; }
+  .acts { display: flex; gap: 4px; margin: 8px 0 0 -10px; }
+  .acts button { height: 28px; padding: 0 10px; border-radius: 4px; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+
+  .dock { padding: 0 28px 20px; }
+  .box { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; background: #fff; border: 1px solid var(--stroke); border-bottom: 2px solid var(--ember); border-radius: 6px; }
+  .box .ph { flex: 1; color: var(--text-2); font-size: 15px; }
+  .box .att { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+  .send { height: 34px; padding: 0 18px; border-radius: 4px; background: var(--ember-ink); color: #fff; font-weight: 600; }
+
+  .status { display: flex; align-items: center; gap: 22px; padding: 0 16px; font-size: 12px; color: var(--text-2); background: var(--mica); }
+  .status .live { display: flex; align-items: center; gap: 7px; color: var(--text); }
+  .status .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ember); }
+  .status .r { margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b1b1f"/><path d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z" fill="#fbfbfc"/><circle cx="212" cy="236" r="20" fill="#1b1b1f"/><circle cx="300" cy="236" r="20" fill="#1b1b1f"/><circle cx="300" cy="236" r="11" fill="#e8680c"/></svg>
+  LocalAide
+  <div class="caps"><span>&#x2013;</span><span>&#x25A1;</span><span>&#x2715;</span></div>
+</div>
+
+<div class="win">
+  <nav class="pane">
+    <button class="on"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat</button>
+    <button><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search</button>
+    <button><svg class="i" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6"/></svg>Memory</button>
+    <button><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>Skills</button>
+    <button><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg>Models</button>
+    <hr>
+    <h2>Recent chats</h2>
+    <button class="t cur">Landlord letter</button>
+    <button class="t">Birthday message for Sara</button>
+    <button class="t">What does APR mean</button>
+    <button class="t">Packing list for Tunis</button>
+    <div class="bottom"><button><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Settings</button></div>
+  </nav>
+
+  <section class="layer">
+    <div class="cmd">
+      <h1>Landlord letter</h1>
+      <button class="combo">Llama 3.2 3B <svg class="i" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button>
+      <button><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+      <button aria-label="More"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+    </div>
+    <div class="log"><div class="col">
+      <div class="me">Can you sum up the letter from my landlord? It's in my Documents folder.</div>
+      <div class="ai">
+        <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="256" fill="#eef0f3"/><path d="M256 112c-76 0-132 58-132 136v150c0 12 12 19 22 13l28-18 28 18c6 4 13 4 19 0l23-17 24 17c6 4 13 4 19 0l28-18 28 18c10 6 22-1 22-13V248c0-78-56-136-132-136z" fill="#fff" stroke="#8b9098" stroke-width="10"/><circle cx="216" cy="240" r="18" fill="#1b1b1f"/><circle cx="296" cy="240" r="18" fill="#1b1b1f"/><circle cx="296" cy="240" r="10" fill="#e8680c"/></svg>
+        <div>
+          <p>Here is the short version. Your lease ends on 31 May, and they would like you to stay.</p>
+          <ul>
+            <li>To renew, sign the form and send it back by 3 May.<span class="ref">1</span></li>
+            <li>Rent goes up from £950 to £985 a month.<span class="ref">1</span></li>
+            <li>If you plan to leave, you must give two months' notice.<span class="ref">2</span></li>
+          </ul>
+          <p>Want me to draft a short reply?</p>
+          <div class="refs">
+            <div><b>1</b>Landlord letter, April.pdf<span>Documents</span></div>
+            <div><b>2</b>Tenancy agreement 2024.pdf<span>Documents\Home</span></div>
+          </div>
+          <div class="acts"><button>Copy</button><button>Retry</button></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="dock"><div class="box">
+      <button class="att" aria-label="Attach image"><svg class="i" viewBox="0 0 24 24"><path d="M20 12l-8 8a5 5 0 01-7-7l8-8a3.5 3.5 0 015 5l-8 8a2 2 0 01-3-3l7-7"/></svg></button>
+      <span class="ph">Ask anything</span>
+      <button class="send">Send</button>
+    </div></div>
+  </section>
+</div>
+
+<footer class="status">
+  <span class="live"><i></i>Running on this computer</span>
+  <span>Memory in use: 2.1 GB of 6 GB</span>
+  <span class="r">Enter sends, Esc stops</span>
+</footer>
+</body>
+</html>

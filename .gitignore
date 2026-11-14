@@ -18,3 +18,5 @@ Thumbs.db
 
 # llama-server sidecar binaries, placed by scripts/prepare-sidecar.sh
 src-tauri/binaries/
+# Browser profiles captured by UI automation hold cookies and saved logins. Never commit them.
+docs/evidence/**/profile/
