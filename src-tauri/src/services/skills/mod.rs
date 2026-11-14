@@ -70,8 +70,9 @@ impl SkillsService {
             std::fs::create_dir_all(parent)
                 .map_err(|e| AppError::storage(format!("Failed to create skills folder: {e}")))?;
         }
-        let data = serde_json::to_string_pretty(&*self.usage.lock().unwrap_or_else(|e| e.into_inner()))
-            .map_err(|e| AppError::storage(format!("Could not serialize skill usage: {e}")))?;
+        let data =
+            serde_json::to_string_pretty(&*self.usage.lock().unwrap_or_else(|e| e.into_inner()))
+                .map_err(|e| AppError::storage(format!("Could not serialize skill usage: {e}")))?;
         std::fs::write(&path, data)
             .map_err(|e| AppError::storage(format!("Could not save skill usage: {e}")))?;
         Ok(())

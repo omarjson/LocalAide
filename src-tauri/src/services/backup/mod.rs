@@ -11,10 +11,10 @@ use crate::app::error::AppError;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
-use zeroize::Zeroizing;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
+use zeroize::Zeroizing;
 
 /// Version marker at the head of every archive file.
 /// Version 1 archives: magic, salt, nonce, ciphertext. The key came from
@@ -465,7 +465,8 @@ fn merge_restored_config(
 ) -> serde_json::Value {
     use serde_json::Value;
 
-    let text = |value: &Value, field: &str| value.get(field).and_then(Value::as_str).map(str::to_string);
+    let text =
+        |value: &Value, field: &str| value.get(field).and_then(Value::as_str).map(str::to_string);
     let mut merged = restored.clone();
     if let Some(obj) = merged.as_object_mut() {
         let current_providers: Vec<Value> = current
@@ -476,7 +477,8 @@ fn merge_restored_config(
 
         if let Some(providers) = obj.get_mut("cloud_providers").and_then(Value::as_array_mut) {
             providers.retain(|p| {
-                text(p, "base_url").is_some_and(|url| crate::config::validate_base_url(&url).is_ok())
+                text(p, "base_url")
+                    .is_some_and(|url| crate::config::validate_base_url(&url).is_ok())
             });
             for provider in providers.iter_mut() {
                 if text(&*provider, "api_key").is_some_and(|key| !key.is_empty()) {
@@ -506,7 +508,10 @@ fn merge_restored_config(
         let active_exists = active.is_some_and(|id| {
             obj.get("cloud_providers")
                 .and_then(Value::as_array)
-                .is_some_and(|ps| ps.iter().any(|p| text(p, "id").as_deref() == Some(id.as_str())))
+                .is_some_and(|ps| {
+                    ps.iter()
+                        .any(|p| text(p, "id").as_deref() == Some(id.as_str()))
+                })
         });
         if !active_exists {
             obj.insert("active_cloud_provider".to_string(), Value::Null);
@@ -679,7 +684,11 @@ mod tests {
         // setting makes the archive fail to open.
         let mut tampered = bytes.clone();
         tampered[MAGIC_V2.len() + 4] ^= 1;
-        assert!(engine.decrypt_payload(&tampered, "long-enough-pass").is_err());
+        assert!(
+            engine
+                .decrypt_payload(&tampered, "long-enough-pass")
+                .is_err()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -712,7 +721,10 @@ mod tests {
         bytes.extend_from_slice(&nonce_bytes);
         bytes.extend_from_slice(&ciphertext);
 
-        assert_eq!(engine.decrypt_payload(&bytes, "long-enough-pass").unwrap(), payload);
+        assert_eq!(
+            engine.decrypt_payload(&bytes, "long-enough-pass").unwrap(),
+            payload
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -724,7 +736,9 @@ mod tests {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
         bytes.extend_from_slice(&[0u8; SALT_LEN + NONCE_LEN + 32]);
-        let err = engine.decrypt_payload(&bytes, "long-enough-pass").unwrap_err();
+        let err = engine
+            .decrypt_payload(&bytes, "long-enough-pass")
+            .unwrap_err();
         assert!(err.message.contains("more memory"));
     }
 

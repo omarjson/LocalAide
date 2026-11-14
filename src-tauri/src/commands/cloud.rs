@@ -405,11 +405,26 @@ mod tests {
 
     #[test]
     fn a_key_stays_with_its_site() {
-        assert!(same_origin("https://api.example.com/v1", "https://api.example.com/v2"));
-        assert!(same_origin("https://api.example.com/v1", "https://api.example.com:443/v1"));
-        assert!(!same_origin("https://api.example.com/v1", "https://evil.example.net/v1"));
-        assert!(!same_origin("https://api.example.com/v1", "http://api.example.com/v1"));
-        assert!(!same_origin("https://api.example.com/v1", "https://api.example.com:8443/v1"));
+        assert!(same_origin(
+            "https://api.example.com/v1",
+            "https://api.example.com/v2"
+        ));
+        assert!(same_origin(
+            "https://api.example.com/v1",
+            "https://api.example.com:443/v1"
+        ));
+        assert!(!same_origin(
+            "https://api.example.com/v1",
+            "https://evil.example.net/v1"
+        ));
+        assert!(!same_origin(
+            "https://api.example.com/v1",
+            "http://api.example.com/v1"
+        ));
+        assert!(!same_origin(
+            "https://api.example.com/v1",
+            "https://api.example.com:8443/v1"
+        ));
         assert!(!same_origin("not a url", "not a url"));
     }
 

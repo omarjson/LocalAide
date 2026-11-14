@@ -62,10 +62,7 @@ impl LibraryService {
     /// Attach the embedding engine after construction (AppState builds the
     /// engine and the library side by side).
     pub fn set_embedding_engine(&self, engine: Arc<EmbeddingEngine>) {
-        *self
-            .embedding
-            .write()
-            .unwrap_or_else(|e| e.into_inner()) = Some(engine);
+        *self.embedding.write().unwrap_or_else(|e| e.into_inner()) = Some(engine);
     }
 
     fn embedding_engine(&self) -> Option<Arc<EmbeddingEngine>> {

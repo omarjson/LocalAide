@@ -478,8 +478,14 @@ fn is_private_host(url: &url::Url) -> bool {
         None => true,
         Some(url::Host::Domain(name)) => {
             let name = name.trim_end_matches('.').to_ascii_lowercase();
-            const LOCAL_SUFFIXES: [&str; 6] =
-                [".localhost", ".local", ".internal", ".lan", ".home.arpa", ".intranet"];
+            const LOCAL_SUFFIXES: [&str; 6] = [
+                ".localhost",
+                ".local",
+                ".internal",
+                ".lan",
+                ".home.arpa",
+                ".intranet",
+            ];
             name == "localhost"
                 || !name.contains('.')
                 || LOCAL_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix))
@@ -931,9 +937,16 @@ mod tests {
             "http://router.lan/",
             "http://app.localhost/",
         ] {
-            assert!(validate_crawl_url(private).is_err(), "{private} must stay home");
+            assert!(
+                validate_crawl_url(private).is_err(),
+                "{private} must stay home"
+            );
         }
-        for public in ["https://example.com/a", "http://93.184.216.34/", "https://[2606:4700::1]/"] {
+        for public in [
+            "https://example.com/a",
+            "http://93.184.216.34/",
+            "https://[2606:4700::1]/",
+        ] {
             assert!(validate_crawl_url(public).is_ok(), "{public} is public");
         }
     }

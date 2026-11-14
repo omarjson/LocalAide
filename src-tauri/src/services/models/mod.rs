@@ -110,7 +110,10 @@ impl ModelService {
 
     /// Snapshot of the active catalog.
     pub fn manifest(&self) -> Arc<CatalogManifest> {
-        self.manifest.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.manifest
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Snapshot of the active catalog (the entries live in `manifest.models`).

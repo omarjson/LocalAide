@@ -346,7 +346,10 @@ mod tests {
     #[test]
     fn reserved_windows_names_get_a_suffix() {
         for name in ["con", "NUL", "Com1", "lpt9"] {
-            assert_eq!(avoid_reserved_name(name.to_string()), format!("{name}_note"));
+            assert_eq!(
+                avoid_reserved_name(name.to_string()),
+                format!("{name}_note")
+            );
         }
         for name in ["COM0", "COM10", "CONSOLE", "Notes"] {
             assert_eq!(avoid_reserved_name(name.to_string()), name);
