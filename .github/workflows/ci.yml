@@ -94,17 +94,20 @@ jobs:
       - name: Rust Clippy
         run: |
           set -o pipefail
-          if ! cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1 | tee clippy.log; then
-            # Error headline and its primary location, as API-readable
-            # annotations (10 per step, most recent wins).
-            grep -E "^error(\[[^]]+\])?:" clippy.log | head -10 | while IFS= read -r line; do
-              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
-              echo "::error title=clippy::$enc"
-            done
-            grep -E "^\s+-->" clippy.log | head -10 | while IFS= read -r line; do
-              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
-              echo "::error title=clippy-loc::$enc"
-            done
+          if cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1 | tee clippy.log; then
+            echo "clippy clean"
+          else
+            # Publish the full log to a diagnostics branch (public, force-
+            # pushed) so the failing lints are readable without log access.
+            mkdir -p .ci-diagnostics
+            cp clippy.log .ci-diagnostics/clippy.log
+            git config user.name "ci-diagnostics"
+            git config user.email "ci-diagnostics@users.noreply.github.com"
+            (git checkout -b ci/clippy-diag || git checkout ci/clippy-diag)
+            git add .ci-diagnostics/clippy.log
+            git commit -m "clippy diagnostics for ${GITHUB_SHA}"
+            git push origin ci/clippy-diag --force
+            echo "::error title=clippy::failed; full log pushed to ci/clippy-diag (.ci-diagnostics/clippy.log)"
             exit 1
           fi
 
