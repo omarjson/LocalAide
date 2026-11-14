@@ -5,3 +5,4 @@ pub mod memory;
 pub mod models;
 pub mod skills;
 pub mod tools;
+pub mod websearch;

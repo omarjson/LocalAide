@@ -7,14 +7,20 @@
     IndexerStatsResponse,
     RerankStatusResponse,
     SearchResultDoc,
+    WebHit,
+    WebPage,
   } from "../lib/api/bindings";
   import { onMount } from "svelte";
 
   let query = $state("");
   // Keyword is BM25-only. Semantic and hybrid rank with vectors from the
   // local embedding engine and quietly fall back to keyword when it is off.
-  let mode = $state<"keyword" | "semantic" | "hybrid">("keyword");
+  // Web searches the open internet through the configured provider.
+  let mode = $state<"keyword" | "semantic" | "hybrid" | "web">("keyword");
   let results = $state<SearchResultDoc[]>([]);
+  let webResults = $state<WebHit[]>([]);
+  let webPages = $state<Record<string, WebPage>>({});
+  let readingUrl = $state<string | null>(null);
   let stats = $state<IndexerStatsResponse | null>(null);
   let folder = $state("");
   let watching = $state(false);
@@ -118,6 +124,7 @@
   const search = async () => {
     if (!query.trim()) {
       await loadInitialLibrary();
+      webResults = [];
       searchDurationMs = null;
       return;
     }
@@ -125,12 +132,35 @@
     errorMessage = null;
     const start = performance.now();
     try {
-      results = await api.searchIndex({ query, mode, limit: 50 });
-      searchDurationMs = Math.round(performance.now() - start);
+      if (mode === "web") {
+        results = [];
+        webResults = await api.webSearch(query);
+        searchDurationMs = Math.round(performance.now() - start);
+      } else {
+        webResults = [];
+        results = await api.searchIndex({ query, mode, limit: 50 });
+        searchDurationMs = Math.round(performance.now() - start);
+      }
     } catch (e: any) {
       errorMessage = e?.message || "Search failed";
     } finally {
       loading = false;
+    }
+  };
+
+  // Read a web result's page as text (Jina Reader keyless by default,
+  // Firecrawl when its key is configured).
+  const readPage = async (url: string) => {
+    if (webPages[url]) return;
+    readingUrl = url;
+    errorMessage = null;
+    try {
+      const page = await api.webCrawl(url);
+      webPages = { ...webPages, [url]: page };
+    } catch (e: any) {
+      errorMessage = e?.message || "Could not read that page";
+    } finally {
+      readingUrl = null;
     }
   };
 
@@ -250,7 +280,7 @@
       <div>
         <div class="text-xs font-semibold text-ink-300 mb-1.5">Search mode</div>
         <div class="flex items-center gap-2">
-          {#each ([["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"]] as const) as [value, label]}
+          {#each ([["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"], ["web", "Web"]] as const) as [value, label]}
             <button
               type="button"
               onclick={() => { mode = value; if (query.length > 2) search(); }}
@@ -302,9 +332,14 @@
         {/if}
       </div>
     </div>
-    {#if mode !== "keyword" && !embedding?.ready}
+    {#if mode !== "keyword" && mode !== "web" && !embedding?.ready}
       <p class="text-[11px] text-amber-300/90 font-mono">
         {mode} mode needs the embedding engine — results fall back to keyword ranking until it is running.
+      </p>
+    {/if}
+    {#if mode === "web"}
+      <p class="text-[11px] text-ink-400 font-mono">
+        Web search runs on the provider chosen in Settings → Web search (DuckDuckGo by default — no key needed). Queries leave this machine only when you press Search.
       </p>
     {/if}
   </div>
@@ -357,8 +392,10 @@
         <input
           bind:this={searchInputEl}
           type="text"
-          aria-label="Search documents"
-          placeholder="Search documents by keyword (Enter to search, Esc to clear)…"
+          aria-label={mode === "web" ? "Search the web" : "Search documents"}
+          placeholder={mode === "web"
+            ? "Search the web (Enter to search)…"
+            : "Search documents by keyword (Enter to search, Esc to clear)…"}
           bind:value={query}
           onkeydown={handleKeydown}
           class="w-full bg-ink-900 border border-ink-800 rounded-lg pl-3 pr-8 py-2 text-sm text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
@@ -378,14 +415,61 @@
     </div>
 
     <div class="flex items-center justify-between text-[11px] font-mono text-ink-400 px-1">
-      <span>{results.length} {results.length === 1 ? "document" : "documents"} {query ? "found" : "in library"}</span>
+      <span>{mode === "web"
+        ? `${webResults.length} ${webResults.length === 1 ? "web result" : "web results"}`
+        : `${results.length} ${results.length === 1 ? "document" : "documents"} ${query ? "found" : "in library"}`}</span>
       {#if searchDurationMs !== null}
         <span class="text-emerald-400">Query completed in {searchDurationMs}ms</span>
       {/if}
     </div>
 
     {#if loading}
-      <div class="py-12 text-center text-xs text-ink-400 font-mono">Searching library index…</div>
+      <div class="py-12 text-center text-xs text-ink-400 font-mono">
+        {mode === "web" ? "Searching the web…" : "Searching library index…"}
+      </div>
+    {:else if mode === "web"}
+      {#if webResults.length === 0}
+        <div class="py-16 max-w-md mx-auto text-center space-y-2">
+          <h3 class="text-sm font-medium text-ink-200">No web results for “{query}”.</h3>
+          <p class="text-xs text-ink-400">Try different words, or pick another provider in Settings → Web search.</p>
+        </div>
+      {:else}
+        <div class="space-y-2">
+          {#each webResults as hit}
+            <div class="border border-ink-800 rounded-xl p-3.5 bg-ink-900/30 hover:border-ink-700 transition-colors">
+              <div class="space-y-1.5">
+                <div class="font-medium text-sm text-ink-200">{hit.title}</div>
+                <p class="text-xs text-ink-400 line-clamp-2 leading-relaxed">{hit.snippet}</p>
+                <div class="flex flex-wrap items-center gap-3 text-xs font-mono text-ink-400">
+                  <a href={hit.url} target="_blank" rel="noreferrer" class="truncate text-ember-300 hover:underline">{hit.url}</a>
+                </div>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                {#if webPages[hit.url]}
+                  <button
+                    onclick={() => { const rest = { ...webPages }; delete rest[hit.url]; webPages = rest; }}
+                    class="text-xs px-2.5 py-1 rounded bg-ink-900 border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors"
+                  >
+                    Hide page text
+                  </button>
+                {:else}
+                  <button
+                    onclick={() => readPage(hit.url)}
+                    disabled={readingUrl !== null}
+                    class="text-xs px-2.5 py-1 rounded bg-ink-800 hover:bg-ink-700 text-ink-200 transition-colors disabled:opacity-40"
+                  >
+                    {readingUrl === hit.url ? "Reading…" : "Read page"}
+                  </button>
+                {/if}
+                <span class="text-[10px] text-ink-500">Reads through the keyless Jina Reader, or Firecrawl when its key is set</span>
+              </div>
+              {#if webPages[hit.url]}
+                <pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-ink-800 bg-ink-950 p-3 text-[11px] text-ink-300 whitespace-pre-wrap font-mono">{webPages[hit.url].content}</pre>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
     {:else if !libraryLoaded}
       <div class="py-12 text-center text-xs text-ink-400 font-mono">Loading library…</div>
     {:else if results.length === 0}

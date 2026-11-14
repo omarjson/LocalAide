@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api/client";
   import { dur } from "../lib/motion";
-  import type { CloudConfigStatus, ToolAuditEntry } from "../lib/api/bindings";
+  import type { CloudConfigStatus, CloudProviderPreset, ToolAuditEntry, WebProviderStatus } from "../lib/api/bindings";
   import { getVersion } from "@tauri-apps/api/app";
   import { slide } from "svelte/transition";
   import { onMount } from "svelte";
@@ -56,6 +56,72 @@
   let providerKey = $state("");
   let providerFormError = $state<string | null>(null);
 
+  // Web search providers (keyless + keyed) and provider-form presets
+  let webProviders = $state<WebProviderStatus[]>([]);
+  let webPresets = $state<CloudProviderPreset[]>([]);
+  let appliedPresetId = $state<string | null>(null);
+  let webKeyDraft = $state<Record<string, string>>({});
+  let webBusy = $state(false);
+  let webNotice = $state<string | null>(null);
+  const appliedPreset = $derived(webPresets.find((p) => p.id === appliedPresetId) ?? null);
+
+  const loadWebProviders = async () => {
+    try {
+      webProviders = await api.webProviders();
+    } catch {
+      webProviders = [];
+    }
+  };
+
+  const labelOf = (id: string) => webProviders.find((p) => p.id === id)?.label ?? id;
+
+  const saveWebKey = async (id: string) => {
+    webBusy = true;
+    webNotice = null;
+    try {
+      const value = webKeyDraft[id]?.trim() ?? "";
+      await api.webSetKey(id, value ? value : null);
+      webKeyDraft = { ...webKeyDraft, [id]: "" };
+      await loadWebProviders();
+      webNotice = `${labelOf(id)} key ${value ? "saved" : "cleared"}.`;
+    } catch (e) {
+      webNotice = errorMessage(e);
+    } finally {
+      webBusy = false;
+    }
+  };
+
+  const setWebDefault = async (id: string) => {
+    webBusy = true;
+    webNotice = null;
+    try {
+      await api.webSetDefault(id);
+      await loadWebProviders();
+      webNotice = `${labelOf(id)} is now the default search provider.`;
+    } catch (e) {
+      webNotice = errorMessage(e);
+    } finally {
+      webBusy = false;
+    }
+  };
+
+  const loadPresets = async () => {
+    if (webPresets.length) return;
+    try {
+      webPresets = await api.cloudProviderPresets();
+    } catch {}
+  };
+
+  const applyPreset = () => {
+    const preset = webPresets.find((p) => p.id === appliedPresetId);
+    if (!preset) return;
+    providerLabel = preset.label;
+    providerUrl = preset.base_url;
+    providerModel = preset.model;
+    providerKey = "";
+    providerFormError = null;
+  };
+
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const loadAudits = async () => {
@@ -97,6 +163,8 @@
     providerModel = "";
     providerKey = "";
     providerFormError = null;
+    appliedPresetId = null;
+    loadPresets();
     showProviderForm = true;
   };
 
@@ -109,6 +177,8 @@
     providerModel = p.model;
     providerKey = "";
     providerFormError = null;
+    appliedPresetId = null;
+    loadPresets();
     showProviderForm = true;
   };
 
@@ -187,6 +257,7 @@
     }
     loadAudits();
     loadCloud();
+    loadWebProviders();
   });
 
   // Settings persist when the slider moves, not on a component-lifetime
@@ -500,6 +571,27 @@
             <div class="text-xs font-semibold text-ink-200 uppercase tracking-wider">
               {editingProviderId ? "Edit provider" : "Add provider"}
             </div>
+            <label class="space-y-1">
+              <span class="text-[11px] text-ink-400">Start from a preset (sources from the open 9Router registry)</span>
+              <select
+                bind:value={appliedPresetId}
+                onchange={applyPreset}
+                class="w-full bg-ink-900 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-100 outline-none focus:border-ember-500/60"
+              >
+                <option value={null}>Choose a provider…</option>
+                {#each webPresets as preset (preset.id)}
+                  <option value={preset.id}>{preset.label}</option>
+                {/each}
+              </select>
+            </label>
+            {#if appliedPreset}
+              <div class="text-[11px] text-ink-400">
+                {appliedPreset.note}
+                {#if appliedPreset.key_url}
+                  <a class="text-ember-300 hover:underline" href={appliedPreset.key_url} target="_blank" rel="noreferrer">Get a key ↗</a>
+                {/if}
+              </div>
+            {/if}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label class="space-y-1">
                 <span class="text-[11px] text-ink-400">Name</span>
@@ -560,6 +652,64 @@
             </div>
           </div>
         {/if}
+      </div>
+
+      <div class="border border-ink-800 rounded-2xl p-5 bg-ink-900/60">
+        <div class="mb-2">
+          <div class="font-medium text-ink-100">Web search</div>
+          <div class="text-xs text-ink-400">Search and read web pages — only when you click. DuckDuckGo and Wikipedia need no key.</div>
+        </div>
+        {#if webNotice}
+          <div class="mb-3 text-[11px] text-ink-300">{webNotice}</div>
+        {/if}
+        <div class="space-y-2">
+          {#each webProviders as wp (wp.id)}
+            <div class={`rounded-xl border p-3 flex flex-wrap items-center gap-2 justify-between ${wp.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-ink-800 bg-ink-950/60"}`}>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm text-ink-100 font-medium">{wp.label}</span>
+                  {#if wp.is_default}
+                    <span class="px-1.5 py-0.5 text-[10px] uppercase font-mono rounded bg-ember-600/20 text-ember-300 border border-ember-500/30">Default</span>
+                  {/if}
+                  <span class="text-[10px] text-ink-500 font-mono">{wp.supports}</span>
+                </div>
+                <div class="text-[11px] text-ink-400">{wp.needs_key ? (wp.key_set ? "Key saved" : "Needs an API key") : "No key needed"}</div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                {#if wp.needs_key}
+                  <input
+                    type="password"
+                    bind:value={webKeyDraft[wp.id]}
+                    placeholder={wp.key_set ? "Replace key" : "Paste API key"}
+                    class="w-40 bg-ink-900 border border-ink-800 rounded-lg px-2 py-1.5 text-xs text-ink-100 placeholder-ink-600 outline-none focus:border-ember-500/60 font-mono"
+                  />
+                  <button
+                    onclick={() => saveWebKey(wp.id)}
+                    disabled={webBusy}
+                    class="px-2 py-1 text-xs rounded-lg bg-ink-800 hover:bg-ink-700 text-ink-200 transition-colors disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                {/if}
+                {#if wp.supports.includes("search") && !wp.is_default}
+                  <button
+                    onclick={() => setWebDefault(wp.id)}
+                    disabled={webBusy}
+                    class="px-2 py-1 text-xs rounded-lg border border-ink-700 hover:bg-ink-800 text-ink-300 transition-colors disabled:opacity-40"
+                  >
+                    Make default
+                  </button>
+                {/if}
+              </div>
+            </div>
+          {/each}
+          {#if !webProviders.length}
+            <div class="text-xs text-ink-400">Provider list unavailable — restart the app and try again.</div>
+          {/if}
+        </div>
+        <div class="text-[11px] text-ink-400 mt-2">
+          Keys are stored in this app's config file on this machine, sent only to their own provider, and excluded from backups unless "Include API keys" is checked.
+        </div>
       </div>
 
       <div class="pt-2 flex items-center gap-3">

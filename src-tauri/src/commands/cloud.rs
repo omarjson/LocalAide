@@ -10,7 +10,121 @@ use crate::domain::cloud::{
     CloudConfigStatus, CloudModeRequest, CloudProviderDto, CloudProviderSaveRequest,
 };
 use crate::services::inference::remote::RemoteTarget;
+use serde::Serialize;
 use tauri::State;
+
+/// A curated starting point for the provider form. The list is aggregated
+/// from the open 9Router registry (github.com/decolua/9router, MIT) plus
+/// first-party endpoints; free tiers change without notice, so the user's
+/// own key and the provider's docs decide what actually works.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudProviderPreset {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub base_url: &'static str,
+    /// A sensible first model to prefill; every provider serves more.
+    pub model: &'static str,
+    /// Where the user signs up for a key. Empty for local proxies.
+    pub key_url: &'static str,
+    pub note: &'static str,
+}
+
+pub const PROVIDER_PRESETS: &[CloudProviderPreset] = &[
+    CloudProviderPreset {
+        id: "ollama-local",
+        label: "Ollama (this machine)",
+        base_url: "http://127.0.0.1:11434/v1",
+        model: "llama3.3",
+        key_url: "",
+        note: "Your own local Ollama server; no key needed.",
+    },
+    CloudProviderPreset {
+        id: "llm7",
+        label: "LLM7 (free)",
+        base_url: "https://api.llm7.io/v1",
+        model: "gpt-5.5",
+        key_url: "https://llm7.io",
+        note: "Free community router; grab a free token, no card.",
+    },
+    CloudProviderPreset {
+        id: "synthetic",
+        label: "Synthetic (free tier)",
+        base_url: "https://api.synthetic.new/openai/v1",
+        model: "hf:zai-org/GLM-5.3",
+        key_url: "https://synthetic.new",
+        note: "Free tier backed by Hugging Face inference.",
+    },
+    CloudProviderPreset {
+        id: "api-airforce",
+        label: "api.airforce (free tier)",
+        base_url: "https://api.airforce/v1",
+        model: "gpt-oss-120b",
+        key_url: "https://api.airforce",
+        note: "Free tier; reliability varies.",
+    },
+    CloudProviderPreset {
+        id: "groq",
+        label: "Groq",
+        base_url: "https://api.groq.com/openai/v1",
+        model: "llama-3.3-70b-versatile",
+        key_url: "https://console.groq.com/keys",
+        note: "Generous free tier with strict rate limits.",
+    },
+    CloudProviderPreset {
+        id: "cerebras",
+        label: "Cerebras",
+        base_url: "https://api.cerebras.ai/v1",
+        model: "llama-3.3-70b",
+        key_url: "https://cloud.cerebras.ai",
+        note: "Free tier with a daily token cap.",
+    },
+    CloudProviderPreset {
+        id: "nvidia",
+        label: "NVIDIA NIM",
+        base_url: "https://integrate.api.nvidia.com/v1",
+        model: "meta/llama-3.3-70b-instruct",
+        key_url: "https://build.nvidia.com",
+        note: "Free tier, about 40 requests per minute.",
+    },
+    CloudProviderPreset {
+        id: "openrouter",
+        label: "OpenRouter",
+        base_url: "https://openrouter.ai/api/v1",
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        key_url: "https://openrouter.ai/keys",
+        note: "Many :free models at 50 requests/day.",
+    },
+    CloudProviderPreset {
+        id: "chutes",
+        label: "Chutes",
+        base_url: "https://llm.chutes.ai/v1",
+        model: "deepseek-ai/DeepSeek-R1",
+        key_url: "https://chutes.ai",
+        note: "Free tier with per-chute quotas.",
+    },
+    CloudProviderPreset {
+        id: "mistral",
+        label: "Mistral",
+        base_url: "https://api.mistral.ai/v1",
+        model: "mistral-small-latest",
+        key_url: "https://console.mistral.ai",
+        note: "Free Experiment tier; data-training opt-in.",
+    },
+];
+
+#[tauri::command]
+pub fn cloud_provider_presets() -> Vec<CloudProviderPreset> {
+    PROVIDER_PRESETS.to_vec()
+}
+
+/// Plain-HTTP proxies on this machine (Ollama, LM Studio, llama-server)
+/// legitimately run without any key.
+fn is_loopback_http(base_url: &str) -> bool {
+    url::Url::parse(base_url).is_ok_and(|u| {
+        u.scheme() == "http"
+            && u.host_str().is_some_and(|h| h == "localhost" || h.starts_with("127."))
+    })
+}
 
 /// Short hint of a stored key for the frontend: fixed dots plus the last four
 /// characters for longer keys.
@@ -139,23 +253,23 @@ pub fn cloud_provider_save(
             provider.id.clone()
         }
         None => {
-            let Some(key) = req
+            let key = req
                 .api_key
                 .as_deref()
                 .map(str::trim)
-                .filter(|k| !k.is_empty())
-            else {
+                .filter(|k| !k.is_empty());
+            if key.is_none() && !is_loopback_http(&base_url) {
                 return Err(AppError::invalid_input(
-                    "An API key is required for a new provider.",
+                    "An API key is required for a new provider. (Local proxies on this machine are the exception.)",
                 ));
-            };
+            }
             let id = format!("cp-{}", uuid_v4());
             cfg.cloud_providers.push(CloudProvider {
                 id: id.clone(),
                 label,
                 base_url,
                 model,
-                api_key: key.to_string(),
+                api_key: key.unwrap_or_default().to_string(),
             });
             id
         }

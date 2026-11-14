@@ -9,6 +9,7 @@ use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
 use crate::services::skills::SkillsService;
 use crate::services::tools::ToolService;
+use crate::services::websearch::WebSearchEngine;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct AppState {
     pub memory: Arc<MemoryService>,
     pub skills: Arc<SkillsService>,
     pub tools: Arc<ToolService>,
+    pub web: Arc<WebSearchEngine>,
     pub config_store: Arc<Mutex<ConfigStore>>,
 }
 
@@ -52,6 +54,9 @@ impl AppState {
             memory,
             skills,
             tools,
+            // Web search is stateless beyond its HTTP client; provider keys
+            // are read from config per request.
+            web: Arc::new(WebSearchEngine::new()),
             config_store: Arc::new(Mutex::new(ConfigStore::new())),
         }
     }

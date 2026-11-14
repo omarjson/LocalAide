@@ -218,6 +218,12 @@ pub fn run() {
             commands::cloud_provider_save,
             commands::cloud_provider_delete,
             commands::cloud_mode_set,
+            commands::cloud_provider_presets,
+            commands::web_search,
+            commands::web_crawl,
+            commands::web_providers,
+            commands::web_set_key,
+            commands::web_set_default,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

@@ -326,6 +326,40 @@ export interface RerankStatusResponse {
   ready: boolean;
 }
 
+/** One web search result. */
+export interface WebHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** A page read from the web as text. */
+export interface WebPage {
+  title: string | null;
+  url: string;
+  content: string;
+}
+
+/** A selectable web-search provider and its local key state. */
+export interface WebProviderStatus {
+  id: string;
+  label: string;
+  needs_key: boolean;
+  supports: string;
+  key_set: boolean;
+  is_default: boolean;
+}
+
+/** A curated starting point for the provider form (from the 9Router registry). */
+export interface CloudProviderPreset {
+  id: string;
+  label: string;
+  base_url: string;
+  model: string;
+  key_url: string;
+  note: string;
+}
+
 /** A saved prompt skill: one markdown file under ~/.aiassistant/skills/. */
 export interface Skill {
   name: string;

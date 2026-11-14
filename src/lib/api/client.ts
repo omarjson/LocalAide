@@ -14,11 +14,15 @@ import type {
   ChatThread,
   CloudConfigStatus,
   CloudModeRequest,
+  CloudProviderPreset,
   CloudProviderSaveRequest,
   DownloadProgressEvent,
   EmbeddingStatusResponse,
   ForgetAllResponse,
   RerankStatusResponse,
+  WebHit,
+  WebPage,
+  WebProviderStatus,
   SystemHealthResponse,
   UpdateCheckResponse,
   IndexFolderResponse,
@@ -341,6 +345,32 @@ export class ApiClient {
 
   async stopRerankEngine(): Promise<void> {
     return invoke<void>("rerank_stop");
+  }
+
+  // Web search (keyless + keyed providers)
+
+  async webSearch(query: string, provider?: string, limit?: number): Promise<WebHit[]> {
+    return invoke<WebHit[]>("web_search", { query, provider, limit });
+  }
+
+  async webCrawl(url: string, provider?: string): Promise<WebPage> {
+    return invoke<WebPage>("web_crawl", { url, provider });
+  }
+
+  async webProviders(): Promise<WebProviderStatus[]> {
+    return invoke<WebProviderStatus[]>("web_providers");
+  }
+
+  async webSetKey(provider: string, key: string | null): Promise<void> {
+    return invoke<void>("web_set_key", { provider, key });
+  }
+
+  async webSetDefault(provider: string): Promise<void> {
+    return invoke<void>("web_set_default", { provider });
+  }
+
+  async cloudProviderPresets(): Promise<CloudProviderPreset[]> {
+    return invoke<CloudProviderPreset[]>("cloud_provider_presets");
   }
 
   // Skills (saved prompt templates)

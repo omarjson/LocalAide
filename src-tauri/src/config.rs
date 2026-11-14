@@ -34,6 +34,11 @@ pub struct AppConfig {
     /// stored, so backups are user-triggered, not scheduled.
     #[serde(default)]
     pub backup: BackupConfig,
+    /// Web search settings (Settings → Web search). API keys are stored in
+    /// the local config file only, sent only to their own provider, and
+    /// excluded from backups unless explicitly included.
+    #[serde(default)]
+    pub web_search: WebSearchConfig,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -50,6 +55,18 @@ pub struct BackupConfig {
 
 fn default_context_tokens() -> u32 {
     8192
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct WebSearchConfig {
+    /// Provider used when the user searches without picking one. None =
+    /// DuckDuckGo (keyless).
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub exa_api_key: Option<String>,
+    #[serde(default)]
+    pub firecrawl_api_key: Option<String>,
 }
 
 /// One user-configured OpenAI-compatible provider (OpenAI, OpenRouter,
@@ -89,6 +106,7 @@ impl Default for AppConfig {
             chat_max_tokens: None,
             chat_persona: None,
             backup: BackupConfig::default(),
+            web_search: WebSearchConfig::default(),
         }
     }
 }
