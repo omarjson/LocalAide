@@ -10,15 +10,51 @@
 use crate::app::error::AppError;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
-use argon2::Argon2;
+use argon2::{Algorithm, Argon2, Params, Version};
+use zeroize::Zeroizing;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
 /// Version marker at the head of every archive file.
+/// Version 1 archives: magic, salt, nonce, ciphertext. The key came from
+/// argon2's defaults (19 MiB, 2 passes). They can still be restored.
 const MAGIC: &[u8] = b"LOCALAIDE-BACKUP-v1";
+/// Version 2 archives: magic, the Argon2 settings (memory in KiB, passes,
+/// lanes; little-endian u32 each), salt, nonce, ciphertext. The whole header
+/// is authenticated by the cipher, so the settings cannot be changed unseen.
+const MAGIC_V2: &[u8] = b"LOCALAIDE-BACKUP-v2";
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
+
+/// Argon2id settings for one archive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct KdfSettings {
+    memory_kib: u32,
+    passes: u32,
+    lanes: u32,
+}
+
+impl KdfSettings {
+    /// What version 1 archives used (argon2's defaults at the time).
+    const V1: Self = Self {
+        memory_kib: 19 * 1024,
+        passes: 2,
+        lanes: 1,
+    };
+    /// New archives: 64 MiB and 3 passes.
+    const CURRENT: Self = Self {
+        memory_kib: 64 * 1024,
+        passes: 3,
+        lanes: 1,
+    };
+
+    /// A header may not ask for more than this, so a crafted file cannot make
+    /// opening it use gigabytes of memory or minutes of work.
+    fn within_limits(self) -> bool {
+        self.memory_kib <= 1024 * 1024 && self.passes <= 10 && self.lanes <= 8
+    }
+}
 const ARCHIVE_EXT: &str = "labak";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,8 +164,11 @@ impl BackupEngine {
                 "A backup passphrase needs at least 8 characters — there is no recovery without it",
             ));
         }
-        let plaintext = serde_json::to_vec(payload)
-            .map_err(|e| AppError::storage(format!("Could not serialize backup: {e}")))?;
+        // The plain text and the key are wiped from memory when dropped.
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(payload)
+                .map_err(|e| AppError::storage(format!("Could not serialize backup: {e}")))?,
+        );
 
         let mut salt = [0u8; SALT_LEN];
         let mut nonce_bytes = [0u8; NONCE_LEN];
@@ -138,24 +177,30 @@ impl BackupEngine {
         getrandom::fill(&mut nonce_bytes)
             .map_err(|_| AppError::internal("OS random source unavailable"))?;
 
-        let key = derive_key(passphrase, &salt);
-        let cipher = Aes256Gcm::new((&key).into());
+        let kdf = KdfSettings::CURRENT;
+        let mut header = Vec::with_capacity(MAGIC_V2.len() + 12 + SALT_LEN + NONCE_LEN);
+        header.extend_from_slice(MAGIC_V2);
+        for value in [kdf.memory_kib, kdf.passes, kdf.lanes] {
+            header.extend_from_slice(&value.to_le_bytes());
+        }
+        header.extend_from_slice(&salt);
+        header.extend_from_slice(&nonce_bytes);
+
+        let key = derive_key(passphrase, &salt, kdf)?;
+        let cipher = Aes256Gcm::new((&*key).into());
         let nonce = Nonce::try_from(&nonce_bytes[..])
             .map_err(|_| AppError::internal("backup nonce construction failed"))?;
         let ciphertext = cipher
             .encrypt(
                 &nonce,
                 Payload {
-                    msg: &plaintext,
-                    aad: MAGIC,
+                    msg: plaintext.as_slice(),
+                    aad: &header,
                 },
             )
             .map_err(|_| AppError::internal("Backup encryption failed"))?;
 
-        let mut out = Vec::with_capacity(MAGIC.len() + SALT_LEN + NONCE_LEN + ciphertext.len());
-        out.extend_from_slice(MAGIC);
-        out.extend_from_slice(&salt);
-        out.extend_from_slice(&nonce_bytes);
+        let mut out = header;
         out.extend_from_slice(&ciphertext);
         Ok(out)
     }
@@ -166,33 +211,62 @@ impl BackupEngine {
         bytes: &[u8],
         passphrase: &str,
     ) -> Result<BackupPayload, AppError> {
-        let head = MAGIC.len() + SALT_LEN + NONCE_LEN;
-        if bytes.len() <= head || !bytes.starts_with(MAGIC) {
-            return Err(AppError::invalid_input(
-                "This file is not a LocalAide backup",
-            ));
+        let not_a_backup = || AppError::invalid_input("This file is not a LocalAide backup");
+        let version_2 = bytes.starts_with(MAGIC_V2);
+        let (kdf, salt_at) = if version_2 {
+            let at = MAGIC_V2.len();
+            let read = |offset: usize| -> Option<u32> {
+                let field: [u8; 4] = bytes.get(at + offset..at + offset + 4)?.try_into().ok()?;
+                Some(u32::from_le_bytes(field))
+            };
+            let (Some(memory_kib), Some(passes), Some(lanes)) = (read(0), read(4), read(8)) else {
+                return Err(not_a_backup());
+            };
+            let kdf = KdfSettings {
+                memory_kib,
+                passes,
+                lanes,
+            };
+            if !kdf.within_limits() {
+                return Err(AppError::invalid_input(
+                    "This backup asks for more memory than LocalAide allows, so it was not opened.",
+                ));
+            }
+            (kdf, at + 12)
+        } else if bytes.starts_with(MAGIC) {
+            (KdfSettings::V1, MAGIC.len())
+        } else {
+            return Err(not_a_backup());
+        };
+        let head = salt_at + SALT_LEN + NONCE_LEN;
+        if bytes.len() <= head {
+            return Err(not_a_backup());
         }
-        let salt = &bytes[MAGIC.len()..MAGIC.len() + SALT_LEN];
-        let nonce_bytes = &bytes[MAGIC.len() + SALT_LEN..head];
+        let salt = &bytes[salt_at..salt_at + SALT_LEN];
+        let nonce_bytes = &bytes[salt_at + SALT_LEN..head];
         let ciphertext = &bytes[head..];
+        // Version 2 authenticates its whole header; version 1 only the magic.
+        let aad = if version_2 { &bytes[..head] } else { MAGIC };
 
-        let key = derive_key(passphrase, salt);
-        let cipher = Aes256Gcm::new((&key).into());
+        let key = derive_key(passphrase, salt, kdf)?;
+        let cipher = Aes256Gcm::new((&*key).into());
         let nonce = Nonce::try_from(nonce_bytes)
             .map_err(|_| AppError::invalid_input("Backup header is corrupted"))?;
-        let plaintext = cipher
-            .decrypt(
-                &nonce,
-                Payload {
-                    msg: ciphertext,
-                    aad: MAGIC,
-                },
-            )
-            .map_err(|_| {
-                AppError::invalid_input(
-                    "Backup decryption failed — wrong passphrase or a corrupted file",
+        let plaintext = Zeroizing::new(
+            cipher
+                .decrypt(
+                    &nonce,
+                    Payload {
+                        msg: ciphertext,
+                        aad,
+                    },
                 )
-            })?;
+                .map_err(|_| {
+                    AppError::invalid_input(
+                        "Backup decryption failed — wrong passphrase or a corrupted file",
+                    )
+                })?,
+        );
         serde_json::from_slice(&plaintext)
             .map_err(|e| AppError::invalid_input(format!("Backup content is invalid: {e}")))
     }
@@ -317,17 +391,31 @@ impl BackupEngine {
             && let Some(backup_time) = config.get("backup_taken_at").and_then(|v| v.as_u64())
         {
             let config_path = self.app_dir.join("config.json");
-            let current_time = std::fs::read_to_string(&config_path)
+            let current = std::fs::read_to_string(&config_path)
                 .ok()
-                .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+            let current_time = current
+                .as_ref()
                 .and_then(|v| v.get("backup_taken_at").and_then(|t| t.as_u64()))
                 .unwrap_or(0);
             if backup_time >= current_time {
-                std::fs::write(
-                    &config_path,
-                    serde_json::to_string_pretty(config).unwrap_or_default(),
-                )
-                .map_err(|e| AppError::storage(format!("Could not restore config: {e}")))?;
+                let merged = merge_restored_config(current.as_ref(), &payload.config);
+                let text = serde_json::to_string_pretty(&merged).map_err(AppError::from)?;
+                // Same as ConfigStore::save: temp file, owner-only, then rename.
+                let tmp = config_path.with_extension("json.tmp");
+                std::fs::write(&tmp, text)
+                    .and_then(|()| {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            let _ = std::fs::set_permissions(
+                                &tmp,
+                                std::fs::Permissions::from_mode(0o600),
+                            );
+                        }
+                        std::fs::rename(&tmp, &config_path)
+                    })
+                    .map_err(|e| AppError::storage(format!("Could not restore config: {e}")))?;
                 config_restored = true;
             } else {
                 skipped_newer_config = true;
@@ -365,12 +453,100 @@ fn restore_destination(app_dir: &Path, rel_path: &str) -> Result<PathBuf, AppErr
     Ok(app_dir.join(rel_path))
 }
 
-fn derive_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
-    let mut key = [0u8; 32];
-    Argon2::default()
-        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
-        .expect("argon2 hash_password_into cannot fail with valid parameters");
-    key
+/// Prepares a restored config for writing.
+///
+/// - A key the backup left out (an empty string) keeps the current key, when
+///   the current provider has the same id and the same address.
+/// - A provider whose address fails the base URL check is dropped.
+/// - Online chat is switched off when its provider is gone.
+fn merge_restored_config(
+    current: Option<&serde_json::Value>,
+    restored: &serde_json::Value,
+) -> serde_json::Value {
+    use serde_json::Value;
+
+    let text = |value: &Value, field: &str| value.get(field).and_then(Value::as_str).map(str::to_string);
+    let mut merged = restored.clone();
+    if let Some(obj) = merged.as_object_mut() {
+        let current_providers: Vec<Value> = current
+            .and_then(|c| c.get("cloud_providers"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        if let Some(providers) = obj.get_mut("cloud_providers").and_then(Value::as_array_mut) {
+            providers.retain(|p| {
+                text(p, "base_url").is_some_and(|url| crate::config::validate_base_url(&url).is_ok())
+            });
+            for provider in providers.iter_mut() {
+                if text(&*provider, "api_key").is_some_and(|key| !key.is_empty()) {
+                    continue;
+                }
+                let restored_id = text(&*provider, "id");
+                let restored_url = text(&*provider, "base_url");
+                let kept = current_providers
+                    .iter()
+                    .find(|&c| {
+                        restored_id.is_some()
+                            && text(c, "id") == restored_id
+                            && text(c, "base_url") == restored_url
+                    })
+                    .and_then(|c| text(c, "api_key"))
+                    .filter(|key| !key.is_empty());
+                if let (Some(key), Some(slot)) = (kept, provider.as_object_mut()) {
+                    slot.insert("api_key".to_string(), Value::String(key));
+                }
+            }
+        }
+
+        let active = obj
+            .get("active_cloud_provider")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let active_exists = active.is_some_and(|id| {
+            obj.get("cloud_providers")
+                .and_then(Value::as_array)
+                .is_some_and(|ps| ps.iter().any(|p| text(p, "id").as_deref() == Some(id.as_str())))
+        });
+        if !active_exists {
+            obj.insert("active_cloud_provider".to_string(), Value::Null);
+            obj.insert("cloud_llm_enabled".to_string(), Value::Bool(false));
+        }
+
+        let current_web = current.and_then(|c| c.get("web_search")).cloned();
+        if let Some(web) = obj.get_mut("web_search").and_then(Value::as_object_mut) {
+            for slot in ["exa_api_key", "firecrawl_api_key"] {
+                let empty = web
+                    .get(slot)
+                    .and_then(Value::as_str)
+                    .is_none_or(str::is_empty);
+                let kept = current_web
+                    .as_ref()
+                    .and_then(|w| text(w, slot))
+                    .filter(|key| !key.is_empty());
+                if empty && let Some(key) = kept {
+                    web.insert(slot.to_string(), Value::String(key));
+                }
+            }
+        }
+    }
+    merged
+}
+
+/// Derives the archive key with Argon2id. The key is wiped from memory when
+/// it is dropped.
+fn derive_key(
+    passphrase: &str,
+    salt: &[u8],
+    kdf: KdfSettings,
+) -> Result<Zeroizing<[u8; 32]>, AppError> {
+    let params = Params::new(kdf.memory_kib, kdf.passes, kdf.lanes, Some(32))
+        .map_err(|_| AppError::invalid_input("Backup header is corrupted"))?;
+    let mut key = Zeroizing::new([0u8; 32]);
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key[..])
+        .map_err(|_| AppError::internal("The backup key could not be made"))?;
+    Ok(key)
 }
 
 fn timestamp_name(secs: u64) -> String {
@@ -493,12 +669,63 @@ mod tests {
         let bytes = engine
             .encrypt_payload(&payload, "long-enough-pass")
             .unwrap();
-        assert!(bytes.starts_with(MAGIC));
+        assert!(bytes.starts_with(MAGIC_V2));
 
         let back = engine.decrypt_payload(&bytes, "long-enough-pass").unwrap();
         assert_eq!(back, payload);
         assert!(engine.decrypt_payload(&bytes, "wrong-passphrase").is_err());
+
+        // The Argon2 settings sit in the authenticated header: a changed
+        // setting makes the archive fail to open.
+        let mut tampered = bytes.clone();
+        tampered[MAGIC_V2.len() + 4] ^= 1;
+        assert!(engine.decrypt_payload(&tampered, "long-enough-pass").is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn version_1_archives_still_open() {
+        let dir = temp_app_dir("v1");
+        let engine = BackupEngine::new(dir.clone());
+        let payload = engine
+            .build_payload(serde_json::json!({"selected_models": []}), false)
+            .unwrap();
+
+        // Build a version 1 archive the way older releases did.
+        let salt = [7u8; SALT_LEN];
+        let nonce_bytes = [9u8; NONCE_LEN];
+        let key = derive_key("long-enough-pass", &salt, KdfSettings::V1).unwrap();
+        let cipher = Aes256Gcm::new((&*key).into());
+        let nonce = Nonce::try_from(&nonce_bytes[..]).unwrap();
+        let plaintext = serde_json::to_vec(&payload).unwrap();
+        let ciphertext = cipher
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: &plaintext,
+                    aad: MAGIC,
+                },
+            )
+            .unwrap();
+        let mut bytes = MAGIC.to_vec();
+        bytes.extend_from_slice(&salt);
+        bytes.extend_from_slice(&nonce_bytes);
+        bytes.extend_from_slice(&ciphertext);
+
+        assert_eq!(engine.decrypt_payload(&bytes, "long-enough-pass").unwrap(), payload);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_header_asking_for_huge_memory_is_refused() {
+        let engine = BackupEngine::new(temp_app_dir("huge"));
+        let mut bytes = MAGIC_V2.to_vec();
+        for value in [u32::MAX, 3, 1] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&[0u8; SALT_LEN + NONCE_LEN + 32]);
+        let err = engine.decrypt_payload(&bytes, "long-enough-pass").unwrap_err();
+        assert!(err.message.contains("more memory"));
     }
 
     #[test]
@@ -574,6 +801,41 @@ mod tests {
 mod restore_path_tests {
     use super::restore_destination;
     use std::path::Path;
+
+    #[test]
+    fn restored_config_keeps_current_keys_and_drops_bad_addresses() {
+        let current = serde_json::json!({
+            "cloud_providers": [
+                {"id": "p1", "base_url": "https://api.example.com/v1", "api_key": "sk-current"},
+                {"id": "p2", "base_url": "https://old.example.com/v1", "api_key": "sk-old"}
+            ],
+            "web_search": {"exa_api_key": "exa-current", "firecrawl_api_key": null}
+        });
+        let restored = serde_json::json!({
+            "cloud_llm_enabled": true,
+            "active_cloud_provider": "p3",
+            "cloud_providers": [
+                {"id": "p1", "base_url": "https://api.example.com/v1", "api_key": ""},
+                {"id": "p2", "base_url": "https://moved.example.com/v1", "api_key": ""},
+                {"id": "p3", "base_url": "http://192.168.1.20/v1", "api_key": "sk-lan"}
+            ],
+            "web_search": {"exa_api_key": "", "firecrawl_api_key": ""}
+        });
+
+        let merged = super::merge_restored_config(Some(&current), &restored);
+        let providers = merged["cloud_providers"].as_array().unwrap();
+        // Same id and address: the current key stays.
+        assert_eq!(providers[0]["api_key"], "sk-current");
+        // The address moved: the old key does not follow it.
+        assert_eq!(providers[1]["api_key"], "");
+        // Plain http to another machine fails the base URL check.
+        assert_eq!(providers.len(), 2);
+        // Its provider is gone, so online chat is off.
+        assert_eq!(merged["cloud_llm_enabled"], false);
+        assert!(merged["active_cloud_provider"].is_null());
+        assert_eq!(merged["web_search"]["exa_api_key"], "exa-current");
+        assert_eq!(merged["web_search"]["firecrawl_api_key"], "");
+    }
 
     #[test]
     fn restore_accepts_only_memory_and_conversation_files() {

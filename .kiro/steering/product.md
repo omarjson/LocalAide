@@ -14,27 +14,28 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 
 - **Offline inference by default.** Chat runs on a local GGUF model through the llama-server sidecar (ADR-0007). With cloud mode off — the default — the chat path makes no network calls.
 - **Zero telemetry.** No analytics, crash beacons or remote logging.
-- **Local by default.** An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
-- Network access happens only for explicit user actions: downloading a model from the built-in catalog, and — when the user switches cloud mode on — chat requests to the provider they configured. No update check is wired yet (ADR-0005).
+- **Local by default.** An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. Changing a provider's address to another site requires the key again. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
+- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" in Settings → About, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
 
 ## Key features (0.1.0, verified in code)
 
-- **Local chat.** Streaming tokens, stop with Esc or the Stop button, and a sliding context budget that drops the oldest turns first and keeps the system prompt and latest message.
+- **Local chat.** Streaming tokens, stop with Esc (anywhere on the Chat screen) or the Stop button, and a sliding context budget that drops the oldest turns first and keeps the system prompt and latest message. The saved model loads in the background after the window opens.
 - **Image input with vision models.** Up to 4 attached images; the sidecar loads the model's `mmproj` projector. Text-only models reject images with a readable error. Not yet exercised against a real vision model end to end.
-- **Model setup and manager.** A setup wizard picks a preset from the machine's RAM. The model manager downloads GGUF files from the built-in catalog.
-- **Verified downloads.** Each file is hashed with SHA-256 in 64 KB chunks and checked against the catalog value before it becomes active. Downloads resume with HTTP Range requests and write to `.part` files first.
-- **Document library.** The user adds folders. Files are chunked (1500 characters, 250 overlap) and stored in SQLite. Search runs FTS5 BM25 keyword matching. See the known gap below.
-- **Memory notes.** Markdown notes in `~/.aiassistant/memory/`, indexed in SQLite. Chat recalls notes above a relevance score of 0.010 and shows numbered citations.
-- **Workspace tools.** Read, list and search files under `~/.aiassistant/workspace/`. Writes need explicit user approval and are logged to the `tool_audit` table.
-- **Keyboard navigation.** Ctrl/Cmd+K command palette, Ctrl/Cmd+N new chat, `/` search, Ctrl/Cmd+1 to 5 screens, Esc to stop or close, `?` for help.
+- **Model setup and manager.** A setup wizard picks a preset from the machine's RAM and the "Memory for models" share in Settings; it can be skipped. The model manager downloads GGUF files from the built-in catalog, and Cancel stops a download.
+- **Verified downloads.** Each file is hashed with SHA-256 in 64 KB chunks and checked against the catalog value before it becomes active. Downloads resume with HTTP Range requests and write to `.part` files first. A free-space check runs first.
+- **Document library.** The user adds folders or files with the system picker. Files are chunked (1500 characters, 250 overlap) and stored in SQLite. Keyword search uses FTS5 BM25. Meaning and hybrid search use vectors when the local embedding engine is running (Search settings → "Turn on meaning search", with an embedding model installed); otherwise they fall back to keywords. Unchanged files are skipped on re-index.
+- **Memory notes.** Markdown notes in `~/.aiassistant/memory/`, indexed in SQLite. Chat recalls notes above a relevance score of 0.010 and shows numbered citations. Two notes with one title are both kept.
+- **Workspace tools.** Read, list and search files under `~/.aiassistant/workspace/`. Writes need explicit user approval. Every action, including refused ones, gets a row in the `tool_audit` table; a write's row is written before the file is touched.
+- **Keyboard navigation.** Ctrl/Cmd+K command palette, Ctrl/Cmd+N new chat, `/` search, Ctrl/Cmd+1 to 6 screens, Esc to stop or close menus and dialogs, `?` for help. Menus support Escape, outside clicks and arrow keys.
 
 ## Known gaps (checked in code; keep docs honest about them)
 
-- **Hybrid search is keyword-only.** Chunk embeddings are never written, and the search path never passes a query vector. The vector side and the RRF fusion code exist but never run. The embedding engine also falls back to a deterministic placeholder until a real model file is present.
+- **Meaning search is not runtime-verified.** The code writes chunk vectors and passes a query vector when the embedding engine runs, but no real embedding model was driven end to end in the 2026-11-14 audit.
 - **The catalog "signature" is a SHA-256 digest, not Ed25519.** It checks the catalog for internal consistency only. It does not prove who published it.
 - **Tool actions are list, read, write and search.** Command execution does not exist, so there is no execution approval path.
-- **The audit log is not append-only.** A `clear_tool_audits` function exists.
+- **The audit log is not append-only.** "Clear" exists; it leaves one row that says how many entries it removed.
 - **Image input is code-complete but not runtime-verified.** No real vision model has been driven end to end yet; add that check before demoing the feature.
+- **Releases are unsigned and there is no in-app updater.** Signing is wired to optional CI secrets; the updater needs a key pair the owner must create (`docs/release.md`).
 
 ## Non-goals for this release
 

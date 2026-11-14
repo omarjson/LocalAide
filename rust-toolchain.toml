@@ -1,4 +1,8 @@
+# One Rust version for local builds and CI, so lints and builds match.
+# rustup reads this file for every cargo command in this repository, so it
+# wins over the toolchain a CI step installs. Keep RUST_TOOLCHAIN in
+# .github/workflows/ci.yml equal to `channel` (the version gate checks it).
 [toolchain]
-channel = "stable"
+channel = "1.100.0"
 components = ["rustfmt", "clippy"]
 profile = "default"

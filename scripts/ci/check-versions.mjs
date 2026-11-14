@@ -29,6 +29,17 @@ if (distinct.size !== 1 || distinct.has(undefined)) {
   process.exit(1);
 }
 
+// rustup takes the Rust version from rust-toolchain.toml, whatever CI
+// installs. If the two differ, CI installs targets for a version that is
+// never used, and a cross build (x86_64 on Apple Silicon) cannot find them.
+const toolchainFile = /^channel\s*=\s*"([^"]+)"/m.exec(read('rust-toolchain.toml'))?.[1];
+const ciToolchain = /^\s*RUST_TOOLCHAIN:\s*'([^']+)'/m.exec(read('.github/workflows/ci.yml'))?.[1];
+console.log(`rust-toolchain.toml: ${toolchainFile ?? 'missing'}; ci.yml RUST_TOOLCHAIN: ${ciToolchain ?? 'missing'}`);
+if (!toolchainFile || toolchainFile !== ciToolchain) {
+  console.log('::error title=toolchain::rust-toolchain.toml and RUST_TOOLCHAIN in ci.yml must name the same Rust version.');
+  process.exit(1);
+}
+
 const [version] = distinct;
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
 console.log(`All files agree on ${version}.`);

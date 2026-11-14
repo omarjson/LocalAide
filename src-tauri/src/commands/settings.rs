@@ -55,7 +55,10 @@ pub fn config_save(state: State<'_, AppState>, cfg: AppConfigDto) -> Result<(), 
     internal_cfg.selected_models = cfg.selected_models;
     internal_cfg.presets = presets;
     internal_cfg.ram_budget_mb = cfg.ram_budget_mb;
-    internal_cfg.cloud_llm_enabled = cfg.cloud_llm_enabled;
+    // `cloud_llm_enabled` is not taken from here. Only `cloud_mode_set` turns
+    // online chat on or off, because it also switches the engine. A flag
+    // written here would send chat online at the next start without the
+    // engine having been switched now.
 
     store.save(&internal_cfg).map_err(AppError::internal)
 }

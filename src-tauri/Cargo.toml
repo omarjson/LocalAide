@@ -52,17 +52,28 @@ pdf-extract = "0.12"
 # Encrypted backups (ADR-0009): AES-256-GCM with an argon2id-derived key.
 aes-gcm = "0.11"
 argon2 = "0.6"
+# Wipes backup keys and decrypted backups from memory after use.
+zeroize = "1"
 
 [features]
 default = []
 voice = ["whisper-rs", "piper-rs", "hound"]
 
-# Smaller, faster release builds. Panics keep unwinding (the default), so a
-# damaged PDF caught by `catch_unwind` cannot take the app down, and drop
-# handlers still stop the engine processes.
+# Backup key derivation (Argon2id, 64 MiB) is very slow without
+# optimization, so these crates are optimized in debug and test builds too.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+# Smaller release builds. Thin LTO keeps most of the size gain of full LTO
+# and needs far less memory to build, which matters on 7 GB macOS runners.
+# Panics keep unwinding (the default), so a damaged PDF caught by
+# `catch_unwind` cannot take the app down, and drop handlers still stop the
+# engine processes.
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
 strip = true
 
 

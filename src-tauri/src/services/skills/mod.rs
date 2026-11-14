@@ -60,7 +60,7 @@ impl SkillsService {
         if let Ok(data) = std::fs::read_to_string(&path)
             && let Ok(map) = serde_json::from_str::<BTreeMap<String, u32>>(&data)
         {
-            *self.usage.lock().expect("usage lock poisoned") = map;
+            *self.usage.lock().unwrap_or_else(|e| e.into_inner()) = map;
         }
     }
 
@@ -70,7 +70,7 @@ impl SkillsService {
             std::fs::create_dir_all(parent)
                 .map_err(|e| AppError::storage(format!("Failed to create skills folder: {e}")))?;
         }
-        let data = serde_json::to_string_pretty(&*self.usage.lock().expect("usage lock poisoned"))
+        let data = serde_json::to_string_pretty(&*self.usage.lock().unwrap_or_else(|e| e.into_inner()))
             .map_err(|e| AppError::storage(format!("Could not serialize skill usage: {e}")))?;
         std::fs::write(&path, data)
             .map_err(|e| AppError::storage(format!("Could not save skill usage: {e}")))?;
@@ -88,7 +88,7 @@ impl SkillsService {
         if key.is_empty() {
             return 0;
         }
-        let mut map = self.usage.lock().expect("usage lock poisoned");
+        let mut map = self.usage.lock().unwrap_or_else(|e| e.into_inner());
         let count = map.entry(key).or_insert(0);
         *count = count.saturating_add(1);
         let value = *count;
@@ -101,7 +101,7 @@ impl SkillsService {
     /// honest "you keep typing this, want to save it?" heuristic.
     pub fn suggestions(&self, min_count: u32) -> Result<Vec<SkillSuggestion>, AppError> {
         let saved_bodies: Vec<String> = self.list()?.into_iter().map(|s| s.body).collect();
-        let map = self.usage.lock().expect("usage lock poisoned");
+        let map = self.usage.lock().unwrap_or_else(|e| e.into_inner());
         let mut out: Vec<SkillSuggestion> = map
             .iter()
             .filter(|(prompt, count)| {

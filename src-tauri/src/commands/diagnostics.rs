@@ -168,12 +168,15 @@ fn version_newer(current: &str, latest: &str) -> bool {
     false
 }
 
-/// Tail of the llama-server log for the Settings diagnostics panel.
+/// Tail of a local log for the Settings diagnostics panel. `source` "app" is
+/// LocalAide's own log; anything else is the model engine's log.
 #[tauri::command]
-pub fn logs_tail(lines: Option<usize>) -> Result<Vec<String>, AppError> {
-    let path = crate::app::paths::app_dir()
-        .join("logs")
-        .join("llama-server.log");
+pub fn logs_tail(lines: Option<usize>, source: Option<String>) -> Result<Vec<String>, AppError> {
+    let file = match source.as_deref() {
+        Some("app") => "localaide.log",
+        _ => "llama-server.log",
+    };
+    let path = crate::app::paths::app_dir().join("logs").join(file);
     let data = match std::fs::read(&path) {
         Ok(data) => data,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

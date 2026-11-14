@@ -236,15 +236,26 @@ pub fn cloud_provider_save(
             let Some(provider) = provider else {
                 return Err(AppError::invalid_input("That provider no longer exists."));
             };
-            provider.label = label;
-            provider.base_url = base_url;
-            provider.model = model;
-            if let Some(key) = req
+            let new_key = req
                 .api_key
                 .as_deref()
                 .map(str::trim)
-                .filter(|k| !k.is_empty())
-            {
+                .filter(|k| !k.is_empty());
+            // A saved key goes only to the address it was entered for. When
+            // the address moves to another site, the key must be entered again.
+            if new_key.is_none() && !same_origin(&provider.base_url, &base_url) {
+                if is_loopback_http(&base_url) {
+                    provider.api_key.clear();
+                } else {
+                    return Err(AppError::invalid_input(
+                        "The address changed, so enter the API key again. LocalAide sends a key only to the address it was entered for.",
+                    ));
+                }
+            }
+            provider.label = label;
+            provider.base_url = base_url;
+            provider.model = model;
+            if let Some(key) = new_key {
                 provider.api_key = key.to_string();
             }
             provider.id.clone()
@@ -365,13 +376,48 @@ pub fn cloud_mode_set(
     })
 }
 
-/// A random id for a provider entry, same scheme as `app::jobs`.
+/// A random id for a provider entry, from the operating system's random source.
 fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let rand_part = (nanos ^ 0x5deece66d) as u64;
-    format!("{:016x}{:016x}", nanos as u64, rand_part)
+    let mut bytes = [0u8; 16];
+    if getrandom::fill(&mut bytes).is_err() {
+        // No random source: fall back to the clock, which is unique enough
+        // for a list the user edits by hand.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        bytes = nanos.to_le_bytes();
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// True when both addresses point at the same site: scheme, host and port.
+fn same_origin(a: &str, b: &str) -> bool {
+    match (url::Url::parse(a), url::Url::parse(b)) {
+        (Ok(a), Ok(b)) => a.origin() == b.origin(),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{same_origin, uuid_v4};
+
+    #[test]
+    fn a_key_stays_with_its_site() {
+        assert!(same_origin("https://api.example.com/v1", "https://api.example.com/v2"));
+        assert!(same_origin("https://api.example.com/v1", "https://api.example.com:443/v1"));
+        assert!(!same_origin("https://api.example.com/v1", "https://evil.example.net/v1"));
+        assert!(!same_origin("https://api.example.com/v1", "http://api.example.com/v1"));
+        assert!(!same_origin("https://api.example.com/v1", "https://api.example.com:8443/v1"));
+        assert!(!same_origin("not a url", "not a url"));
+    }
+
+    #[test]
+    fn provider_ids_are_random() {
+        let a = uuid_v4();
+        let b = uuid_v4();
+        assert_eq!(a.len(), 32);
+        assert_ne!(a, b);
+    }
 }

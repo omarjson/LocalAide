@@ -483,8 +483,9 @@ export class ApiClient {
     return invoke<UpdateCheckResponse>("update_check");
   }
 
-  async getLogTail(lines?: number): Promise<string[]> {
-    return invoke<string[]>("logs_tail", { lines });
+  /** The end of a local log: LocalAide's own ("app") or the model engine's. */
+  async getLogTail(lines?: number, source: "app" | "engine" = "engine"): Promise<string[]> {
+    return invoke<string[]>("logs_tail", { lines, source });
   }
 
   // Encrypted local backups (ADR-0009)

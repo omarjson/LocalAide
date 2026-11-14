@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 console.log("=== LocalAide Build & Startup Smoke Test ===");
@@ -37,6 +37,21 @@ if (indexHtml.includes('vite.svg')) {
 
 console.log("PASS: index.html has valid mount container, product title, and assets.");
 
+// The CSP allows scripts from the app itself only, so an inline script would
+// be blocked in the real window. Every <script> needs a src.
+const inlineScripts = [...indexHtml.matchAll(/<script\b([^>]*)>/g)].filter(([, attrs]) => !/\bsrc=/.test(attrs));
+if (inlineScripts.length > 0) {
+  console.error("FAIL: dist/index.html has an inline <script>, which the CSP blocks.");
+  process.exit(1);
+}
+
+// The theme script must load before the page draws, or a light theme flashes dark.
+if (!indexHtml.includes('<script src="/theme-init.js"></script>') || !existsSync(join(distDir, 'theme-init.js'))) {
+  console.error("FAIL: dist/theme-init.js is missing or not loaded by index.html.");
+  process.exit(1);
+}
+console.log("PASS: no inline scripts, and the theme loads before the first paint.");
+
 // 2. Verify CSS bundle
 const assetFiles = readdirSync(assetsDir);
 const cssFiles = assetFiles.filter(f => f.endsWith('.css'));
@@ -70,18 +85,5 @@ if (!jsContent.includes('LocalAide')) {
   process.exit(1);
 }
 
-console.log("PASS: JS bundle compiled successfully.");
-
-// Write evidence
-const evidenceDir = join(process.cwd(), 'docs', 'evidence');
-mkdirSync(evidenceDir, { recursive: true });
-const logContent = `Smoke Test Report: PASS
-Date: ${new Date().toISOString()}
-HTML: dist/index.html (valid #app, title LocalAide)
-CSS: ${cssFiles[0]} (${cssSize} bytes - Tailwind verified)
-JS: ${jsFiles[0]} (${statSync(jsPath).size} bytes)
-Status: GREEN
-`;
-writeFileSync(join(evidenceDir, 'smoke-test.log'), logContent);
-console.log("PASS: Smoke test report written to docs/evidence/smoke-test.log");
+console.log(`PASS: JS bundle compiled successfully (${jsFiles[0]}, ${statSync(jsPath).size} bytes).`);
 console.log("=== ALL SMOKE CHECKS PASSED ===");

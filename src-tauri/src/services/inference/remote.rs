@@ -43,9 +43,12 @@ impl RemoteEngine {
         // mid-stream therefore parks the generation thread until CHAT_TIMEOUT;
         // the cancel flag is still checked between SSE lines, so the UI
         // recovers immediately when the user presses Stop.
+        // Redirects are not followed: a redirect would send the conversation
+        // and the API key to an address the user never entered.
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(Duration::from_secs(15))
             .timeout(CHAT_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
         Self {

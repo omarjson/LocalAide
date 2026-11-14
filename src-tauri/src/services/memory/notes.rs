@@ -40,6 +40,47 @@ impl NotesManager {
         }
     }
 
+    /// Writes a new note file named `<stem>.md`. A note with that name is never
+    /// replaced: the name gets `_2`, `_3` and so on until it is free. The file
+    /// is created only if it does not exist yet, so two saves cannot race.
+    fn write_new_note_file(&self, stem: &str, markdown: &str) -> Result<PathBuf, AppError> {
+        use std::io::Write;
+
+        for n in 1..=1000 {
+            let name = if n == 1 {
+                format!("{stem}.md")
+            } else {
+                format!("{stem}_{n}.md")
+            };
+            let path = self.notes_dir.join(name);
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(mut file) => {
+                    file.write_all(markdown.as_bytes()).map_err(|e| {
+                        AppError::storage(format!(
+                            "Failed to write memory note to {}: {e}",
+                            path.display()
+                        ))
+                    })?;
+                    return Ok(path);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    return Err(AppError::storage(format!(
+                        "Failed to create memory note {}: {e}",
+                        path.display()
+                    )));
+                }
+            }
+        }
+        Err(AppError::storage(
+            "Too many notes share this title. Use a different title.",
+        ))
+    }
+
     pub fn create_note(
         &self,
         title: &str,
@@ -61,19 +102,18 @@ impl NotesManager {
             })
             .collect();
 
-        let filename = if safe_title.trim().is_empty() {
+        let stem = if safe_title.trim().is_empty() {
             format!(
-                "note_{}.md",
+                "note_{}",
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs()
             )
         } else {
-            format!("{safe_title}.md")
+            avoid_reserved_name(safe_title)
         };
 
-        let path = self.notes_dir.join(&filename);
         let tags_vec = tags.unwrap_or_default();
         let tags_header = if !tags_vec.is_empty() {
             format!("<!-- tags: {} -->\n", tags_vec.join(", "))
@@ -82,12 +122,7 @@ impl NotesManager {
         };
 
         let markdown = format!("# {title}\n{tags_header}\n{content}\n");
-        fs::write(&path, &markdown).map_err(|e| {
-            AppError::storage(format!(
-                "Failed to write memory note to {}: {e}",
-                path.display()
-            ))
-        })?;
+        let path = self.write_new_note_file(&stem, &markdown)?;
 
         let meta = fs::metadata(&path)
             .map_err(|e| AppError::storage(format!("Failed to read note metadata: {e}")))?;
@@ -271,9 +306,52 @@ impl NotesManager {
     }
 }
 
+/// Windows reserves CON, PRN, AUX, NUL, COM1 to COM9 and LPT1 to LPT9 as file
+/// names, whatever the extension, so a note with such a title gets a suffix.
+fn avoid_reserved_name(stem: String) -> String {
+    let upper = stem.to_ascii_uppercase();
+    let numbered_port = upper.len() == 4
+        && (upper.starts_with("COM") || upper.starts_with("LPT"))
+        && matches!(upper.as_bytes()[3], b'1'..=b'9');
+    if numbered_port || matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        format!("{stem}_note")
+    } else {
+        stem
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_with_the_same_title_are_both_kept() {
+        let root = std::env::temp_dir().join(format!("la-notes-same-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let notes_dir = root.join("memory");
+        let library = Arc::new(LibraryService::open_in_memory().unwrap());
+        let manager = NotesManager::new(library.db(), library.clone(), notes_dir.clone());
+
+        let first = manager.create_note("Groceries", "milk", None).unwrap();
+        let second = manager.create_note("Groceries", "bread", None).unwrap();
+        assert_ne!(first.path, second.path);
+        assert!(fs::read_to_string(&first.path).unwrap().contains("milk"));
+        assert!(fs::read_to_string(&second.path).unwrap().contains("bread"));
+
+        let reserved = manager.create_note("CON", "a note", None).unwrap();
+        assert!(reserved.path.ends_with("CON_note.md"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reserved_windows_names_get_a_suffix() {
+        for name in ["con", "NUL", "Com1", "lpt9"] {
+            assert_eq!(avoid_reserved_name(name.to_string()), format!("{name}_note"));
+        }
+        for name in ["COM0", "COM10", "CONSOLE", "Notes"] {
+            assert_eq!(avoid_reserved_name(name.to_string()), name);
+        }
+    }
 
     #[test]
     fn note_paths_must_be_markdown_files_in_the_notes_folder() {

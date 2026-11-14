@@ -72,7 +72,7 @@ impl CustomModels {
     pub fn all(&self) -> Arc<Vec<CatalogEntry>> {
         self.entries
             .read()
-            .expect("community-model lock poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
@@ -98,7 +98,7 @@ impl CustomModels {
         }
         next.push(entry);
         self.persist(&next)?;
-        *self.entries.write().expect("community-model lock poisoned") = Arc::new(next);
+        *self.entries.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(next);
         Ok(())
     }
 
@@ -114,7 +114,7 @@ impl CustomModels {
             )));
         }
         self.persist(&next)?;
-        *self.entries.write().expect("community-model lock poisoned") = Arc::new(next);
+        *self.entries.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(next);
         Ok(())
     }
 }

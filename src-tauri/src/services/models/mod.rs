@@ -110,7 +110,7 @@ impl ModelService {
 
     /// Snapshot of the active catalog.
     pub fn manifest(&self) -> Arc<CatalogManifest> {
-        self.manifest.read().expect("catalog lock poisoned").clone()
+        self.manifest.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Snapshot of the active catalog (the entries live in `manifest.models`).
@@ -119,7 +119,7 @@ impl ModelService {
     }
 
     pub fn fetched_at(&self) -> Option<u64> {
-        *self.fetched_at.read().expect("catalog lock poisoned")
+        *self.fetched_at.read().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn get_model_entry(&self, id: &str) -> Option<CatalogEntry> {
@@ -193,8 +193,8 @@ impl ModelService {
         // catalog unchanged instead of promising a refresh that would not
         // survive a restart.
         self.write_cache(&fetched, now)?;
-        *self.manifest.write().expect("catalog lock poisoned") = Arc::new(fetched);
-        *self.fetched_at.write().expect("catalog lock poisoned") = Some(now);
+        *self.manifest.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(fetched);
+        *self.fetched_at.write().unwrap_or_else(|e| e.into_inner()) = Some(now);
         Ok(self.manifest())
     }
 
@@ -209,8 +209,8 @@ impl ModelService {
         }
         let builtin = CatalogManifest::default_manifest();
         builtin.verify()?;
-        *self.manifest.write().expect("catalog lock poisoned") = Arc::new(builtin);
-        *self.fetched_at.write().expect("catalog lock poisoned") = None;
+        *self.manifest.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(builtin);
+        *self.fetched_at.write().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(self.manifest())
     }
 
@@ -286,7 +286,7 @@ impl ModelService {
                     cancel,
                     move |mut p: DownloadProgress| {
                         p.percent = base + p.percent * weight / 100.0;
-                        let mut cb = shared.lock().expect("download progress lock poisoned");
+                        let mut cb = shared.lock().unwrap_or_else(|e| e.into_inner());
                         cb(p);
                     },
                 )

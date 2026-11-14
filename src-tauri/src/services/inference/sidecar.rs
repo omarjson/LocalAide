@@ -122,11 +122,12 @@ impl InferenceEngine for SidecarEngine {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
-            .arg("--api-key")
-            .arg(&api_key)
             .arg("-c")
             .arg(context_size.to_string())
             .arg("--jinja")
+            // The key goes in the environment, not the command line, which
+            // other programs on this computer can read.
+            .env("LLAMA_API_KEY", &api_key)
             .stdin(Stdio::null());
 
         let mmproj = mmproj_for(model_path);

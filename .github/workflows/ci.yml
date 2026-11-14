@@ -88,6 +88,9 @@ jobs:
       - name: Smoke Test
         run: npm run smoke
 
+      - name: Frontend Unit Tests
+        run: npm run test:unit
+
       # The Rust steps run even when an earlier step failed, so one run
       # reports formatting, lint and test problems together.
       - name: Rust Formatting Check
@@ -278,6 +281,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: macos-latest
     strategy:
+      # Each target reports its own result; one failure does not cancel the other.
+      fail-fast: false
       matrix:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
@@ -353,8 +358,10 @@ jobs:
             fi
           done
 
+      # Run through cargo-annotate.mjs, so a failure's last lines become an
+      # annotation that can be read without log access.
       - name: Build Tauri Package
-        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
+        run: node scripts/ci/cargo-annotate.mjs tauri-build -- node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }} --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -443,9 +450,9 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
-          $cliArgs = @('tauri', 'build', '--target', '${{ matrix.target }}', '--config', 'src-tauri/tauri.sidecar.conf.json')
+          $cliArgs = @('scripts/ci/cargo-annotate.mjs', 'tauri-build', '--', 'node', 'node_modules/@tauri-apps/cli/tauri.js', 'build', '--target', '${{ matrix.target }}', '--config', 'src-tauri/tauri.sidecar.conf.json')
           if ($env:SIGNING_CONFIG) { $cliArgs += @('--config', $env:SIGNING_CONFIG) }
-          npx @cliArgs
+          node @cliArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Artifacts
@@ -511,7 +518,7 @@ jobs:
         run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
 
       - name: Build Tauri Package
-        run: npx tauri build --config src-tauri/tauri.sidecar.conf.json
+        run: node scripts/ci/cargo-annotate.mjs tauri-build -- node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.sidecar.conf.json
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

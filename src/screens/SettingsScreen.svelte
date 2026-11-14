@@ -56,6 +56,11 @@
   let health = $state<SystemHealthResponse | null>(null);
   let updateInfo = $state<UpdateCheckResponse | null>(null);
   let logLines = $state<string[]>([]);
+  let logSource = $state<"app" | "engine">("app");
+  const logTabs = [
+    { value: "app", label: "LocalAide" },
+    { value: "engine", label: "Model engine" },
+  ];
   let diagBusy = $state(false);
   let updateBusy = $state(false);
 
@@ -349,7 +354,7 @@
     try {
       const [healthResult, logs] = await Promise.all([
         api.getSystemHealth(),
-        api.getLogTail(120).catch(() => [] as string[]),
+        api.getLogTail(120, logSource).catch(() => [] as string[]),
       ]);
       health = healthResult;
       logLines = logs;
@@ -811,7 +816,7 @@
               <SettingsRow icon="check" title="Settings" description={health.config_ok ? "Saved correctly" : "Could not read settings"} class="border-t border-ink-800" />
             </SettingsGroup>
           {/if}
-          <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><h3 class="font-semibold text-ink-50">Local log</h3><Button variant="subtle" disabled={diagBusy} onclick={() => void loadDiagnostics()}>Refresh</Button></div>{#if logLines.length === 0}<p class="mt-3 text-sm text-ink-400">No log output yet.</p>{:else}<pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{logLines.join("\n")}</pre>{/if}</div>
+          <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><h3 class="font-semibold text-ink-50">Local log</h3><div class="flex items-center gap-2"><Tabs items={logTabs} value={logSource} onChange={(value) => { if (value === "app" || value === "engine") { logSource = value; void loadDiagnostics(); } }} ariaLabel="Which log" /><Button variant="subtle" disabled={diagBusy} onclick={() => void loadDiagnostics()}>Refresh</Button></div></div>{#if logLines.length === 0}<p class="mt-3 text-sm text-ink-400">No log output yet.</p>{:else}<pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{logLines.join("\n")}</pre>{/if}</div>
         </div>
       {/if}
     </div>

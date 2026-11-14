@@ -65,25 +65,25 @@ impl LibraryService {
         *self
             .embedding
             .write()
-            .expect("embedding slot lock poisoned") = Some(engine);
+            .unwrap_or_else(|e| e.into_inner()) = Some(engine);
     }
 
     fn embedding_engine(&self) -> Option<Arc<EmbeddingEngine>> {
         self.embedding
             .read()
-            .expect("embedding slot lock poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
     /// Attach the reranker engine after construction.
     pub fn set_rerank_engine(&self, engine: Arc<RerankEngine>) {
-        *self.rerank.write().expect("reranker slot lock poisoned") = Some(engine);
+        *self.rerank.write().unwrap_or_else(|e| e.into_inner()) = Some(engine);
     }
 
     fn rerank_engine(&self) -> Option<Arc<RerankEngine>> {
         self.rerank
             .read()
-            .expect("reranker slot lock poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 

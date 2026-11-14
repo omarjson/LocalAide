@@ -103,11 +103,12 @@ impl EmbeddingEngine {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
-            .arg("--api-key")
-            .arg(&api_key)
             .arg("-c")
             .arg(EMBED_CONTEXT.to_string())
             .arg("--embedding")
+            // The key goes in the environment, not the command line, which
+            // other programs on this computer can read.
+            .env("LLAMA_API_KEY", &api_key)
             .stdin(Stdio::null());
 
         match open_log() {

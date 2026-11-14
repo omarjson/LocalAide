@@ -951,6 +951,25 @@ impl LibraryDb {
         Ok(conn.last_insert_rowid())
     }
 
+    /// Sets the outcome of an audit row written before its action ran.
+    pub fn finish_tool_audit(
+        &self,
+        id: i64,
+        status: &str,
+        details: Option<&str>,
+    ) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute(
+            "UPDATE tool_audit SET status = ?1, details = ?2 WHERE id = ?3",
+            params![status, details, id],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to update tool audit: {e}")))?;
+        Ok(())
+    }
+
     pub fn list_tool_audits(&self, limit: usize) -> Result<Vec<DbToolAudit>, AppError> {
         let conn = self
             .conn

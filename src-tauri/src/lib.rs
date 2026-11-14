@@ -302,7 +302,9 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
+        .unwrap_or_else(|e| {
+            lifecycle::fatal_startup_error(&format!("The app window could not open: {e}"))
+        })
         .run(move |_app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 // Stop the engines. The job object ends any child that is left.

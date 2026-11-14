@@ -107,7 +107,16 @@ function buildAnnotations() {
   }
   flush();
 
-  const annotations = main.slice(0, MAX_ANNOTATIONS);
+  const annotations = main.slice(0, MAX_ANNOTATIONS - 1);
+
+  // Tools other than cargo (the Tauri bundler, for one) may report on
+  // stdout, so its last lines go in too when nothing else explained the failure.
+  if (annotations.length === 0) {
+    const outTail = plainLines.filter((l) => l.trim() && !STATUS_LINE.test(l)).slice(-40);
+    if (outTail.length > 0) {
+      annotations.push(`::error title=${escapeProperty(`${label}: stdout`)}::${escapeData(clip(outTail.join('\n')))}`);
+    }
+  }
 
   // The rest of stderr: build scripts, the linker and cargo itself.
   const tail = stderrLines.filter((l) => !STATUS_LINE.test(l)).slice(-80);

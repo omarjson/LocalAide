@@ -246,7 +246,9 @@ impl WebSearchEngine {
         provider: &str,
         keys: &WebSearchKeys,
     ) -> Result<WebPage, AppError> {
-        validate_crawl_url(url)?;
+        // Send the parsed form, so what was checked is exactly what is sent.
+        let checked = validate_crawl_url(url)?;
+        let url = checked.as_str();
         match provider {
             "firecrawl" => {
                 let key = keys.for_provider("firecrawl")?;
@@ -445,8 +447,11 @@ fn strip_tags(s: &str) -> String {
     out
 }
 
-/// Crawl targets must be plain http(s) URLs without embedded credentials.
-pub fn validate_crawl_url(url: &str) -> Result<(), AppError> {
+/// Crawl targets must be plain http(s) URLs on a public host, without
+/// embedded credentials. The address goes to an online reader (Jina or
+/// Firecrawl), so addresses inside the user's own computer or network never
+/// leave it. Returns the parsed URL, which is what gets sent.
+pub fn validate_crawl_url(url: &str) -> Result<url::Url, AppError> {
     let parsed = url::Url::parse(url)
         .map_err(|_| AppError::invalid_input("That is not a valid URL to read."))?;
     if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -454,12 +459,52 @@ pub fn validate_crawl_url(url: &str) -> Result<(), AppError> {
             "Do not put a username or password in the URL.",
         ));
     }
-    match parsed.scheme() {
-        "https" | "http" => Ok(()),
-        _ => Err(AppError::invalid_input(
+    if !matches!(parsed.scheme(), "https" | "http") {
+        return Err(AppError::invalid_input(
             "Only http and https pages can be read.",
-        )),
+        ));
     }
+    if is_private_host(&parsed) {
+        return Err(AppError::invalid_input(
+            "Pages on this computer or your local network cannot be read here, because the address would be sent to an online reader.",
+        ));
+    }
+    Ok(parsed)
+}
+
+/// Hosts that only make sense inside the user's own computer or network.
+fn is_private_host(url: &url::Url) -> bool {
+    match url.host() {
+        None => true,
+        Some(url::Host::Domain(name)) => {
+            let name = name.trim_end_matches('.').to_ascii_lowercase();
+            const LOCAL_SUFFIXES: [&str; 6] =
+                [".localhost", ".local", ".internal", ".lan", ".home.arpa", ".intranet"];
+            name == "localhost"
+                || !name.contains('.')
+                || LOCAL_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix))
+        }
+        Some(url::Host::Ipv4(ip)) => is_private_v4(ip),
+        Some(url::Host::Ipv6(ip)) => {
+            let first = ip.segments()[0];
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || (first & 0xfe00) == 0xfc00 // unique local, fc00::/7
+                || (first & 0xffc0) == 0xfe80 // link local, fe80::/10
+                || ip.to_ipv4_mapped().is_some_and(is_private_v4)
+        }
+    }
+}
+
+fn is_private_v4(ip: std::net::Ipv4Addr) -> bool {
+    let [a, b, ..] = ip.octets();
+    ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || (a == 100 && (b & 0xc0) == 64) // shared address space, 100.64.0.0/10
 }
 
 /// Pull the `uddg=` target out of a DuckDuckGo redirect href, or pass the
@@ -864,6 +909,33 @@ mod tests {
         assert!(validate_crawl_url("ftp://example.com").is_err());
         assert!(validate_crawl_url("https://user:pass@example.com").is_err());
         assert!(validate_crawl_url("not a url").is_err());
+    }
+
+    #[test]
+    fn addresses_inside_the_users_network_are_not_sent_out() {
+        for private in [
+            "http://localhost:8080/admin",
+            "http://127.0.0.1/",
+            "http://10.0.0.5/files",
+            "http://192.168.1.1/",
+            "http://172.16.4.2/",
+            "http://169.254.169.254/latest/meta-data",
+            "http://100.64.0.1/",
+            "http://[::1]/",
+            "http://[fd00::1]/",
+            "http://[fe80::1]/",
+            "http://[::ffff:192.168.0.1]/",
+            "http://nas/share",
+            "http://printer.local/",
+            "http://wiki.corp.internal/",
+            "http://router.lan/",
+            "http://app.localhost/",
+        ] {
+            assert!(validate_crawl_url(private).is_err(), "{private} must stay home");
+        }
+        for public in ["https://example.com/a", "http://93.184.216.34/", "https://[2606:4700::1]/"] {
+            assert!(validate_crawl_url(public).is_ok(), "{public} is public");
+        }
     }
 
     #[test]

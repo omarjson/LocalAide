@@ -100,9 +100,10 @@
         </button>
         <button
           onclick={onApproveSession}
+          title="Allows changes to files in this folder for the next 30 minutes"
           class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-on-ember font-medium transition-colors"
         >
-          Allow for Session
+          Allow in this folder for 30 min
         </button>
       </div>
       </FocusTrap>
