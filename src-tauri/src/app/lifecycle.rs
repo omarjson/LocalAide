@@ -15,6 +15,7 @@ pub fn claim_single_instance() -> bool {
     let _ = std::fs::create_dir_all(&dir);
     let file = match std::fs::OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(dir.join("instance.lock"))

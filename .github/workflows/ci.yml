@@ -44,16 +44,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev
 
+      # Saved even when the job fails, so the next fix does not rebuild
+      # every dependency.
       - name: Cache Cargo Dependencies
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-quality-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-quality-
+          workspaces: src-tauri -> target
+          cache-on-failure: true
 
       - name: Install npm dependencies
         run: npm ci
@@ -138,15 +135,10 @@ jobs:
           cache: 'npm'
 
       - name: Cache Cargo Dependencies
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-check-
+          workspaces: src-tauri -> target
+          cache-on-failure: true
 
       # tauri::generate_context! embeds ../dist, so the frontend is built first.
       - name: Install npm dependencies
