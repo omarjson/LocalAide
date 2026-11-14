@@ -1,8 +1,8 @@
 <script lang="ts">
   import Icon from "../components/Icon.svelte";
   import { onMount } from "svelte";
-  import { api } from "../lib/api/client";
-  import type { ModelInfo } from "../lib/api/bindings";
+  import { api, errorMessage } from "../lib/api/client";
+  import type { HfFileInfo, HfRepo, ModelInfo } from "../lib/api/bindings";
   import { formatBytes } from "../lib/format";
 
   type Step = "detect" | "preset" | "confirm" | "download" | "done";
@@ -96,6 +96,94 @@
     } catch {}
   };
 
+  // ---- Community models (Hugging Face) ----
+  // The preset path stays the default; this is the Models screen's
+  // community browser, condensed, for picks the catalog does not carry.
+
+  let communityOpen = $state(false);
+  let wfQuery = $state("");
+  let wfRepos = $state<HfRepo[]>([]);
+  let wfBusy = $state(false);
+  let wfExpanded = $state<string | null>(null);
+  let wfFiles = $state<Record<string, HfFileInfo[]>>({});
+  let wfFilesBusy = $state<string | null>(null);
+  let wfAdding = $state<string | null>(null);
+  let wfError = $state<string | null>(null);
+  // Set while a community download runs so Cancel hits the right job.
+  let communityModelId = $state<string | null>(null);
+
+  const wfSearch = async () => {
+    if (!wfQuery.trim()) return;
+    wfBusy = true;
+    wfError = null;
+    wfExpanded = null;
+    try {
+      wfRepos = await api.hfSearch(wfQuery.trim(), 10);
+      if (!wfRepos.length) wfError = "No GGUF repositories matched that search.";
+    } catch (e) {
+      wfError = errorMessage(e);
+    } finally {
+      wfBusy = false;
+    }
+  };
+
+  const wfToggleRepo = async (repo: string) => {
+    if (wfExpanded === repo) {
+      wfExpanded = null;
+      return;
+    }
+    wfExpanded = repo;
+    if (wfFiles[repo]) return;
+    wfFilesBusy = repo;
+    wfError = null;
+    try {
+      const files = await api.hfRepoFiles(repo);
+      wfFiles = { ...wfFiles, [repo]: files };
+    } catch (e) {
+      wfError = errorMessage(e);
+      wfExpanded = null;
+    } finally {
+      wfFilesBusy = null;
+    }
+  };
+
+  const wfInstall = async (repo: string, file: HfFileInfo) => {
+    wfAdding = file.path;
+    wfError = null;
+    try {
+      const license = wfRepos.find((r) => r.id === repo)?.license ?? null;
+      const withMmproj = (wfFiles[repo] ?? []).some((f) => f.is_mmproj && f.path !== file.path);
+      const res = await api.hfCustomAdd(repo, file.path, "chat", license, withMmproj);
+      const label = file.path.split("/").pop() ?? file.path;
+      communityModelId = res.id;
+      step = "download";
+      progress = 0;
+      status = `Downloading ${label}...`;
+      await api.downloadModel(res.id, (evt) => {
+        if (evt.status === "failed") return;
+        progress = Math.round(evt.percent);
+        status = `Downloading ${label} (${Math.round(evt.percent)}%)...`;
+      });
+      step = "done";
+      status = `${label} installed. You can switch models any time on the Models screen.`;
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      wfError = /cancel/i.test(msg) ? null : `Install failed: ${msg}`;
+      status = /cancel/i.test(msg) ? "Install cancelled." : `Install failed: ${msg}`;
+      step = "preset";
+    } finally {
+      wfAdding = null;
+      communityModelId = null;
+    }
+  };
+
+  const cancelCommunity = async () => {
+    if (!communityModelId) return;
+    try {
+      await api.cancelModelDownload(communityModelId);
+    } catch {}
+  };
+
   onMount(detect);
 </script>
 
@@ -163,6 +251,85 @@
           </button>
         {/each}
       </div>
+
+      <div class="mt-6 border-t border-edge pt-4">
+        {#if !communityOpen}
+          <button
+            onclick={() => (communityOpen = true)}
+            class="text-xs text-ember-300 hover:underline"
+          >
+            Or grab a community model from Hugging Face →
+          </button>
+        {:else}
+          <div class="text-xs font-semibold text-ink-300 mb-2">Community models (Hugging Face)</div>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={wfQuery}
+              placeholder="Search public GGUF repositories…"
+              onkeydown={(e) => e.key === "Enter" && wfSearch()}
+              class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 outline-none focus:border-ember-500/60"
+            />
+            <button
+              onclick={wfSearch}
+              disabled={wfBusy || !wfQuery.trim()}
+              class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-200 transition-colors"
+            >
+              {wfBusy ? "Searching…" : "Search"}
+            </button>
+          </div>
+          {#if wfError}
+            <p class="mt-2 text-xs text-rose-300">{wfError}</p>
+          {/if}
+          <div class="mt-3 space-y-1.5 max-h-72 overflow-auto">
+            {#each wfRepos as repo (repo.id)}
+              <div class="rounded-lg border border-edge bg-ink-950/60">
+                <button
+                  onclick={() => wfToggleRepo(repo.id)}
+                  class="w-full text-left px-3 py-2 hover:bg-white/[0.02] transition-colors"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs text-ink-200 font-medium truncate">{repo.id}</span>
+                    <span class="text-[10px] text-ink-500 font-mono shrink-0">{repo.downloads.toLocaleString()} dl</span>
+                  </div>
+                  <div class="text-[10px] text-ink-500 font-mono">
+                    {#if repo.license}{repo.license}{/if}
+                    {#if repo.gated}<span class="text-amber-300"> · gated — needs a hub login, refused here</span>{/if}
+                  </div>
+                </button>
+                {#if wfExpanded === repo.id}
+                  <div class="border-t border-edge px-3 py-2">
+                    {#if wfFilesBusy === repo.id}
+                      <div class="text-[11px] text-ink-400 font-mono">Listing files…</div>
+                    {:else if (wfFiles[repo.id] ?? []).length === 0}
+                      <div class="text-[11px] text-ink-400">No pinned GGUF files in this repository.</div>
+                    {:else}
+                      {#each wfFiles[repo.id] as file (file.path)}
+                        <div class="flex items-center justify-between gap-2 py-1">
+                          <span class="text-[11px] text-ink-300 font-mono truncate">{file.path}</span>
+                          <span class="flex items-center gap-2 shrink-0">
+                            <span class="text-[10px] text-ink-500 font-mono">{formatBytes(file.size)}</span>
+                            <button
+                              onclick={() => wfInstall(repo.id, file)}
+                              disabled={wfAdding !== null}
+                              class="px-2 py-1 rounded bg-ember-600 text-on-ember text-[10px] font-medium disabled:opacity-40"
+                            >
+                              {wfAdding === file.path ? "Adding…" : "Install"}
+                            </button>
+                          </span>
+                        </div>
+                      {/each}
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+          <p class="mt-2 text-[10px] text-ink-500">
+            Community weights and licenses are not vetted by LocalAide; every download is hash-verified against what the hub serves.
+          </p>
+        {/if}
+      </div>
     {:else if step === "confirm"}
       <div class="bg-ink-950 rounded-xl p-4 mb-6 border border-edge">
         <div class="font-medium text-ink-100">{selected?.name} preset</div>
@@ -178,7 +345,7 @@
       <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>
       <div class="text-xs font-mono text-ink-400 mb-4">{progress}%</div>
       <button
-        onclick={cancelInstall}
+        onclick={communityModelId ? cancelCommunity : cancelInstall}
         class="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
       >
         Cancel install
