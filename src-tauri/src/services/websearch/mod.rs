@@ -695,8 +695,9 @@ mod tests {
     use super::*;
 
     /// The current (2026) DuckDuckGo markup: `result-link` anchors with
-    /// `result-snippet` elements.
-    const DDG_FIXTURE: &str = r#"<html><body>
+    /// `result-snippet` elements. Double-hash delimiters because the
+    /// fixture contains `"#` inside `href="#"`.
+    const DDG_FIXTURE: &str = r##"<html><body>
     <div class="result">
       <h2><a rel="nofollow" class="result-link" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.rust-lang.org%2F&amp;rut=abc">The Rust Programming Language</a></h2>
       <div class="result-snippet">A language empowering <b>everyone</b> to build reliable software &amp; more.</div>
@@ -705,13 +706,13 @@ mod tests {
       <tr><td><a rel="nofollow" class="result-link" href="https://doc.rust-lang.org/book/">The Rust Book</a></td></tr>
       <tr><td class="result-snippet">Learn <span class="searchmatch">Rust</span> from the official book.</td></tr>
     </table>
-    </body></html>"#;
+    </body></html>"##;
 
     /// The legacy layout some mirrors and caches still serve.
-    const DDG_LEGACY_FIXTURE: &str = r#"<html><body>
+    const DDG_LEGACY_FIXTURE: &str = r##"<html><body>
     <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fold.example%2F&amp;rut=x">Old Result</a>
     <a class="result__snippet" href="#">Legacy <b>snippet</b> text.</a>
-    </body></html>"#;
+    </body></html>"##;
 
     #[test]
     fn parses_ddg_results_and_resolves_redirects() {
