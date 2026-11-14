@@ -37,7 +37,7 @@ LocalAide is a local-first desktop AI assistant built on Tauri v2, Rust (edition
 ## 2. Core Service Boundaries
 
 ### Single AppState (`src-tauri/src/app/state.rs`)
-One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelManager`, `ModelService`, `RouterEngine`, `LibraryService`, `MemoryService`, `ToolService`, `SkillsService`, `BackupEngine`, `EmbeddingEngine`, and `ConfigStore`. There is no distributed state and no ad-hoc file cache.
+One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelManager`, `ModelService`, `RouterEngine`, `LibraryService`, `MemoryService`, `ToolService`, `SkillsService`, `BackupEngine`, `EmbeddingEngine`, `WebSearchEngine`, and `ConfigStore`. There is no distributed state and no ad-hoc file cache.
 
 ### Inference (`src-tauri/src/services/inference/`)
 - `RouterEngine` is the one `InferenceEngine` the rest of the app talks to. It forwards to the local sidecar by default and to the remote engine only while cloud mode is on; loading a model always returns to local.
@@ -63,6 +63,11 @@ One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelMana
 - Actions are `list_dir`, `read_file`, `write_file`, `search_files`. Reads are auto-approved and bounded (1 MB read, 1000-entry listings); `write_file` (4 MB cap) requires interactive approval with a payload preview, honored once or for the session.
 - Every call — approved, denied, or failed — is written to the SQLite `tool_audit` table. The log is user-visible and clearable from Settings.
 
+### Web search (`src-tauri/src/services/websearch/`)
+- One blocking HTTP client with per-provider base URLs; the provider table fixes what exists: DuckDuckGo (lite page), Wikipedia REST search, Jina Reader, Exa, Firecrawl. Unknown ids are refused before any request.
+- Keyless providers need nothing; keyed ones fail with `WEB_NO_KEY` until the user stores a key in Settings → Web search. Keys live in `config.json`, travel only to their own provider, and are stripped from backups unless included.
+- Parsing is in pure functions (DuckDuckGo HTML with both class generations, Wikipedia pages, Exa results, Firecrawl search/scrape) tested without network; HTTP-level tests run against loopback servers, including 429/401 mapping and the 2 MB response cap. See [ADR-0011](docs/adr/0011-web-search.md).
+
 ## 3. Threat Model & Invariants
 
 | Threat | Mitigation |
@@ -70,5 +75,5 @@ One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelMana
 | Prompt-injection exfiltration | Tools confined to `WorkspaceJail`; absolute paths and outside symlinks rejected with `SANDBOX_DENIED`. |
 | Model weight tampering | Catalog integrity digest over ids, sizes, and hashes, checked before any download; streaming SHA-256 verification before atomic rename. |
 | XSS | Strict CSP (`default-src 'self' ...`), no remote scripts, typed IPC edges. |
-| Data exfiltration | Zero telemetry; with cloud mode off, the chat and search paths make no network requests. Cloud mode is opt-in, sends chat only to the configured provider, and shows a badge while active. |
+| Data exfiltration | Zero telemetry; with cloud mode off, the chat path makes no network requests. Cloud mode is opt-in, sends chat only to the configured provider, and shows a badge while active. Web search sends queries to the provider the user picked, only on an explicit click, with a 2 MB response cap. |
 | Memory exhaustion | Streaming SHA-256 in 64 KB buffers; bounded tool reads and writes; strict context budgeting. |

@@ -3,6 +3,18 @@
 All notable changes to LocalAide are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Web search and page reading (ADR-0011): the Search screen's Web mode queries the open internet — DuckDuckGo (lite results page), Wikipedia REST search, and the Jina Reader work keylessly; Exa and Firecrawl run after the user pastes an API key in Settings → Web search. "Read page" pulls a result's content as markdown (Firecrawl when keyed, the keyless Jina Reader otherwise). Every request is an explicit click; keys live in the local config, travel only to their own provider, and are excluded from backups unless included. HTTP-level tests exercise every provider against loopback servers.
+- Online-provider presets from the open 9Router registry (ADR-0011): the Settings provider form can prefill from LLM7, Synthetic, api.airforce, Groq, Cerebras, NVIDIA NIM, OpenRouter, Chutes, Mistral, or the user's own local Ollama, each with a note and a key link. Free tiers are labeled as changing without notice; loopback proxies may be saved without a key.
+- Light theme: the ink ramp inverts to bone paper with dark ink text, accent text roles darken to stay readable, and the choice persists in config with a Settings toggle. Dark remains the designed default; the light theme has not yet been eyeballed on a real screen.
+- First-run wizard community step: besides the RAM presets, the wizard can search public Hugging Face GGUF repositories, expand a repo's files, and install one through the same hash-verified download pipeline.
+- Backup stance confirmed: the `.labak` archive is a portable file the user can upload anywhere; built-in passphrase-verified restore was already shipped and stays the only restore path.
+
+### Changed
+- Meaningful borders moved from the `ink-800`/`ink-700` tokens (1.2:1 / 1.9:1 — both below the 3:1 non-text floor) to a dedicated `edge` ramp sized to clear 3:1 in both themes; text on ember fills now uses the semantic `on-ember` token that flips with the theme. Arithmetic recorded in `docs/evidence/a11y.md`; on-screen re-measure still open.
+
 ## [0.1.0] - 2026-11-14
 
 First published release of LocalAide, tagged `v0.1.0`. Every platform stage — llama-server sidecar builds and app bundles (`.dmg` for Apple Silicon and Intel, `.msi`/NSIS for Windows, `.deb`/`.AppImage` for Linux) — completed green in CI on the tagged commit, and the installers are attached to the GitHub Release.

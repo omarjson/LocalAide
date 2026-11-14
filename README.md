@@ -48,7 +48,8 @@ Search is BM25 keyword search over SQLite FTS5 by default; with the local embedd
 
 - **Local chat**: token streaming with a working Stop control and `Esc` (cancellation applies at the next streamed token), conversation history in JSON thread files, and message actions (retry, edit-and-resend, copy, delete thread).
 - **Image input with vision models**: attach up to 4 images (PNG, JPEG, WEBP, GIF, 20 MB total); the sidecar loads the model's `mmproj` projector when one is present and rejects image input for text-only models.
-- **Opt-in online providers**: add an OpenAI-compatible provider (OpenAI, OpenRouter, a localhost proxy such as Ollama or LM Studio) with your own API key. Off by default; the key is stored in the local config file, masked in the UI, and sent only to the provider's base URL.
+- **Opt-in online providers**: add an OpenAI-compatible provider with your own API key, or start from a preset list aggregated from the open 9Router registry — LLM7, Synthetic, Groq, Cerebras, NVIDIA NIM, OpenRouter, Chutes, Mistral, api.airforce, plus your own local Ollama (no key needed for proxies on this machine). Off by default; the key is stored in the local config file, masked in the UI, and sent only to the provider's base URL.
+- **Web search & page reading** ([ADR-0011](docs/adr/0011-web-search.md)): the Search screen's Web mode searches the open internet. DuckDuckGo, Wikipedia, and the Jina Reader work keylessly out of the box; Exa and Firecrawl run after you paste an API key in Settings → Web search. Every request is an explicit click — nothing crawls in the background — and keys are stored locally, sent only to their own provider, and excluded from backups unless you opt in.
 - **Sliding-window context budget**: older turns are pruned when the conversation exceeds the model's context, preserving the system prompt, the retrieved context block, and the latest message.
 - **Document library**: index folders of Markdown, text, source, and PDF files; chunking follows natural boundaries (1500 characters, 250 overlap); search runs FTS5 BM25 keyword matching — or semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running, re-ranked by a local reranker model when that engine is running too, with a one-click backfill for existing indexes.
 - **Skills**: reusable prompts saved as local markdown files with a full editor; type `/` in chat to pull one in. Custom prompts you keep re-typing surface a local save-as-skill suggestion (usage counts stay on this machine).
@@ -57,9 +58,10 @@ Search is BM25 keyword search over SQLite FTS5 by default; with the local embedd
 - **Explicit tool consent**: reads, listings, and searches run without prompts; file writes require an approval modal ("Allow Once", "Allow for Session", "Deny"). Every tool call lands in a SQLite audit log you can view and clear in Settings.
 - **Verified model downloads**: a 41-model curated catalog with an integrity digest over ids, sizes, and hashes, plus a community browser that can download any public GGUF from the Hugging Face hub ([ADR-0010](docs/adr/0010-community-models.md)); resumable HTTP downloads to `.part` files (vision projector files and split-GGUF shards download with their model); SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
 - **Catalog refresh, fail-closed**: the Models screen can fetch the newest catalog from this repository over HTTPS ([ADR-0008](docs/adr/0008-catalog-refresh.md)). Refreshes are explicit, validated structurally, checked against the integrity digest, and blocked from rolling back to an older version; Reset restores the list compiled into the app. A CI job verifies every catalog pin against the Hugging Face API.
-- **Encrypted backups**: one `.labak` archive of your config, memory notes, and conversations under AES-256-GCM with an argon2id passphrase that is never stored ([ADR-0009](docs/adr/0009-encrypted-backups.md)). Point the folder at a OneDrive or Drive sync folder for cloud redundancy without any cloud login in the app; provider API keys are excluded by default.
+- **Encrypted backups**: one `.labak` archive of your config, memory notes, and conversations under AES-256-GCM with an argon2id passphrase that is never stored ([ADR-0009](docs/adr/0009-encrypted-backups.md)). The archive is a plain portable file — upload it wherever you like (a OneDrive or Drive sync folder gives free off-machine redundancy with no cloud login in the app), and the built-in restore verifies your passphrase before touching any file and never clobbers a newer config. Provider API keys are excluded by default.
 - **Keyboard-complete navigation**: see the matrix below.
-- **Accessibility**: WCAG 2.2 AA is the target. Text contrast is audited against the design tokens ([docs/evidence/a11y.md](docs/evidence/a11y.md)); one open finding remains (border contrast), and focus rings, `aria-live` streaming, and reduced-motion support are in place.
+- **Accessibility**: WCAG 2.2 AA is the target. Text and border contrast are audited against the design tokens ([docs/evidence/a11y.md](docs/evidence/a11y.md)) — meaningful borders now clear 3:1 through a dedicated `edge` ramp in both themes, and the on-screen re-measure is the open item. Focus rings, `aria-live` streaming, and reduced-motion support are in place.
+- **Dark and light themes**: the stitched-ghost dark palette is the designed default; a light theme (bone paper, darkened accents, same semantic tokens) can be switched in Settings and persists. The light theme has not yet been eyeballed on a real screen — dark remains the reference.
 
 ## Hardware Requirements & Recommended Models
 
@@ -135,16 +137,16 @@ CI runs on every push to `main`: rustfmt, `clippy --all-targets -- -D warnings`,
 
 Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md). Known open items, kept visible on purpose:
 
-- Border contrast fails the 3:1 non-text threshold ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
-- The installers (`.dmg`/`.msi`/`.deb`/`.AppImage`) have not been run on real machines yet (demo-run open item); CI builds them green on every `[build-all]`.
-- The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)).
+- Border contrast is fixed at the token level (a dedicated `edge` ramp clears 3:1 in both themes), but nothing has been re-measured on a real screen yet ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
+- The installers (`.dmg`/`.msi`/`.deb`/`.AppImage`) have not been run on real machines yet (demo-run open item); CI builds them green on every `[build-all]`, and the `v0.1.0` GitHub Release attaches them.
+- The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)) — including the new light theme.
 - Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest, and refreshed catalogs are validated structurally with anti-rollback ([ADR-0005](docs/adr/0005-updates.md), [ADR-0008](docs/adr/0008-catalog-refresh.md)).
 
 ## Scope & Non-Goals
 
 LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs/scope.md](docs/scope.md). In brief:
 
-- **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager, the SQLite WAL document library with keyword/semantic/hybrid search, Markdown memory notes with RAG citations, local skills, encrypted backups, safe file tools in the workspace jail, and opt-in online providers.
+- **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager (plus the HF community browser, also in the first-run wizard), the SQLite WAL document library with keyword/semantic/hybrid search and the reranker second stage, Markdown memory notes with RAG citations, local skills, encrypted backups, safe file tools in the workspace jail, opt-in online providers with 9Router-derived presets, and keyless-first web search with page reading ([ADR-0011](docs/adr/0011-web-search.md)).
 - **Deferred**: speech (STT/TTS) — it needs a second runtime (`.kiro/specs/engine-upgrade/tasks.md`); vision runtime verification — image input is wired but has not been exercised against a real vision model end to end.
 - **Non-goals**: telemetry of any kind, silent cloud failover, and in-app component hot-swapping (updates ship as whole packages; updater signing is future work per ADR-0005).
 
@@ -158,6 +160,7 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
 - [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
 - [ADR-0010: Community Models from the Hugging Face Hub](docs/adr/0010-community-models.md)
+- [ADR-0011: Web Search and Page Reading](docs/adr/0011-web-search.md)
 
 ## Security Disclosure
 

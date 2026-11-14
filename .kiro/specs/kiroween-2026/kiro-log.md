@@ -104,3 +104,13 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - Light theme (needs visual verification, which requires a local Node toolchain).
 - Cloud backup providers (OneDrive/Drive need operator app registrations; local-folder backups shipped with ADR-0009).
 - Binary code signing / notarization (ADR-0005).
+
+## 2026-11-14 — First release v0.1.0 + web search, presets, light theme, wizard community step
+
+- **Kiro artifact:** the operator's batch: release tag, light theme, border contrast, wizard community integration, HTTP-level mock tests, keyless-first web search with API keys, 9Router provider presets, local-only backup confirmation. The stale local `v0.0.1` tag was deleted; the changelog folded into a real `[0.1.0] - 2026-11-14` section and tagged.
+- **Release:** tag `v0.1.0` pushed at `1db1720` — the first published GitHub Release, attaching CI-built installers for macOS (Apple Silicon + Intel), Windows, and Linux. All version fields already read 0.1.0.
+- **Web search (ADR-0011):** `services/websearch/` + Search screen "Web" mode + Settings key slots. Keyless: DuckDuckGo lite (parser accepts current `result-link`/`result-snippet` classes and the legacy `result__a` names), Wikipedia REST search, Jina Reader (JSON mode). Keyed: Exa (`x-api-key`, `/search` + `contents.text`), Firecrawl (`Bearer`, `/v2/search` + `/v2/scrape`). Errors map 429 → `WEB_RATE_LIMITED`, 401/403 → `WEB_AUTH_FAILED`, missing key → `WEB_NO_KEY`. 2 MB response cap; loopback HTTP tests per provider (request path, headers, status mapping, cap).
+- **Provider presets:** `cloud_provider_presets` command ships the 9Router-derived list (LLM7, Synthetic, api.airforce, Groq, Cerebras, NVIDIA NIM, OpenRouter, Chutes, Mistral, local Ollama); loopback HTTP providers may save without a key.
+- **Light theme + contrast:** semantic tokens `on-ember` and `edge` introduced; 27 `text-ink-950` and ~230 `border-ink-800/700` usages mechanically swapped; light ramp inverts the ink scale and darkens ember/emerald/rose/amber text roles; theme persisted via `settings_theme`/`settings_set_theme` and applied on boot. Border a11y row flipped to PASS at token level (3.35:1 dark / 3.58:1 light).
+- **Wizard:** the preset step gained a collapsible Hugging Face community browser (search → repo → file → install through the hash-verified pipeline; Cancel hits the community job).
+- **Backup:** restore path verified end to end (command + passphrase + config flag + report); stance documented as local-only portable archive — the OneDrive/Drive OAuth open item is closed by decision ("user uploads wherever they want").

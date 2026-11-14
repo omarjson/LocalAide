@@ -47,7 +47,12 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
 8. **Accessible, honest frontend**:
    - Svelte 5 runes architecture with design tokens ([DESIGN.md](../DESIGN.md)).
    - Zero dead buttons, no unhandled async rejections, no synthetic mock data.
-   - Keyboard-complete navigation and ARIA semantics; WCAG 2.2 AA is the target with one open contrast finding ([docs/evidence/a11y.md](evidence/a11y.md)).
+   - Keyboard-complete navigation and ARIA semantics; WCAG 2.2 AA is the target. The meaningful-border contrast finding is fixed at the token level — a dedicated `edge` ramp sized to clear 3:1 against the page background in both themes — pending an on-screen re-measure ([docs/evidence/a11y.md](evidence/a11y.md)).
+9. **Web search & page reading** (ADR-0011):
+   - Keyless providers work out of the box: DuckDuckGo (lite results page), Wikipedia REST search, and the Jina Reader for page→markdown reads.
+   - Keyed providers (Exa search, Firecrawl scrape + search) run after the user pastes an API key in Settings → Web search; keys live in `config.json` only, travel only to their own provider, and are excluded from backups unless explicitly included.
+   - Every web request is an explicit user action — the Search screen's "Web" mode or a result's "Read page" button. Nothing runs in the background, and no page content enters the index automatically.
+   - Online-provider presets aggregate the open 9Router registry (github.com/decolua/9router); free tiers change without notice and the UI says so.
 
 ---
 
@@ -86,6 +91,6 @@ By this definition, macOS packages are supported at the CI level: the sidecar an
 
 ## 5. Privacy and Security Stance
 - **Zero telemetry**: no tracking pixels, analytics SDKs, crash beacons, or remote logging.
-- **Network boundaries**: network access happens only for explicit user actions — model downloads from verified catalog URLs, the explicit catalog refresh from this repository's pinned URL (ADR-0008), the display-only update check against this repository's GitHub Releases, and, when cloud mode is switched on, chat requests to the provider the user configured. Backups (ADR-0009) are encrypted local files; cloud backup destinations are not wired and would require explicit operator-registered OAuth clients.
+- **Network boundaries**: network access happens only for explicit user actions — model downloads from verified catalog URLs, the explicit catalog refresh from this repository's pinned URL (ADR-0008), the display-only update check against this repository's GitHub Releases, web searches and page reads through the providers configured in Settings (keyless by default, ADR-0011), and, when cloud mode is switched on, chat requests to the provider the user configured. Backups (ADR-0009) are encrypted local files the user can upload anywhere they choose; restore is built in and passphrase-verified. Cloud backup destinations are not wired and would require explicit operator-registered OAuth clients.
 - **Filesystem isolation**: tool file access is jailed to the workspace directory. Path traversal, symlink escapes, and system roots are hard-rejected.
 - **Integrity**: models are verified via SHA-256 checksums before entering active status. Provider base URLs must be HTTPS unless they point at the user's own machine.
