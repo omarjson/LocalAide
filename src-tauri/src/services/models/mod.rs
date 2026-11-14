@@ -1,10 +1,13 @@
 pub mod catalog;
+pub mod custom;
 pub mod download;
+pub mod hf;
 pub mod refresh;
 pub mod verify;
 
 use crate::app::error::AppError;
 use catalog::{CatalogEntry, CatalogManifest};
+use custom::CustomModels;
 use download::{DownloadProgress, ModelDownloader};
 use refresh::{CachedCatalog, CatalogRefresher};
 use std::path::{Path, PathBuf};
@@ -22,12 +25,15 @@ pub struct ModelService {
     /// Unix timestamp of the fetch that produced the active catalog, when it
     /// came from a refresh rather than the embedded list.
     fetched_at: RwLock<Option<u64>>,
+    /// Community models added from the Hugging Face hub (ADR-0010). They are
+    /// catalog-shaped and resolve through the same accessors as the manifest.
+    custom: CustomModels,
     refresher: CatalogRefresher,
     downloader: ModelDownloader,
 }
 
 impl ModelService {
-    pub fn new(models_dir: PathBuf, cache_path: PathBuf) -> Result<Self, AppError> {
+    pub fn new(models_dir: PathBuf, cache_path: PathBuf, custom_path: PathBuf) -> Result<Self, AppError> {
         let builtin = CatalogManifest::default_manifest();
         builtin.verify()?;
 
@@ -64,6 +70,7 @@ impl ModelService {
             cache_path,
             manifest: RwLock::new(manifest),
             fetched_at: RwLock::new(fetched_at),
+            custom: CustomModels::load(custom_path),
             refresher: CatalogRefresher::new(),
             downloader: ModelDownloader::new(),
         })
@@ -112,7 +119,24 @@ impl ModelService {
     }
 
     pub fn get_model_entry(&self, id: &str) -> Option<CatalogEntry> {
-        self.manifest().models.iter().find(|m| m.id == id).cloned()
+        self.manifest()
+            .models
+            .iter()
+            .find(|m| m.id == id)
+            .cloned()
+            .or_else(|| self.custom.get(id))
+    }
+
+    /// Every model the app knows about: the active catalog plus the
+    /// user's community additions.
+    pub fn all_entries(&self) -> Vec<CatalogEntry> {
+        let mut all = self.manifest().models.as_ref().clone();
+        all.extend(self.custom.all().as_ref().clone());
+        all
+    }
+
+    pub fn custom_models(&self) -> &CustomModels {
+        &self.custom
     }
 
     pub fn model_file_path(&self, id: &str) -> PathBuf {

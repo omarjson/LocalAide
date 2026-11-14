@@ -55,7 +55,7 @@ Search is BM25 keyword search over SQLite FTS5 by default; with the local embedd
 - **Memory notes with citations**: Markdown notes in `~/.aiassistant/memory/` are indexed into SQLite; chat recalls notes above a relevance score of 0.010 and renders clickable citation pills with the snippet, path, and score.
 - **Capability-rooted workspace jail**: file tools are confined to `~/.aiassistant/workspace/`. Paths are checked lexically and canonically; traversal escapes, outside symlinks, and symlink loops are rejected with `SANDBOX_DENIED`.
 - **Explicit tool consent**: reads, listings, and searches run without prompts; file writes require an approval modal ("Allow Once", "Allow for Session", "Deny"). Every tool call lands in a SQLite audit log you can view and clear in Settings.
-- **Verified model downloads**: a 41-model catalog with an integrity digest over ids, sizes, and hashes; resumable HTTP downloads to `.part` files (vision projector files and split-GGUF shards download with their model); SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
+- **Verified model downloads**: a 41-model curated catalog with an integrity digest over ids, sizes, and hashes, plus a community browser that can download any public GGUF from the Hugging Face hub ([ADR-0010](docs/adr/0010-community-models.md)); resumable HTTP downloads to `.part` files (vision projector files and split-GGUF shards download with their model); SHA-256 verified in streaming 64 KB buffers before the file is renamed into place.
 - **Catalog refresh, fail-closed**: the Models screen can fetch the newest catalog from this repository over HTTPS ([ADR-0008](docs/adr/0008-catalog-refresh.md)). Refreshes are explicit, validated structurally, checked against the integrity digest, and blocked from rolling back to an older version; Reset restores the list compiled into the app. A CI job verifies every catalog pin against the Hugging Face API.
 - **Encrypted backups**: one `.labak` archive of your config, memory notes, and conversations under AES-256-GCM with an argon2id passphrase that is never stored ([ADR-0009](docs/adr/0009-encrypted-backups.md)). Point the folder at a OneDrive or Drive sync folder for cloud redundancy without any cloud login in the app; provider API keys are excluded by default.
 - **Keyboard-complete navigation**: see the matrix below.
@@ -157,6 +157,7 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 - [ADR-0005: Atomic Updates & Verification](docs/adr/0005-updates.md)
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
 - [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
+- [ADR-0010: Community Models from the Hugging Face Hub](docs/adr/0010-community-models.md)
 
 ## Security Disclosure
 

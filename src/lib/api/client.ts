@@ -26,6 +26,9 @@ import type {
   MemoryCreateResponse,
   MemoryNote,
   MemoryUpdateRequest,
+  HfCustomAddResult,
+  HfFileInfo,
+  HfRepo,
   ModelInfo,
   ModelPreset,
   ModelVerifyResult,
@@ -113,6 +116,30 @@ export class ApiClient {
       channel.onmessage = onProgress;
     }
     return invoke<void>("model_download", { id, channel });
+  }
+
+  async hfSearch(query: string, limit?: number): Promise<HfRepo[]> {
+    return invoke<HfRepo[]>("hf_search", { query, limit: limit ?? null });
+  }
+
+  async hfRepoFiles(repo: string): Promise<HfFileInfo[]> {
+    return invoke<HfFileInfo[]>("hf_repo_files", { repo });
+  }
+
+  async hfCustomAdd(
+    repo: string,
+    path: string,
+    kind: string,
+    license: string | null,
+    withMmproj: boolean
+  ): Promise<HfCustomAddResult> {
+    return invoke<HfCustomAddResult>("hf_custom_add", {
+      repo,
+      path,
+      kind,
+      license: license ?? null,
+      withMmproj,
+    });
   }
 
   // Chat & Inference

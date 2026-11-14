@@ -62,6 +62,13 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Deferred:** light theme (needs visual verification — no local Node toolchain), cloud backup (needs operator app registrations), reranker second stage.
 - **CI:** gate cycles during this round were diagnosed through check-run annotations (svelte-check output, npm ERESOLVE logs); the diagnostics emitters stay in ci.yml as permanent failure reporting. The gate surfaced 10+ rustfmt diffs from the round's new code — applied via a temporary ubuntu-only fmt workflow (same push-to-branch trick as the lockfile) rather than hand-transcribed diffs — and then 7 real clippy/compile findings (missing trait import, u64/usize mismatch, deprecated `Nonce::from_slice` in aes-gcm 0.11, a test fixture behind the new field, a missing `mut`). Full job logs are readable with the stored git credential, which beats annotation caps.
 
+## 2026-11-14 — Community models: dynamic HF browser + chat model picker
+
+- The operator asked for a dynamic model selector fed by Hugging Face so people can use whatever model they like. Planned via plan mode with two operator decisions: the picker also lives in the chat header, and the browser is always visible (no settings gate).
+- Backend: a community registry (`custom-models.json`) reuses the `CatalogEntry` shape so downloads, verification, deletion, and context all run through the existing paths; an `HfClient` (search + repo tree, 2 MB cap, strict repo-id validation, gated → `HF_GATED`) feeds a Models-screen browser; `inference_load` and the startup auto-load now resolve through the filesystem (catalog or community entry, honoring split-GGUF `dest`), fixing a latent trap where freshly downloaded models could not be loaded manually.
+- Trust model (ADR-0010): downloads are pinned to the SHA-256 the hub serves for the file; weights and licenses are NOT vetted — the UI says so, shows the license tag, and badges community models everywhere. No hub credentials are stored; gated repos error clearly.
+- Frontend: an "Add & download" flow reuses the Channel progress pattern; model rows gain a Community badge; the chat header gains a picker over installed models.
+
 ## 2026-11-14 — Catalog v8: the operator rejected the v7 additions as outdated
 
 - The v7 additions filled missing families with old generations (Llama 3.2 Sep 2024, Phi-4-mini Feb 2025, DeepSeek-R1-0528 May 2025, Mistral Small 3.2 Jun 2025, gpt-oss Aug 2025, BGE-M3 Jan 2024). The operator reviewed and rejected them; late-2026 research found newer, superior models in every role.

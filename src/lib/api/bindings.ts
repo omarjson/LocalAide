@@ -30,6 +30,8 @@ export interface ModelInfo {
   license: string;
   sha256: string;
   download_url: string;
+  /** Where the entry came from: "catalog" (curated) or "community" (HF hub). */
+  source: string;
   /** True when the model ships a vision projector and accepts images. */
   vision: boolean;
   installed: boolean;
@@ -63,6 +65,28 @@ export interface ModelVerifyResult {
   expected_sha256: string;
   actual_sha256: string | null;
   error: string | null;
+}
+
+/** A public GGUF repository found by the Hugging Face search. */
+export interface HfRepo {
+  id: string;
+  downloads: number;
+  likes: number;
+  gated: boolean;
+  /** License tag on the repo (for example "apache-2.0"), when present. */
+  license: string | null;
+}
+
+/** A pinned GGUF file inside a repository. */
+export interface HfFileInfo {
+  path: string;
+  size: number;
+  sha256: string;
+  is_mmproj: boolean;
+}
+
+export interface HfCustomAddResult {
+  id: string;
 }
 
 export interface ChatMessage {

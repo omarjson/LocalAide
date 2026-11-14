@@ -10,13 +10,17 @@ use tauri::State;
 
 #[tauri::command]
 pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError> {
-    let catalog = state.model_service.list_catalog();
+    let entries = state.model_service.all_entries();
     let active_id = state.model_manager.active_model().map(|m| m.id);
 
-    let infos = catalog
-        .models
+    let infos = entries
         .iter()
         .map(|e| {
+            let source = if state.model_service.custom_models().get(&e.id).is_some() {
+                "community"
+            } else {
+                "catalog"
+            };
             let path = state.model_service.model_file_path(&e.id);
             let installed = path.is_file() || state.model_manager.is_installed(&e.id);
             let is_active = active_id.as_deref() == Some(&e.id);
@@ -32,6 +36,7 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 license: e.license.clone(),
                 sha256: e.sha256.clone(),
                 download_url: e.url.clone(),
+                source: source.to_string(),
                 // Split shards are companions too; only an mmproj projector
                 // makes a model accept images.
                 vision: e.companions.iter().any(|c| c.dest.contains("mmproj")),
@@ -126,6 +131,9 @@ pub fn model_remove(state: State<'_, AppState>, id: String) -> Result<(), AppErr
             }
         }
     }
+
+    // Forget the community entry, if this was one (no-op for catalog ids).
+    let _ = state.model_service.custom_models().remove(&id);
 
     state.model_manager.remove(&id).map_err(AppError::internal)
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api/client";
-  import type { CatalogStatus, ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import type { CatalogStatus, HfFileInfo, HfRepo, ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import { formatBytes } from "../lib/format";
   import { onMount } from "svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
 
@@ -17,6 +18,7 @@
     active?: boolean;
     kind?: string;
     vision?: boolean;
+    source?: string;
   };
 
   let models = $state<Model[]>([]);
@@ -36,6 +38,17 @@
   // the project repo). Null until the first status call lands.
   let catalog = $state<CatalogStatus | null>(null);
   let catalogBusy = $state(false);
+  // Hugging Face community browser (ADR-0010): search → pick repo → pick
+  // GGUF file → register + download. Community models are verified against
+  // the hash HF serves, but their weights and licenses are not vetted.
+  let hfQuery = $state("");
+  let hfBusy = $state(false);
+  let hfRepos = $state<HfRepo[]>([]);
+  let hfExpanded = $state<string | null>(null);
+  let hfFiles = $state<Record<string, HfFileInfo[]>>({});
+  let hfFilesBusy = $state<string | null>(null);
+  let hfKinds = $state<Record<string, string>>({});
+  let hfAdding = $state<string | null>(null);
 
   const verifyModel = async (id: string) => {
     verifying = id;
@@ -82,7 +95,8 @@
         license: m.license,
         active: m.active ?? false,
         kind: m.kind,
-        vision: m.vision ?? false
+        vision: m.vision ?? false,
+        source: m.source
       }));
     } catch {
       models = [];
@@ -118,6 +132,73 @@
       actionError = errorMessage(e);
     } finally {
       catalogBusy = false;
+    }
+  };
+
+  // ---- Hugging Face community browser ----
+
+  const hfSearchRepos = async () => {
+    if (!hfQuery.trim()) return;
+    hfBusy = true;
+    actionError = null;
+    hfExpanded = null;
+    try {
+      hfRepos = await api.hfSearch(hfQuery.trim(), 20);
+      if (hfRepos.length === 0) actionError = "No GGUF repositories matched that search.";
+    } catch (e) {
+      actionError = errorMessage(e);
+    } finally {
+      hfBusy = false;
+    }
+  };
+
+  const hfToggleRepo = async (repo: string) => {
+    if (hfExpanded === repo) {
+      hfExpanded = null;
+      return;
+    }
+    hfExpanded = repo;
+    if (hfFiles[repo]) return;
+    hfFilesBusy = repo;
+    actionError = null;
+    try {
+      const files = await api.hfRepoFiles(repo);
+      hfFiles = { ...hfFiles, [repo]: files };
+    } catch (e) {
+      actionError = errorMessage(e);
+      hfExpanded = null;
+    } finally {
+      hfFilesBusy = null;
+    }
+  };
+
+  // Register the chosen file as a community model, then reuse the standard
+  // download flow (Channel progress, cancel, SHA-256 verification).
+  const hfAddAndDownload = async (repo: string, file: HfFileInfo) => {
+    hfAdding = file.path;
+    actionError = null;
+    try {
+      const license = hfRepos.find(r => r.id === repo)?.license ?? null;
+      const withMmproj = (hfFiles[repo] ?? []).some(f => f.is_mmproj && f.path !== file.path);
+      const kind = hfKinds[repo] ?? "chat";
+      const res = await api.hfCustomAdd(repo, file.path, kind, license, withMmproj);
+      await refresh();
+      const row = models.find(m => m.id === res.id);
+      if (row) {
+        row.status = "installing";
+        row.progress = 0;
+      }
+      await api.downloadModel(res.id, evt => {
+        models = models.map(m =>
+          m.id === res.id ? { ...m, status: "installing", progress: Math.round(evt.percent) } : m
+        );
+      });
+      await refresh();
+    } catch (e) {
+      actionError = errorMessage(e);
+      await refresh();
+    } finally {
+      hfAdding = null;
     }
   };
 
@@ -351,6 +432,104 @@
     </div>
   {/if}
 
+  <div class="border border-ink-800 rounded-2xl p-4 bg-ink-900/40 space-y-3">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <div class="text-sm font-medium text-ink-200">Hugging Face community models</div>
+        <div class="text-[11px] text-ink-400 mt-0.5">
+          Search public GGUF repositories. Downloads are SHA-256-verified against the hash Hugging Face serves — the weights and licenses themselves are not vetted, so check the license before commercial use.
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <input
+        type="text"
+        bind:value={hfQuery}
+        onkeydown={(e) => { if (e.key === "Enter") hfSearchRepos(); }}
+        placeholder="Search huggingface.co for GGUF models, e.g. qwen 3.5 9b"
+        aria-label="Search Hugging Face for GGUF models"
+        class="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-500 focus:outline-none focus:border-ink-700 font-mono"
+      />
+      <button
+        onclick={hfSearchRepos}
+        disabled={hfBusy || !hfQuery.trim()}
+        class="px-4 py-2 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-950 transition-colors"
+      >
+        {hfBusy ? "Searching…" : "Search"}
+      </button>
+    </div>
+
+    {#if hfRepos.length > 0}
+      <div class="space-y-2">
+        {#each hfRepos as r (r.id)}
+          <div class="border border-ink-800 rounded-xl bg-ink-950/60">
+            <button
+              type="button"
+              onclick={() => hfToggleRepo(r.id)}
+              class="w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-3 hover:border-ink-700 transition-colors"
+            >
+              <div class="min-w-0">
+                <div class="text-sm text-ink-200 truncate font-medium">{r.id}</div>
+                <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-ink-400 mt-0.5">
+                  <span>{r.downloads.toLocaleString()} downloads</span>
+                  <span>♥ {r.likes}</span>
+                  {#if r.license}
+                    <span class="px-1.5 py-0.5 rounded bg-ink-800 text-ink-300">{r.license}</span>
+                  {/if}
+                  {#if r.gated}
+                    <span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">Gated</span>
+                  {/if}
+                </div>
+              </div>
+              <span class="text-xs text-ink-400 flex-shrink-0">{hfExpanded === r.id ? "Hide files" : "Browse files"}</span>
+            </button>
+
+            {#if hfExpanded === r.id}
+              <div class="border-t border-ink-800 p-3 space-y-2">
+                {#if hfFilesBusy === r.id}
+                  <div class="text-xs text-ink-400 font-mono py-2">Listing GGUF files…</div>
+                {:else}
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[11px] font-mono text-ink-400">Use as:</span>
+                    {#each [["chat", "Chat"], ["embedding", "Embedding"], ["reranker", "Reranker"], ["code", "Code"]] as [kindValue, kindLabel]}
+                      <button
+                        type="button"
+                        onclick={() => { hfKinds = { ...hfKinds, [r.id]: (hfKinds[r.id] ?? "chat") === kindValue ? "chat" : kindValue }; }}
+                        class="text-[11px] font-mono px-2 py-0.5 rounded-full border transition-colors {(hfKinds[r.id] ?? "chat") === kindValue
+                          ? 'bg-ember-500/20 border-ember-500/40 text-ember-300'
+                          : 'border-ink-800 text-ink-400 hover:border-ink-700'}"
+                      >
+                        {kindLabel}
+                      </button>
+                    {/each}
+                    {#if (hfFiles[r.id] ?? []).some(f => f.is_mmproj)}
+                      <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Vision projector included</span>
+                    {/if}
+                  </div>
+                  {#each (hfFiles[r.id] ?? []).filter(f => !f.is_mmproj) as f (f.path)}
+                    <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg hover:bg-ink-900/60">
+                      <div class="min-w-0">
+                        <div class="text-xs text-ink-200 font-mono truncate">{f.path}</div>
+                        <div class="text-[11px] font-mono text-ink-400">{formatBytes(f.size)}</div>
+                      </div>
+                      <button
+                        onclick={() => hfAddAndDownload(r.id, f)}
+                        disabled={hfAdding !== null}
+                        class="px-3 py-1.5 bg-ember-600 hover:bg-ember-500 disabled:opacity-40 rounded-lg text-[11px] font-medium text-ink-950 transition-colors flex-shrink-0"
+                      >
+                        {hfAdding === f.path ? "Adding…" : "Add & download"}
+                      </button>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
   {#if loading}
     <div class="py-12 text-center text-xs text-ink-400 font-mono">Loading model catalog…</div>
   {:else}
@@ -365,6 +544,9 @@
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm text-ink-100">{m.name}</span>
                 <span class="text-xs font-mono px-1.5 rounded border border-ink-700 text-ink-300" title="Model license">{m.license}</span>
+                {#if m.source === "community"}
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30" title="Added from the Hugging Face hub. Verified against the hash HF serves; weights and license are not vetted.">Community</span>
+                {/if}
                 {#if m.vision}
                   <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30" title="Ships with a vision projector; accepts images">Vision</span>
                 {/if}

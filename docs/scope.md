@@ -25,6 +25,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
    - Mandatory SHA-256 integrity verification against the catalog before installation.
    - Inference runs in a `llama-server` child process, with clean load, unload, and model switching.
 4. **Document library & indexing**:
+   - Community models: any public GGUF on the Hugging Face hub can be registered and downloaded in-app, verified against the hash the hub serves (ADR-0010). The hub's weights and licenses are not vetted by LocalAide; the license tag is shown and gated repositories are refused.
    - User-specified folder indexing into embedded SQLite with WAL mode.
    - Content hashing, deduplication, incremental scanning skipping unchanged files by mtime/size.
    - Bounded file reading and natural-boundary chunking (1500 characters, 250 overlap).

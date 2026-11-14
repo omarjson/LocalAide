@@ -57,17 +57,19 @@ fn validate_images(images: &[String]) -> Result<(), AppError> {
 
 #[tauri::command]
 pub async fn inference_load(state: State<'_, AppState>, id: String) -> Result<String, AppError> {
-    let entry = state
-        .model_manager
-        .list_models()
-        .into_iter()
-        .find(|m| m.id == id)
+    // Filesystem truth: the model must exist in the active catalog or the
+    // community registry AND on disk. This keeps freshly downloaded models
+    // loadable and honors split-GGUF dest names.
+    state
+        .model_service
+        .get_model_entry(&id)
         .ok_or_else(|| AppError::model_not_installed(&id))?;
-
-    if !entry.installed {
+    let path = state
+        .model_service
+        .model_file_path(&id);
+    if !path.is_file() {
         return Err(AppError::model_not_installed(&id));
     }
-    let path = state.model_manager.primary_path(&id);
     // The engine uses a blocking HTTP client. Run it on a plain thread, not the async runtime.
     let engine = state.inference_engine.clone();
     let load_path = path.clone();

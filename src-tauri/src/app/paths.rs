@@ -40,3 +40,9 @@ pub fn config_path() -> PathBuf {
 pub fn catalog_cache_path() -> PathBuf {
     app_dir().join("catalog-cache.json")
 }
+
+/// Registry of community models the user added from the Hugging Face hub
+/// (ADR-0010), kept next to the catalog cache.
+pub fn custom_models_path() -> PathBuf {
+    app_dir().join("custom-models.json")
+}

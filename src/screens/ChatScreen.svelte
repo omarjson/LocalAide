@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
-  import { api } from "../lib/api/client";
+  import { api, errorMessage } from "../lib/api/client";
   import { dur } from "../lib/motion";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
   import type { ChatMessage, ChatThread, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
@@ -49,6 +49,12 @@
 
   // Shown in the empty state: which model is active, or none yet.
   let activeModelName = $state<string | null>(null);
+  // Installed models for the header picker; switching loads the chosen one
+  // through the same path the Models screen uses.
+  let installedModels = $state<{ id: string; name: string }[]>([]);
+  let pickerOpen = $state(false);
+  let switchingModel = $state(false);
+  let switchError = $state<string | null>(null);
   let modelsChecked = $state(false);
 
   let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
@@ -57,6 +63,9 @@
     try {
       const models = await api.listModels();
       activeModelName = models.find((m) => m.active)?.name ?? null;
+      installedModels = models
+        .filter((m) => m.installed)
+        .map((m) => ({ id: m.id, name: m.name }));
     } catch {
       activeModelName = null;
     } finally {
@@ -414,6 +423,21 @@
     persistCurrentThread();
   };
 
+  // Load the chosen model into the engine and make it the chat default.
+  const switchModel = async (id: string, name: string) => {
+    pickerOpen = false;
+    switchingModel = true;
+    switchError = null;
+    try {
+      await api.loadInferenceModel(id);
+      activeModelName = name;
+    } catch (e: any) {
+      switchError = e?.message ?? "Could not load the model.";
+    } finally {
+      switchingModel = false;
+    }
+  };
+
   onMount(() => {
     activeThreadId = `t_${Date.now()}`;
     loadThreads();
@@ -438,7 +462,37 @@
           <span class="text-xs font-mono text-amber-300" title="Chat is running through your online provider. Messages are sent to {cloudChat.label}.">Cloud: {cloudChat.model} · {cloudChat.label}</span>
         {:else}
           <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          <span class="text-xs font-mono text-ink-400">{activeModelName ?? model}</span>
+          <div class="relative">
+            <button
+              type="button"
+              onclick={() => (pickerOpen = !pickerOpen)}
+              disabled={switchingModel}
+              class="text-xs font-mono text-ink-400 hover:text-ink-200 disabled:opacity-50 flex items-center gap-1.5"
+              title="Switch the local chat model"
+            >
+              {switchingModel ? "Loading…" : (activeModelName ?? model)}
+              {#if installedModels.length > 1}
+                <span class="text-[10px] text-ink-500">▾</span>
+              {/if}
+            </button>
+            {#if switchError}
+              <div class="absolute left-0 top-6 z-20 max-w-[280px] bg-rose-950/90 border border-rose-500/40 rounded-lg px-3 py-1.5 text-[11px] text-rose-200 font-mono" role="alert">
+                {switchError}
+              </div>
+            {:else if pickerOpen && installedModels.length > 1}
+              <div class="absolute left-0 top-6 z-20 min-w-[240px] max-h-64 overflow-y-auto bg-ink-950 border border-ink-800 rounded-xl shadow-xl py-1">
+                {#each installedModels as m (m.id)}
+                  <button
+                    type="button"
+                    onclick={() => switchModel(m.id, m.name)}
+                    class="w-full text-left px-3 py-1.5 text-xs hover:bg-ink-900 transition-colors {(activeModelName === m.name ? 'text-ember-300' : 'text-ink-300')}"
+                  >
+                    {m.name}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
         {/if}
       </div>
     </div>

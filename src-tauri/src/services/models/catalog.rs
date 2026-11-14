@@ -141,87 +141,7 @@ impl CatalogManifest {
                     m.id
                 )));
             }
-            if m.name.is_empty() || m.params.is_empty() || m.quant.is_empty() {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has an empty name, params, or quant label",
-                    m.id
-                )));
-            }
-            if !KNOWN_KINDS.contains(&m.kind.as_str()) {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has unknown kind '{}'",
-                    m.id, m.kind
-                )));
-            }
-            if !is_sha256_hex(&m.sha256) {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has a malformed SHA-256",
-                    m.id
-                )));
-            }
-            if m.file_size == 0 {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' reports zero file size",
-                    m.id
-                )));
-            }
-            if !(0.1..=512.0).contains(&m.ram_estimate_gb) {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has an implausible RAM estimate ({})",
-                    m.id, m.ram_estimate_gb
-                )));
-            }
-            if let Some(ctx) = m.context_tokens
-                && !(512..=1_048_576).contains(&ctx)
-            {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has an implausible context hint ({ctx})",
-                    m.id
-                )));
-            }
-            if let Some(dest) = &m.dest
-                && (dest.is_empty()
-                    || dest.contains('/')
-                    || dest.contains('\\')
-                    || dest.contains("..")
-                    || !dest.ends_with(".gguf"))
-            {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' has an unsafe dest '{}': it must be a plain .gguf file name",
-                    m.id, dest
-                )));
-            }
-            require_https(&m.url, "model download")?;
-            if m.companions.len() > MAX_COMPANIONS_PER_MODEL {
-                return Err(AppError::invalid_input(format!(
-                    "Catalog model '{}' lists {} companions; the limit is {MAX_COMPANIONS_PER_MODEL}",
-                    m.id,
-                    m.companions.len()
-                )));
-            }
-
-            let mut seen_dests = std::collections::HashSet::new();
-            for c in &m.companions {
-                require_https(&c.url, "companion download")?;
-                if !is_sha256_hex(&c.sha256) {
-                    return Err(AppError::invalid_input(format!(
-                        "Companion of '{}' has a malformed SHA-256",
-                        m.id
-                    )));
-                }
-                if c.file_size == 0 {
-                    return Err(AppError::invalid_input(format!(
-                        "Companion of '{}' reports zero file size",
-                        m.id
-                    )));
-                }
-                if c.dest.is_empty() || !seen_dests.insert(c.dest.as_str()) {
-                    return Err(AppError::invalid_input(format!(
-                        "Companion of '{}' has an empty or duplicated destination name",
-                        m.id
-                    )));
-                }
-            }
+            m.validate_entry()?;
         }
         Ok(())
     }
@@ -672,6 +592,93 @@ impl CatalogEntry {
     fn with_dest(mut self, dest: &str) -> Self {
         self.dest = Some(dest.into());
         self
+    }
+
+    /// Per-entry structural checks, shared by manifest validation and by the
+    /// community-model registry (whose entries never pass through a manifest).
+    pub fn validate_entry(&self) -> Result<(), AppError> {
+        if self.name.is_empty() || self.params.is_empty() || self.quant.is_empty() {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has an empty name, params, or quant label",
+                self.id
+            )));
+        }
+        if !KNOWN_KINDS.contains(&self.kind.as_str()) {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has unknown kind '{}'",
+                self.id, self.kind
+            )));
+        }
+        if !is_sha256_hex(&self.sha256) {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has a malformed SHA-256",
+                self.id
+            )));
+        }
+        if self.file_size == 0 {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' reports zero file size",
+                self.id
+            )));
+        }
+        if !(0.1..=512.0).contains(&self.ram_estimate_gb) {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has an implausible RAM estimate ({})",
+                self.id, self.ram_estimate_gb
+            )));
+        }
+        if let Some(ctx) = self.context_tokens
+            && !(512..=1_048_576).contains(&ctx)
+        {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has an implausible context hint ({ctx})",
+                self.id
+            )));
+        }
+        if let Some(dest) = &self.dest
+            && (dest.is_empty()
+                || dest.contains('/')
+                || dest.contains('\\')
+                || dest.contains("..")
+                || !dest.ends_with(".gguf"))
+        {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' has an unsafe dest '{}': it must be a plain .gguf file name",
+                self.id, dest
+            )));
+        }
+        require_https(&self.url, "model download")?;
+        if self.companions.len() > MAX_COMPANIONS_PER_MODEL {
+            return Err(AppError::invalid_input(format!(
+                "Catalog model '{}' lists {} companions; the limit is {MAX_COMPANIONS_PER_MODEL}",
+                self.id,
+                self.companions.len()
+            )));
+        }
+
+        let mut seen_dests = std::collections::HashSet::new();
+        for c in &self.companions {
+            require_https(&c.url, "companion download")?;
+            if !is_sha256_hex(&c.sha256) {
+                return Err(AppError::invalid_input(format!(
+                    "Companion of '{}' has a malformed SHA-256",
+                    self.id
+                )));
+            }
+            if c.file_size == 0 {
+                return Err(AppError::invalid_input(format!(
+                    "Companion of '{}' reports zero file size",
+                    self.id
+                )));
+            }
+            if c.dest.is_empty() || !seen_dests.insert(c.dest.as_str()) {
+                return Err(AppError::invalid_input(format!(
+                    "Companion of '{}' has an empty or duplicated destination name",
+                    self.id
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

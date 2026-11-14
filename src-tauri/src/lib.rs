@@ -11,7 +11,9 @@ use app::AppState;
 use model_manager::ModelManager;
 use services::inference::InferenceEngine;
 
-pub use app::paths::{catalog_cache_path, config_path, index_dir, memory_dir, models_dir};
+pub use app::paths::{
+    catalog_cache_path, config_path, custom_models_path, index_dir, memory_dir, models_dir,
+};
 
 pub fn run() {
     let model_manager = Arc::new(ModelManager::new().unwrap_or_else(|e| {
@@ -36,15 +38,23 @@ pub fn run() {
     ));
 
     let model_service = Arc::new(
-        crate::services::models::ModelService::new(models_dir(), catalog_cache_path())
-            .unwrap_or_else(|e| {
-                log::error!(
-                    "Failed to init ModelService at standard path: {e}; falling back to temp dir"
-                );
-                let fallback = std::env::temp_dir().join("localaide_models_fallback");
-                crate::services::models::ModelService::new(fallback, catalog_cache_path())
-                    .expect("Fallback model service must initialize")
-            }),
+        crate::services::models::ModelService::new(
+            models_dir(),
+            catalog_cache_path(),
+            custom_models_path(),
+        )
+        .unwrap_or_else(|e| {
+            log::error!(
+                "Failed to init ModelService at standard path: {e}; falling back to temp dir"
+            );
+            let fallback = std::env::temp_dir().join("localaide_models_fallback");
+            crate::services::models::ModelService::new(
+                fallback,
+                catalog_cache_path(),
+                custom_models_path(),
+            )
+            .expect("Fallback model service must initialize")
+        }),
     );
 
     let jail = Arc::new(
@@ -118,13 +128,9 @@ pub fn run() {
         }
         if !restored_cloud
             && let Some(active_id) = cfg.selected_models.last()
-            && app_state
-                .model_manager
-                .list_models()
-                .iter()
-                .any(|m| m.id == *active_id && m.installed)
+            && app_state.model_service.get_model_entry(active_id).is_some()
         {
-            let path = app_state.model_manager.primary_path(active_id);
+            let path = app_state.model_service.model_file_path(active_id);
             if path.exists() {
                 let context = app_state
                     .model_service
@@ -142,6 +148,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system_probe,
             commands::model_list,
+            commands::hf_search,
+            commands::hf_repo_files,
+            commands::hf_custom_add,
             commands::model_activate,
             commands::model_remove,
             commands::model_verify,

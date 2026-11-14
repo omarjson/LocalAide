@@ -13,6 +13,9 @@ pub struct ModelInfo {
     pub license: String,
     pub sha256: String,
     pub download_url: String,
+    /// Where this entry came from: "catalog" (curated, pinned by CI) or
+    /// "community" (added by the user from the Hugging Face hub, ADR-0010).
+    pub source: String,
     /// True when the catalog lists companion files (a vision projector), so
     /// the model accepts images once they are downloaded.
     pub vision: bool,
