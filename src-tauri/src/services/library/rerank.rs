@@ -323,8 +323,14 @@ mod tests {
     fn reorder_puts_scored_first_and_keeps_unscored_order() {
         let docs = vec!["a", "b", "c", "d"];
         let hits = vec![
-            RerankHit { index: 3, score: 0.9 },
-            RerankHit { index: 0, score: 0.5 },
+            RerankHit {
+                index: 3,
+                score: 0.9,
+            },
+            RerankHit {
+                index: 0,
+                score: 0.5,
+            },
         ];
         let out = reorder(&docs, &hits);
         assert_eq!(out, vec!["d", "a", "b", "c"]);
@@ -334,9 +340,18 @@ mod tests {
     fn reorder_drops_out_of_range_and_duplicate_indices() {
         let docs = vec!["a", "b"];
         let hits = vec![
-            RerankHit { index: 5, score: 1.0 },
-            RerankHit { index: 1, score: 0.8 },
-            RerankHit { index: 1, score: 0.7 },
+            RerankHit {
+                index: 5,
+                score: 1.0,
+            },
+            RerankHit {
+                index: 1,
+                score: 0.8,
+            },
+            RerankHit {
+                index: 1,
+                score: 0.7,
+            },
         ];
         let out = reorder(&docs, &hits);
         assert_eq!(out, vec!["b", "a"]);
