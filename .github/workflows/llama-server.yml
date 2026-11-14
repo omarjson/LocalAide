@@ -30,10 +30,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-latest
             triple: aarch64-apple-darwin
             ext: ''
-          - os: macos-14
+          - os: macos-latest
             triple: x86_64-apple-darwin
             ext: ''
             cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=x86_64'
