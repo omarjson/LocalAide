@@ -159,7 +159,7 @@ fn test_rag_relevance_gate_and_citation_generation() {
 
     // Query completely unrelated to note (testing relevance gate)
     let unrelated_recall = memory
-        .recall("quantum astrophysics dark matter galaxy", Some(512))
+        .recall("quantum astrophysics dark matter galaxy", None, Some(512))
         .expect("Recall unrelated");
     assert_eq!(
         unrelated_recall.citations.len(),
@@ -189,7 +189,7 @@ fn test_rag_strictly_respects_token_budget() {
 
     // Recall with tight token budget of 50 tokens
     let budget_res = memory
-        .recall("testing budget limits", Some(50))
+        .recall("testing budget limits", None, Some(50))
         .expect("Recall");
     assert!(
         budget_res.total_tokens <= 50,
