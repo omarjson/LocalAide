@@ -64,10 +64,12 @@ The following are out of scope for this release. UI controls, dependencies, and 
 ## 3. Supported Platforms and Tiers
 
 ### Tier 1 (built and tested in CI)
-- **macOS Apple Silicon (aarch64-apple-darwin)**: macOS 13+. Metal acceleration (upstream llama.cpp default). *Sidecar builds currently cancelled in CI — bundling unverified.*
-- **macOS Intel (x86_64-apple-darwin)**: macOS 12+. CPU / Accelerate backend. *Same caveat.*
+- **macOS Apple Silicon (aarch64-apple-darwin)**: macOS 13+. Metal acceleration (upstream llama.cpp default).
+- **macOS Intel (x86_64-apple-darwin)**: macOS 12+. CPU / Accelerate backend.
 - **Windows x64 (x86_64-pc-windows-msvc)**: Windows 10/11 64-bit. CPU inference (AVX2).
 - **Linux x64 (x86_64-unknown-linux-gnu)**: Ubuntu 22.04+. CPU inference. Requires WebKitGTK 4.1.
+
+All four platform stages build green in CI — sidecar compile and app bundle (`.dmg`/`.msi`/`.deb`/`.AppImage`) — on `e81a99b`; running the installers on real machines is the demo-run open item.
 
 ---
 
@@ -78,7 +80,7 @@ A platform, model, or feature is **supported** if and only if:
 3. Every error in that path produces a user-readable error code (`AppError`) without crashing the application.
 4. Reproduction steps and documented evidence exist in `docs/evidence/`.
 
-By this definition, macOS packages are not yet supported: their CI stage has never completed.
+By this definition, macOS packages are supported at the CI level: the sidecar and bundle stages complete green and produce artifacts (verified on `e81a99b`); a human smoke run of the installer remains part of the demo-run open item.
 
 ---
 

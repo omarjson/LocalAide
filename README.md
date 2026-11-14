@@ -21,7 +21,7 @@
 
 ---
 
-**Status:** `main` is the branch of record. The CI quality gate (rustfmt, clippy, cargo test, svelte-check, frontend build, smoke test) is green on `main`. macOS/package bundling is the one CI stage never verified: the macOS sidecar builds were cancelled twice to save runner cost, and a cancelled job is not a failed one, so no package has been proven to install and run. Everything else in this README is matched to the code and re-checked against the standing honesty audit in [docs/evidence/audit-2026-11-13.md](docs/evidence/audit-2026-11-13.md).
+**Status:** `main` is the branch of record. The CI quality gate (rustfmt, clippy, cargo test, svelte-check, frontend build, smoke test) is green on `main`, and **all platform stages are verified**: macOS (Apple Silicon + Intel), Windows, and Linux sidecar and bundle builds completed green in CI on `e81a99b`, producing installable `.dmg`/`.msi`/`.deb`/`.AppImage` artifacts — the macOS stages that had only ever been cancelled (over a now-void minutes concern) are proven, not assumed. What remains unverified is running the installers on real machines (a human demo run). Everything else in this README is matched to the code and re-checked against the standing honesty audit in [docs/evidence/audit-2026-11-13.md](docs/evidence/audit-2026-11-13.md).
 
 ## Table of Contents
 
@@ -87,7 +87,7 @@ Grab a package from the [Releases page](https://github.com/omarjson/LocalAide/re
 - **Windows (x64)**: `LocalAide_<version>_x64_en-US.msi` or the NSIS installer (`.exe`)
 - **Linux (x64)**: `LocalAide_<version>_amd64.deb` or `LocalAide_<version>_amd64.AppImage`
 
-Note the status line above: the macOS packages come from a CI stage that has not yet completed, so treat them as unverified until a run proves them.
+Every platform stage above is verified in CI (sidecar + bundle builds green on `e81a99b`); the installers themselves have not yet been run on real machines — that is part of the demo-run open item.
 
 ### Option B: build from source
 
@@ -136,8 +136,8 @@ CI runs on every push to `main`: rustfmt, `clippy --all-targets -- -D warnings`,
 Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md). Known open items, kept visible on purpose:
 
 - Border contrast fails the 3:1 non-text threshold ([docs/evidence/a11y.md](docs/evidence/a11y.md)).
+- The installers (`.dmg`/`.msi`/`.deb`/`.AppImage`) have not been run on real machines yet (demo-run open item); CI builds them green on every `[build-all]`.
 - The design pass has not been checked on screen ([DESIGN.md](DESIGN.md)).
-- macOS/package bundling is unverified in CI (see the status line).
 - Catalog signing with Ed25519 is future work; today's catalog check is an integrity digest, and refreshed catalogs are validated structurally with anti-rollback ([ADR-0005](docs/adr/0005-updates.md), [ADR-0008](docs/adr/0008-catalog-refresh.md)).
 
 ## Scope & Non-Goals

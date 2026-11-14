@@ -242,7 +242,7 @@
     <text x="601" y="82" text-anchor="middle" fill="#34d399">llama-server sidecar</text>
     <text x="601" y="102" text-anchor="middle" fill="#aaa2b8" font-size="10">llama.cpp v1.0.0, server-only</text>
     <text x="601" y="118" text-anchor="middle" fill="#aaa2b8" font-size="10">windows-msvc ✓ · linux-gnu ✓</text>
-    <text x="601" y="134" text-anchor="middle" fill="#fbbf24" font-size="10">macOS — cancelled 7× (cost concern, now void)</text>
+    <text x="601" y="134" text-anchor="middle" fill="#34d399" font-size="10">macOS ✓ (was cancelled 7× over a void cost concern)</text>
     <text x="601" y="152" text-anchor="middle" fill="#aaa2b8" font-size="9">artifact: sidecar binary</text>
 
     <line x1="716" y1="115" x2="758" y2="115" stroke="#463d58" stroke-width="2" marker-end="url(#ar)"/>
@@ -262,7 +262,7 @@
 </svg>
 <div class="legend">
   <span><b class="dot" style="background:var(--emerald)"></b>verified green on every recent push</span>
-  <span><b class="dot" style="background:var(--amber)"></b>macOS bundling was cancelled 7× over a minutes concern — void: standard runners are free on public repos</span>
+  <span><b class="dot" style="background:var(--emerald)"></b>all four platforms verified on e81a99b — macOS x2 were cancelled 7× under a minutes concern that turned out void (public repos: runners free)</span>
 </div>
 
 <h2><span class="n">04</span>Feature status board</h2>
@@ -290,8 +290,7 @@
   </div>
   <div class="col open">
     <h3>Open — ordered by user value</h3>
-    <div class="row"><span class="dot d-open"></span>Platform bundling verification — [build-all] dispatched (minutes are free on public repos; macOS x2 cancelled above)</div>
-    <div class="row"><span class="dot d-open"></span>Light theme · OneDrive/Drive OAuth backup targets · wizard integration for community models</div>
+    <div class="row"><span class="dot d-open"></span>Installer smoke run on real machines (dmg/msi/deb artifacts build green) · light theme · OneDrive/Drive OAuth backup targets · wizard integration for community models</div>
     <div class="row"><span class="dot d-open"></span>Binary code signing / notarization (ADR-0005 future work)</div>
   </div>
 </div>

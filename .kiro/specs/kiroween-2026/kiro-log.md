@@ -88,6 +88,14 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **What changed:** a third `llama-server --rerank` sidecar (`services/library/rerank.rs`, mirroring `EmbeddingEngine`) serves `/v1/rerank` for the installed reranker model — the catalog's Qwen3 Reranker 0.6B pin, or a community reranker. When the engine is running, `LibraryService::search` re-orders the top 20 fused candidates by true query-document relevance (`reorder` keeps unscored docs at the tail); a rerank failure logs a warning and keeps the fused order instead of failing the search. Because the stage lives in the service, the Search screen, memory search, and chat RAG all get re-ranked results. Search screen has a start/stop reranker chip; diagnostics shows the reranker row. Both engine resolvers now read `all_entries()`, so community embedding/reranker models resolve too.
 - **Skipped deliberately:** reranking the chat RAG recall's own candidate query (memory notes corpus — rerankers are trained on passage pairs, not notes), HTTP-level mock tests for the rerank endpoint.
 
+## 2026-11-14 — Platform bundling verified end to end (macOS proven for the first time)
+
+- **Kiro artifact:** closes "macOS/package bundling in CI" from the open list — README status line, scope.md Tier 1, and the project map flipped from "unverified" to "CI-verified".
+- **Operator correction:** the macOS cancellations rested on a wrong premise — standard GitHub runners are **free for public repositories**, macOS included (no 10× billed minutes). Omar flagged it; the docs rationale was corrected and the bundling verification dispatched via a `[build-all]` push.
+- **What happened:** the first dispatch (04eb942) died oddly — both macOS sidecar legs cancelled one second after start with zero logs, then the whole run was cancelled mid-compile; a re-run reproduced the instant macOS cancellation while Windows/Linux completed, ruling out operator action. The check-run annotation carried the real cause: **"The configuration 'macos-14-arm64-us-default' is not supported"** — the `macos-14` runner label is retired. Moving the sidecar matrix to `macos-latest` (`e81a99b`) fixed it: all four sidecars (macOS aarch64, macOS x86_64 cross-compiled, Windows, Linux) and all four bundle stages went green, producing real `.dmg`/`.msi`/`.deb`/`.AppImage` artifacts. Publish-release was correctly skipped (tag-gated).
+- **Still honest:** the installers have not been executed on real machines — CI proves they build, not that they install. That stays as the demo-run open item.
+- **Lesson:** a job that "completes: cancelled" one second after start with no logs is a queue-time rejection — read the check-run **annotations**, not the job log.
+
 ## Still open
 
 - A real-model chat and demo run on each platform (plan §8 test list, `demo-checklist.md`).
