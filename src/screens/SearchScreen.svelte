@@ -219,7 +219,7 @@
       <div>
         <div class="text-xs font-semibold text-ink-300 mb-1.5">Search mode</div>
         <div class="flex items-center gap-2">
-          {#each [["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"]] as [value, label]}
+          {#each ([["keyword", "Keyword"], ["hybrid", "Hybrid"], ["semantic", "Semantic"]] as const) as [value, label]}
             <button
               type="button"
               onclick={() => { mode = value; if (query.length > 2) search(); }}
