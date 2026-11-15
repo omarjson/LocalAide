@@ -48,7 +48,7 @@ jobs:
             cmake_extra: '-DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
     steps:
       - name: Check out llama.cpp at the pinned tag
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ggml-org/llama.cpp
           ref: ${{ inputs.llama_cpp_tag }}
@@ -102,7 +102,7 @@ jobs:
           fi
 
       - name: Upload sidecar artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: llama-server-${{ matrix.triple }}
           path: ${{ runner.temp }}/sidecar/llama-server-${{ matrix.triple }}${{ matrix.ext }}
