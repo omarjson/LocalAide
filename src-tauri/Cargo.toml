@@ -43,7 +43,7 @@ notify = "8"
 whisper-rs = { version = "0.16", optional = true }
 piper-rs = { version = "0.2", optional = true }
 hound = { version = "3", optional = true }
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+rusqlite = { version = "0.42.0", features = ["bundled"] }
 flate2 = "1.1"
 # Library ingest: UTF-16 and Windows-1252 text files, and real PDF text
 # (fonts and encodings). The hand-written PDF reader stays as a fallback.
