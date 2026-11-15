@@ -5,7 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-15
+
+Merges the `design/windows-theme` work (UI redesign and production-hardening Phases 0 to 5, audit in `docs/evidence/audit-2026-11-14.md`). A `[build-all]` CI run on `6bd9194` passed every job, including all four `llama-server` builds and the macOS, Windows and Linux installers.
+
 ### Added
+- UI redesign: shared components (buttons, tabs, page headers, settings rows, confirm dialogs, focus trap, toasts), plain copy, Ctrl+1 to Ctrl+6 screen shortcuts, native folder and file pickers, and chat export through a save window. Mockups live in `docs/design/mockups/`.
+- Release pipeline: tag builds create a draft GitHub Release with installers, `SHA256SUMS.txt` and an SPDX SBOM; a version gate checks `package.json`, `Cargo.toml`, `tauri.conf.json` and the tag agree; portable `llama-server` builds (no native CPU flags, no OpenMP, static MSVC runtime) must start in CI; optional code signing through repository secrets. See `docs/release.md`.
+- Third-party notices and a `cargo-about` license file ship inside the app; Dependabot and a weekly dependency audit.
+- A Windows Rust job (clippy and tests) and readable CI failure annotations.
 - Web search and page reading (ADR-0011): the Search screen's Web mode queries the open internet — DuckDuckGo (lite results page), Wikipedia REST search, and the Jina Reader work keylessly; Exa and Firecrawl run after the user pastes an API key in Settings → Web search. "Read page" pulls a result's content as markdown (Firecrawl when keyed, the keyless Jina Reader otherwise). Every request is an explicit click; keys live in the local config, travel only to their own provider, and are excluded from backups unless included. HTTP-level tests exercise every provider against loopback servers.
 - Online-provider presets from the open 9Router registry (ADR-0011): the Settings provider form can prefill from LLM7, Synthetic, api.airforce, Groq, Cerebras, NVIDIA NIM, OpenRouter, Chutes, Mistral, or the user's own local Ollama, each with a note and a key link. Free tiers are labeled as changing without notice; loopback proxies may be saved without a key.
 - Light theme: the ink ramp inverts to bone paper with dark ink text, accent text roles darken to stay readable, and the choice persists in config with a Settings toggle. Dark remains the designed default; the light theme has not yet been eyeballed on a real screen.
@@ -13,7 +21,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Backup stance confirmed: the `.labak` archive is a portable file the user can upload anywhere; built-in passphrase-verified restore was already shipped and stays the only restore path.
 
 ### Changed
+- Responsiveness: heavy commands run on worker threads, the model loads after the window opens, one load at a time, and Stop works before the first token.
+- Library indexing skips unchanged files, streams vectors, reads UTF-16/Windows-1252 text and PDFs, caps file sizes, depth and counts, and refuses symlinks and junctions. Deleted folders leave the library.
+- Downloads have timeouts, a free-space check, off-thread checksums and HTTP 416 recovery.
+- Backup format v2 (Argon2id 64 MiB / 3 passes in an authenticated header); v1 archives still open.
+- Rust toolchain pinned to 1.100.0 in both `rust-toolchain.toml` and CI.
 - Meaningful borders moved from the `ink-800`/`ink-700` tokens (1.2:1 / 1.9:1 — both below the 3:1 non-text floor) to a dedicated `edge` ramp sized to clear 3:1 in both themes; text on ember fills now uses the semantic `on-ember` token that flips with the theme. Arithmetic recorded in `docs/evidence/a11y.md`; on-screen re-measure still open.
+
+### Fixed
+- Engines stop on exit, and child processes join a kill-on-close job object on Windows, so no `llama-server` is left running. Single-instance lock and a minimum window size.
+- Download Cancel now matches the job it targets.
+- Path checks on model ids, note paths, thread ids, backup entries and companion file names.
+- Using a model loads it; downloads no longer mark a model active; nothing contacts GitHub at launch.
+
+### Security
+- Cloud chat follows no redirects, needs the key re-entered when a provider's host changes, and only `cloud_mode_set` turns online chat on. Local-network pages are never sent to page readers.
+- Stricter CSP, links open in the browser for http/https only, random provider ids, engine key passed through `LLAMA_API_KEY`, folder approvals expire after 30 minutes, and refused tool actions are logged.
+
+### Removed
+- The dev-only Developer config screen, unused commands (`config_save`, `config_compute_ram`, `model_existing_size`, `chat_thread_export`), the unused prompt builder, `OPTIMIZATIONS.md`, `PACKAGING.md` and the lock-update workflow. Old config and state files still load.
 
 ## [0.1.0] - 2026-11-14
 
