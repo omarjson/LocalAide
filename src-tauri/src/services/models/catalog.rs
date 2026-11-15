@@ -120,7 +120,7 @@ impl CatalogManifest {
                 hasher.update(c.file_size.to_le_bytes());
             }
         }
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     pub fn verify(&self) -> Result<(), AppError> {

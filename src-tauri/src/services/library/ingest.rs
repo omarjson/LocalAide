@@ -142,13 +142,13 @@ impl FileIngester {
         // Content hash
         let mut hasher = Sha256::new();
         hasher.update(&raw_bytes);
-        let content_hash = format!("{:x}", hasher.finalize());
+        let content_hash = hex::encode(hasher.finalize());
 
         // The id comes from the path, not the content. Two files with the same
         // bytes must not share one document row, or the second is never indexed.
         let mut path_hasher = Sha256::new();
         path_hasher.update(path.to_string_lossy().as_bytes());
-        let path_hash = format!("{:x}", path_hasher.finalize());
+        let path_hash = hex::encode(path_hasher.finalize());
         let doc_id = format!("doc_{}", &path_hash[..16]);
         let title = path
             .file_name()

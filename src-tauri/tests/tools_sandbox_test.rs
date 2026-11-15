@@ -207,7 +207,7 @@ fn test_model_catalog_signature_and_checksum_verification() {
 
     // Correct SHA-256
     let actual_sha = sha2::Sha256::digest(b"test model binary content");
-    let actual_hex = format!("{:x}", actual_sha);
+    let actual_hex = hex::encode(actual_sha);
 
     assert!(verify_file_checksum(&test_file, &actual_hex).is_ok());
 

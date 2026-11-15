@@ -30,11 +30,14 @@ tauri-plugin-dialog = "2"
 # used; the plugin is not registered, so the web page cannot call it directly.
 tauri-plugin-opener = "2"
 sysinfo = "0.32"
-reqwest = { version = "0.13", features = ["json", "stream", "blocking"] }
+# reqwest 0.13 puts `.form()` behind the "form" feature (web search uses it).
+reqwest = { version = "0.13", features = ["json", "stream", "blocking", "form"] }
 url = "2"
 tokio = { version = "1", features = ["sync"] }
 futures = "0.3"
 sha2 = "0.11"
+# sha2 0.11 digests no longer format with {:x}; hex::encode writes them.
+hex = "0.4"
 dirs-next = "2.0"
 # OS-random bytes for the llama-server loopback API key (ADR-0007).
 getrandom = "0.4"

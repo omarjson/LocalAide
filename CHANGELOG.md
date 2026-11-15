@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+- Dependency updates: reqwest 0.13 (HTTPS now uses rustls with the operating system's certificate store instead of native-tls), sha2 0.11, rusqlite 0.42, getrandom 0.4, four smaller Rust updates, and six GitHub Actions updates. Hashes are written with `hex::encode`, which gives the same lowercase hex as before, so stored file hashes and the catalog digest still match.
+
 ## [0.1.1] - 2026-11-15
 
 Merges the `design/windows-theme` work (UI redesign and production-hardening Phases 0 to 5, audit in `docs/evidence/audit-2026-11-14.md`). A `[build-all]` CI run on `6bd9194` passed every job, including all four `llama-server` builds and the macOS, Windows and Linux installers.

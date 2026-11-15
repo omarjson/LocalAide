@@ -34,7 +34,7 @@ pub fn compute_sha256_streaming(path: &Path) -> Result<String, AppError> {
         hasher.update(&buffer[..n]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// Verify that a file's SHA-256 matches the expected digest.
