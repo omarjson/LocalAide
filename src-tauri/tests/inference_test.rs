@@ -1,6 +1,5 @@
 use app_lib::domain::chat::ChatMessage;
 use app_lib::services::inference::context::ContextBudget;
-use app_lib::services::inference::prompt::{PromptBuilder, PromptFormat};
 
 #[test]
 fn test_context_budget_within_limits() {
@@ -64,24 +63,4 @@ fn test_context_budget_truncates_oldest_turns() {
     assert!(result.prompt.contains("System prompt"));
     assert!(result.prompt.contains("Latest question"));
     assert!(!result.prompt.contains(&"A".repeat(160)));
-}
-
-#[test]
-fn test_prompt_builder_rag_citations() {
-    let builder = PromptBuilder::new(PromptFormat::Standard);
-    let base_prompt = "user: What is our vacation policy?\nassistant:";
-    let citations = [
-        (
-            "handbook.md",
-            "Employees receive 20 days of paid time off per calendar year.",
-        ),
-        ("benefits.md", "Sick leave is separate from PTO."),
-    ];
-
-    let augmented = builder.append_rag_context(base_prompt, &citations);
-    assert!(augmented.contains("Context from library:"));
-    assert!(augmented.contains("[1] (Source: handbook.md):"));
-    assert!(augmented.contains("Employees receive 20 days"));
-    assert!(augmented.contains("[2] (Source: benefits.md):"));
-    assert!(augmented.contains("user: What is our vacation policy?"));
 }

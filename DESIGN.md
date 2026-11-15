@@ -69,7 +69,7 @@ Rules:
 - The built frontend has not been checked inside the real Tauri window yet.
 - The Search screen cannot show a folder count because the backend only returns document count and storage size.
 - The Settings screen estimates words from the token limit; the model's real tokenizer can differ.
-- The Dev Config screen is out of the sidebar. Open it from the command palette (Ctrl/Cmd+K) as "Developer config".
+- The Dev Config screen is gone (2026-11-15). Memory for models is set in Settings → General, and the Models screen and setup flag models that may not fit.
 
 ## Shared screen kit
 

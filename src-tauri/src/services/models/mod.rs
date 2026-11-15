@@ -116,11 +116,6 @@ impl ModelService {
             .clone()
     }
 
-    /// Snapshot of the active catalog (the entries live in `manifest.models`).
-    pub fn list_catalog(&self) -> Arc<CatalogManifest> {
-        self.manifest()
-    }
-
     pub fn fetched_at(&self) -> Option<u64> {
         *self.fetched_at.read().unwrap_or_else(|e| e.into_inner())
     }

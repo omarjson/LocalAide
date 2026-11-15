@@ -8,7 +8,6 @@
     | "skills"
     | "models"
     | "settings"
-    | "dev"
     | "close"
     | "menu"
     | "alert"
@@ -32,8 +31,7 @@
     | "cloud"
     | "database"
     | "globe"
-    | "chevron-right"
-    | "external";
+    | "chevron-right";
 
   interface Props {
     name: IconName;
@@ -74,8 +72,6 @@
     <circle cx="15" cy="6" r="2" />
     <circle cx="9" cy="12" r="2" />
     <circle cx="17" cy="18" r="2" />
-  {:else if name === "dev"}
-    <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14" />
   {:else if name === "close"}
     <path d="M6 6l12 12M18 6L6 18" />
   {:else if name === "menu"}
@@ -141,8 +137,5 @@
     <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
   {:else if name === "chevron-right"}
     <path d="m9 6 6 6-6 6" />
-  {:else if name === "external"}
-    <path d="M14 4h6v6M20 4l-9 9" />
-    <path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" />
   {/if}
 </svg>

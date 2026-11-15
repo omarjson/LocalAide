@@ -61,12 +61,6 @@ impl AppError {
         .with_detail(reason)
     }
 
-    pub fn db_busy(reason: &str) -> Self {
-        Self::new("DB_BUSY", "Database is currently busy.")
-            .with_detail(reason)
-            .retryable()
-    }
-
     pub fn cancelled() -> Self {
         Self::new("CANCELLED", "The operation was cancelled.")
     }

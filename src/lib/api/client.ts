@@ -39,7 +39,6 @@ import type {
   ModelInfo,
   ModelPreset,
   ModelVerifyResult,
-  RamComputationResponse,
   RestoreReport,
   SearchIndexRequest,
   Skill,
@@ -49,7 +48,6 @@ import type {
   SummarizeResponse,
   SystemProbeResult,
   ThreadExportRequest,
-  ThreadExportResponse,
   ToolAuditEntry,
   ToolExecutionRequest,
   ToolExecutionResponse,
@@ -201,10 +199,6 @@ export class ApiClient {
     return invoke<void>("chat_thread_delete", { threadId });
   }
 
-  async exportChatThread(req: ThreadExportRequest): Promise<ThreadExportResponse> {
-    return invoke<ThreadExportResponse>("chat_thread_export", { req });
-  }
-
   /** Asks where to save the chat and writes it. Null when the user cancels. */
   async saveChatExport(req: ThreadExportRequest): Promise<string | null> {
     return invoke<string | null>("chat_thread_export_save", { req });
@@ -323,16 +317,6 @@ export class ApiClient {
   // Config & Settings
   async loadConfig(): Promise<AppConfigDto> {
     return invoke<AppConfigDto>("config_load");
-  }
-
-  async saveConfig(cfg: AppConfigDto): Promise<void> {
-    return invoke<void>("config_save", { cfg });
-  }
-
-  async computeRam(modelIds: string[]): Promise<RamComputationResponse> {
-    return invoke<RamComputationResponse>("config_compute_ram", {
-      modelIds,
-    });
   }
 
   // Engine context window
@@ -555,7 +539,6 @@ export default api;
 
 /** Plain words for error codes whose backend text is too technical. */
 const FRIENDLY_ERRORS: Record<string, string> = {
-  DB_BUSY: "LocalAide is busy. Try again in a moment.",
   CHECKSUM_MISMATCH: "The download was damaged. Download it again.",
 };
 

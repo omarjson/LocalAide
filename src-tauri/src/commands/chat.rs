@@ -464,13 +464,6 @@ fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
     Ok(())
 }
 
-#[tauri::command]
-pub async fn chat_thread_export(
-    req: ThreadExportRequest,
-) -> Result<ThreadExportResponse, AppError> {
-    run_blocking(move || chat_thread_export_work(req)).await
-}
-
 /// Asks where to save the chat, then writes it there. Returns the saved path,
 /// or `None` when the user closes the save window.
 #[tauri::command]

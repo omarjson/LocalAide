@@ -1,5 +1,4 @@
 pub mod context;
-pub mod prompt;
 pub mod remote;
 pub mod router;
 pub mod sidecar;

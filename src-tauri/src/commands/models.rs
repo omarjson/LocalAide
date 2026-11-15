@@ -3,9 +3,7 @@ use crate::app::error::AppError;
 use crate::app::events::DownloadProgressEvent;
 use crate::app::state::AppState;
 use crate::commands::chat::load_and_activate;
-use crate::domain::model::{
-    CatalogStatus, ModelInfo, ModelPreset, ModelSizeResult, ModelVerifyResult,
-};
+use crate::domain::model::{CatalogStatus, ModelInfo, ModelPreset, ModelVerifyResult};
 use crate::services::models::catalog::is_safe_model_id;
 use crate::services::models::refresh::CATALOG_URL;
 use crate::services::models::verify::compute_sha256_streaming;
@@ -25,7 +23,7 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 "catalog"
             };
             let path = state.model_service.model_file_path(&e.id);
-            let installed = path.is_file() || state.model_manager.is_installed(&e.id);
+            let installed = path.is_file();
             let is_active = active_id.as_deref() == Some(&e.id);
             let filename = e.dest.clone().unwrap_or_else(|| format!("{}.gguf", e.id));
             ModelInfo {
@@ -193,34 +191,7 @@ fn model_verify_work(state: AppState, id: String) -> Result<ModelVerifyResult, A
 }
 
 #[tauri::command]
-pub fn model_existing_size(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<ModelSizeResult, AppError> {
-    if state.model_service.get_model_entry(&id).is_none() {
-        return Err(AppError::model_not_installed(&id));
-    }
-    let path = state.model_service.model_file_path(&id);
-    let part_path = path.with_extension("part");
-    let size_bytes = if path.exists() {
-        std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0)
-    } else if part_path.exists() {
-        std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0)
-    } else {
-        state.model_manager.existing_size(&id)
-    };
-
-    let complete = path.is_file();
-    Ok(ModelSizeResult {
-        id,
-        size_bytes,
-        complete,
-    })
-}
-
-#[tauri::command]
 pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
-    state.model_manager.cancel_download(&id);
     // Job ids add a random part to "download_<id>", so cancel by kind.
     state.jobs.cancel_kind(&format!("download_{id}"));
     Ok(())

@@ -15,10 +15,9 @@
   import SkillsScreen from "./screens/SkillsScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
-  import DevConfigScreen from "./screens/DevConfigScreen.svelte";
-  import SearchScreen from "./screens/SearchScreen.svelte";
+    import SearchScreen from "./screens/SearchScreen.svelte";
 
-  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "dev" | "search";
+  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search";
   type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings";
 
   // Null until startup decides: returning users with a downloaded model go
@@ -60,7 +59,6 @@
     }
   });
 
-  // The developer screen is for builds made with `npm run dev` only.
   const screens = [
     { id: "chat", label: "Chat" },
     { id: "search", label: "Search" },
@@ -68,7 +66,6 @@
     { id: "skills", label: "Skills" },
     { id: "models", label: "Models" },
     { id: "settings", label: "Settings" },
-    ...(import.meta.env.DEV ? [{ id: "dev", label: "Developer config" } as const] : []),
   ] as const;
 
   const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "settings"];
@@ -235,8 +232,6 @@
         <ModelManagerScreen />
       {:else if screen === "settings"}
         <SettingsScreen />
-      {:else if screen === "dev" && import.meta.env.DEV}
-        <DevConfigScreen />
       {/if}
         </div>
       {/key}

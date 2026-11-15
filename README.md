@@ -15,7 +15,7 @@
 [![SQLite: WAL](https://img.shields.io/badge/SQLite-WAL%20Mode-003B57.svg)](https://www.sqlite.org/)
 [![Accessibility: WCAG 2.2 AA target](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20target-purple.svg)](docs/evidence/a11y.md)
 
-[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Packaging Guide](PACKAGING.md) • [Project Map](docs/evidence/project-map.html) • [Evidence Index](docs/evidence/scorecard.md)
+[Download Releases](https://github.com/omarjson/LocalAide/releases) • [Architecture](ARCHITECTURE.md) • [Security Policy](SECURITY.md) • [Release Guide](docs/release.md) • [Project Map](docs/evidence/project-map.html) • [Evidence Index](docs/evidence/scorecard.md)
 
 </div>
 
@@ -123,11 +123,13 @@ How releases are built, and what signing needs, is in [docs/release.md](docs/rel
    ```bash
    npx tauri dev   # or `npm run dev` for the frontend alone
    ```
-5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Build it from the pinned llama.cpp tag (v1.0.0) and stage it with `scripts/prepare-sidecar.sh`, or let CI do both — see [.github/workflows/llama-server.yml](.github/workflows/llama-server.yml) and [PACKAGING.md](PACKAGING.md). Then:
+5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Stage it, write the license file, then build:
    ```bash
-   npx tauri build --config src-tauri/tauri.sidecar.conf.json
+   scripts/prepare-sidecar.sh <folder-with-llama-server> <target-triple>
+   (cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html)
+   make release
    ```
-   The overlay adds `bundle.externalBin`. A bare `npx tauri build` — including `make release`, which passes the overlay for you — produces an app that cannot chat without it. Artifacts land in `src-tauri/target/release/bundle/`.
+   `make release` passes the `src-tauri/tauri.sidecar.conf.json` overlay, which bundles the sidecar and the license file. A bare `npx tauri build` produces an app that cannot chat. Artifacts land in `src-tauri/target/release/bundle/`. The full steps, including where to get `llama-server`, are in [docs/release.md](docs/release.md).
 
 ## Keyboard Navigation
 

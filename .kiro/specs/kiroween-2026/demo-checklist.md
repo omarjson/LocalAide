@@ -9,7 +9,7 @@ Every step lists what success looks like and what to do if it does not happen.
 
 - [ ] Latest build installed from CI artifacts (Quality Gate → sidecar →
       platform build on `main`), or `make release` with
-      the sidecar staged per PACKAGING.md.
+      the sidecar staged per docs/release.md.
 - [ ] Internet available for the model download; nothing else needs the
       network for the rest of the demo.
 - [ ] Budget check: the machine should have ≥ 8 GB RAM so the Tiny preset fits.

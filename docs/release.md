@@ -12,6 +12,34 @@ This page explains how a release is built, what CI checks, and the steps that ne
 
 To test the builds without a release, put `[build-all]` in a commit message on any branch.
 
+## Build an installer on your own computer
+
+CI builds every release, so this is only for trying a package locally.
+
+You need:
+
+- **Rust.** rustup installs the version named in `rust-toolchain.toml` by itself.
+- **Node.js 24 or newer.**
+- **System build tools.**
+  - macOS: Xcode Command Line Tools (`xcode-select --install`).
+  - Windows: Visual Studio C++ Build Tools (MSVC), and Git Bash for the shell scripts.
+  - Linux: `libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`.
+- **`cargo-about`**, for the license file: `cargo install cargo-about --locked`.
+- **`llama-server` for your platform.** Download the `llama-server-<target>` artifact from a `[build-all]` CI run, or build llama.cpp `v1.0.0` with the flags in `.github/workflows/llama-server.yml`.
+
+Then, from the repository root:
+
+```bash
+scripts/prepare-sidecar.sh <folder-with-llama-server> <target-triple>
+(cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html)
+npm ci
+make release
+```
+
+The target triple is one of `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc` or `x86_64-unknown-linux-gnu`. `make release` builds with the `src-tauri/tauri.sidecar.conf.json` overlay, which bundles `llama-server` and the license file. A bare `npx tauri build` makes an app that cannot chat.
+
+The installers land in `src-tauri/target/release/bundle/`, in `nsis/` (Windows), `dmg/` and `macos/` (macOS), or `deb/` and `appimage/` (Linux).
+
 ## What each release contains
 
 | File | What it is |

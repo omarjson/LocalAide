@@ -137,11 +137,6 @@ export interface ThreadExportRequest {
   format: "markdown" | "json";
 }
 
-export interface ThreadExportResponse {
-  content: string;
-  filename: string;
-}
-
 export interface IndexFolderResponse {
   indexed: number;
   skipped: number;
@@ -254,22 +249,9 @@ export interface ToolAuditEntry {
   details: string | null;
 }
 
-export interface UserPresetDto {
-  id: string;
-  name: string;
-  model_ids: string[];
-  total_ram_gb: number;
-}
-
+/** What the app shell reads at startup. Empty `selected_models` means first run. */
 export interface AppConfigDto {
   selected_models: string[];
-  presets: UserPresetDto[];
-  ram_budget_mb: number;
-  cloud_llm_enabled: boolean;
-}
-
-export interface RamComputationResponse {
-  total_ram_gb: number;
 }
 
 export interface DownloadProgressEvent {

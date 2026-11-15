@@ -1,48 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use crate::models_dir;
-use crate::services::models::catalog::{CatalogEntry, CatalogManifest, is_safe_model_id};
-
-/// A downloadable companion file (config, tokenizer, sidecar json…).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelFile {
-    pub url: String,
-    pub sha256: Option<String>,
-    /// File name relative to the model directory.
-    pub dest: String,
-}
-
-/// A model entry from the catalog.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelEntry {
-    pub id: String,
-    pub name: String,
-    pub kind: ModelKind,
-    pub params: String,
-    pub file_size: u64,
-    pub ram_estimate_gb: f32,
-    pub url: String,
-    pub sha256: Option<String>,
-    pub quant: Option<String>,
-    pub installed: bool,
-    pub active: bool,
-    /// Companion files downloaded alongside the primary file.
-    #[serde(default)]
-    pub files: Vec<ModelFile>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[allow(clippy::upper_case_acronyms)]
-pub enum ModelKind {
-    LLM,
-    Embedding,
-}
+use crate::services::models::catalog::is_safe_model_id;
 
 /// Preset selection computed by the Simple mode wizard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,82 +70,25 @@ impl Preset {
     }
 }
 
-/// Built-in catalog. The single source is `services::models::catalog`.
-pub fn default_catalog() -> Vec<ModelEntry> {
-    CatalogManifest::default_manifest()
-        .models
-        .into_iter()
-        .map(catalog_entry_to_model_entry)
-        .collect()
-}
-
-fn catalog_entry_to_model_entry(e: CatalogEntry) -> ModelEntry {
-    let kind = match e.kind.as_str() {
-        "embedding" | "reranker" => ModelKind::Embedding,
-        _ => ModelKind::LLM,
-    };
-    ModelEntry {
-        id: e.id,
-        name: e.name,
-        kind,
-        params: e.params,
-        file_size: e.file_size,
-        ram_estimate_gb: e.ram_estimate_gb,
-        url: e.url,
-        sha256: Some(e.sha256),
-        quant: Some(e.quant),
-        installed: false,
-        active: false,
-        files: e
-            .companions
-            .into_iter()
-            .map(|c| ModelFile {
-                url: c.url,
-                sha256: Some(c.sha256),
-                dest: c.dest,
-            })
-            .collect(),
-    }
-}
-
-/// Installed-model state persisted to disk.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Model state persisted to `models/state.json`. Older files also hold an
+/// `installed` map that nothing ever filled; serde skips it when reading.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InstalledState {
     pub active_model: Option<String>,
-    pub installed: HashMap<String, InstalledModel>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InstalledModel {
-    pub id: String,
-    pub path: String,
-    pub sha256: Option<String>,
-    pub installed_at: String,
 }
 
 impl InstalledState {
     pub fn new() -> Self {
-        Self {
-            active_model: None,
-            installed: HashMap::new(),
-        }
+        Self::default()
     }
 }
 
-impl Default for InstalledState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Model manager: catalog, install/download with resume, verify SHA256, activate/remove.
+/// Remembers which model is active and removes model files. Downloads and the
+/// installed check live in `services::models` (`ModelService`).
 pub struct ModelManager {
     models_dir: PathBuf,
-    catalog: Vec<ModelEntry>,
-    /// Interior mutability so Tauri `State` (shared ref) can drive installs.
+    /// Interior mutability so Tauri `State` (shared ref) can change it.
     state: Mutex<InstalledState>,
-    /// Cancellation flags for in-flight downloads keyed by model id.
-    cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl ModelManager {
@@ -194,7 +99,6 @@ impl ModelManager {
 
     pub fn with_dir(dir: PathBuf) -> Result<Self, String> {
         let _ = fs::create_dir_all(&dir);
-        let catalog = default_catalog();
         let state = Self::load_state(&dir).unwrap_or_else(|e| {
             log::warn!(
                 "Could not load model state from {}, initializing empty: {e}",
@@ -204,9 +108,7 @@ impl ModelManager {
         });
         Ok(Self {
             models_dir: dir,
-            catalog,
             state: Mutex::new(state),
-            cancels: Mutex::new(HashMap::new()),
         })
     }
 
@@ -233,36 +135,8 @@ impl ModelManager {
         fs::write(path, data).map_err(|e| e.to_string())
     }
 
-    pub(crate) fn model_path(&self, id: &str) -> PathBuf {
+    fn model_path(&self, id: &str) -> PathBuf {
         self.models_dir.join(format!("{id}.gguf"))
-    }
-
-    /// Resolve the destination path for a model's primary file.
-    pub(crate) fn primary_path(&self, id: &str) -> PathBuf {
-        self.model_path(id)
-    }
-
-    /// List catalog entries with installed/active flags merged from persisted state.
-    pub fn list_models(&self) -> Vec<ModelEntry> {
-        let state = match self.state.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                log::error!("state mutex poisoned in list_models: {e}");
-                return vec![];
-            }
-        };
-        self.catalog
-            .iter()
-            .map(|m| {
-                let installed = state.installed.contains_key(&m.id);
-                let active = state.active_model.as_deref() == Some(m.id.as_str());
-                ModelEntry {
-                    installed,
-                    active,
-                    ..m.clone()
-                }
-            })
-            .collect()
     }
 
     /// Id of the model the user last loaded, or `None`. Unlike a catalog
@@ -301,7 +175,7 @@ impl ModelManager {
         Ok(())
     }
 
-    /// Remove an installed model file and its state entry.
+    /// Remove an installed model file and forget it if it was active.
     pub fn remove(&self, id: &str) -> Result<(), String> {
         // The id becomes a folder path that is deleted recursively below. An id
         // of `..` would delete the whole app data folder, so reject it first.
@@ -315,7 +189,6 @@ impl ModelManager {
         if state.active_model.as_deref() == Some(id) {
             state.active_model = None;
         }
-        state.installed.remove(id);
         drop(state);
         let path = self.model_path(id);
         if path.exists() {
@@ -328,53 +201,6 @@ impl ModelManager {
         }
         self.save_state()?;
         Ok(())
-    }
-
-    /// Check whether a model file is already present on disk.
-    pub fn is_installed(&self, id: &str) -> bool {
-        match self.state.lock() {
-            Ok(state) => state.installed.contains_key(id),
-            Err(e) => {
-                log::error!("state mutex poisoned in is_installed: {e}");
-                false
-            }
-        }
-    }
-
-    /// Compute local file size of an in-progress download for resume support.
-    pub fn existing_size(&self, id: &str) -> u64 {
-        let path = self.model_path(id);
-        if path.exists() {
-            return path.metadata().map(|m| m.len()).unwrap_or(0);
-        }
-        // Multi-file layout: report size of the primary file.
-        let p = self.primary_path(id);
-        p.metadata().map(|m| m.len()).unwrap_or(0)
-    }
-
-    /// Request cancellation of an in-flight download.
-    pub fn cancel_download(&self, id: &str) {
-        let cancels = match self.cancels.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                log::error!("cancels mutex poisoned in cancel_download: {e}");
-                return;
-            }
-        };
-        if let Some(flag) = cancels.get(id) {
-            flag.store(true, Ordering::SeqCst);
-        }
-    }
-
-    /// Whether a download is currently running for this model.
-    pub fn is_downloading(&self, id: &str) -> bool {
-        match self.cancels.lock() {
-            Ok(cancels) => cancels.contains_key(id),
-            Err(e) => {
-                log::error!("cancels mutex poisoned in is_downloading: {e}");
-                false
-            }
-        }
     }
 }
 
@@ -412,6 +238,24 @@ mod tests {
         );
         manager.clear_active().unwrap();
         assert!(manager.active_model_id().is_none());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_older_state_file_still_loads() {
+        let root = std::env::temp_dir().join(format!("la-model-state-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let models = root.join("models");
+        fs::create_dir_all(&models).unwrap();
+        fs::write(
+            models.join("state.json"),
+            r#"{"active_model":"qwen3.5-2b-q4","installed":{}}"#,
+        )
+        .unwrap();
+
+        let manager = ModelManager::with_dir(models).unwrap();
+        assert_eq!(manager.active_model_id().as_deref(), Some("qwen3.5-2b-q4"));
 
         let _ = fs::remove_dir_all(&root);
     }

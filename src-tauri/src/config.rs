@@ -6,9 +6,9 @@ use crate::config_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    // Older config files also hold `presets` and `ram_budget_mb`. Nothing
+    // used them, so they are no longer read; serde skips unknown fields.
     pub selected_models: Vec<String>,
-    pub presets: Vec<UserPreset>,
-    pub ram_budget_mb: u64,
     pub cloud_llm_enabled: bool,
     /// Opt-in OpenAI-compatible providers. Empty unless the user adds one.
     #[serde(default)]
@@ -104,20 +104,10 @@ pub struct CloudProvider {
     pub api_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserPreset {
-    pub id: String,
-    pub name: String,
-    pub model_ids: Vec<String>,
-    pub total_ram_gb: f32,
-}
-
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             selected_models: vec![],
-            presets: vec![],
-            ram_budget_mb: 4096,
             cloud_llm_enabled: false,
             cloud_providers: vec![],
             active_cloud_provider: None,
@@ -175,22 +165,6 @@ impl ConfigStore {
             let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
         }
         fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
-    }
-
-    pub fn compute_total_ram_gb(
-        &self,
-        model_ids: &[String],
-        catalog: &[crate::model_manager::ModelEntry],
-    ) -> f32 {
-        model_ids
-            .iter()
-            .filter_map(|id| {
-                catalog
-                    .iter()
-                    .find(|m| &m.id == id)
-                    .map(|m| m.ram_estimate_gb)
-            })
-            .sum()
     }
 }
 

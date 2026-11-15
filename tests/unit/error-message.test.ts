@@ -16,8 +16,8 @@ test("error codes in text are removed", () => {
 
 test("technical codes get plain words", () => {
   assert.equal(
-    errorMessage({ code: "DB_BUSY", message: "Database is currently busy." }),
-    "LocalAide is busy. Try again in a moment.",
+    errorMessage({ code: "CHECKSUM_MISMATCH", message: "Cryptographic integrity verification failed." }),
+    "The download was damaged. Download it again.",
   );
 });
 

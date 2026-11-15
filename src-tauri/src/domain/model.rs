@@ -55,10 +55,3 @@ pub struct ModelVerifyResult {
     pub actual_sha256: Option<String>,
     pub error: Option<String>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelSizeResult {
-    pub id: String,
-    pub size_bytes: u64,
-    pub complete: bool,
-}
