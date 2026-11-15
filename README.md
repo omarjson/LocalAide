@@ -184,4 +184,4 @@ Found a security vulnerability? Follow the [Security Policy](SECURITY.md) and re
 ## License
 
 LocalAide is open-source software licensed under the [MIT License](LICENSE).
-Copyright (c) 2025 Omar. Bundled third-party software is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright (c) 2026 Omar. Bundled third-party software is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

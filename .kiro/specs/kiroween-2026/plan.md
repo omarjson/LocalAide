@@ -11,7 +11,8 @@ Status: merged. Decisions below were made by Omar on 2026-11-13. The work ran on
 ## 1. Eligibility (checked)
 
 - Kiroween 2026 accepts only projects started in the submission window, October 30 to December 4, 2026. Source: the Kiroween 2026 announcement and rules, found by web search.
-- This repo's first commit is dated 2026-10-30, so it qualifies. Keep the history as it is. Do not squash or rewrite it.
+- This repo's first commit (`890c38c`) is dated 2026-10-30 at 06:58 Pacific, about two hours before the window opened at 09:00 Pacific. Mention this in the submission. Keep the history as it is. Do not squash or rewrite it.
+- The first commits gave the year as 2025 in `LICENSE` and `CHANGELOG.md` by mistake. Omar confirmed on 2026-11-15 that the code is new, and the copyright year now reads 2026.
 - Judges also look for real use of Kiro: specs, steering and hooks. This repo has `.kiro/steering/` and this spec. Keep adding real spec-driven work, and keep a short log of how Kiro shaped each change in `kiro-log.md`.
 
 ## 3. What the audit found (must fix before a demo)
