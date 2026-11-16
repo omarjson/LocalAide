@@ -4,14 +4,14 @@ Status: merged. Decisions below were made by Omar on 2026-11-13. The work ran on
 
 ## 0. Decisions (2026-11-13)
 
-- **Category: Costume Contest.** Judged on a polished, memorable UI. The design pass, DESIGN.md and the patched-ghost brand carry it; the Frankenstein story still shows through the branding.
+- **Category: Frankenstein** (changed 2026-11-15; first chosen as Costume Contest). Costume Contest judges a haunting UI, and the shipped design is the calm "At Home on Windows" look (DESIGN.md), not a Halloween one. Frankenstein judges stitching unlike parts into one working app, which is what LocalAide is: a C++ llama-server child process, a Rust core, a Svelte web UI, SQLite FTS5, three local engines (chat, embedding, rerank) and any OpenAI-compatible cloud API, behind one `InferenceEngine` trait. The patched-ghost logo tells the same story. See `submission.md`.
 - **Online mode: build it in.** OpenAI-compatible cloud providers as an explicit opt-in, disabled by default, user-supplied key. The local-first default and its zero-data-exfiltration guarantee do not change. Docs describe it as in development until it ships.
 - **Speech: defer.** Stubs are already removed; the product stays chat-only. Revisit after the contest (see `engine-upgrade` Phase 5 findings).
 
 ## 1. Eligibility (checked)
 
 - Kiroween 2026 accepts only projects started in the submission window, October 30 to December 4, 2026. Source: the Kiroween 2026 announcement and rules, found by web search.
-- This repo's first commit (`890c38c`) is dated 2026-10-30 at 06:58 Pacific, about two hours before the window opened at 09:00 Pacific. Mention this in the submission. Keep the history as it is. Do not squash or rewrite it.
+- This repo's first commit (`890c38c`) is dated 2026-10-30 at 06:58 Pacific, about two hours before the window opened at 09:00 Pacific. Mention this in the submission. Keep the history as it is. Do not squash or rewrite it. The full disclosure, with surviving-line counts and a note for the organizers, is in `eligibility.md`.
 - The first commits gave the year as 2025 in `LICENSE` and `CHANGELOG.md` by mistake. Omar confirmed on 2026-11-15 that the code is new, and the copyright year now reads 2026.
 - Judges also look for real use of Kiro: specs, steering and hooks. This repo has `.kiro/steering/` and this spec. Keep adding real spec-driven work, and keep a short log of how Kiro shaped each change in `kiro-log.md`.
 

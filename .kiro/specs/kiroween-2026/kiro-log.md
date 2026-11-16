@@ -40,7 +40,7 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 
 ## Decisions recorded (2026-11-13)
 
-- Kiroween category: **Costume Contest**.
+- Kiroween category: **Costume Contest** (changed to **Frankenstein** on 2026-11-15; see the entry at the end).
 - Online mode: **build it in** as opt-in (plan §0).
 - Speech: **defer** (plan §0, engine-upgrade Phase 5).
 
@@ -114,3 +114,13 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Light theme + contrast:** semantic tokens `on-ember` and `edge` introduced; 27 `text-ink-950` and ~230 `border-ink-800/700` usages mechanically swapped; light ramp inverts the ink scale and darkens ember/emerald/rose/amber text roles; theme persisted via `settings_theme`/`settings_set_theme` and applied on boot. Border a11y row flipped to PASS at token level (3.35:1 dark / 3.58:1 light).
 - **Wizard:** the preset step gained a collapsible Hugging Face community browser (search → repo → file → install through the hash-verified pipeline; Cancel hits the community job).
 - **Backup:** restore path verified end to end (command + passphrase + config flag + report); stance documented as local-only portable archive — the OneDrive/Drive OAuth open item is closed by decision ("user uploads wherever they want").
+
+## 2026-11-15 — Submission readiness: eligibility, category, more Kiro
+
+- **Kiro artifact:** a judge-style review of the repo, run in a Kiro Web session, which flagged three risks: eligibility, category fit, and thin Kiro use. This entry records the response.
+- **Eligibility:** `eligibility.md` lays out what the first commit (`890c38c`, Oct 30 06:58 PDT) contained, measures what survives (700 of 23,047 app source lines by `git blame -w -M -C`), lists the features built in the window with commit hashes, and drafts a note to the organizers. The history stays untouched.
+- **Category:** changed from Costume Contest to **Frankenstein** (plan §0). The shipped UI is deliberately calm, so it would score low on "haunting"; the stitched architecture is the real story.
+- **Spec:** `.kiro/specs/online-providers/` adds a full requirements (EARS) → design → tasks set for online mode. It was written from the shipped code, says so at the top, and maps every criterion to code and commits. Tasks 8 to 10 (RemoteEngine HTTP tests, OS keychain, router tests) are open and are the next spec-first work.
+- **Hooks:** `.kiro/hooks/rust-and-catalog-checks.json` (current v1 hook format) runs clippy with `-D warnings` when Rust code or `Cargo.toml` is saved, and the catalog parity test plus the Hugging Face pin check when the catalog is saved.
+- **MCP:** `.kiro/settings/mcp.json` connects the official Hugging Face MCP server. A new conditional steering file, `.kiro/steering/catalog.md` (`inclusion: fileMatch`), loads only for catalog work and tells the agent to use that server for model research, and the hook and CI for pins.
+- **Not yet verified:** the new hooks and the MCP connection have not been run. The review session's sandbox blocks huggingface.co and has no Rust 1.100.0 toolchain. Check both in the Kiro IDE before recording the demo.

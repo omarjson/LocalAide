@@ -14,7 +14,7 @@ inclusion: always
 - `tests/unit/`: frontend unit tests, run by Node's own test runner (`npm run test:unit`).
 - `public/`: files served as they are, including `theme-init.js`, which sets the theme before the first paint.
 - `.github/`: workflows (`ci.yml`, `llama-server.yml`, `audit.yml`), `dependabot.yml`, issue templates.
-- `.kiro/`: Kiro project files: `skills/impeccable/`, this `steering/` folder, and `specs/` (`engine-upgrade`, `kiroween-2026`).
+- `.kiro/`: Kiro project files: `skills/impeccable/`, this `steering/` folder (`catalog.md` loads only for catalog files), `specs/` (`engine-upgrade`, `kiroween-2026`, `online-providers`), `hooks/` (svelte-check, clippy, catalog checks) and `settings/mcp.json` (Hugging Face MCP server).
 - `README.md`, `ARCHITECTURE.md`, `docs/scope.md`, `THIRD_PARTY_NOTICES.md`: product, design and license docs. They aim to match the code; if you find a mismatch, fix the doc and note it (see `tech.md` — verify before you claim).
 
 ## Frontend (`src/`)
