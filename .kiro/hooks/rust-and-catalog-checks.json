@@ -1,0 +1,27 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Clippy on Rust edit",
+      "description": "Runs clippy with warnings as errors, as CI does, whenever the agent saves Rust code or the Cargo manifest, so lint failures show up before a push.",
+      "trigger": "PostFileSave",
+      "matcher": "src-tauri[/\\\\](.*\\.rs|Cargo\\.toml)$",
+      "action": {
+        "type": "command",
+        "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings"
+      },
+      "timeout": 900
+    },
+    {
+      "name": "Catalog parity and pin check",
+      "description": "When the model catalog changes, checks that catalog/models.json still matches the manifest compiled into the app, then checks every SHA-256 pin against the Hugging Face API (no downloads).",
+      "trigger": "PostFileSave",
+      "matcher": "(catalog[/\\\\]models\\.json|services[/\\\\]models[/\\\\]catalog\\.rs)$",
+      "action": {
+        "type": "command",
+        "command": "cargo test --manifest-path src-tauri/Cargo.toml --lib catalog_json_matches_embedded_manifest && node scripts/verify-catalog.mjs"
+      },
+      "timeout": 900
+    }
+  ]
+}
