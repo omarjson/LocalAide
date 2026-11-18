@@ -421,7 +421,7 @@
   {/if}
 
   <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-    <div class="flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-md border border-ink-700 border-b border-b-ember-500 bg-ink-900 px-3">
+    <div class="field-shell flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-700 bg-ink-950 px-3 shadow-sm">
       <Icon name="search" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
       <input
         bind:this={searchInputEl}
@@ -430,7 +430,7 @@
         placeholder={mode === "web" ? "Search the web" : "Search your documents"}
         bind:value={query}
         onkeydown={handleKeydown}
-        class="min-w-0 flex-1 bg-transparent text-base text-ink-100 outline-none placeholder:text-ink-400"
+        class="field-bare min-w-0 flex-1 bg-transparent text-base text-ink-100 placeholder:text-ink-400"
       />
       {#if query}
         <button

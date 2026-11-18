@@ -6,8 +6,21 @@
   import { api, errorMessage } from "../lib/api/client";
   import type { HfFileInfo, HfRepo, ModelInfo } from "../lib/api/bindings";
   import { formatBytes } from "../lib/format";
+  import { fly } from "svelte/transition";
+  import { enterScreen } from "../lib/motion";
+  import { openLegal } from "../lib/legal.svelte";
+  import LogoMark from "../components/LogoMark.svelte";
 
   type Step = "detect" | "preset" | "confirm" | "download" | "done";
+
+  const stepList: { id: Step; label: string }[] = [
+    { id: "detect", label: "Check this computer" },
+    { id: "preset", label: "Choose a size" },
+    { id: "download", label: "Install" },
+    { id: "done", label: "Ready" },
+  ];
+  // "confirm" shares the "Choose a size" dot.
+  const stepIndex = (value: Step): number => (value === "confirm" ? 1 : stepList.findIndex((item) => item.id === value));
 
   type Preset = {
     id: string;
@@ -226,9 +239,30 @@
 </script>
 
 <div class="mx-auto max-w-3xl">
-  <PageHeader title="Set up LocalAide" description="Choose a model that fits this computer. It will run locally by default." />
+  <div class="ember-glow -mx-6 mb-2 flex items-center gap-4 rounded-lg px-6 pt-2" in:fly={enterScreen()}>
+    <LogoMark class="h-14 w-14 shrink-0 drop-shadow-lg" />
+    <div class="min-w-0 flex-1">
+      <PageHeader title="Welcome to LocalAide" description="Pick an AI model that fits this computer. It runs here, so your chats stay private." />
+    </div>
+  </div>
+  <ol class="mb-5 flex items-center gap-2" aria-label="Setup steps">
+    {#each stepList as item, i (item.id)}
+      {@const current = stepIndex(step)}
+      <li class="flex min-w-0 flex-1 items-center gap-2" aria-current={i === current ? "step" : undefined}>
+        <span class={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold transition-colors duration-300 ${i < current ? "bg-emerald-500/20 text-emerald-300" : i === current ? "bg-ember-500 text-on-ember" : "bg-ink-800 text-ink-400"}`}>
+          {#if i < current}<Icon name="check" class="h-3.5 w-3.5" />{:else}{i + 1}{/if}
+        </span>
+        <span class={`hidden truncate text-sm sm:inline ${i === current ? "font-semibold text-ink-50" : "text-ink-400"}`}>{item.label}</span>
+        {#if i < stepList.length - 1}
+          <span class="relative h-px flex-1 overflow-hidden bg-ink-700" aria-hidden="true"><span class={`absolute inset-y-0 left-0 bg-ember-500 transition-[width] duration-500 ease-out ${i < current ? "w-full" : "w-0"}`}></span></span>
+        {/if}
+      </li>
+    {/each}
+  </ol>
   {#if setupError}<div class="mb-4"><ErrorBanner message={setupError} onRetry={retrySetup} onDismiss={() => setupError = null} /></div>{/if}
-  <div class="rounded-lg border border-edge bg-ink-900/60 p-6">
+  <div class="rounded-lg border border-edge bg-ink-900/60 p-6 shadow-sm">
+  {#key step}
+  <div in:fly={enterScreen()}>
 
     {#if step === "detect"}
       <div class="flex flex-col items-center gap-3 py-10">
@@ -236,7 +270,7 @@
           <p class="text-sm text-rose-300">{status}</p>
           <button
             onclick={detect}
-            class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium transition-colors"
+            class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium transition-colors"
           >
             Retry
           </button>
@@ -247,15 +281,15 @@
       </div>
     {:else if step === "preset"}
       <div class="grid grid-cols-3 gap-2 text-sm mb-6">
-        <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
+        <div class="px-3 py-2 rounded-lg border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Total</span>
           <span class="text-ink-200">{formatBytes(ramTotal)}</span>
         </div>
-        <div class="px-3 py-2 rounded-xl border border-edge bg-ink-950">
+        <div class="px-3 py-2 rounded-lg border border-edge bg-ink-950">
           <span class="block text-xs text-ink-400">Usable</span>
           <span class="text-ink-200">{formatBytes(ramUsable)}</span>
         </div>
-        <div class="px-3 py-2 rounded-xl border border-ember-500/30 bg-ember-500/10">
+        <div class="px-3 py-2 rounded-lg border border-ember-500/30 bg-ember-500/10">
           <span class="block text-xs text-ember-300">For models</span>
           <span class="text-ember-200">{formatBytes(budget)}</span>
         </div>
@@ -271,7 +305,7 @@
         {#each presets as p}
           {@const fits = p.ramGb <= budgetGb}
           {@const isRec = p.id === recommended.id}
-          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-xl border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
+          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
             <div class="flex items-center justify-between">
               <div>
                 <div class="font-medium text-ink-100 flex items-center gap-2">
@@ -312,7 +346,7 @@
               bind:value={wfQuery}
               placeholder="Search public community models…"
               onkeydown={(e) => e.key === "Enter" && wfSearch()}
-              class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-600 outline-none focus:border-ember-500/60"
+              class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder:text-ink-600 outline-none focus:border-ember-500/60"
             />
             <button
               onclick={wfSearch}
@@ -375,14 +409,14 @@
         {/if}
       </div>
     {:else if step === "confirm"}
-      <div class="bg-ink-950 rounded-xl p-4 mb-6 border border-edge">
+      <div class="bg-ink-950 rounded-lg p-4 mb-6 border border-edge">
         <div class="font-medium text-ink-100">{selected?.name} preset</div>
         <div class="text-sm text-ink-400">{selected?.models.join(", ")}</div>
       </div>
       <p class="text-sm text-ink-400 mb-6">{status}</p>
       <div class="flex flex-wrap items-center gap-3">
-        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-xl bg-veil/5 border border-edge text-sm text-ink-300 hover:bg-veil/10">Change preset</button>
-        <button onclick={install} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Install</button>
+        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-lg bg-veil/5 border border-edge text-sm text-ink-300 hover:bg-veil/10">Change preset</button>
+        <button onclick={install} class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium">Install</button>
         {#if onSkip}
           <button onclick={onSkip} class="ml-auto text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
         {/if}
@@ -394,7 +428,7 @@
       <div class="text-sm text-ink-400 mb-4">{progress}%</div>
       <button
         onclick={communityModelId ? cancelCommunity : cancelInstall}
-        class="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
+        class="px-4 py-2 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
       >
         Cancel install
       </button>
@@ -406,9 +440,18 @@
           <div class="text-sm text-ink-400">{status}</div>
         </div>
       </div>
-      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-xl bg-ember-600 text-on-ember text-sm font-medium">Open app</button>
+      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium transition-colors hover:bg-ember-500">Open app</button>
     {/if}
   </div>
+  {/key}
+  </div>
+  <p class="mt-4 text-center text-xs text-ink-500">
+    By using LocalAide you agree to the
+    <button type="button" class="underline hover:text-ember-300" onclick={() => openLegal("terms")}>Terms of Use</button>
+    and the
+    <button type="button" class="underline hover:text-ember-300" onclick={() => openLegal("privacy")}>Privacy Policy</button>.
+    No account, no tracking.
+  </p>
 </div>
 
 <style>

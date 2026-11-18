@@ -167,6 +167,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(log_plugin)
         .plugin(tauri_plugin_dialog::init())
+        // Registered always; it installs nothing unless the user confirms in
+        // Settings, and builds without an update key never offer to install.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::system_probe,
@@ -233,8 +236,13 @@ pub fn run() {
             commands::skills_update,
             commands::skills_delete,
             commands::skills_suggestions,
+            commands::skills_sources,
+            commands::skills_discover,
+            commands::skills_remote_detail,
+            commands::skills_import,
             commands::system_health,
             commands::update_check,
+            commands::update_install,
             commands::logs_tail,
             commands::backup_config_get,
             commands::backup_config_set,
@@ -253,6 +261,7 @@ pub fn run() {
             commands::cloud_provider_delete,
             commands::cloud_mode_set,
             commands::cloud_provider_presets,
+            commands::cloud_list_models,
             commands::web_search,
             commands::web_crawl,
             commands::web_providers,

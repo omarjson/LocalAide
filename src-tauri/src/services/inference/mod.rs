@@ -1,4 +1,5 @@
 pub mod context;
+pub mod provider_models;
 pub mod remote;
 pub mod router;
 pub mod sidecar;

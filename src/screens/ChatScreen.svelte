@@ -4,7 +4,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import { dur } from "../lib/motion";
+  import { dur, stagger } from "../lib/motion";
   import { showToast } from "../lib/toast.svelte";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
@@ -190,12 +190,20 @@
     { label: "Concise", prompt: "You are a concise analyst. Answer directly with bullet points. No conversational filler." },
   ];
 
-  const starterPrompts = [
-    "Help me plan my week.",
-    "Draft a polite email about a late payment.",
-    "Summarize this note in five short points.",
-    "Compare these two choices and explain the trade-offs.",
+  const starterPrompts: { title: string; prompt: string; icon: "clock" | "chat" | "file" | "sliders" }[] = [
+    { title: "Plan my week", prompt: "Help me plan my week.", icon: "clock" },
+    { title: "Write an email", prompt: "Draft a polite email about a late payment.", icon: "chat" },
+    { title: "Summarize", prompt: "Summarize this note in five short points.", icon: "file" },
+    { title: "Compare options", prompt: "Compare these two choices and explain the trade-offs.", icon: "sliders" },
   ];
+
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 5) return "Working late?";
+    if (hour < 12) return "Good morning.";
+    if (hour < 18) return "Good afternoon.";
+    return "Good evening.";
+  })();
 
   const handleScroll = () => {
     if (!scrollEl) return;
@@ -744,49 +752,60 @@
   >
     {#if messages.length === 0}
       <!-- Empty state: says what to do next, based on whether a model is active -->
-      <div class="h-full flex flex-col justify-center items-center text-center p-6 space-y-6">
-        <div class="space-y-2 max-w-sm">
-          <LogoMark class="w-12 h-12 mx-auto" />
+      <div class="ember-glow h-full flex flex-col justify-center items-center text-center p-6 gap-7 rounded-lg">
+        <div class="flex flex-col items-center gap-2 max-w-md" in:fly={{ y: 8, duration: dur(320) }}>
+          <div class="relative mb-2">
+            <div class="absolute inset-0 -z-10 scale-150 rounded-full bg-ember-500/15 blur-2xl" aria-hidden="true"></div>
+            <LogoMark class="w-16 h-16 drop-shadow-lg" />
+          </div>
           {#if cloudChat}
-            <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
-            <p class="text-xs text-ink-400">Running {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
+            <h3 class="text-xl font-semibold text-ink-50">{greeting} What can I help with?</h3>
+            <p class="text-sm text-ink-400">Running {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
           {:else if !modelsChecked}
-            <h3 class="text-sm font-medium text-ink-200">Checking for a model…</h3>
+            <h3 class="text-xl font-semibold text-ink-50">Checking for a model…</h3>
           {:else if !activeModelName}
-            <h3 class="text-sm font-medium text-ink-200">Pick a model to start chatting.</h3>
-            <p class="text-xs text-ink-400">Models run on this computer. Download one in Models, then come back here.</p>
+            <h3 class="text-xl font-semibold text-ink-50">Pick a model to start chatting</h3>
+            <p class="text-sm text-ink-400">Models run on this computer. Download one in Models, or connect a free online provider in Settings.</p>
             {#if onOpenModels}
-              <button
-                type="button"
-                onclick={onOpenModels}
-                class="mt-2 px-4 py-2 bg-ember-600 hover:bg-ember-500 rounded-lg text-xs font-medium text-on-ember"
-              >
-                Open Models
-              </button>
+              <Button variant="primary" class="mt-2 h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>
             {/if}
           {:else}
-            <h3 class="text-sm font-medium text-ink-200">Ask about your notes, files, or an image.</h3>
+            <h3 class="text-xl font-semibold text-ink-50">{greeting} What can I help with?</h3>
             {#if engineLoading}
-              <p class="text-xs text-ink-400" role="status">Loading {activeModelName}. This can take a minute.</p>
+              <p class="flex items-center gap-2 text-sm text-ink-400" role="status"><span class="h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeModelName}. This can take a minute.</p>
             {:else if !engineLoaded}
-              <p class="text-xs text-ink-400">{activeModelName} is not loaded. Choose it in the model menu above.</p>
+              <p class="text-sm text-ink-400">{activeModelName} is not loaded. Choose it in the model menu above.</p>
             {:else}
-              <p class="text-xs text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
+              <p class="text-sm text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
             {/if}
           {/if}
         </div>
 
         {#if cloudChat || activeModelName}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full">
-          {#each starterPrompts as sp}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-xl w-full">
+          {#each starterPrompts as sp, i (sp.title)}
             <button
-              onclick={() => { input = sp; send(); }}
-              class="text-left p-3 rounded-xl border border-edge/80 bg-ink-900/40 hover:bg-ink-900 hover:border-edge text-xs text-ink-300 transition-all"
+              type="button"
+              onclick={() => { input = sp.prompt; send(); }}
+              in:fly={stagger(i + 2)}
+              class="lift group flex items-start gap-3 text-left p-3.5 rounded-lg border border-ink-700 bg-ink-900/70 hover:border-edge hover:bg-ink-900"
             >
-              "{sp}"
+              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-300 transition-colors group-hover:bg-ember-500/15 group-hover:text-ember-300"><Icon name={sp.icon} class="h-4 w-4" /></span>
+              <span class="min-w-0">
+                <span class="block text-sm font-semibold text-ink-100">{sp.title}</span>
+                <span class="block text-sm text-ink-400">{sp.prompt}</span>
+              </span>
             </button>
           {/each}
         </div>
+        {#if skills.length > 0}
+          <div class="flex max-w-xl flex-wrap items-center justify-center gap-2" in:fade={{ duration: dur(300), delay: dur(200) }}>
+            <span class="text-xs text-ink-500">Your skills:</span>
+            {#each skills.slice(0, 5) as skill (skill.path)}
+              <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 px-3 py-1 text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
+            {/each}
+          </div>
+        {/if}
         {/if}
       </div>
     {:else}

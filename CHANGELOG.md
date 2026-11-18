@@ -5,7 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+Version 0.2.0: installs, trust and polish, from testing 0.1.1 on an Intel Mac and on Windows 11 (`.kiro/specs/release-0.2/plan.md`).
+
+### Added
+- In-app updates: Settings → About → "Check for updates" shows the new version and its notes, and "Install and restart" downloads, verifies the signature and installs it. Nothing is checked at startup. CI signs update packages and writes `latest.json` once the owner adds the update key (`docs/release.md`).
+- Privacy Policy and Terms of Use (`PRIVACY.md`, `TERMS.md`), shipped inside the app and readable in Settings → About → Legal, the command palette and the setup wizard. The Windows installer shows the terms as its license page.
+- Skills → Discover: browse and import skills from Anthropic Skills, GitHub Awesome Copilot, prompts.chat, or any public GitHub repo with a `skills/<name>/SKILL.md` layout. Imports keep their source address and license.
+- Online providers: keyless providers (Pollinations), local routers (9Router, OmniRoute, LM Studio) and more presets (Google Gemini, Hugging Face, OpenAI, DeepSeek, Together), grouped by "No key needed", "On this computer", "Free key" and "Paid". "Load models" lists what a provider serves today and marks free models.
+- Hugging Face browsing sorts by trending, downloads, likes or newest, opens on trending models, and can show only unfiltered ("uncensored" or "abliterated") models, with a warning.
+- Command palette actions (new chat, theme, providers, updates, legal pages) with arrow-key navigation.
+
 ### Changed
+- The app and installer icons are the LocalAide ghost (they were still the default Tauri icons). The Windows installer has a branded header and sidebar and installs per user; the macOS disk image has a branded background.
+- Fields no longer draw a second focus box inside themselves; native search "x", WebView2 clear and reveal buttons, and autofill tints are hidden; selects use one themed chevron.
+- Motion: screens, settings sections, setup steps and tabs animate; lists enter in sequence; cards lift on hover; loading uses skeletons. Every animation respects the reduced-motion setting.
+- New chat, skills and setup screens: richer empty states, a setup step indicator, and starter cards.
+- Online providers no longer require an API key; a provider that needs one answers with a clear message.
+
 - Dependency updates: reqwest 0.13 (HTTPS now uses rustls with the operating system's certificate store instead of native-tls), sha2 0.11, rusqlite 0.42, getrandom 0.4, four smaller Rust updates, and six GitHub Actions updates. Hashes are written with `hex::encode`, which gives the same lowercase hex as before, so stored file hashes and the catalog digest still match.
 
 ## [0.1.1] - 2026-11-15

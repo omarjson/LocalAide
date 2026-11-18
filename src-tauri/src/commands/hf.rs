@@ -9,18 +9,29 @@ use crate::app::state::AppState;
 use crate::services::models::catalog::MAX_COMPANIONS_PER_MODEL;
 use crate::services::models::catalog::{CatalogCompanion, CatalogEntry};
 use crate::services::models::custom::{community_id, unique_id};
-use crate::services::models::hf::{HfClient, HfFile, HfRepo};
+use crate::services::models::hf::{HfClient, HfFile, HfRepo, HfSort, HfTag};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-/// Public GGUF repositories matching a search, most-downloaded first.
+/// Public GGUF repositories matching a search. `sort` is "trending",
+/// "downloads" (the default), "likes" or "newest"; `tag` optionally narrows
+/// to "uncensored" or "abliterated" models. An empty query lists them all.
 #[tauri::command]
-pub async fn hf_search(query: String, limit: Option<u32>) -> Result<Vec<HfRepo>, AppError> {
+pub async fn hf_search(
+    query: String,
+    limit: Option<u32>,
+    sort: Option<String>,
+    tag: Option<String>,
+) -> Result<Vec<HfRepo>, AppError> {
+    let sort = HfSort::parse(sort.as_deref())?;
+    let tag = HfTag::parse(tag.as_deref())?;
     let client = HfClient::new()?;
     client
         .search(
             query.trim(),
             limit.unwrap_or(crate::services::models::hf::DEFAULT_SEARCH_LIMIT),
+            sort,
+            tag,
         )
         .await
 }

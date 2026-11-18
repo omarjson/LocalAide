@@ -77,11 +77,14 @@ impl HfClient {
     }
 
     /// Search public GGUF repositories, most-downloaded first.
-    pub async fn search(&self, query: &str, limit: u32) -> Result<Vec<HfRepo>, AppError> {
-        let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
-        let q = urlencode(query);
-        let path =
-            format!("/api/models?search={q}&filter=gguf&sort=downloads&direction=-1&limit={limit}");
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: u32,
+        sort: HfSort,
+        tag: Option<HfTag>,
+    ) -> Result<Vec<HfRepo>, AppError> {
+        let path = search_path(query, limit, sort, tag);
         let body = self.get_capped(&path).await?;
         parse_repos(&body)
     }
@@ -94,6 +97,81 @@ impl HfClient {
             .await?;
         parse_files(&body)
     }
+}
+
+/// How search results are ordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HfSort {
+    /// What people are downloading and liking right now.
+    Trending,
+    #[default]
+    Downloads,
+    Likes,
+    Newest,
+}
+
+impl HfSort {
+    pub fn parse(value: Option<&str>) -> Result<Self, AppError> {
+        match value.map(str::trim).unwrap_or("") {
+            "" | "downloads" => Ok(Self::Downloads),
+            "trending" => Ok(Self::Trending),
+            "likes" => Ok(Self::Likes),
+            "newest" => Ok(Self::Newest),
+            other => Err(AppError::invalid_input(format!(
+                "Unknown sort order: {other}"
+            ))),
+        }
+    }
+
+    fn api_field(self) -> &'static str {
+        match self {
+            Self::Trending => "trendingScore",
+            Self::Downloads => "downloads",
+            Self::Likes => "likes",
+            Self::Newest => "createdAt",
+        }
+    }
+}
+
+/// Extra tag filters. A fixed list, so the query string stays predictable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HfTag {
+    /// Models whose makers removed refusals ("uncensored").
+    Uncensored,
+    /// Models with refusals removed by abliteration.
+    Abliterated,
+}
+
+impl HfTag {
+    pub fn parse(value: Option<&str>) -> Result<Option<Self>, AppError> {
+        match value.map(str::trim).unwrap_or("") {
+            "" => Ok(None),
+            "uncensored" => Ok(Some(Self::Uncensored)),
+            "abliterated" => Ok(Some(Self::Abliterated)),
+            other => Err(AppError::invalid_input(format!("Unknown filter: {other}"))),
+        }
+    }
+
+    fn api_tag(self) -> &'static str {
+        match self {
+            Self::Uncensored => "uncensored",
+            Self::Abliterated => "abliterated",
+        }
+    }
+}
+
+/// The search request path. Filters are ANDed by the Hub, so a tag narrows
+/// GGUF results instead of widening them.
+pub fn search_path(query: &str, limit: u32, sort: HfSort, tag: Option<HfTag>) -> String {
+    let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
+    let q = urlencode(query.trim());
+    let tag = tag
+        .map(|t| format!("&filter={}", t.api_tag()))
+        .unwrap_or_default();
+    format!(
+        "/api/models?search={q}&filter=gguf{tag}&sort={}&direction=-1&limit={limit}",
+        sort.api_field()
+    )
 }
 
 /// Very small percent-encoding for query strings — enough for search terms.
@@ -139,6 +217,11 @@ pub struct HfRepo {
     pub gated: bool,
     /// License tag on the repo (for example "apache-2.0"), when present.
     pub license: Option<String>,
+    /// True when the repo says its safety tuning was removed (an
+    /// "uncensored" or "abliterated" tag or name).
+    pub uncensored: bool,
+    /// When the repo was created (ISO 8601), when the Hub sends it.
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +277,14 @@ struct HfRepoEntry {
     gated: bool,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default, rename = "createdAt")]
+    created_at: Option<String>,
+}
+
+fn looks_uncensored(id: &str, tags: &[String]) -> bool {
+    let id = id.to_ascii_lowercase();
+    let marked = |s: &str| s.contains("uncensored") || s.contains("abliterated");
+    marked(&id) || tags.iter().any(|t| marked(&t.to_ascii_lowercase()))
 }
 
 /// Parse a search response. Pure function so tests need no network.
@@ -204,6 +295,8 @@ pub fn parse_repos(body: &str) -> Result<Vec<HfRepo>, AppError> {
     Ok(entries
         .into_iter()
         .map(|e| HfRepo {
+            uncensored: looks_uncensored(&e.id, &e.tags),
+            created_at: e.created_at.clone(),
             license: e
                 .tags
                 .iter()
@@ -255,6 +348,44 @@ mod tests {
         assert!(!repos[0].gated);
         assert!(repos[1].gated);
         assert!(repos[1].license.is_none());
+    }
+
+    #[test]
+    fn marks_uncensored_repos_and_reads_dates() {
+        let body = r#"[
+            {"id":"someone/Model-abliterated-GGUF","tags":["gguf"],"createdAt":"2026-11-01T00:00:00.000Z"},
+            {"id":"someone/Plain-GGUF","tags":["gguf","uncensored"]},
+            {"id":"someone/Safe-GGUF","tags":["gguf"]}
+        ]"#;
+        let repos = parse_repos(body).unwrap();
+        assert!(repos[0].uncensored);
+        assert_eq!(
+            repos[0].created_at.as_deref(),
+            Some("2026-11-01T00:00:00.000Z")
+        );
+        assert!(repos[1].uncensored);
+        assert!(!repos[2].uncensored);
+    }
+
+    #[test]
+    fn search_paths_carry_sort_and_tag() {
+        assert_eq!(
+            search_path("qwen 3", 20, HfSort::Downloads, None),
+            "/api/models?search=qwen%203&filter=gguf&sort=downloads&direction=-1&limit=20"
+        );
+        assert_eq!(
+            search_path("", 500, HfSort::Trending, Some(HfTag::Uncensored)),
+            "/api/models?search=&filter=gguf&filter=uncensored&sort=trendingScore&direction=-1&limit=50"
+        );
+        assert!(search_path("x", 0, HfSort::Newest, None).contains("sort=createdAt"));
+        assert!(
+            search_path("x", 5, HfSort::Likes, Some(HfTag::Abliterated))
+                .contains("filter=abliterated")
+        );
+        assert_eq!(HfSort::parse(None).ok(), Some(HfSort::Downloads));
+        assert!(HfSort::parse(Some("random")).is_err());
+        assert_eq!(HfTag::parse(Some("")).ok(), Some(None));
+        assert!(HfTag::parse(Some("nsfw")).is_err());
     }
 
     #[test]

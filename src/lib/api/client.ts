@@ -16,6 +16,7 @@ import type {
   CloudConfigStatus,
   CloudModeRequest,
   CloudProviderPreset,
+  ProviderModel,
   CloudProviderSaveRequest,
   DownloadProgressEvent,
   EmbeddingStatusResponse,
@@ -26,6 +27,7 @@ import type {
   WebProviderStatus,
   SystemHealthResponse,
   UpdateCheckResponse,
+  UpdateProgressEvent,
   IndexFolderResponse,
   IndexerStatsResponse,
   InferenceStatus,
@@ -36,6 +38,11 @@ import type {
   HfCustomAddResult,
   HfFileInfo,
   HfRepo,
+  RemoteSkill,
+  RemoteSkillDetail,
+  SkillSource,
+  HfSort,
+  HfTag,
   ModelInfo,
   ModelPreset,
   ModelVerifyResult,
@@ -123,8 +130,9 @@ export class ApiClient {
     return invoke<void>("model_download", { id, channel });
   }
 
-  async hfSearch(query: string, limit?: number): Promise<HfRepo[]> {
-    return invoke<HfRepo[]>("hf_search", { query, limit: limit ?? null });
+  /** Public GGUF repositories. An empty query lists everything in `sort` order. */
+  async hfSearch(query: string, limit?: number, sort: HfSort = "downloads", tag: HfTag | null = null): Promise<HfRepo[]> {
+    return invoke<HfRepo[]>("hf_search", { query, limit: limit ?? null, sort, tag });
   }
 
   async hfRepoFiles(repo: string): Promise<HfFileInfo[]> {
@@ -396,6 +404,13 @@ export class ApiClient {
     return invoke<CloudProviderPreset[]>("cloud_provider_presets");
   }
 
+  /** Ask a provider which models it serves. Contacts the provider. */
+  async cloudListModels(baseUrl: string, apiKey?: string, providerId?: string): Promise<ProviderModel[]> {
+    return invoke<ProviderModel[]>("cloud_list_models", {
+      req: { base_url: baseUrl, api_key: apiKey || null, provider_id: providerId ?? null },
+    });
+  }
+
   // Theme
 
   async getTheme(): Promise<string | null> {
@@ -439,6 +454,25 @@ export class ApiClient {
     return invoke<void>("skills_delete", { path });
   }
 
+  /** Public skill collections on GitHub. */
+  async skillsSources(): Promise<SkillSource[]> {
+    return invoke<SkillSource[]>("skills_sources");
+  }
+
+  /** List a collection. Contacts GitHub. `repo` is owner/name for source "github". */
+  async skillsDiscover(source: string, repo?: string): Promise<RemoteSkill[]> {
+    return invoke<RemoteSkill[]>("skills_discover", { source, repo: repo ?? null });
+  }
+
+  async skillsRemoteDetail(source: string, id: string, repo?: string): Promise<RemoteSkillDetail> {
+    return invoke<RemoteSkillDetail>("skills_remote_detail", { source, id, repo: repo ?? null });
+  }
+
+  /** Save a listed skill on this computer. */
+  async skillsImport(source: string, id: string, repo?: string): Promise<Skill> {
+    return invoke<Skill>("skills_import", { source, id, repo: repo ?? null });
+  }
+
   async skillsSuggestions(): Promise<SkillSuggestion[]> {
     return invoke<SkillSuggestion[]>("skills_suggestions");
   }
@@ -453,7 +487,7 @@ export class ApiClient {
     return invoke<void>("chat_prefs_set", { prefs });
   }
 
-  // Diagnostics & update check (display-only, all local)
+  // Diagnostics (local) and updates (GitHub, only when the user asks)
 
   async getSystemHealth(): Promise<SystemHealthResponse> {
     return invoke<SystemHealthResponse>("system_health");
@@ -465,6 +499,13 @@ export class ApiClient {
 
   async checkForUpdate(): Promise<UpdateCheckResponse> {
     return invoke<UpdateCheckResponse>("update_check");
+  }
+
+  /** Download, verify and install the newest version. The app restarts when it succeeds. */
+  async installUpdate(onProgress: (event: UpdateProgressEvent) => void): Promise<void> {
+    const channel = new Channel<UpdateProgressEvent>();
+    channel.onmessage = onProgress;
+    await invoke("update_install", { channel });
   }
 
   /** The end of a local log: LocalAide's own ("app") or the model engine's. */
@@ -540,6 +581,7 @@ export default api;
 /** Plain words for error codes whose backend text is too technical. */
 const FRIENDLY_ERRORS: Record<string, string> = {
   CHECKSUM_MISMATCH: "The download was damaged. Download it again.",
+  UPDATE_CHECK_FAILED: "Could not reach the update server. Check your internet connection and try again.",
 };
 
 /** Text made from a Rust error reads "[CODE] message". Keep the message. */

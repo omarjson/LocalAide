@@ -1,4 +1,4 @@
-//! Local diagnostics and the update check. Every field here describes this
+//! Local diagnostics. Every field here describes this
 //! machine's own state; nothing is uploaded anywhere.
 
 use crate::app::error::AppError;
@@ -6,8 +6,6 @@ use crate::app::state::AppState;
 use crate::services::inference::InferenceEngine;
 use serde::{Deserialize, Serialize};
 use tauri::State;
-
-const RELEASES_API: &str = "https://api.github.com/repos/omarjson/LocalAide/releases/latest";
 
 /// Aggregate health snapshot of every local subsystem, for the Settings
 /// diagnostics panel and the fatal-error screen's "Copy Diagnostics".
@@ -95,79 +93,6 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
     })
 }
 
-/// Check GitHub Releases for a newer version. Display-only: the app never
-/// downloads or installs anything by itself, and offline just yields
-/// `update_available: false`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateCheckResponse {
-    pub current_version: String,
-    pub latest_version: Option<String>,
-    pub update_available: bool,
-    pub release_url: String,
-}
-
-#[tauri::command]
-pub async fn update_check() -> Result<UpdateCheckResponse, AppError> {
-    let current = env!("CARGO_PKG_VERSION").to_string();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-
-    let response = client
-        .get(RELEASES_API)
-        .header("User-Agent", "LocalAide-update-check")
-        .send()
-        .await;
-    let latest = match response {
-        Ok(resp) if resp.status().is_success() => {
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| AppError::internal(e.to_string()))?;
-            body["tag_name"]
-                .as_str()
-                .map(|t| t.trim_start_matches('v').to_string())
-        }
-        _ => None,
-    };
-
-    let update_available = latest
-        .as_ref()
-        .map(|latest| version_newer(&current, latest))
-        .unwrap_or(false);
-
-    Ok(UpdateCheckResponse {
-        current_version: current,
-        latest_version: latest,
-        update_available,
-        release_url: "https://github.com/omarjson/LocalAide/releases/latest".to_string(),
-    })
-}
-
-/// True when `latest` is strictly newer than `current` (dotted numerics).
-fn version_newer(current: &str, latest: &str) -> bool {
-    let parse = |v: &str| -> Vec<u64> {
-        v.split('.')
-            .map(|p| p.trim().parse::<u64>().unwrap_or(0))
-            .collect()
-    };
-    let (a, b) = (parse(current), parse(latest));
-    for i in 0..a.len().max(b.len()) {
-        let (x, y) = (
-            a.get(i).copied().unwrap_or(0),
-            b.get(i).copied().unwrap_or(0),
-        );
-        if y > x {
-            return true;
-        }
-        if y < x {
-            return false;
-        }
-    }
-    false
-}
-
 /// Tail of a local log for the Settings diagnostics panel. `source` "app" is
 /// LocalAide's own log; anything else is the model engine's log.
 #[tauri::command]
@@ -195,19 +120,4 @@ pub fn logs_tail(lines: Option<usize>, source: Option<String>) -> Result<Vec<Str
         .collect();
     collected.reverse();
     Ok(collected)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::version_newer;
-
-    #[test]
-    fn detects_newer_versions() {
-        assert!(version_newer("0.1.0", "0.1.1"));
-        assert!(version_newer("0.1.0", "1.0.0"));
-        assert!(version_newer("0.1.9", "0.2.0"));
-        assert!(!version_newer("0.1.0", "0.1.0"));
-        assert!(!version_newer("0.2.0", "0.1.9"));
-        assert!(!version_newer("0.1.0", "0.1.0-beta"));
-    }
 }

@@ -11,7 +11,10 @@
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import type { CatalogStatus, HfFileInfo, HfRepo, ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import type { CatalogStatus, HfFileInfo, HfRepo, HfSort, ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import { fly, slide } from "svelte/transition";
+  import { dur, stagger } from "../lib/motion";
+  import { openLegal } from "../lib/legal.svelte";
   import { formatBytes } from "../lib/format";
 
   type Model = {
@@ -57,6 +60,15 @@
   let showAllModels = $state(false);
   let showMoreOptions = $state(false);
   let showCommunity = $state(false);
+  let hfSort = $state<HfSort>("trending");
+  let hfUnfiltered = $state(false);
+  let hfSearched = $state("");
+  const hfSorts: { value: HfSort; label: string; icon: "flame" | "download" | "heart" | "clock" }[] = [
+    { value: "trending", label: "Trending", icon: "flame" },
+    { value: "downloads", label: "Most downloaded", icon: "download" },
+    { value: "likes", label: "Most liked", icon: "heart" },
+    { value: "newest", label: "Newest", icon: "clock" },
+  ];
   let openModelMenu = $state<string | null>(null);
   let pendingRemoveId = $state<string | null>(null);
 
@@ -148,13 +160,24 @@
     }
   };
 
+  // An empty search lists the most popular GGUF models in the chosen order.
   const hfSearchRepos = async () => {
-    if (!hfQuery.trim()) return;
     hfBusy = true;
     actionError = null;
     hfExpanded = null;
     try {
-      hfRepos = await api.hfSearch(hfQuery.trim(), 20);
+      if (hfUnfiltered) {
+        // Makers tag these two ways; ask for both and merge.
+        const [a, b] = await Promise.all([
+          api.hfSearch(hfQuery.trim(), 20, hfSort, "uncensored"),
+          api.hfSearch(hfQuery.trim(), 20, hfSort, "abliterated"),
+        ]);
+        const seen = new Set<string>();
+        hfRepos = [...a, ...b].filter((repo) => !seen.has(repo.id) && seen.add(repo.id));
+      } else {
+        hfRepos = await api.hfSearch(hfQuery.trim(), 30, hfSort);
+      }
+      hfSearched = hfQuery.trim();
       if (hfRepos.length === 0) actionError = "No public model folders matched that search.";
     } catch (e: unknown) {
       actionError = errorMessage(e);
@@ -673,25 +696,62 @@
             <h2 class="font-semibold text-ink-50">Community models</h2>
             <p class="mt-1 text-sm text-ink-400">Search public model folders. Check the license before you use one for work.</p>
           </div>
-          <Button variant="subtle" onclick={() => showCommunity = !showCommunity}>{showCommunity ? "Hide" : "Show"}</Button>
+          <Button variant="subtle" onclick={() => { showCommunity = !showCommunity; if (showCommunity && hfRepos.length === 0) void hfSearchRepos(); }}>{showCommunity ? "Hide" : "Browse"}</Button>
         </div>
         {#if showCommunity}
-          <div class="mt-4">
+          <div class="mt-4" transition:slide={{ duration: dur(200) }}>
             <div class="flex gap-2">
-              <input
-                type="search"
-                bind:value={hfQuery}
-                onkeydown={(event) => { if (event.key === "Enter") void hfSearchRepos(); }}
-                placeholder="Search public model folders"
-                aria-label="Search community models"
-                class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge"
-              />
-              <Button variant="primary" disabled={hfBusy || !hfQuery.trim()} onclick={() => void hfSearchRepos()}>{hfBusy ? "Searching…" : "Search"}</Button>
+              <span class="field-shell flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-ink-700 bg-ink-950 px-3">
+                <Icon name="search" class="h-4 w-4 shrink-0 text-ink-400" />
+                <input
+                  type="search"
+                  bind:value={hfQuery}
+                  onkeydown={(event) => { if (event.key === "Enter") void hfSearchRepos(); }}
+                  placeholder="Search by name, or leave empty to browse"
+                  aria-label="Search community models"
+                  class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-400"
+                />
+              </span>
+              <Button variant="primary" class="h-10" disabled={hfBusy} onclick={() => void hfSearchRepos()}>{hfBusy ? "Searching…" : "Search"}</Button>
             </div>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              {#each hfSorts as option (option.value)}
+                <button
+                  type="button"
+                  aria-pressed={hfSort === option.value}
+                  onclick={() => { hfSort = option.value; void hfSearchRepos(); }}
+                  class={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors duration-150 ${hfSort === option.value ? "border-ember-500/50 bg-ember-500/10 text-ember-200" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}
+                >
+                  <Icon name={option.icon} class="h-4 w-4" />{option.label}
+                </button>
+              {/each}
+              <span class="mx-1 hidden h-5 w-px bg-ink-700 sm:block" aria-hidden="true"></span>
+              <button
+                type="button"
+                aria-pressed={hfUnfiltered}
+                onclick={() => { hfUnfiltered = !hfUnfiltered; void hfSearchRepos(); }}
+                class={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors duration-150 ${hfUnfiltered ? "border-amber-500/50 bg-amber-500/10 text-amber-200" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}
+              >
+                <Icon name="alert" class="h-4 w-4" />Unfiltered only
+              </button>
+            </div>
+            {#if hfUnfiltered}
+              <div class="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6 text-amber-200" transition:slide={{ duration: dur(150) }}>
+                These models had their safety training removed ("uncensored" or "abliterated"). They answer requests other models refuse and can produce harmful or explicit text. Use them only if you are an adult and it is legal where you live. <button type="button" class="font-semibold underline" onclick={() => openLegal("terms")}>Terms of Use</button>
+              </div>
+            {/if}
+            {#if hfBusy && hfRepos.length === 0}
+              <div class="mt-3 space-y-2" aria-hidden="true">
+                {#each [0, 1, 2, 3] as i (i)}<div class="skeleton h-[62px]"></div>{/each}
+              </div>
+            {/if}
             {#if hfRepos.length > 0}
-              <div class="mt-3 space-y-2">
-                {#each hfRepos as repo (repo.id)}
-                  <div class="rounded-md border border-ink-700 bg-ink-950">
+              <p class="mt-3 text-sm text-ink-400">{hfSearched ? `Results for “${hfSearched}”` : hfSorts.find((o) => o.value === hfSort)?.label} · {hfRepos.length} model folders</p>
+            {/if}
+            {#if hfRepos.length > 0}
+              <div class={`mt-2 space-y-2 transition-opacity duration-150 ${hfBusy ? "opacity-60" : ""}`}>
+                {#each hfRepos as repo, i (repo.id)}
+                  <div class="lift rounded-md border border-ink-700 bg-ink-950 hover:border-edge" in:fly={stagger(i)}>
                     <button type="button" onclick={() => void hfToggleRepo(repo.id)} class="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-veil/5">
                       <div class="min-w-0">
                         <div class="truncate font-semibold text-ink-100">{repo.id}</div>
@@ -699,13 +759,14 @@
                           <span>{repo.downloads.toLocaleString()} downloads</span>
                           <span>{repo.likes} likes</span>
                           {#if repo.license}<span>{repo.license}</span>{/if}
+                          {#if repo.uncensored}<StatusBadge label="Unfiltered" tone="warn" />{/if}
                           {#if repo.gated}<StatusBadge label="Needs access" tone="warn" />{/if}
                         </div>
                       </div>
-                      <Icon name="chevron-right" class={`h-4 w-4 shrink-0 transition-transform ${hfExpanded === repo.id ? 'rotate-90' : ''}`} />
+                      <Icon name="chevron-right" class={`h-4 w-4 shrink-0 transition-transform duration-200 ${hfExpanded === repo.id ? 'rotate-90' : ''}`} />
                     </button>
                     {#if hfExpanded === repo.id}
-                      <div class="border-t border-ink-800 p-3">
+                      <div class="border-t border-ink-800 p-3" transition:slide={{ duration: dur(180) }}>
                         {#if hfFilesBusy === repo.id}
                           <div class="text-sm text-ink-400">Looking for files…</div>
                         {:else}

@@ -2,9 +2,14 @@
   import { onMount } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import { api, errorMessage } from "./lib/api/client";
-  import { dur } from "./lib/motion";
+  import { dur, enterDialog, enterScreen, leaveDialog, motion } from "./lib/motion";
   import { formatBytes } from "./lib/format";
-  import { applyTheme } from "./lib/theme";
+  import { applyTheme, currentTheme } from "./lib/theme";
+  import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
+  import { requestSettings } from "./lib/nav.svelte";
+  import MarkdownDoc from "./components/MarkdownDoc.svelte";
+  import Modal from "./components/Modal.svelte";
+  import type { IconName } from "./components/Icon.svelte";
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
@@ -15,7 +20,7 @@
   import SkillsScreen from "./screens/SkillsScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
-    import SearchScreen from "./screens/SearchScreen.svelte";
+  import SearchScreen from "./screens/SearchScreen.svelte";
 
   type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search";
   type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings";
@@ -50,6 +55,7 @@
     // The memory share for models can change in Settings, so read it again.
     if (screen === "settings" && s !== "settings") void refreshProbe();
     screen = s;
+    mobileNav = false;
     return true;
   };
 
@@ -59,14 +65,77 @@
     }
   });
 
-  const screens = [
-    { id: "chat", label: "Chat" },
-    { id: "search", label: "Search" },
-    { id: "memory", label: "Memory" },
-    { id: "skills", label: "Skills" },
-    { id: "models", label: "Models" },
-    { id: "settings", label: "Settings" },
-  ] as const;
+  type Command = { id: string; label: string; hint?: string; icon: IconName; group: "Go to" | "Actions"; run: () => void };
+
+  const toggleTheme = async () => {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try {
+      await api.setTheme(next);
+    } catch (e: unknown) {
+      showToast(`The theme could not be saved: ${errorMessage(e)}`, "error");
+    }
+  };
+
+  // macOS shows ⌘, everyone else Ctrl.
+  const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";
+
+  const commands = $derived<Command[]>([
+    { id: "chat", label: "Chat", hint: `${mod}1`, icon: "chat", group: "Go to", run: () => navigate("chat") },
+    { id: "search", label: "Search", hint: `${mod}2`, icon: "search", group: "Go to", run: () => navigate("search") },
+    { id: "memory", label: "Memory", hint: `${mod}3`, icon: "memory", group: "Go to", run: () => navigate("memory") },
+    { id: "skills", label: "Skills", hint: `${mod}4`, icon: "skills", group: "Go to", run: () => navigate("skills") },
+    { id: "models", label: "Models", hint: `${mod}5`, icon: "models", group: "Go to", run: () => navigate("models") },
+    { id: "settings", label: "Settings", hint: `${mod}6`, icon: "settings", group: "Go to", run: () => navigate("settings") },
+    { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) chatResetTick += 1; } },
+    { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
+    { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
+    { id: "updates", label: "Check for updates", icon: "download", group: "Actions", run: () => { if (navigate("settings")) requestSettings("about", true); } },
+    { id: "privacy", label: "Privacy Policy", icon: "shield", group: "Actions", run: () => openLegal("privacy") },
+    { id: "terms", label: "Terms of Use", icon: "scale", group: "Actions", run: () => openLegal("terms") },
+    { id: "help", label: "Keyboard shortcuts", hint: "?", icon: "info", group: "Actions", run: () => { showHelp = true; } },
+  ]);
+
+  let cmdIndex = $state(0);
+  const filteredCommands = $derived(
+    commands.filter((c) => c.label.toLowerCase().includes(cmdQuery.trim().toLowerCase())),
+  );
+
+  const closePalette = () => {
+    cmdOpen = false;
+    cmdQuery = "";
+    cmdIndex = 0;
+  };
+
+  const runCommand = (c: Command) => {
+    closePalette();
+    c.run();
+  };
+
+  const paletteKeydown = (e: KeyboardEvent) => {
+    const count = filteredCommands.length;
+    if (e.key === "ArrowDown" && count) {
+      e.preventDefault();
+      cmdIndex = (cmdIndex + 1) % count;
+    } else if (e.key === "ArrowUp" && count) {
+      e.preventDefault();
+      cmdIndex = (cmdIndex - 1 + count) % count;
+    } else if (e.key === "Enter" && count) {
+      e.preventDefault();
+      runCommand(filteredCommands[Math.min(cmdIndex, count - 1)]);
+    }
+  };
+
+  $effect(() => {
+    // A new query starts at the top match.
+    void cmdQuery;
+    cmdIndex = 0;
+  });
+
+  $effect(() => {
+    if (!cmdOpen) return;
+    document.getElementById(`cmd-${cmdIndex}`)?.scrollIntoView({ block: "nearest" });
+  });
 
   const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "settings"];
 
@@ -131,8 +200,9 @@
       }
 
       if (e.key === "Escape") {
-        cmdOpen = false;
+        closePalette();
         showHelp = false;
+        mobileNav = false;
       }
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
         e.preventDefault();
@@ -165,7 +235,10 @@
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
   <div class="flex flex-1 min-h-0">
-  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-64 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 transition-transform duration-300 ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+  {#if mobileNav}
+    <div role="presentation" class="fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
+  {/if}
+  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-64 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 transition-transform duration-300 ease-out ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
     <div class="h-12 flex items-center gap-2.5 px-3 shrink-0">
       <LogoMark class="w-5 h-5 shrink-0" />
       <span class="text-sm font-semibold text-ink-50">LocalAide</span>
@@ -175,10 +248,10 @@
       <button
         onclick={() => navigate(id)}
         aria-current={screen === id ? "page" : undefined}
-        class={`relative w-full flex items-center gap-3.5 h-10 px-3 rounded-md text-sm text-left transition-colors ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold' : 'text-ink-200 hover:bg-veil/5'}`}
+        class={`group relative w-full flex items-center gap-3.5 h-10 px-3 rounded-md text-sm text-left transition-[background-color,color] duration-150 ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold' : 'text-ink-200 hover:bg-veil/5 hover:text-ink-50'}`}
       >
-        {#if screen === id}<span class="absolute left-0 top-3 h-4 w-[3px] rounded-full bg-ember-500" aria-hidden="true"></span>{/if}
-        <Icon name={id} class="w-[18px] h-[18px] shrink-0" />
+        <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${screen === id ? 'h-4 opacity-100' : 'h-0 opacity-0'}`} aria-hidden="true"></span>
+        <Icon name={id} class={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 ease-out ${screen === id ? '' : 'group-hover:scale-110'}`} />
         {label}
       </button>
     {/snippet}
@@ -202,7 +275,7 @@
     </div>
     <div class="min-h-full p-6 md:p-10">
       {#key screen}
-        <div in:fade={{ duration: dur(120) }}>
+        <div in:fly={enterScreen()}>
       {#if startupError}
         <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center" role="alert">
           <div class="text-rose-300 mb-3 flex justify-center"><Icon name="alert" class="w-7 h-7" /></div>
@@ -248,19 +321,42 @@
   </footer>
 
   {#if cmdOpen}
-    <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[20vh] px-4 z-50" onclick={() => cmdOpen = false} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-lg mx-auto rounded-2xl border border-edge bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') cmdOpen = false; e.stopPropagation(); }}>
+    <div role="presentation" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[18vh] px-4 z-50" onclick={closePalette} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-lg mx-auto rounded-xl border border-edge bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); e.stopPropagation(); }}>
         <FocusTrap>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-edge">
           <span class="text-ink-400"><Icon name="search" /></span>
-          <input aria-label="Jump to screen" bind:this={cmdInput} bind:value={cmdQuery} placeholder="Jump to…" class="flex-1 bg-transparent outline-none text-sm placeholder-ink-600"/>
-          <span class="text-xs px-1.5 py-0.5 rounded bg-ink-800 text-ink-400">ESC</span>
+          <input
+            aria-label="Search commands"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="cmd-list"
+            aria-activedescendant={filteredCommands.length ? `cmd-${cmdIndex}` : undefined}
+            bind:this={cmdInput}
+            bind:value={cmdQuery}
+            onkeydown={paletteKeydown}
+            placeholder="Go to a screen or run a command…"
+            class="field-bare flex-1 bg-transparent text-sm placeholder:text-ink-500"
+          />
+          <kbd class="text-xs px-1.5 py-0.5 rounded bg-ink-800 text-ink-400">Esc</kbd>
         </div>
-        <div class="p-2 max-h-80 overflow-auto">
-          {#each screens.filter(s => s.label.toLowerCase().includes(cmdQuery.toLowerCase())) as s}
-            <button onclick={() => { navigate(s.id as Screen); cmdOpen = false; cmdQuery = ""; }} class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-veil/5 text-left">
-              <span class="size-8 grid place-items-center rounded-lg bg-veil/5"><Icon name={s.id} /></span>
-              <span class="text-sm">{s.label}</span>
+        <div id="cmd-list" role="listbox" aria-label="Commands" class="p-2 max-h-80 overflow-auto">
+          {#each filteredCommands as c, i (c.id)}
+            {#if i === 0 || filteredCommands[i - 1].group !== c.group}
+              <div class="px-3 pb-1 pt-2 text-xs font-semibold text-ink-500" role="presentation">{c.group}</div>
+            {/if}
+            <button
+              id={`cmd-${i}`}
+              role="option"
+              aria-selected={i === cmdIndex}
+              tabindex="-1"
+              onmouseenter={() => cmdIndex = i}
+              onclick={() => runCommand(c)}
+              class={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors duration-100 ${i === cmdIndex ? 'bg-veil/10 text-ink-50' : 'text-ink-200'}`}
+            >
+              <span class={`size-8 grid place-items-center rounded-md transition-colors ${i === cmdIndex ? 'bg-ember-500/15 text-ember-300' : 'bg-veil/5'}`}><Icon name={c.icon} /></span>
+              <span class="flex-1 text-sm">{c.label}</span>
+              {#if c.hint}<kbd class="text-xs text-ink-500">{c.hint}</kbd>{/if}
             </button>
           {:else}
             <div class="px-3 py-6 text-center text-sm text-ink-400">No matches</div>
@@ -275,9 +371,9 @@
   <div class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
     {#if toast.message}
       <div
-        in:fly={{ y: 10, duration: dur(160) }}
-        out:fade={{ duration: dur(100) }}
-        class={`flex max-w-[min(36rem,90vw)] items-start gap-3 rounded-xl border px-4 py-2 text-sm shadow-lg ${toast.tone === "error" ? "border-rose-500/40 bg-ink-900 text-rose-200" : "border-edge bg-ink-900 text-ink-100"}`}
+        in:fly={{ y: 12, duration: dur(motion.base), easing: motion.enter }}
+        out:fly={{ y: 6, duration: dur(motion.fast) }}
+        class={`flex max-w-[min(36rem,90vw)] items-start gap-3 rounded-lg border px-4 py-2 text-sm shadow-lg ${toast.tone === "error" ? "border-rose-500/40 bg-ink-900 text-rose-200" : "border-edge bg-ink-900 text-ink-100"}`}
       >
         <span class="min-w-0 break-words">{toast.message}</span>
         {#if toast.tone === "error"}
@@ -289,7 +385,7 @@
 
   {#if showHelp}
     <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={{ start: 0.97, duration: dur(130) }} out:scale={{ start: 0.97, duration: dur(80) }} class="w-full max-w-md rounded-2xl border border-edge bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; e.stopPropagation(); }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-md rounded-xl border border-edge bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; e.stopPropagation(); }}>
         <FocusTrap>
         <h3 class="text-lg font-semibold mb-4 text-ink-100">Keyboard shortcuts</h3>
         <div class="space-y-2.5 text-xs font-mono">
@@ -302,9 +398,15 @@
           <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Enter</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">?</kbd></div>
         </div>
-        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-xl bg-veil/5 border border-edge text-sm hover:bg-veil/10">Close</button>
+        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-md bg-veil/5 border border-edge text-sm hover:bg-veil/10">Close</button>
         </FocusTrap>
       </div>
     </div>
+  {/if}
+  {#if legal.open}
+    {@const doc = LEGAL_DOCS[legal.open]}
+    <Modal title={doc.title} size="lg" onClose={() => legal.open = null}>
+      <MarkdownDoc source={doc.source} />
+    </Modal>
   {/if}
 </main>

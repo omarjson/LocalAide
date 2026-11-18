@@ -110,27 +110,34 @@ impl RemoteEngine {
         });
 
         let start = Instant::now();
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(&target.api_key)
-            .json(&body)
-            .send()
-            .map_err(|e| {
-                AppError::internal(format!(
-                    "Could not reach {label}: {e}. Check the base URL and your connection.",
-                    label = target.label
-                ))
-            })?;
+        let mut request = self.client.post(&url).json(&body);
+        // Keyless providers (Pollinations, local routers) get no
+        // Authorization header at all, rather than an empty bearer token.
+        if !target.api_key.trim().is_empty() {
+            request = request.bearer_auth(&target.api_key);
+        }
+        let resp = request.send().map_err(|e| {
+            AppError::internal(format!(
+                "Could not reach {label}: {e}. Check the base URL and your connection.",
+                label = target.label
+            ))
+        })?;
 
         if !resp.status().is_success() {
             let code = resp.status();
             let text = resp.text().unwrap_or_default();
-            let hint = if code.as_u16() == 401 || code.as_u16() == 403 {
-                " The API key looks wrong or unauthorized."
-            } else {
-                ""
+            let hint = match code.as_u16() {
+                401 | 403 if target.api_key.trim().is_empty() => {
+                    " This provider needs an API key. Add one in Settings, Online providers."
+                }
+                401 | 403 => " The API key looks wrong or unauthorized.",
+                402 | 429 => {
+                    " The free limit is used up for now. Wait a minute and try again, or add your own key."
+                }
+                _ => "",
             };
+            // Error bodies can be whole HTML pages; keep the message short.
+            let text: String = text.chars().take(400).collect();
             return Err(AppError::internal(format!(
                 "{label} returned {code}:{hint} {text}",
                 label = target.label
