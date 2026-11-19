@@ -584,7 +584,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find release-artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} release/ \;
+          # Only the installer build folders: the llama-server-* artifacts
+          # hold an .exe too, which is not an installer.
+          find release-artifacts/macos-* release-artifacts/windows-* release-artifacts/linux-* -type f \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} release/ \;
           ls -l release
           if [ -z "$(ls -A release)" ]; then
             echo "::error title=release::No installers were found in the build artifacts."

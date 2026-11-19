@@ -2,7 +2,7 @@
 // Node strips the TypeScript types itself, so no build step is needed.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { errorMessage } from "../../src/lib/api/client.ts";
+import { errorMessage } from "../../src/lib/api/errors.ts";
 
 test("backend errors show their message, not [object Object]", () => {
   const appError = { code: "INVALID_INPUT", message: "Give the provider a name.", detail: null, retryable: false };

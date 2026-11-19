@@ -16,7 +16,10 @@
   import { openInBrowser } from "../lib/links";
   import { dur, enterScreen } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
-  import { settingsRequest } from "../lib/nav.svelte";
+  import { settingsRequest, type SettingsSectionId } from "../lib/nav.svelte";
+  import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
+  import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
+  import type { OpenCodeSettings } from "../lib/api/bindings";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import { applyTheme, currentTheme } from "../lib/theme";
   import type {
@@ -32,7 +35,7 @@
     WebProviderStatus,
   } from "../lib/api/bindings";
 
-  type SettingsSection = "general" | "online" | "web" | "privacy" | "backups" | "activity" | "about";
+  type SettingsSection = SettingsSectionId;
   type Confirmation = {
     title: string;
     message: string;
@@ -40,15 +43,93 @@
     action: () => void | Promise<void>;
   };
 
-  const sections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" }[] = [
+  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" }[] = [
     { id: "general", label: "General", icon: "sun" },
     { id: "online", label: "Online providers", icon: "cloud" },
     { id: "web", label: "Web search", icon: "globe" },
+    { id: "integrations", label: "Integrations", icon: "plug" },
     { id: "privacy", label: "Privacy & files", icon: "lock" },
     { id: "backups", label: "Backups", icon: "database" },
     { id: "activity", label: "Activity log", icon: "file" },
+    { id: "developer", label: "Developer", icon: "flask" },
     { id: "about", label: "About", icon: "info" },
   ];
+  const sections = $derived(allSections.filter((sec) => (sec.id !== "online" || moduleOn("online")) && (sec.id !== "integrations" || moduleOn("opencode"))));
+
+  // Integrations: OpenCode
+  let opencode = $state<OpenCodeSettings | null>(null);
+  let opencodeUrl = $state("");
+  let opencodePassword = $state("");
+  let opencodeBusy = $state(false);
+  let opencodeNotice = $state<{ ok: boolean; text: string } | null>(null);
+
+  const loadOpenCode = async () => {
+    try {
+      opencode = await api.opencodeGet();
+      opencodeUrl = opencode.base_url ?? opencode.default_url;
+    } catch (e: unknown) {
+      opencodeNotice = { ok: false, text: errorMessage(e) };
+    }
+  };
+
+  const linkOpenCode = async () => {
+    opencodeBusy = true;
+    opencodeNotice = null;
+    try {
+      opencode = await api.opencodeSet(opencodeUrl.trim(), opencodePassword ? opencodePassword : undefined);
+      opencodePassword = "";
+      const health = await api.opencodeCheck();
+      opencodeNotice = { ok: true, text: `Connected to OpenCode${health.version ? ` ${health.version}` : ""}.` };
+    } catch (e: unknown) {
+      opencodeNotice = { ok: false, text: errorMessage(e) };
+    } finally {
+      opencodeBusy = false;
+    }
+  };
+
+  const unlinkOpenCode = async () => {
+    opencodeBusy = true;
+    try {
+      opencode = await api.opencodeSet(null, "");
+      opencodeNotice = { ok: true, text: "OpenCode is no longer linked." };
+    } catch (e: unknown) {
+      opencodeNotice = { ok: false, text: errorMessage(e) };
+    } finally {
+      opencodeBusy = false;
+    }
+  };
+
+  // Developer
+  let devBusy = $state(false);
+  let devNotice = $state<string | null>(null);
+  const setDev = async (update: Parameters<typeof updateDev>[0]) => {
+    devBusy = true;
+    devNotice = null;
+    try {
+      await updateDev(update);
+    } catch (e: unknown) {
+      devNotice = errorMessage(e);
+    } finally {
+      devBusy = false;
+    }
+  };
+
+  // Web search: a Firecrawl server on this computer
+  let firecrawlUrl = $state("");
+  const saveFirecrawlUrl = async () => {
+    webBusy = true;
+    webNotice = null;
+    try {
+      const value = firecrawlUrl.trim();
+      await api.webSetFirecrawlUrl(value || null);
+      await loadWebProviders();
+      webNotice = value ? `Firecrawl now uses your server at ${value}.` : "Firecrawl uses its own service again.";
+    } catch (e: unknown) {
+      webNotice = errorMessage(e);
+    } finally {
+      webBusy = false;
+    }
+  };
 
   const themeTabs = [
     { value: "dark", label: "Dark" },
@@ -165,11 +246,13 @@
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
     if (section === "about") void loadDiagnostics();
+    if (section === "integrations") void loadOpenCode();
   };
 
   const loadWebProviders = async () => {
     try {
       webProviders = await api.webProviders();
+      firecrawlUrl = webProviders.find((p) => p.id === "firecrawl")?.base_url ?? "";
     } catch (e: unknown) {
       console.error(e);
       webProviders = [];
@@ -231,7 +314,7 @@
     providerLabel = preset.label;
     providerUrl = preset.base_url;
     providerModel = preset.model;
-    providerKey = "";
+    providerKey = preset.public_key ?? "";
     providerFormError = null;
   };
 
@@ -846,30 +929,154 @@
       {:else if activeTab === "web"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Web search</h2>
-          <p class="mt-1 text-sm text-ink-400">Search and read web pages only when you click. Some providers need a key.</p>
-          {#if webNotice}<div class="mt-4 rounded-md border border-ink-700 bg-ink-900 p-3 text-sm text-ink-300">{webNotice}</div>{/if}
+          <p class="mt-1 text-sm text-ink-400">Every provider works without a key. LocalAide searches only when you press Search, or when you turn on Web in the chat box.</p>
+          {#if webNotice}<div class="mt-4 rounded-md border border-ink-700 bg-ink-900 p-3 text-sm text-ink-300" in:slide={{ duration: dur(150) }}>{webNotice}</div>{/if}
           <div class="mt-6 space-y-2">
             {#each webProviders as provider (provider.id)}
-              <div class={`rounded-lg border p-4 ${provider.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`}>
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div class={`rounded-lg border p-4 transition-colors ${provider.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`}>
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2"><span class="font-semibold text-ink-50">{provider.label}</span>{#if provider.is_default}<StatusBadge label="Default" tone="ok" dot />{/if}</div>
-                    <div class="mt-1 text-sm text-ink-400">{provider.needs_key ? (provider.key_set ? "Key saved" : "Needs an API key") : "No key needed"} · {provider.supports}</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-semibold text-ink-50">{provider.label}</span>
+                      {#if provider.is_default}<StatusBadge label="Default" tone="ok" dot />{/if}
+                      <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-300">{provider.key_set ? "Your key" : "No key needed"}</span>
+                      <span class="text-xs text-ink-500">{provider.supports === "crawl" ? "Reads pages" : provider.supports === "search" ? "Search" : "Search and reads pages"}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-ink-400">{provider.note}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
-                    {#if provider.needs_key}
-                      <input type="password" bind:value={webKeyDraft[provider.id]} placeholder={provider.key_set ? "Replace key" : "Paste API key"} class="h-9 w-44 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" />
-                      <Button variant="secondary" disabled={webBusy} onclick={() => void saveWebKey(provider.id)}>Save key</Button>
+                    {#if provider.takes_key}
+                      <input type="password" bind:value={webKeyDraft[provider.id]} placeholder={provider.key_set ? "Replace key" : "Optional key"} autocomplete="off" class="h-9 w-44 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100 placeholder:text-ink-400" />
+                      <Button variant="secondary" disabled={webBusy} onclick={() => void saveWebKey(provider.id)}>{webKeyDraft[provider.id]?.trim() || !provider.key_set ? "Save key" : "Remove key"}</Button>
                     {/if}
                     {#if provider.supports.includes("search") && !provider.is_default}<Button variant="subtle" disabled={webBusy} onclick={() => void setWebDefault(provider.id)}>Make default</Button>{/if}
                   </div>
                 </div>
+                {#if provider.id === "firecrawl"}
+                  <div class="mt-3 border-t border-ink-800 pt-3">
+                    <label class="block text-sm text-ink-400" for="firecrawl-url">Your own Firecrawl server (optional)</label>
+                    <div class="mt-1 flex flex-col gap-2 sm:flex-row">
+                      <input id="firecrawl-url" bind:value={firecrawlUrl} placeholder="http://localhost:3002" class="h-9 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 font-mono text-sm text-ink-100 placeholder:text-ink-500" />
+                      <Button variant="secondary" disabled={webBusy} onclick={() => void saveFirecrawlUrl()}>{firecrawlUrl.trim() ? "Use this server" : "Use Firecrawl's service"}</Button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-ink-500">Run Firecrawl yourself (for example with its Docker setup) and nothing goes to Firecrawl's servers. Leave empty to use their keyless free tier.</p>
+                  </div>
+                {/if}
               </div>
             {:else}
               <div class="rounded-lg border border-ink-700 bg-ink-900 p-5 text-sm text-ink-400">The provider list is not ready. Restart the app and try again.</div>
             {/each}
           </div>
-          <p class="mt-4 text-sm text-ink-400">Keys stay in this app's local settings and are sent only to their own provider. Backups leave them out unless you choose to include them.</p>
+          <p class="mt-4 text-sm text-ink-400">Keys stay in this app's local settings and are sent only to their own provider. Without a key, free limits apply per computer. Backups leave keys out unless you choose to include them.</p>
+        </div>
+      {:else if activeTab === "integrations"}
+        <div>
+          <h2 class="text-xl font-semibold text-ink-50">Integrations</h2>
+          <p class="mt-1 text-sm text-ink-400">Connect LocalAide to tools you already run on this computer.</p>
+          <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-5">
+            <div class="flex items-start gap-3">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ember-300"><Icon name="code" class="h-5 w-5" /></span>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2"><h3 class="font-semibold text-ink-50">OpenCode</h3>{#if opencode?.base_url}<StatusBadge label="Linked" tone="ok" dot />{/if}</div>
+                <p class="mt-1 text-sm leading-6 text-ink-400">Hand coding tasks from chat to OpenCode, the open-source coding agent. Start its server with <code class="rounded bg-ink-800 px-1 font-mono text-[0.85em]">opencode serve</code>, link it here, then use the <Icon name="code" class="inline h-3.5 w-3.5" /> button under any message. Front ends for OpenCode, such as OpenChamber, see the same sessions.</p>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-[1fr_14rem]">
+              <label class="text-sm text-ink-400">Server address<input bind:value={opencodeUrl} placeholder={opencode?.default_url ?? "http://127.0.0.1:4096"} class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 font-mono text-sm text-ink-100 placeholder:text-ink-500" /></label>
+              <label class="text-sm text-ink-400">Password {opencode?.has_password ? "(saved)" : "(if set)"}<input type="password" bind:value={opencodePassword} autocomplete="off" placeholder={opencode?.has_password ? "Keep the saved one" : "OPENCODE_SERVER_PASSWORD"} class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-500" /></label>
+            </div>
+            {#if opencodeNotice}
+              <p class={`mt-3 flex items-center gap-2 text-sm ${opencodeNotice.ok ? "text-emerald-300" : "text-rose-300"}`} in:slide={{ duration: dur(150) }}><Icon name={opencodeNotice.ok ? "check" : "alert"} class="h-4 w-4" />{opencodeNotice.text}</p>
+            {/if}
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
+              {#if opencode?.base_url}<Button variant="subtle" disabled={opencodeBusy} onclick={() => void unlinkOpenCode()}>Unlink</Button>{/if}
+              <Button variant="primary" disabled={opencodeBusy || !opencodeUrl.trim()} onclick={() => void linkOpenCode()}>{opencodeBusy ? "Connecting…" : opencode?.base_url ? "Save and test" : "Link and test"}</Button>
+            </div>
+          </div>
+          <div class="mt-3 rounded-lg border border-ink-700 bg-ink-900 p-5">
+            <div class="flex items-start gap-3">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ember-300"><Icon name="cloud" class="h-5 w-5" /></span>
+              <div class="min-w-0 flex-1">
+                <h3 class="font-semibold text-ink-50">OpenCode Zen and Kilo Code models</h3>
+                <p class="mt-1 text-sm leading-6 text-ink-400">To chat with OpenCode's or Kilo Code's free models directly, add them as online providers. Neither needs a sign-up.</p>
+              </div>
+              {#if moduleOn("online")}<Button variant="secondary" onclick={() => { selectSection("online"); openAddProvider(); }}>Add a provider</Button>{/if}
+            </div>
+          </div>
+        </div>
+      {:else if activeTab === "developer"}
+        {@const ds = dev.settings}
+        <div>
+          <h2 class="text-xl font-semibold text-ink-50">Developer</h2>
+          <p class="mt-1 text-sm text-ink-400">Experimental features, the parts LocalAide is made of, and what the chat modes tell the model.</p>
+          {#if devNotice}<div class="mt-4"><ErrorBanner message={devNotice} onDismiss={() => devNotice = null} /></div>{/if}
+          {#if !ds}
+            <div class="skeleton mt-6 h-24"></div>
+          {:else}
+            <div class="mt-6"></div>
+            <SettingsGroup>
+              <SettingsRow icon="flask" title="Developer mode" description="Turns on the experimental features below. They may change or disappear in later versions.">
+                {#snippet control()}
+                  <button type="button" role="switch" aria-checked={ds.enabled} aria-label="Developer mode" disabled={devBusy} onclick={() => void setDev({ enabled: !ds.enabled })} class={`relative h-6 w-11 rounded-full border transition-colors disabled:opacity-50 ${ds.enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}>
+                    <span class={`absolute left-1 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${ds.enabled ? "translate-x-5 bg-on-ember" : "bg-ink-300"}`}></span>
+                  </button>
+                {/snippet}
+              </SettingsRow>
+            </SettingsGroup>
+
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="flask" class="h-4 w-4 text-ember-300" />Experimental features</h3>
+            <div class={`space-y-2 transition-opacity ${ds.enabled ? "" : "pointer-events-none opacity-50"}`} aria-disabled={!ds.enabled}>
+              {#each ds.flag_list as f (f.id)}
+                <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
+                  <input type="checkbox" checked={ds.flags[f.id]} disabled={!ds.enabled || devBusy} onchange={(e) => void setDev({ flags: { [f.id]: (e.currentTarget as HTMLInputElement).checked } })} class="mt-0.5 h-4 w-4 accent-ember-600" />
+                  <span class="min-w-0"><span class="block text-sm font-semibold text-ink-100">{f.label}</span><span class="block text-sm text-ink-400">{f.description}</span></span>
+                </label>
+              {/each}
+            </div>
+
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="layers" class="h-4 w-4 text-ember-300" />Modules</h3>
+            <p class="mb-2 text-sm text-ink-400">Switch off parts of LocalAide you do not use. They stay off until you switch them on here, even outside developer mode.</p>
+            <div class="grid gap-2 sm:grid-cols-2">
+              {#each ds.module_list as m (m.id)}
+                <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
+                  <input type="checkbox" checked={ds.modules[m.id]} disabled={devBusy} onchange={(e) => void setDev({ modules: { [m.id]: (e.currentTarget as HTMLInputElement).checked } })} class="mt-0.5 h-4 w-4 accent-ember-600" />
+                  <span class="min-w-0"><span class="block text-sm font-semibold text-ink-100">{m.label}</span><span class="block text-sm text-ink-400">{m.description}</span></span>
+                </label>
+              {/each}
+            </div>
+
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="chat" class="h-4 w-4 text-ember-300" />Mode instructions</h3>
+            <div class="space-y-2">
+              {#each ds.modes as m (m.id)}
+                <details class="group rounded-lg border border-ink-700 bg-ink-900">
+                  <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ink-100"><Icon name="chevron-right" class="h-4 w-4 transition-transform duration-200 group-open:rotate-90" />{m.label}<span class="font-normal text-ink-500">· {m.description}</span></summary>
+                  <p class="border-t border-ink-800 px-4 py-3 font-mono text-[12px] leading-5 text-ink-300">{m.instruction || "No extra instruction. The model gets your system prompt and any notes or web context."}</p>
+                </details>
+              {/each}
+            </div>
+
+            {#if flag("request_log")}
+              <div class="mb-2 mt-7 flex items-center justify-between">
+                <h3 class="flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="file" class="h-4 w-4 text-ember-300" />Request log</h3>
+                <Button variant="subtle" onclick={clearRequestLog}>Clear</Button>
+              </div>
+              <div class="max-h-80 overflow-y-auto rounded-lg border border-ink-700 bg-ink-950 font-mono text-[12px]">
+                {#each requestLog.entries as r (r.id)}
+                  <div class="flex items-center gap-3 border-b border-ink-800 px-3 py-1.5 last:border-b-0">
+                    <span class={`h-2 w-2 shrink-0 rounded-full ${r.ok ? "bg-emerald-400" : "bg-rose-400"}`}></span>
+                    <span class="w-20 shrink-0 text-ink-500">{new Date(r.at).toLocaleTimeString()}</span>
+                    <span class="min-w-0 flex-1 truncate text-ink-100">{r.command}</span>
+                    {#if r.error}<span class="max-w-[40%] truncate text-rose-300" title={r.error}>{r.error}</span>{/if}
+                    <span class={`w-16 shrink-0 text-right ${r.ms > 1000 ? "text-amber-300" : "text-ink-400"}`}>{r.ms.toFixed(0)} ms</span>
+                  </div>
+                {:else}
+                  <p class="px-3 py-6 text-center text-ink-500">No calls yet. Use the app and they appear here.</p>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="mt-7 flex justify-end"><Button variant="subtle" disabled={devBusy} onclick={() => { void resetDev().catch((e: unknown) => devNotice = errorMessage(e)); }}>Reset everything here</Button></div>
+          {/if}
         </div>
       {:else if activeTab === "privacy"}
         <div>

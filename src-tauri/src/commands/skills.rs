@@ -1,6 +1,8 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::services::skills::discover::{RemoteSkill, RemoteSkillDetail, SOURCES, SkillSource};
+use crate::services::skills::discover::{
+    RemoteSkill, RemoteSkillDetail, SOURCES, SkillDescription, SkillSource,
+};
 use crate::services::skills::{Skill, SkillSuggestion};
 use tauri::State;
 
@@ -113,4 +115,19 @@ pub async fn skills_import(
         Some(detail.url),
         detail.license,
     )
+}
+
+/// Descriptions for listed skills (one page at a time), so the Discover
+/// list says what each skill does.
+#[tauri::command]
+pub async fn skills_remote_describe(
+    state: State<'_, AppState>,
+    source: String,
+    repo: Option<String>,
+    ids: Vec<String>,
+) -> Result<Vec<SkillDescription>, AppError> {
+    state
+        .skill_discovery
+        .describe(&source, repo.as_deref(), &ids)
+        .await
 }

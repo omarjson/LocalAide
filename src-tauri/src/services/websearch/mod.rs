@@ -1,6 +1,8 @@
-//! Web search and page reading over public HTTP APIs. Providers are either
-//! keyless (DuckDuckGo HTML results, Wikipedia, the Jina Reader) or take a
-//! key the user pastes into Settings (Exa, Firecrawl). Keys live in
+//! Web search and page reading over public HTTP APIs. Every provider works
+//! without a key: DuckDuckGo results, Wikipedia, the Jina Reader, Exa
+//! (through its public MCP endpoint, at a free rate limit) and Firecrawl
+//! (its keyless free tier, or a Firecrawl server on this computer). A key
+//! pasted into Settings raises Exa's and Firecrawl's limits. Keys live in
 //! config.json on this machine only, travel only to their own provider, and
 //! are excluded from backups unless explicitly included. Every request is
 //! an explicit user action — nothing here runs in the background.
@@ -11,6 +13,7 @@
 
 use crate::app::error::AppError;
 use serde::Serialize;
+use serde_json::{Value, json};
 use std::io::Read as _;
 use std::time::Duration;
 
@@ -19,47 +22,77 @@ use std::time::Duration;
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const USER_AGENT: &str = concat!(
+    "Mozilla/5.0 (compatible; LocalAide/",
+    env!("CARGO_PKG_VERSION"),
+    "; +https://github.com/omarjson/LocalAide)"
+);
+/// The order "Automatic" tries providers in. Each is keyless.
+const AUTO_SEARCH_ORDER: [&str; 3] = ["duckduckgo", "exa", "wikipedia"];
 
 /// One selectable provider, as the Settings screen renders it.
 #[derive(Debug, Clone, Serialize)]
 pub struct WebProvider {
     pub id: &'static str,
     pub label: &'static str,
+    /// True when the provider cannot work at all without a key. No shipped
+    /// provider needs one; the field stays for the Settings screen.
     pub needs_key: bool,
+    /// True when a key can be added to raise the free limits.
+    pub takes_key: bool,
     /// "search", "crawl", or "search+crawl".
     pub supports: &'static str,
+    pub note: &'static str,
 }
 
 pub const PROVIDER_TABLE: &[WebProvider] = &[
     WebProvider {
+        id: "auto",
+        label: "Automatic",
+        needs_key: false,
+        takes_key: false,
+        supports: "search",
+        note: "Tries DuckDuckGo, then Exa, then Wikipedia, and uses the first that answers.",
+    },
+    WebProvider {
         id: "duckduckgo",
         label: "DuckDuckGo",
         needs_key: false,
+        takes_key: false,
         supports: "search",
+        note: "Private web search. No key.",
+    },
+    WebProvider {
+        id: "exa",
+        label: "Exa",
+        needs_key: false,
+        takes_key: true,
+        supports: "search+crawl",
+        note: "Search built for AI. Works without a key at a free rate limit; a key raises it.",
+    },
+    WebProvider {
+        id: "firecrawl",
+        label: "Firecrawl",
+        needs_key: false,
+        takes_key: true,
+        supports: "search+crawl",
+        note: "Search and clean page text. Works without a key (a small free allowance per computer), with a key, or on your own computer.",
     },
     WebProvider {
         id: "wikipedia",
         label: "Wikipedia",
         needs_key: false,
+        takes_key: false,
         supports: "search",
+        note: "Encyclopedia articles only. No key.",
     },
     WebProvider {
         id: "jina",
         label: "Jina Reader",
         needs_key: false,
+        takes_key: false,
         supports: "crawl",
-    },
-    WebProvider {
-        id: "exa",
-        label: "Exa",
-        needs_key: true,
-        supports: "search",
-    },
-    WebProvider {
-        id: "firecrawl",
-        label: "Firecrawl",
-        needs_key: true,
-        supports: "search+crawl",
+        note: "Reads a page as text. No key.",
     },
 ];
 
@@ -68,33 +101,43 @@ fn known_provider(id: &str) -> bool {
     PROVIDER_TABLE.iter().any(|p| p.id == id)
 }
 
-/// The keys the user configured, read from config per request. Keyless
-/// providers ignore this; keyed providers fail with `WEB_NO_KEY` when their
-/// slot is empty.
+/// What the user configured, read from config per request.
 #[derive(Debug, Clone, Default)]
 pub struct WebSearchKeys {
     pub exa_api_key: Option<String>,
     pub firecrawl_api_key: Option<String>,
+    /// A Firecrawl server the user runs, for example
+    /// `http://localhost:3002`. None = Firecrawl's own service.
+    pub firecrawl_base_url: Option<String>,
 }
 
 impl WebSearchKeys {
-    /// The stored key for a provider, or `WEB_NO_KEY` when it is missing or
-    /// blank. Keyless providers return an empty string.
-    pub(crate) fn for_provider(&self, id: &str) -> Result<&str, AppError> {
+    /// The stored key for a provider, when one is set and not blank.
+    pub(crate) fn key(&self, id: &str) -> Option<&str> {
         let key = match id {
             "exa" => self.exa_api_key.as_deref(),
             "firecrawl" => self.firecrawl_api_key.as_deref(),
-            _ => return Ok(""),
+            _ => None,
         };
-        key.filter(|k| !k.trim().is_empty())
-            .ok_or_else(|| {
-                AppError::new(
-                    "WEB_NO_KEY",
-                    format!(
-                        "{id} needs an API key — add one in Settings → Web search. DuckDuckGo and Wikipedia need no key."
-                    ),
-                )
-            })
+        key.map(str::trim).filter(|k| !k.is_empty())
+    }
+
+    fn firecrawl_base<'a>(&'a self, default: &'a str) -> &'a str {
+        self.firecrawl_base_url
+            .as_deref()
+            .map(|u| u.trim().trim_end_matches('/'))
+            .filter(|u| !u.is_empty())
+            .unwrap_or(default)
+    }
+
+    /// True when page reading should go to Firecrawl by default: the user
+    /// added a key or runs their own Firecrawl server.
+    pub(crate) fn prefers_firecrawl(&self) -> bool {
+        self.key("firecrawl").is_some()
+            || self
+                .firecrawl_base_url
+                .as_deref()
+                .is_some_and(|u| !u.trim().is_empty())
     }
 }
 
@@ -106,6 +149,8 @@ pub struct Bases {
     pub wikipedia: String,
     pub jina: String,
     pub exa: String,
+    /// Exa's public MCP endpoint (the keyless path).
+    pub exa_mcp: String,
     pub firecrawl: String,
 }
 
@@ -118,16 +163,30 @@ impl Bases {
             wikipedia: "https://en.wikipedia.org".into(),
             jina: "https://r.jina.ai".into(),
             exa: "https://api.exa.ai".into(),
+            exa_mcp: "https://mcp.exa.ai".into(),
             firecrawl: "https://api.firecrawl.dev".into(),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct WebHit {
     pub title: String,
     pub url: String,
     pub snippet: String,
+    /// The provider that found this result.
+    pub source: String,
+}
+
+impl WebHit {
+    fn new(title: String, url: String, snippet: String) -> Self {
+        Self {
+            title,
+            url,
+            snippet,
+            source: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -171,8 +230,46 @@ impl WebSearchEngine {
         limit: u32,
         keys: &WebSearchKeys,
     ) -> Result<Vec<WebHit>, AppError> {
+        if !known_provider(provider) {
+            return Err(AppError::new(
+                "WEB_UNKNOWN_PROVIDER",
+                format!("'{provider}' is not a web search provider this build knows."),
+            ));
+        }
+        if provider != "auto" {
+            return self.search_one(provider, query, limit, keys);
+        }
+        // Automatic: the first provider with results wins. A provider that
+        // fails or finds nothing hands over to the next one.
+        let mut last_error = None;
+        for id in AUTO_SEARCH_ORDER {
+            match self.search_one(id, query, limit, keys) {
+                Ok(hits) if !hits.is_empty() => return Ok(hits),
+                Ok(_) => {}
+                Err(e) => {
+                    log::warn!("Web search via {id} failed: {e}");
+                    last_error = Some(e);
+                }
+            }
+        }
+        match last_error {
+            Some(e) => Err(e),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn search_one(
+        &self,
+        provider: &str,
+        query: &str,
+        limit: u32,
+        keys: &WebSearchKeys,
+    ) -> Result<Vec<WebHit>, AppError> {
         let mut hits = self.search_unfiltered(provider, query, limit, keys)?;
         hits.retain(|hit| validate_crawl_url(&hit.url).is_ok());
+        for hit in &mut hits {
+            hit.source = provider.to_string();
+        }
         Ok(hits)
     }
 
@@ -183,12 +280,6 @@ impl WebSearchEngine {
         limit: u32,
         keys: &WebSearchKeys,
     ) -> Result<Vec<WebHit>, AppError> {
-        if !known_provider(provider) {
-            return Err(AppError::new(
-                "WEB_UNKNOWN_PROVIDER",
-                format!("'{provider}' is not a web search provider this build knows."),
-            ));
-        }
         let limit = limit.clamp(1, 20) as usize;
         match provider {
             "duckduckgo" => {
@@ -204,33 +295,46 @@ impl WebSearchEngine {
                 let body = self.get_capped(&url)?;
                 parse_wikipedia_json(&body, limit, &self.bases.wikipedia)
             }
-            "exa" => {
-                let key = keys.for_provider("exa")?;
-                let body = serde_json::json!({
-                    "query": query,
-                    "numResults": limit,
-                    "contents": {"text": {"maxCharacters": 500}}
-                })
-                .to_string();
-                let response = self.post_json(
-                    &format!("{}/search", self.bases.exa),
-                    &[("x-api-key", key)],
-                    &body,
-                )?;
-                parse_exa_json(&response, limit)
-            }
+            "exa" => match keys.key("exa") {
+                Some(key) => {
+                    let body = json!({
+                        "query": query,
+                        "numResults": limit,
+                        "contents": {"text": {"maxCharacters": 500}}
+                    })
+                    .to_string();
+                    let response = self.post_json(
+                        &format!("{}/search", self.bases.exa),
+                        &[("x-api-key", key)],
+                        &body,
+                    )?;
+                    parse_exa_json(&response, limit)
+                }
+                None => {
+                    let text = self.mcp_call(
+                        &self.bases.exa_mcp,
+                        "web_search_advanced_exa",
+                        json!({
+                            "query": query,
+                            "numResults": limit,
+                            "textMaxCharacters": 500
+                        }),
+                    )?;
+                    Ok(parse_exa_mcp_search(&text, limit))
+                }
+            },
             "firecrawl" => {
-                let key = keys.for_provider("firecrawl")?;
-                let body = serde_json::json!({"query": query, "limit": limit}).to_string();
-                let response = self.post_json(
-                    &format!("{}/v2/search", self.bases.firecrawl),
-                    &[("Authorization", &format!("Bearer {key}"))],
-                    &body,
-                )?;
+                let base = keys.firecrawl_base(&self.bases.firecrawl);
+                let body = json!({"query": query, "limit": limit}).to_string();
+                let auth = keys.key("firecrawl").map(|k| format!("Bearer {k}"));
+                let headers: Vec<(&str, &str)> = auth
+                    .as_deref()
+                    .map(|a| vec![("Authorization", a)])
+                    .unwrap_or_default();
+                let response = self.post_json(&format!("{base}/v2/search"), &headers, &body)?;
                 parse_firecrawl_search_json(&response, limit)
             }
-            // The match above is total over PROVIDER_TABLE; crawl-only
-            // providers cannot serve searches.
+            // Crawl-only providers cannot serve searches.
             _ => Err(AppError::new(
                 "WEB_UNKNOWN_PROVIDER",
                 format!("'{provider}' cannot search the web."),
@@ -238,8 +342,9 @@ impl WebSearchEngine {
         }
     }
 
-    /// Read one page as text. Firecrawl renders markdown when its key is
-    /// configured; the keyless default is the Jina Reader.
+    /// Read one page as text. "auto" uses Firecrawl when the user added a
+    /// key or runs their own Firecrawl, otherwise the Jina Reader, and falls
+    /// back to Exa when Jina fails.
     pub fn read_page(
         &self,
         url: &str,
@@ -250,19 +355,32 @@ impl WebSearchEngine {
         let checked = validate_crawl_url(url)?;
         let url = checked.as_str();
         match provider {
+            "auto" => {
+                if keys.prefers_firecrawl() {
+                    return self.read_page(url, "firecrawl", keys);
+                }
+                match self.read_page(url, "jina", keys) {
+                    Ok(page) => Ok(page),
+                    Err(jina_error) => {
+                        log::warn!("Jina Reader failed, trying Exa: {jina_error}");
+                        self.read_page(url, "exa", keys).map_err(|_| jina_error)
+                    }
+                }
+            }
             "firecrawl" => {
-                let key = keys.for_provider("firecrawl")?;
-                let body = serde_json::json!({
+                let base = keys.firecrawl_base(&self.bases.firecrawl);
+                let body = json!({
                     "url": url,
                     "formats": ["markdown"],
                     "onlyMainContent": true
                 })
                 .to_string();
-                let response = self.post_json(
-                    &format!("{}/v2/scrape", self.bases.firecrawl),
-                    &[("Authorization", &format!("Bearer {key}"))],
-                    &body,
-                )?;
+                let auth = keys.key("firecrawl").map(|k| format!("Bearer {k}"));
+                let headers: Vec<(&str, &str)> = auth
+                    .as_deref()
+                    .map(|a| vec![("Authorization", a)])
+                    .unwrap_or_default();
+                let response = self.post_json(&format!("{base}/v2/scrape"), &headers, &body)?;
                 parse_firecrawl_scrape_json(&response, url)
             }
             "jina" => {
@@ -274,11 +392,90 @@ impl WebSearchEngine {
                 )?;
                 parse_jina_response(&body, header_title.as_deref(), url)
             }
+            "exa" => {
+                let text = self.mcp_call(
+                    &self.bases.exa_mcp,
+                    "web_fetch_exa",
+                    json!({"urls": [url], "maxCharacters": 20000}),
+                )?;
+                Ok(parse_exa_mcp_page(&text, url))
+            }
             other => Err(AppError::new(
                 "WEB_UNKNOWN_PROVIDER",
-                format!("'{other}' cannot read pages — use Firecrawl or Jina Reader."),
+                format!("'{other}' cannot read pages. Use Firecrawl, Jina Reader or Exa."),
             )),
         }
+    }
+
+    /// One MCP tool call over Streamable HTTP: initialize, the initialized
+    /// notification, then `tools/call`. Answers may come as JSON or as
+    /// server-sent events. Returns the tool's text output.
+    fn mcp_call(&self, base: &str, tool: &str, arguments: Value) -> Result<String, AppError> {
+        let url = format!(
+            "{}/mcp?tools=web_search_advanced_exa,web_fetch_exa",
+            base.trim_end_matches('/')
+        );
+        let init = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "LocalAide", "version": env!("CARGO_PKG_VERSION")}
+            }
+        });
+        let (status, session, _) = self.mcp_post(&url, None, &init)?;
+        check_status(status)?;
+        let session = session.as_deref();
+        // The notification has no answer worth reading; servers reply 202.
+        let _ = self.mcp_post(
+            &url,
+            session,
+            &json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        );
+        let call = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments}
+        });
+        let (status, _, body) = self.mcp_post(&url, session, &call)?;
+        check_status(status)?;
+        parse_mcp_result(&body)
+    }
+
+    fn mcp_post(
+        &self,
+        url: &str,
+        session: Option<&str>,
+        payload: &Value,
+    ) -> Result<(reqwest::StatusCode, Option<String>, String), AppError> {
+        let mut request = self
+            .client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("User-Agent", USER_AGENT);
+        if let Some(id) = session {
+            request = request.header("Mcp-Session-Id", id);
+        }
+        let response = request
+            .body(payload.to_string())
+            .send()
+            .map_err(|e| AppError::internal(format!("Web request failed: {e}")))?;
+        let status = response.status();
+        let session = response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let body = if status.is_success() {
+            read_capped(response)?
+        } else {
+            String::new()
+        };
+        Ok((status, session, body))
     }
 
     /// GET with a response-size cap. Returns (body, X-Title header).
@@ -290,7 +487,7 @@ impl WebSearchEngine {
         let response = self
             .client
             .get(url)
-            .header("User-Agent", "LocalAide-web/0.1")
+            .header("User-Agent", USER_AGENT)
             .header("Accept", accept)
             .send()
             .map_err(|e| AppError::internal(format!("Web request failed: {e}")))?;
@@ -320,7 +517,7 @@ impl WebSearchEngine {
             .client
             .post(url)
             .header("Content-Type", "application/json")
-            .header("User-Agent", "LocalAide-web/0.1");
+            .header("User-Agent", USER_AGENT);
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
@@ -336,7 +533,8 @@ impl WebSearchEngine {
         let response = self
             .client
             .post(url)
-            .header("User-Agent", "LocalAide-web/0.1")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html")
             .form(form)
             .send()
             .map_err(|e| AppError::internal(format!("Web request failed: {e}")))?;
@@ -530,95 +728,316 @@ fn resolve_ddg_href(href: &str) -> String {
     full
 }
 
+/// The value of one attribute in an HTML open tag, with either quote style
+/// or none. Attribute names are matched exactly (DDG writes lowercase).
+fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let bytes = tag.as_bytes();
+    let mut search = 0;
+    while let Some(found) = tag[search..].find(name) {
+        let at = search + found;
+        search = at + name.len();
+        // Must be a whole attribute name: preceded by whitespace, followed by '='.
+        let before_ok = at > 0 && bytes[at - 1].is_ascii_whitespace();
+        let rest = tag[at + name.len()..].trim_start();
+        if !before_ok || !rest.starts_with('=') {
+            continue;
+        }
+        let value = rest[1..].trim_start();
+        return match value.chars().next() {
+            Some(q @ ('"' | '\'')) => value[1..].find(q).map(|end| &value[1..1 + end]),
+            Some(_) => {
+                let end = value
+                    .find(|c: char| c.is_ascii_whitespace() || c == '>')
+                    .unwrap_or(value.len());
+                Some(&value[..end])
+            }
+            None => None,
+        };
+    }
+    None
+}
+
+fn tag_has_class(tag: &str, classes: &[&str]) -> bool {
+    tag_attr(tag, "class")
+        .map(|value| value.split_ascii_whitespace().any(|c| classes.contains(&c)))
+        .unwrap_or(false)
+}
+
+const DDG_TITLE_CLASSES: [&str; 2] = ["result-link", "result__a"];
+const DDG_SNIPPET_CLASSES: [&str; 2] = ["result-snippet", "result__snippet"];
+
+/// Every open tag `<name ...>` in `body`, as (start, end-after-'>').
+fn open_tags<'a>(body: &'a str, name: &'a str) -> impl Iterator<Item = (usize, usize)> + 'a {
+    let needle = format!("<{name}");
+    let mut from = 0;
+    std::iter::from_fn(move || {
+        loop {
+            let found = body[from..].find(&needle)?;
+            let start = from + found;
+            let after = start + needle.len();
+            from = after;
+            // "<a" must be followed by whitespace or '>', so "<abbr" is skipped.
+            match body.as_bytes().get(after) {
+                Some(b) if b.is_ascii_whitespace() || *b == b'>' => {}
+                _ => continue,
+            }
+            let end = body[after..].find('>')? + after + 1;
+            return Some((start, end));
+        }
+    })
+}
+
 /// Parse a DuckDuckGo results page (the lite table or the full HTML page).
-/// Pure function so tests need no network. The current layout marks result
-/// titles with `result-link` anchors and snippets with `result-snippet`
-/// elements; the older `result__a`/`result__snippet` names are accepted as
-/// a fallback so a cosmetic change on DDG's side degrades slowly instead
-/// of breaking outright.
+/// Pure function so tests need no network. Result titles are anchors with
+/// a `result-link` (lite) or `result__a` (full page) class; snippets are
+/// elements with `result-snippet` or `result__snippet`. Attributes can come
+/// in any order and with either quote style: the lite page writes
+/// `href="…" class='result-link'`.
 pub fn parse_ddg_html(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError> {
-    if body.contains("anomaly") || body.contains("unusual traffic") {
+    let lowered = body.to_ascii_lowercase();
+    if lowered.contains("anomaly-modal")
+        || lowered.contains("unusual traffic")
+        || lowered.contains("bots use duckduckgo too")
+    {
         return Err(AppError::new(
             "WEB_RATE_LIMITED",
-            "DuckDuckGo is rate-limiting this machine — switch provider in Settings or try again later.",
+            "DuckDuckGo asked for a check that LocalAide cannot pass. Try again later, or choose Automatic or Exa in Settings → Web search.",
         ));
     }
-    let title_marker = if body.contains("class=\"result-link\"") {
-        "class=\"result-link\""
-    } else {
-        "class=\"result__a\""
-    };
-    let snippet_marker = if body.contains("class=\"result-snippet\"") {
-        "class=\"result-snippet\""
-    } else {
-        "class=\"result__snippet\""
-    };
+
+    let anchors: Vec<(usize, usize)> = open_tags(body, "a")
+        .filter(|(start, end)| tag_has_class(&body[*start..*end], &DDG_TITLE_CLASSES))
+        .collect();
+
     let mut hits = Vec::new();
-    let mut rest = body;
-    while hits.len() < limit {
-        let Some(marker) = rest.find(title_marker) else {
+    for (i, (start, open_end)) in anchors.iter().enumerate() {
+        if hits.len() >= limit {
             break;
+        }
+        let tag = &body[*start..*open_end];
+        let Some(href) = tag_attr(tag, "href") else {
+            continue;
         };
-        rest = &rest[marker..];
-        // href="..." inside the anchor's open tag.
-        let Some(href_start) = rest.find("href=\"") else {
-            break;
+        let Some(close) = body[*open_end..].find("</a>") else {
+            continue;
         };
-        let after_href = &rest[href_start + 6..];
-        let Some(href_end) = after_href.find('"') else {
-            break;
-        };
-        let href = &after_href[..href_end];
-        // Title: text between the end of the open tag and </a>.
-        let after_open = &after_href[href_end..];
-        let Some(tag_end) = after_open.find('>') else {
-            break;
-        };
-        let after_tag = &after_open[tag_end + 1..];
-        let Some(close) = after_tag.find("</a>") else {
-            break;
-        };
-        let title = decode_entities(&strip_tags(&after_tag[..close]))
+        let title = decode_entities(&strip_tags(&body[*open_end..open_end + close]))
             .trim()
             .to_string();
 
-        // Snippet: the next snippet element, if it precedes the next result.
-        let snippet_window = &after_open[close + 4..];
-        let next_result = snippet_window
-            .find(title_marker)
-            .unwrap_or(snippet_window.len());
-        let snippet = match snippet_window.find(snippet_marker) {
-            Some(pos) if pos < next_result => {
-                let after = &snippet_window[pos..];
-                if let Some(gt) = after.find('>') {
-                    let tail = &after[gt + 1..];
-                    // Snippets live in a <td>, <div>, or <a> depending on
-                    // the layout; take whichever closes first.
-                    let end = ["</td>", "</div>", "</a>"]
+        // The snippet is the next snippet element before the next result.
+        let window_end = anchors.get(i + 1).map(|(s, _)| *s).unwrap_or(body.len());
+        let window_start = open_end + close + 4;
+        let snippet = if window_start < window_end {
+            let window = &body[window_start..window_end];
+            ["td", "div", "a", "span"]
+                .iter()
+                .flat_map(|name| open_tags(window, name))
+                .filter(|(s, e)| tag_has_class(&window[*s..*e], &DDG_SNIPPET_CLASSES))
+                .min_by_key(|(s, _)| *s)
+                .map(|(_, e)| {
+                    let tail = &window[e..];
+                    let end = ["</td>", "</div>", "</a>", "</span>"]
                         .iter()
                         .filter_map(|c| tail.find(c))
                         .min()
                         .unwrap_or(tail.len());
-                    decode_entities(&strip_tags(&tail[..end]))
-                        .trim()
-                        .to_string()
-                } else {
-                    String::new()
-                }
-            }
-            _ => String::new(),
+                    collapse_space(&decode_entities(&strip_tags(&tail[..end])))
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
         };
 
         if !title.is_empty() {
-            hits.push(WebHit {
-                title,
-                url: resolve_ddg_href(href),
-                snippet,
-            });
+            hits.push(WebHit::new(title, resolve_ddg_href(href), snippet));
         }
-        rest = snippet_window;
     }
     Ok(hits)
+}
+
+fn collapse_space(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The text of an MCP `tools/call` answer, sent as plain JSON or as
+/// server-sent events (`data:` lines).
+pub fn parse_mcp_result(body: &str) -> Result<String, AppError> {
+    let trimmed = body.trim();
+    let message: Value = if trimmed.starts_with('{') {
+        serde_json::from_str(trimmed).map_err(|_| {
+            AppError::internal("The search service sent an answer LocalAide could not read.")
+        })?
+    } else {
+        trimmed
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .filter_map(|data| serde_json::from_str::<Value>(data.trim()).ok())
+            .rfind(|v| v.get("result").is_some() || v.get("error").is_some())
+            .ok_or_else(|| AppError::internal("The search service sent an empty answer."))?
+    };
+    if let Some(error) = message.get("error") {
+        let text = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown error");
+        if text.to_ascii_lowercase().contains("rate") {
+            return Err(AppError::new(
+                "WEB_RATE_LIMITED",
+                "The free search limit is used up for now. Wait a little, or add a key in Settings → Web search.",
+            ));
+        }
+        return Err(AppError::internal(format!(
+            "The search service said: {text}"
+        )));
+    }
+    let result = &message["result"];
+    let text = result["content"]
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|p| p.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default();
+    if result.get("isError").and_then(Value::as_bool) == Some(true) {
+        let lower = text.to_ascii_lowercase();
+        if lower.contains("rate limit")
+            || lower.contains("429")
+            || (lower.contains("free") && lower.contains("limit"))
+        {
+            return Err(AppError::new(
+                "WEB_RATE_LIMITED",
+                "The free search limit is used up for now. Wait a little, or add a key in Settings → Web search.",
+            ));
+        }
+        let short: String = text.chars().take(300).collect();
+        return Err(AppError::internal(format!(
+            "The search service said: {short}"
+        )));
+    }
+    Ok(text)
+}
+
+/// Exa MCP search output: a JSON document with `results`, or the plain-text
+/// form with `Title:` and `URL:` lines.
+pub fn parse_exa_mcp_search(text: &str, limit: usize) -> Vec<WebHit> {
+    if let Ok(json) = serde_json::from_str::<Value>(text.trim())
+        && let Some(results) = json.get("results").and_then(Value::as_array)
+    {
+        return results
+            .iter()
+            .filter_map(|r| {
+                let url = r.get("url").and_then(Value::as_str)?.to_string();
+                let title = r
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .filter(|t| !t.trim().is_empty())
+                    .unwrap_or(&url)
+                    .trim()
+                    .to_string();
+                let snippet = ["summary", "text"]
+                    .iter()
+                    .find_map(|k| r.get(*k).and_then(Value::as_str))
+                    .map(str::to_string)
+                    .or_else(|| {
+                        r.get("highlights").and_then(Value::as_array).map(|h| {
+                            h.iter()
+                                .filter_map(Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join(" … ")
+                        })
+                    })
+                    .unwrap_or_default();
+                Some(WebHit::new(
+                    title,
+                    url,
+                    truncate_chars(&collapse_space(&snippet), 400),
+                ))
+            })
+            .take(limit)
+            .collect();
+    }
+
+    let mut hits = Vec::new();
+    let mut title: Option<String> = None;
+    let mut url: Option<String> = None;
+    let mut snippet = String::new();
+    let mut flush = |title: &mut Option<String>, url: &mut Option<String>, snippet: &mut String| {
+        if let Some(u) = url.take() {
+            let t = title.take().unwrap_or_else(|| u.clone());
+            hits.push(WebHit::new(
+                t,
+                u,
+                truncate_chars(&collapse_space(snippet), 400),
+            ));
+        }
+        title.take();
+        snippet.clear();
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(t) = line.strip_prefix("Title:") {
+            flush(&mut title, &mut url, &mut snippet);
+            title = Some(t.trim().to_string());
+        } else if let Some(u) = line.strip_prefix("URL:") {
+            url = Some(u.trim().to_string());
+        } else if line.starts_with("Published")
+            || line.starts_with("Author")
+            || line.starts_with("ID:")
+        {
+            continue;
+        } else if !line.is_empty() && url.is_some() && snippet.len() < 600 {
+            let text = line
+                .strip_prefix("Text:")
+                .or_else(|| line.strip_prefix("Highlights:"))
+                .or_else(|| line.strip_prefix("Summary:"))
+                .unwrap_or(line);
+            snippet.push_str(text.trim());
+            snippet.push(' ');
+        }
+    }
+    flush(&mut title, &mut url, &mut snippet);
+    hits.truncate(limit);
+    hits
+}
+
+/// Exa MCP page output: text, optionally led by `Title:` and `URL:` lines.
+pub fn parse_exa_mcp_page(text: &str, url: &str) -> WebPage {
+    let mut title = None;
+    let mut body = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if title.is_none()
+            && let Some(t) = trimmed.strip_prefix("Title:")
+        {
+            title = Some(t.trim().to_string());
+            continue;
+        }
+        if body.is_empty() && (trimmed.starts_with("URL:") || trimmed.starts_with("ID:")) {
+            continue;
+        }
+        body.push(line);
+    }
+    let content = body.join("\n").trim().to_string();
+    WebPage {
+        title: title.filter(|t| !t.is_empty()),
+        url: url.to_string(),
+        content: content
+            .strip_prefix("Text:")
+            .map(|c| c.trim().to_string())
+            .unwrap_or(content),
+    }
+}
+
+fn truncate_chars(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let cut: String = s.chars().take(max).collect();
+    format!("{}…", cut.trim_end())
 }
 
 /// Parse a Jina Reader response. JSON mode (Accept: application/json)
@@ -697,6 +1116,7 @@ pub fn parse_wikipedia_json(body: &str, limit: usize, base: &str) -> Result<Vec<
                 url: format!("{}/wiki/{}", base.trim_end_matches('/'), slug),
                 title: e.title,
                 snippet: decode_entities(&strip_tags(&e.excerpt)),
+                source: String::new(),
             }
         })
         .collect())
@@ -734,6 +1154,7 @@ pub fn parse_exa_json(body: &str, limit: usize) -> Result<Vec<WebHit>, AppError>
                 },
                 url: e.url,
                 snippet,
+                source: String::new(),
             }
         })
         .collect())
@@ -769,6 +1190,7 @@ pub fn parse_firecrawl_search_json(body: &str, limit: usize) -> Result<Vec<WebHi
             },
             url: e.url,
             snippet: e.description,
+            source: String::new(),
         })
         .collect())
 }
@@ -811,6 +1233,92 @@ mod tests {
     </table>
     </body></html>"##;
 
+    /// The real lite page: `href` before `class`, single-quoted classes,
+    /// snippets in the next table row.
+    const DDG_LITE_FIXTURE: &str = r##"<table border="0">
+      <tr>
+        <td valign="top">1.&nbsp;</td>
+        <td>
+          <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.rust-lang.org%2F&amp;rut=1" class='result-link'>Rust Programming Language</a>
+        </td>
+      </tr>
+      <tr>
+        <td>&nbsp;&nbsp;&nbsp;</td>
+        <td class='result-snippet'>
+          A language empowering <b>everyone</b>
+          to build reliable software.
+        </td>
+      </tr>
+      <tr><td>&nbsp;</td><td><span class='link-text'>www.rust-lang.org</span></td></tr>
+      <tr>
+        <td valign="top">2.&nbsp;</td>
+        <td><a rel="nofollow" href="https://en.wikipedia.org/wiki/Rust" class='result-link'>Rust - Wikipedia</a></td>
+      </tr>
+      <tr><td>&nbsp;</td><td class='result-snippet'>Rust is a language.</td></tr>
+    </table>"##;
+
+    #[test]
+    fn parses_the_real_lite_layout() {
+        let hits = parse_ddg_html(DDG_LITE_FIXTURE, 10).unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "Rust Programming Language");
+        assert_eq!(hits[0].url, "https://www.rust-lang.org/");
+        assert_eq!(
+            hits[0].snippet,
+            "A language empowering everyone to build reliable software."
+        );
+        assert_eq!(hits[1].url, "https://en.wikipedia.org/wiki/Rust");
+        assert_eq!(hits[1].snippet, "Rust is a language.");
+    }
+
+    #[test]
+    fn attribute_reader_handles_quotes_and_order() {
+        let tag = r#"<a rel="nofollow" href='https://x.example/' class="a result-link b">"#;
+        assert_eq!(tag_attr(tag, "href"), Some("https://x.example/"));
+        assert!(tag_has_class(tag, &DDG_TITLE_CLASSES));
+        assert!(!tag_has_class(
+            r#"<a data-class="result-link">"#,
+            &DDG_TITLE_CLASSES
+        ));
+        assert_eq!(
+            tag_attr("<td class=result-snippet>", "class"),
+            Some("result-snippet")
+        );
+    }
+
+    #[test]
+    fn mcp_answers_parse_as_json_or_events() {
+        let json =
+            r#"{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"hello"}]}}"#;
+        assert_eq!(parse_mcp_result(json).unwrap(), "hello");
+        let sse = format!("event: message\ndata: {json}\n\n");
+        assert_eq!(parse_mcp_result(&sse).unwrap(), "hello");
+        let err = r#"{"jsonrpc":"2.0","id":2,"result":{"isError":true,"content":[{"type":"text","text":"429 rate limit"}]}}"#;
+        assert_eq!(parse_mcp_result(err).unwrap_err().code, "WEB_RATE_LIMITED");
+        assert!(parse_mcp_result("").is_err());
+    }
+
+    #[test]
+    fn exa_mcp_results_parse_in_both_forms() {
+        let json = r#"{"results":[{"title":"Rust","url":"https://www.rust-lang.org/","text":"A language"},{"url":"https://b.example/","highlights":["one","two"]}]}"#;
+        let hits = parse_exa_mcp_search(json, 10);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].snippet, "A language");
+        assert_eq!(hits[1].title, "https://b.example/");
+        assert_eq!(hits[1].snippet, "one … two");
+        let text = "Title: Rust\nURL: https://www.rust-lang.org/\nPublished: 2026\nText: A language\nfor everyone\n\nTitle: Book\nURL: https://doc.rust-lang.org/book/\n";
+        let hits = parse_exa_mcp_search(text, 10);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].snippet, "A language for everyone");
+        assert_eq!(hits[1].title, "Book");
+        let page = parse_exa_mcp_page(
+            "Title: Rust\nURL: https://x/\nText: Hello\nworld",
+            "https://x/",
+        );
+        assert_eq!(page.title.as_deref(), Some("Rust"));
+        assert_eq!(page.content, "Hello\nworld");
+    }
+
     /// The legacy layout some mirrors and caches still serve.
     const DDG_LEGACY_FIXTURE: &str = r##"<html><body>
     <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fold.example%2F&amp;rut=x">Old Result</a>
@@ -839,7 +1347,11 @@ mod tests {
 
     #[test]
     fn ddg_anomaly_page_is_reported() {
-        let err = parse_ddg_html("oops anomaly detected", 10).unwrap_err();
+        let err = parse_ddg_html(
+            "<div class=\"anomaly-modal\">bots use DuckDuckGo too</div>",
+            10,
+        )
+        .unwrap_err();
         assert_eq!(err.code, "WEB_RATE_LIMITED");
     }
 
@@ -952,17 +1464,27 @@ mod tests {
     }
 
     #[test]
-    fn keyed_providers_refuse_to_run_without_keys() {
+    fn blank_keys_count_as_missing() {
         let keys = WebSearchKeys::default();
-        let err = keys.for_provider("exa").unwrap_err();
-        assert_eq!(err.code, "WEB_NO_KEY");
-        // Blank strings count as missing, not present.
+        assert_eq!(keys.key("exa"), None);
         let keys = WebSearchKeys {
             exa_api_key: Some("   ".into()),
-            firecrawl_api_key: None,
+            firecrawl_api_key: Some(" fc ".into()),
+            firecrawl_base_url: None,
         };
-        assert!(keys.for_provider("exa").is_err());
-        assert!(keys.for_provider("duckduckgo").is_ok());
+        assert_eq!(keys.key("exa"), None);
+        assert_eq!(keys.key("firecrawl"), Some("fc"));
+        assert_eq!(keys.key("duckduckgo"), None);
+        assert!(keys.prefers_firecrawl());
+        let local = WebSearchKeys {
+            firecrawl_base_url: Some("http://localhost:3002/".into()),
+            ..WebSearchKeys::default()
+        };
+        assert!(local.prefers_firecrawl());
+        assert_eq!(
+            local.firecrawl_base("https://api.firecrawl.dev"),
+            "http://localhost:3002"
+        );
     }
 
     #[test]
@@ -981,41 +1503,137 @@ mod tests {
     // These exercise the real request path (headers, status handling,
     // body cap) with canned responses.
 
+    type Canned = (&'static str, &'static str, &'static str, Vec<u8>);
+
     /// Serve one canned HTTP response on a random loopback port.
-    fn spawn_mock(status: &str, content_type: &str, extra_headers: &str, body: &[u8]) -> Bases {
+    fn spawn_mock(
+        status: &'static str,
+        content_type: &'static str,
+        extra_headers: &'static str,
+        body: &[u8],
+    ) -> Bases {
+        spawn_mock_seq(vec![(status, content_type, extra_headers, body.to_vec())]).0
+    }
+
+    /// Serve canned responses in order, one connection each, and record the
+    /// raw requests so tests can check the headers that were sent.
+    fn spawn_mock_seq(
+        responses: Vec<Canned>,
+    ) -> (Bases, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
         use std::io::Write as _;
         use std::net::TcpListener;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        let body = body.to_vec();
-        let status = status.to_string();
-        let ct = content_type.to_string();
-        let extra = extra_headers.to_string();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
         std::thread::spawn(move || {
-            let Ok((mut stream, _)) = listener.accept() else {
-                return;
-            };
-            let mut buf = [0u8; 8192];
-            let _ = stream.read(&mut buf);
-            // The blank line after the extra headers terminates the header
-            // section; without it every client rejects the response.
-            let response = format!(
-                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n",
-                status,
-                ct,
-                body.len(),
-                extra
-            );
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.write_all(&body);
+            for (status, ct, extra, body) in responses {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut buf = [0u8; 8192];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                log.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf[..n]).to_string());
+                // The blank line after the extra headers terminates the header
+                // section; without it every client rejects the response.
+                let response = format!(
+                    "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n",
+                    status,
+                    ct,
+                    body.len(),
+                    extra
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(&body);
+            }
         });
-        Bases {
-            ddg: format!("http://{addr}"),
-            wikipedia: format!("http://{addr}"),
-            jina: format!("http://{addr}"),
-            exa: format!("http://{addr}"),
-            firecrawl: format!("http://{addr}"),
-        }
+        let base = format!("http://{addr}");
+        (
+            Bases {
+                ddg: base.clone(),
+                wikipedia: base.clone(),
+                jina: base.clone(),
+                exa: base.clone(),
+                exa_mcp: base.clone(),
+                firecrawl: base,
+            },
+            seen,
+        )
+    }
+
+    fn mcp_exchange(call_body: &str) -> Vec<Canned> {
+        vec![
+            (
+                "200 OK",
+                "application/json",
+                "Mcp-Session-Id: s-1\r\n",
+                br#"{"jsonrpc":"2.0","id":1,"result":{}}"#.to_vec(),
+            ),
+            ("202 Accepted", "application/json", "", Vec::new()),
+            (
+                "200 OK",
+                "text/event-stream",
+                "",
+                format!("event: message\ndata: {call_body}\n\n").into_bytes(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn exa_searches_without_a_key_over_mcp() {
+        let call = r#"{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"Title: Rust\nURL: https://www.rust-lang.org/\nText: A language"}]}}"#;
+        let (bases, seen) = spawn_mock_seq(mcp_exchange(call));
+        let engine = WebSearchEngine::with_bases(bases);
+        let hits = engine
+            .search("exa", "rust", 5, &WebSearchKeys::default())
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].source, "exa");
+        let requests = seen.lock().unwrap();
+        assert!(requests[0].contains("\"initialize\""));
+        assert!(
+            requests[2]
+                .to_ascii_lowercase()
+                .contains("mcp-session-id: s-1")
+        );
+        assert!(requests[2].contains("web_search_advanced_exa"));
+    }
+
+    #[test]
+    fn automatic_search_falls_back_when_duckduckgo_finds_nothing() {
+        let call = r#"{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"results\":[{\"title\":\"Rust\",\"url\":\"https://www.rust-lang.org/\"}]}"}]}}"#;
+        let mut responses: Vec<Canned> = vec![(
+            "200 OK",
+            "text/html",
+            "",
+            b"<html>no results</html>".to_vec(),
+        )];
+        responses.extend(mcp_exchange(call));
+        let (bases, _) = spawn_mock_seq(responses);
+        let engine = WebSearchEngine::with_bases(bases);
+        let hits = engine
+            .search("auto", "rust", 5, &WebSearchKeys::default())
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].source, "exa");
+    }
+
+    #[test]
+    fn firecrawl_sends_no_key_when_none_is_set() {
+        let body = br#"{"success":true,"data":{"web":[{"url":"https://www.rust-lang.org/","title":"Rust","description":"A language"}]}}"#;
+        let (bases, seen) = spawn_mock_seq(vec![("200 OK", "application/json", "", body.to_vec())]);
+        let engine = WebSearchEngine::with_bases(bases);
+        let hits = engine
+            .search("firecrawl", "rust", 5, &WebSearchKeys::default())
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(
+            !seen.lock().unwrap()[0]
+                .to_ascii_lowercase()
+                .contains("authorization")
+        );
     }
 
     #[test]
@@ -1041,7 +1659,7 @@ mod tests {
         let engine = WebSearchEngine::with_bases(bases);
         let keys = WebSearchKeys {
             exa_api_key: Some("test-key".into()),
-            firecrawl_api_key: None,
+            ..WebSearchKeys::default()
         };
         let hits = engine.search("exa", "rust", 5, &keys).unwrap();
         assert_eq!(hits.len(), 1);
@@ -1055,8 +1673,8 @@ mod tests {
         let bases = spawn_mock("200 OK", "application/json", "", body);
         let engine = WebSearchEngine::with_bases(bases);
         let keys = WebSearchKeys {
-            exa_api_key: None,
             firecrawl_api_key: Some("fc-key".into()),
+            ..WebSearchKeys::default()
         };
         let page = engine
             .read_page("https://example.com/doc", "firecrawl", &keys)
@@ -1109,7 +1727,7 @@ mod tests {
         let engine = WebSearchEngine::with_bases(bases);
         let keys = WebSearchKeys {
             exa_api_key: Some("wrong".into()),
-            firecrawl_api_key: None,
+            ..WebSearchKeys::default()
         };
         let err = engine.search("exa", "q", 5, &keys).unwrap_err();
         assert_eq!(err.code, "WEB_AUTH_FAILED");

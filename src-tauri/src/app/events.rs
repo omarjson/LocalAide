@@ -13,6 +13,11 @@ pub enum ChatStreamEvent {
         snippet: String,
         score: f32,
     },
+    /// What LocalAide is doing before the answer starts, for example
+    /// "Searching the web". Shown as a short activity line.
+    Status {
+        label: String,
+    },
     Done {
         finish_reason: String,
         total_tokens: usize,

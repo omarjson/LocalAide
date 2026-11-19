@@ -8,7 +8,8 @@ import { cubicOut, quintOut } from "svelte/easing";
  * this: reduced-motion users get instant (0 ms) instead of animated.
  */
 export function dur(ms: number): number {
-  return prefersReducedMotion.current ? 0 : ms;
+  const off = typeof document !== "undefined" && document.documentElement.dataset.motion === "off";
+  return prefersReducedMotion.current || off ? 0 : ms;
 }
 
 /** One set of timings for the whole app, so motion feels like one product. */

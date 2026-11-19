@@ -17,9 +17,20 @@ pub struct WebProviderStatus {
     pub id: String,
     pub label: String,
     pub needs_key: bool,
+    /// A key can be added to raise the free limits.
+    pub takes_key: bool,
     pub supports: String,
+    pub note: String,
+    /// Firecrawl only: the user's own server address, when set.
+    pub base_url: Option<String>,
     pub key_set: bool,
     pub is_default: bool,
+}
+
+/// The configured keys and default provider, for chat's web context.
+pub(crate) fn web_settings(state: &AppState) -> Result<(String, WebSearchKeys), AppError> {
+    let (cfg, keys) = load_web(state)?;
+    Ok((default_provider(&cfg), keys))
 }
 
 fn load_web(state: &AppState) -> Result<(AppConfig, WebSearchKeys), AppError> {
@@ -31,6 +42,7 @@ fn load_web(state: &AppState) -> Result<(AppConfig, WebSearchKeys), AppError> {
     let keys = WebSearchKeys {
         exa_api_key: cfg.web_search.exa_api_key.clone(),
         firecrawl_api_key: cfg.web_search.firecrawl_api_key.clone(),
+        firecrawl_base_url: cfg.web_search.firecrawl_base_url.clone(),
     };
     Ok((cfg, keys))
 }
@@ -40,7 +52,7 @@ fn default_provider(cfg: &AppConfig) -> String {
         .provider
         .clone()
         .filter(|p| PROVIDER_TABLE.iter().any(|t| t.id == *p))
-        .unwrap_or_else(|| "duckduckgo".into())
+        .unwrap_or_else(|| "auto".into())
 }
 
 #[tauri::command]
@@ -53,8 +65,13 @@ pub fn web_providers(state: State<'_, AppState>) -> Result<Vec<WebProviderStatus
             id: p.id.to_string(),
             label: p.label.to_string(),
             needs_key: p.needs_key,
+            takes_key: p.takes_key,
             supports: p.supports.to_string(),
-            key_set: keys.for_provider(p.id).is_ok(),
+            note: p.note.to_string(),
+            base_url: (p.id == "firecrawl")
+                .then(|| keys.firecrawl_base_url.clone())
+                .flatten(),
+            key_set: keys.key(p.id).is_some(),
             is_default: p.id == default,
         })
         .collect())
@@ -91,8 +108,9 @@ fn web_search_work(
         .search(&provider, &query, limit.unwrap_or(8), &keys)
 }
 
-/// Read one page as text. Default: Firecrawl when its key is configured
-/// (it renders markdown), otherwise the keyless Jina Reader.
+/// Read one page as text. Default ("auto"): Firecrawl when the user added
+/// its key or runs their own Firecrawl, otherwise the Jina Reader with Exa
+/// as the fallback.
 #[tauri::command]
 pub async fn web_crawl(
     state: State<'_, AppState>,
@@ -109,17 +127,7 @@ fn web_crawl_work(
     provider: Option<String>,
 ) -> Result<WebPage, AppError> {
     let (_, keys) = load_web(&state)?;
-    let provider = provider.unwrap_or_else(|| {
-        if keys
-            .firecrawl_api_key
-            .as_deref()
-            .is_some_and(|k| !k.trim().is_empty())
-        {
-            "firecrawl".to_string()
-        } else {
-            "jina".to_string()
-        }
-    });
+    let provider = provider.unwrap_or_else(|| "auto".to_string());
     state.web.read_page(&url, &provider, &keys)
 }
 
@@ -171,5 +179,28 @@ pub fn web_set_default(state: State<'_, AppState>, provider: String) -> Result<(
         .map_err(|e| AppError::internal(e.to_string()))?;
     let mut cfg = store.load().map_err(AppError::internal)?;
     cfg.web_search.provider = Some(provider);
+    store.save(&cfg).map_err(AppError::internal)
+}
+
+/// Point Firecrawl at a server the user runs, or clear it (None or empty)
+/// to use Firecrawl's own service. Plain http is allowed for this computer
+/// only, like other local servers.
+#[tauri::command]
+pub fn web_set_firecrawl_url(
+    state: State<'_, AppState>,
+    url: Option<String>,
+) -> Result<(), AppError> {
+    let value = url
+        .map(|u| u.trim().trim_end_matches('/').to_string())
+        .filter(|u| !u.is_empty());
+    if let Some(u) = &value {
+        crate::config::validate_base_url(u).map_err(AppError::invalid_input)?;
+    }
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.web_search.firecrawl_base_url = value;
     store.save(&cfg).map_err(AppError::internal)
 }

@@ -39,7 +39,21 @@
     | "external"
     | "scale"
     | "key"
-    | "sparkle";
+    | "sparkle"
+    | "sidebar"
+    | "arrow-up"
+    | "stop"
+    | "copy"
+    | "pencil"
+    | "image"
+    | "bolt"
+    | "unlock"
+    | "code"
+    | "flask"
+    | "plug"
+    | "eye"
+    | "layers"
+    | "target";
 
   interface Props {
     name: IconName;
@@ -164,6 +178,45 @@
   {:else if name === "key"}
     <circle cx="8" cy="15" r="4" />
     <path d="m11 12 9-9M16 7l3 3M14 9l2 2" />
+  {:else if name === "sidebar"}
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16M15 10l-2 2 2 2" />
+  {:else if name === "arrow-up"}
+    <path d="M12 19V5m-6 6 6-6 6 6" />
+  {:else if name === "stop"}
+    <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />
+  {:else if name === "copy"}
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M5 15V6a2 2 0 0 1 2-2h8" />
+  {:else if name === "pencil"}
+    <path d="M4 20h4L19 9l-4-4L4 16z" />
+    <path d="m13.5 6.5 4 4" />
+  {:else if name === "image"}
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="10" r="1.5" />
+    <path d="m21 16-5-5-8 8" />
+  {:else if name === "bolt"}
+    <path d="M13 3 5 13h6l-1 8 8-10h-6z" />
+  {:else if name === "unlock"}
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 7.5-2" />
+  {:else if name === "code"}
+    <path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14" />
+  {:else if name === "flask"}
+    <path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3" />
+    <path d="M7 15h10" />
+  {:else if name === "plug"}
+    <path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4" />
+  {:else if name === "eye"}
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+    <circle cx="12" cy="12" r="3" />
+  {:else if name === "layers"}
+    <path d="m12 3 9 5-9 5-9-5z" />
+    <path d="m3 13 9 5 9-5" />
+  {:else if name === "target"}
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1" />
   {:else if name === "sparkle"}
     <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
   {/if}

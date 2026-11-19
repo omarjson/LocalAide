@@ -375,6 +375,9 @@
     }
   };
 
+  const sourceLabel = (id: string): string =>
+    ({ duckduckgo: "DuckDuckGo", exa: "Exa", firecrawl: "Firecrawl", wikipedia: "Wikipedia" })[id] ?? id;
+
   const fileType = (title: string) => {
     const extension = title.split(".").pop()?.toUpperCase();
     return extension && extension.length <= 4 ? extension : "FILE";
@@ -605,7 +608,7 @@
                 </div>
                 <div class="min-w-0 flex-1">
                   <a href={hit.url} rel="noreferrer" onclick={(e) => openInBrowser(e, hit.url)} onauxclick={(e) => openInBrowser(e, hit.url)} class="font-semibold text-ink-50 hover:text-ember-300 hover:underline">{hit.title}</a>
-                  <div class="mt-1 truncate text-sm text-ink-400">{hit.url}</div>
+                  <div class="mt-1 flex min-w-0 items-center gap-2 text-sm text-ink-400"><span class="truncate">{hit.url}</span>{#if hit.source}<span class="shrink-0 rounded-full border border-ink-700 px-2 text-xs text-ink-500">via {sourceLabel(hit.source)}</span>{/if}</div>
                   <p class="mt-2 text-sm leading-6 text-ink-200">{hit.snippet}</p>
                   <div class="mt-3 flex flex-wrap items-center gap-2">
                     {#if webPages[hit.url]}

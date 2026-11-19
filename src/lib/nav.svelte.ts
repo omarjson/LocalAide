@@ -1,7 +1,19 @@
-// Requests from the command palette to open a part of a screen. Screens read
-// these with $effect; `tick` changes on every request so a repeat still fires.
+// Requests to open a part of the app. App.svelte watches `screenRequest`
+// and Settings watches `settingsRequest`; `tick` changes on every request so
+// a repeat still fires.
 
-export type SettingsSectionId = "general" | "online" | "web" | "privacy" | "backups" | "activity" | "about";
+export type SettingsSectionId =
+  | "general"
+  | "online"
+  | "web"
+  | "integrations"
+  | "privacy"
+  | "backups"
+  | "activity"
+  | "developer"
+  | "about";
+
+export const screenRequest = $state<{ screen: "settings" | "models" | null; tick: number }>({ screen: null, tick: 0 });
 
 export const settingsRequest = $state<{ section: SettingsSectionId | null; checkUpdates: boolean; tick: number }>({
   section: null,
@@ -13,4 +25,6 @@ export function requestSettings(section: SettingsSectionId, checkUpdates = false
   settingsRequest.section = section;
   settingsRequest.checkUpdates = checkUpdates;
   settingsRequest.tick += 1;
+  screenRequest.screen = "settings";
+  screenRequest.tick += 1;
 }

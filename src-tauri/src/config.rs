@@ -46,6 +46,13 @@ pub struct AppConfig {
     /// models may use, in percent (Settings → Memory for models). None = 70.
     #[serde(default)]
     pub model_memory_percent: Option<u8>,
+    /// Link to an OpenCode server the user runs (Settings → Integrations).
+    #[serde(default)]
+    pub opencode: OpenCodeConfig,
+    /// Developer mode, experimental flags and which modules are on
+    /// (Settings → Developer).
+    #[serde(default)]
+    pub developer: DeveloperConfig,
 }
 
 /// Default and limits for `AppConfig::model_memory_percent`.
@@ -81,13 +88,40 @@ fn default_context_tokens() -> u32 {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct WebSearchConfig {
     /// Provider used when the user searches without picking one. None =
-    /// DuckDuckGo (keyless).
+    /// Automatic (DuckDuckGo, then Exa, then Wikipedia; all keyless).
     #[serde(default)]
     pub provider: Option<String>,
     #[serde(default)]
     pub exa_api_key: Option<String>,
     #[serde(default)]
     pub firecrawl_api_key: Option<String>,
+    /// A Firecrawl server on this computer, for example
+    /// `http://localhost:3002`. None = Firecrawl's own service.
+    #[serde(default)]
+    pub firecrawl_base_url: Option<String>,
+}
+
+/// Where LocalAide finds the user's OpenCode server. None = not linked.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct OpenCodeConfig {
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// The server's OPENCODE_SERVER_PASSWORD, when it has one. Left out of
+    /// backups unless keys are included.
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
+/// Developer mode. `flags` turn experimental features on; `modules` turn
+/// whole parts of the app off (a missing entry means on).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct DeveloperConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub flags: std::collections::BTreeMap<String, bool>,
+    #[serde(default)]
+    pub modules: std::collections::BTreeMap<String, bool>,
 }
 
 /// One user-configured OpenAI-compatible provider (OpenAI, OpenRouter,
@@ -120,6 +154,8 @@ impl Default for AppConfig {
             web_search: WebSearchConfig::default(),
             theme: None,
             model_memory_percent: None,
+            opencode: OpenCodeConfig::default(),
+            developer: DeveloperConfig::default(),
         }
     }
 }

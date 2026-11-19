@@ -15,7 +15,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - **Offline inference by default.** Chat runs on a local GGUF model through the llama-server sidecar (ADR-0007). With cloud mode off — the default — the chat path makes no network calls.
 - **Zero telemetry.** No analytics, crash beacons or remote logging.
 - **Local by default.** An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. Changing a provider's address to another site requires the key again. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
-- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" or "Install and restart" in Settings → About, browsing or importing skills from GitHub on the Skills screen, "Load models" for an online provider, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
+- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" or "Install and restart" in Settings → About, browsing or importing skills from GitHub on the Skills screen, "Load models" for an online provider, a chat message sent with the **Web** switch on (or Autonomous mode with Web on), linking or sending a task to OpenCode, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
 
 ## Key features (0.1.0, verified in code)
 
@@ -44,6 +44,11 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - Cloud inference is never a silent fallback. The only cloud path is the opt-in Online Providers mode above; the app never ships a provider, a key, or an automatic failover to the cloud.
 - Hot-swapping components in the app. Updates ship as whole signed packages (ADR-0005).
 - Any telemetry.
+
+## Chat modes and developer mode (0.1.3)
+
+- Modes (Standard, Strict, Unrestricted, Autonomous) live in `services/inference/modes.rs`; each adds one instruction to the system prompt, and the same table feeds the UI. Unrestricted must keep its last sentence (law and serious harm). Autonomous gathers web context only when Web is on.
+- Developer mode (`commands/developer.rs`): every flag and module there must change real behaviour. Modules default on and gate both the UI and, for recall and web, the backend.
 
 ## Legal
 

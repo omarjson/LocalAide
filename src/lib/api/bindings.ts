@@ -102,6 +102,10 @@ export interface ChatMessage {
   citations?: Citation[];
   /** Attached images as data URLs. Kept in the session only, not saved with the thread. */
   images?: string[];
+  /** Session only: what LocalAide did before answering. */
+  steps?: string[];
+  /** Session only: answer statistics (developer flag). */
+  stats?: { tokens: number; ms: number; firstTokenMs: number | null } | null;
 }
 
 export interface ChatThread {
@@ -121,11 +125,28 @@ export interface ChatStreamRequest {
   max_tokens?: number;
   history?: ChatMessage[];
   images?: string[];
+  /** Chat mode; the backend adds its instruction to the system prompt. */
+  mode?: ChatModeId;
+  /** Look in notes and documents (default true). */
+  use_recall?: boolean;
+  /** Search the web for this message (default false). */
+  use_web?: boolean;
+}
+
+export type ChatModeId = "standard" | "strict" | "unrestricted" | "autonomous";
+
+export interface ChatModeInfo {
+  id: ChatModeId;
+  label: string;
+  description: string;
+  /** Text added to the system prompt. Empty for standard. */
+  instruction: string;
 }
 
 export type ChatStreamEvent =
   | { type: "token"; payload: { token: string } }
   | { type: "citation"; payload: Citation }
+  | { type: "status"; payload: { label: string } }
   | { type: "done"; payload: { finish_reason: string; total_tokens: number } }
   | { type: "error"; payload: { error: string } };
 
@@ -327,6 +348,8 @@ export interface WebHit {
   title: string;
   url: string;
   snippet: string;
+  /** The provider that found it, for example "duckduckgo" or "exa". */
+  source: string;
 }
 
 /** A page read from the web as text. */
@@ -341,9 +364,52 @@ export interface WebProviderStatus {
   id: string;
   label: string;
   needs_key: boolean;
+  /** A key can be added to raise the free limits. */
+  takes_key: boolean;
   supports: string;
+  note: string;
+  /** Firecrawl only: the user's own server address. */
+  base_url: string | null;
   key_set: boolean;
   is_default: boolean;
+}
+
+/** One switch in Settings → Developer. */
+export interface DevToggle {
+  id: string;
+  label: string;
+  description: string;
+  default: boolean;
+}
+
+export interface DeveloperSettings {
+  enabled: boolean;
+  flags: Record<string, boolean>;
+  modules: Record<string, boolean>;
+  flag_list: DevToggle[];
+  module_list: DevToggle[];
+  modes: ChatModeInfo[];
+}
+
+export interface DeveloperUpdate {
+  enabled?: boolean;
+  flags?: Record<string, boolean>;
+  modules?: Record<string, boolean>;
+}
+
+export interface OpenCodeSettings {
+  base_url: string | null;
+  default_url: string;
+  has_password: boolean;
+}
+
+export interface OpenCodeHealth {
+  version: string | null;
+}
+
+export interface OpenCodeHandoff {
+  session_id: string;
+  title: string;
 }
 
 /** A curated starting point for the provider form (from the 9Router registry). */
@@ -361,6 +427,8 @@ export interface CloudProviderPreset {
   local: boolean;
   /** True when there is a free way in. */
   free: boolean;
+  /** A shared public key the service expects ("public" for OpenCode Zen). */
+  public_key: string;
 }
 
 /** One model a provider serves (cloud_list_models). */
@@ -397,8 +465,17 @@ export interface SkillSource {
 export interface RemoteSkill {
   id: string;
   name: string;
+  /** What the skill is for, when already known. */
+  description: string | null;
   preview: string | null;
   url: string;
+}
+
+export interface SkillDescription {
+  id: string;
+  name: string;
+  description: string;
+  license: string | null;
 }
 
 /** A listed skill's full text. */

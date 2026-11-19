@@ -44,7 +44,7 @@
   aria-expanded={ariaExpanded}
   aria-haspopup={ariaHaspopup}
   onclick={onclick}
-  class={`inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-sm whitespace-nowrap transition-[background-color,color,border-color,transform,box-shadow] duration-150 ease-out active:scale-[0.97] disabled:cursor-default disabled:opacity-50 disabled:active:scale-100 ${variants[variant]} ${className}`}
+  class={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm whitespace-nowrap transition-[background-color,color,border-color,transform,box-shadow] duration-150 ease-out active:scale-[0.97] disabled:cursor-default disabled:opacity-50 disabled:active:scale-100 ${variants[variant]} ${className}`}
 >
   {@render children?.()}
 </button>
