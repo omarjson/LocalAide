@@ -42,3 +42,12 @@ pub struct CloudModeRequest {
     pub enabled: bool,
     pub provider_id: Option<String>,
 }
+
+/// Ask a provider for its model list. `api_key` is a key typed into the form;
+/// without it, the saved key of `provider_id` is used for the same site.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CloudModelsRequest {
+    pub base_url: String,
+    pub api_key: Option<String>,
+    pub provider_id: Option<String>,
+}

@@ -5,8 +5,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-18
+
+Installs, updates and polish, from testing 0.1.1 on an Intel Mac and on Windows 11. This is the first version that can update itself, so people on 0.1.0 or 0.1.1 install it by hand once. On Windows the new installer replaces the old version; on macOS drag the new app over the old one. Your chats, notes, models and settings in `~/.aiassistant/` are kept.
+
+### Added
+- **In-app updates.** Settings → About → "Check for updates" shows the new version and what changed. "Install and restart" downloads it, checks its signature, installs it and keeps your data. Nothing is checked when the app starts.
+- **Privacy Policy and Terms of Use.** Readable in Settings → About → Legal, the command palette and the setup screen. The Windows installer shows the terms as its license page.
+- **Discover skills.** The Skills screen can browse and add skills from Anthropic Skills, GitHub Awesome Copilot, prompts.chat (about 2,600 prompts), or any public GitHub repository with a `skills` folder. Each added skill keeps its source and license.
+- **Free and local online providers.** Pollinations works with no key. 9Router, OmniRoute, LM Studio and Ollama run on your own computer. Google Gemini, OpenRouter, Groq, Cerebras, Hugging Face, NVIDIA, Mistral, LLM7 and Chutes have free keys; OpenAI, DeepSeek and Together are paid. "Load models" shows what a provider offers today and marks the free models.
+- **Hugging Face browsing.** Community models open on what is trending, and can be sorted by downloads, likes or newest. "Unfiltered only" shows uncensored and abliterated models, with a warning.
+- **Command palette actions.** Ctrl/⌘+K can start a new chat, switch the theme, open online providers, check for updates and open the legal pages. Arrow keys and Enter work in the list.
+
 ### Changed
-- Dependency updates: reqwest 0.13 (HTTPS now uses rustls with the operating system's certificate store instead of native-tls), sha2 0.11, rusqlite 0.42, getrandom 0.4, four smaller Rust updates, and six GitHub Actions updates. Hashes are written with `hex::encode`, which gives the same lowercase hex as before, so stored file hashes and the catalog digest still match.
+- **Icons and installers.** The app and installer icons are the LocalAide ghost; they were the default Tauri icons. The Windows installer has a branded header and side panel and installs for the current user, without an administrator prompt. The macOS disk image has a branded background.
+- **Motion.** Screens, settings sections, setup steps and tabs animate. Lists appear one item after another, cards lift on hover and loading shows placeholders. All of it turns off when the system asks for reduced motion.
+- **Fuller screens.** Chat, Skills and Setup have proper starting screens. Setup shows which step you are on.
+- An API key is no longer required to add an online provider. A provider that needs one says so in plain words.
+- Dependency updates: reqwest 0.13 (HTTPS now uses rustls with the operating system's certificate store instead of native-tls), sha2 0.11, rusqlite 0.42, getrandom 0.4, tauri-plugin-updater 2.14 (new), four smaller Rust updates, and six GitHub Actions updates. Stored file hashes and the catalog digest are unchanged.
+
+### Fixed
+- Search boxes no longer show a second box inside them when focused, or two clear buttons. Password fields no longer show Windows' extra reveal and clear buttons, and dropdowns show one arrow.
+- The `llama-server` engine is built without llama.cpp's web chat page. That page is downloaded at build time and its files disappeared, which broke every build on 2026-11-18. LocalAide never used it.
+
+### Release
+- Each GitHub Release now uses its section of this changelog as its notes, and the release job fails if the section is missing.
 
 ## [0.1.1] - 2026-11-15
 

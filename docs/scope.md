@@ -61,7 +61,7 @@ LocalAide is a privacy-first, local-first desktop assistant for daily computer w
 The following are out of scope for this release. UI controls, dependencies, and doc claims for them are disabled or removed until implemented end-to-end:
 
 - **Speech (STT / TTS)**: needs a second runtime. Deferred per ADR-0006; findings recorded in `.kiro/specs/engine-upgrade/tasks.md` Phase 5.
-- **Modular component hot-swapping**: deferred; updates ship as whole packages (updater signing is future work, ADR-0005).
+- **Modular component hot-swapping**: deferred; updates ship as whole signed packages through the in-app updater (ADR-0005).
 - **Telemetry / remote analytics**: zero background telemetry, analytics, or user profiling.
 
 ---

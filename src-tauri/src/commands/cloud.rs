@@ -7,114 +7,296 @@ use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::config::{CloudProvider, is_local_host, validate_base_url};
 use crate::domain::cloud::{
-    CloudConfigStatus, CloudModeRequest, CloudProviderDto, CloudProviderSaveRequest,
+    CloudConfigStatus, CloudModeRequest, CloudModelsRequest, CloudProviderDto,
+    CloudProviderSaveRequest,
 };
+use crate::services::inference::provider_models::{ProviderModel, list_models};
 use crate::services::inference::remote::RemoteTarget;
 use serde::Serialize;
 use tauri::State;
 
-/// A curated starting point for the provider form. The list is aggregated
-/// from the open 9Router registry (github.com/decolua/9router, MIT) plus
-/// first-party endpoints; free tiers change without notice, so the user's
-/// own key and the provider's docs decide what actually works.
+/// A curated starting point for the provider form. The list started from
+/// the open 9Router registry (github.com/decolua/9router, MIT) plus
+/// first-party endpoints. Free tiers change without notice, so "Load models"
+/// in Settings asks the provider what it serves today.
 #[derive(Debug, Clone, Serialize)]
 pub struct CloudProviderPreset {
     pub id: &'static str,
     pub label: &'static str,
     pub base_url: &'static str,
-    /// A sensible first model to prefill; every provider serves more.
+    /// A first model to prefill. Empty when the user should load the list.
     pub model: &'static str,
-    /// Where the user signs up for a key. Empty for local proxies.
+    /// Where the user signs up for a key. Empty when no key is needed.
     pub key_url: &'static str,
     pub note: &'static str,
+    /// False when the provider works without any key.
+    pub needs_key: bool,
+    /// True when this is a router or server on the user's own computer.
+    pub local: bool,
+    /// True when the provider has a free way in (keyless or a free key).
+    pub free: bool,
+}
+
+// One positional constructor keeps the table above readable as rows.
+#[allow(clippy::too_many_arguments)]
+const fn preset(
+    id: &'static str,
+    label: &'static str,
+    base_url: &'static str,
+    model: &'static str,
+    key_url: &'static str,
+    note: &'static str,
+    needs_key: bool,
+    local: bool,
+    free: bool,
+) -> CloudProviderPreset {
+    CloudProviderPreset {
+        id,
+        label,
+        base_url,
+        model,
+        key_url,
+        note,
+        needs_key,
+        local,
+        free,
+    }
 }
 
 pub const PROVIDER_PRESETS: &[CloudProviderPreset] = &[
-    CloudProviderPreset {
-        id: "ollama-local",
-        label: "Ollama (this machine)",
-        base_url: "http://127.0.0.1:11434/v1",
-        model: "llama3.3",
-        key_url: "",
-        note: "Your own local Ollama server; no key needed.",
-    },
-    CloudProviderPreset {
-        id: "llm7",
-        label: "LLM7 (free)",
-        base_url: "https://api.llm7.io/v1",
-        model: "gpt-5.5",
-        key_url: "https://llm7.io",
-        note: "Free community router; grab a free token, no card.",
-    },
-    CloudProviderPreset {
-        id: "synthetic",
-        label: "Synthetic (free tier)",
-        base_url: "https://api.synthetic.new/openai/v1",
-        model: "hf:zai-org/GLM-5.3",
-        key_url: "https://synthetic.new",
-        note: "Free tier backed by Hugging Face inference.",
-    },
-    CloudProviderPreset {
-        id: "api-airforce",
-        label: "api.airforce (free tier)",
-        base_url: "https://api.airforce/v1",
-        model: "gpt-oss-120b",
-        key_url: "https://api.airforce",
-        note: "Free tier; reliability varies.",
-    },
-    CloudProviderPreset {
-        id: "groq",
-        label: "Groq",
-        base_url: "https://api.groq.com/openai/v1",
-        model: "llama-3.3-70b-versatile",
-        key_url: "https://console.groq.com/keys",
-        note: "Generous free tier with strict rate limits.",
-    },
-    CloudProviderPreset {
-        id: "cerebras",
-        label: "Cerebras",
-        base_url: "https://api.cerebras.ai/v1",
-        model: "llama-3.3-70b",
-        key_url: "https://cloud.cerebras.ai",
-        note: "Free tier with a daily token cap.",
-    },
-    CloudProviderPreset {
-        id: "nvidia",
-        label: "NVIDIA NIM",
-        base_url: "https://integrate.api.nvidia.com/v1",
-        model: "meta/llama-3.3-70b-instruct",
-        key_url: "https://build.nvidia.com",
-        note: "Free tier, about 40 requests per minute.",
-    },
-    CloudProviderPreset {
-        id: "openrouter",
-        label: "OpenRouter",
-        base_url: "https://openrouter.ai/api/v1",
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        key_url: "https://openrouter.ai/keys",
-        note: "Many :free models at 50 requests/day.",
-    },
-    CloudProviderPreset {
-        id: "chutes",
-        label: "Chutes",
-        base_url: "https://llm.chutes.ai/v1",
-        model: "deepseek-ai/DeepSeek-R1",
-        key_url: "https://chutes.ai",
-        note: "Free tier with per-chute quotas.",
-    },
-    CloudProviderPreset {
-        id: "mistral",
-        label: "Mistral",
-        base_url: "https://api.mistral.ai/v1",
-        model: "mistral-small-latest",
-        key_url: "https://console.mistral.ai",
-        note: "Free Experiment tier; data-training opt-in.",
-    },
+    // No key at all.
+    preset(
+        "pollinations",
+        "Pollinations (free, no key)",
+        "https://text.pollinations.ai/v1",
+        "openai",
+        "https://enter.pollinations.ai",
+        "Works without a key or sign-up. Free use is limited to one request about every 45 seconds per computer, and answers may be filtered. Add a Pollinations key for more models and no wait.",
+        false,
+        false,
+        true,
+    ),
+    // Routers on this computer. 9Router and OmniRoute both listen on port
+    // 20128 by default and pool many free tiers behind one address.
+    preset(
+        "9router",
+        "9Router (on this computer)",
+        "http://localhost:20128/v1",
+        "",
+        "https://github.com/decolua/9router",
+        "A free router you run yourself. It switches between free providers when one runs out. Start it, then press Load models. Paste a key only if you turned keys on in its dashboard.",
+        false,
+        true,
+        true,
+    ),
+    preset(
+        "omniroute",
+        "OmniRoute (on this computer)",
+        "http://localhost:20128/v1",
+        "",
+        "https://github.com/diegosouzapw/OmniRoute",
+        "A free router you run yourself, with automatic fallback across many providers. Start it, then press Load models. Paste a key only if you set one in OmniRoute.",
+        false,
+        true,
+        true,
+    ),
+    preset(
+        "ollama-local",
+        "Ollama (on this computer)",
+        "http://127.0.0.1:11434/v1",
+        "",
+        "",
+        "Your own Ollama server. No key needed. Press Load models to see what you have pulled.",
+        false,
+        true,
+        true,
+    ),
+    preset(
+        "lmstudio-local",
+        "LM Studio (on this computer)",
+        "http://127.0.0.1:1234/v1",
+        "",
+        "",
+        "LM Studio's local server. Turn it on in LM Studio, then press Load models.",
+        false,
+        true,
+        true,
+    ),
+    // Free keys.
+    preset(
+        "gemini",
+        "Google Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-flash-latest",
+        "https://aistudio.google.com/apikey",
+        "Free key from Google AI Studio, with daily limits. On the free tier Google may use your prompts to improve its products.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "openrouter",
+        "OpenRouter",
+        "https://openrouter.ai/api/v1",
+        "",
+        "https://openrouter.ai/keys",
+        "One key for hundreds of models. Models marked Free cost nothing, with a daily request limit.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "groq",
+        "Groq",
+        "https://api.groq.com/openai/v1",
+        "llama-3.3-70b-versatile",
+        "https://console.groq.com/keys",
+        "Very fast. Free key with strict rate limits.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "cerebras",
+        "Cerebras",
+        "https://api.cerebras.ai/v1",
+        "",
+        "https://cloud.cerebras.ai",
+        "Free key with a daily token cap.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "huggingface",
+        "Hugging Face Inference",
+        "https://router.huggingface.co/v1",
+        "",
+        "https://huggingface.co/settings/tokens",
+        "Open models from many hosts with one Hugging Face token. Free accounts get small monthly credits.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "nvidia",
+        "NVIDIA NIM",
+        "https://integrate.api.nvidia.com/v1",
+        "",
+        "https://build.nvidia.com",
+        "Free key, about 40 requests per minute.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "mistral",
+        "Mistral",
+        "https://api.mistral.ai/v1",
+        "mistral-small-latest",
+        "https://console.mistral.ai",
+        "Free Experiment tier. Mistral may train on free-tier prompts.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "llm7",
+        "LLM7",
+        "https://api.llm7.io/v1",
+        "",
+        "https://llm7.io",
+        "Community router. Get a free token, no card needed.",
+        true,
+        false,
+        true,
+    ),
+    preset(
+        "chutes",
+        "Chutes",
+        "https://llm.chutes.ai/v1",
+        "",
+        "https://chutes.ai",
+        "Open models with per-model quotas.",
+        true,
+        false,
+        true,
+    ),
+    // Paid.
+    preset(
+        "openai",
+        "OpenAI",
+        "https://api.openai.com/v1",
+        "",
+        "https://platform.openai.com/api-keys",
+        "Paid by use.",
+        true,
+        false,
+        false,
+    ),
+    preset(
+        "deepseek",
+        "DeepSeek",
+        "https://api.deepseek.com/v1",
+        "deepseek-chat",
+        "https://platform.deepseek.com/api_keys",
+        "Paid by use, low prices.",
+        true,
+        false,
+        false,
+    ),
+    preset(
+        "together",
+        "Together AI",
+        "https://api.together.xyz/v1",
+        "",
+        "https://api.together.ai/settings/api-keys",
+        "Paid by use, many open models.",
+        true,
+        false,
+        false,
+    ),
 ];
 
 #[tauri::command]
 pub fn cloud_provider_presets() -> Vec<CloudProviderPreset> {
     PROVIDER_PRESETS.to_vec()
+}
+
+/// Ask a provider which models it serves. Runs only when the user presses
+/// "Load models". A key typed into the form wins; otherwise the saved key of
+/// `provider_id` is used, and only when the address is still the same site.
+#[tauri::command]
+pub async fn cloud_list_models(
+    state: State<'_, AppState>,
+    req: CloudModelsRequest,
+) -> Result<Vec<ProviderModel>, AppError> {
+    let base_url = req.base_url.trim().to_string();
+    if base_url.is_empty() {
+        return Err(AppError::invalid_input("Enter the provider address first."));
+    }
+    validate_base_url(&base_url).map_err(AppError::invalid_input)?;
+    let typed = req
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_string);
+    let key = match typed {
+        Some(key) => key,
+        None => match req.provider_id.as_deref() {
+            Some(id) => {
+                let cfg = load_config(&state)?;
+                cfg.cloud_providers
+                    .iter()
+                    .find(|p| p.id == id && same_origin(&p.base_url, &base_url))
+                    .map(|p| p.api_key.clone())
+                    .unwrap_or_default()
+            }
+            None => String::new(),
+        },
+    };
+    list_models(&base_url, &key).await
 }
 
 /// Plain-HTTP proxies on this machine (Ollama, LM Studio, llama-server)
@@ -126,6 +308,9 @@ fn is_loopback_http(base_url: &str) -> bool {
 /// Short hint of a stored key for the frontend: fixed dots plus the last four
 /// characters for longer keys.
 fn key_hint(key: &str) -> String {
+    if key.trim().is_empty() {
+        return String::new();
+    }
     let chars: Vec<char> = key.chars().collect();
     if chars.len() <= 8 {
         return "••••••••".to_string();
@@ -243,7 +428,10 @@ pub fn cloud_provider_save(
                 .filter(|k| !k.is_empty());
             // A saved key goes only to the address it was entered for. When
             // the address moves to another site, the key must be entered again.
-            if new_key.is_none() && !same_origin(&provider.base_url, &base_url) {
+            if new_key.is_none()
+                && !provider.api_key.is_empty()
+                && !same_origin(&provider.base_url, &base_url)
+            {
                 if is_loopback_http(&base_url) {
                     provider.api_key.clear();
                 } else {
@@ -266,11 +454,9 @@ pub fn cloud_provider_save(
                 .as_deref()
                 .map(str::trim)
                 .filter(|k| !k.is_empty());
-            if key.is_none() && !is_loopback_http(&base_url) {
-                return Err(AppError::invalid_input(
-                    "An API key is required for a new provider. (Local proxies on this machine are the exception.)",
-                ));
-            }
+            // The key is optional: keyless services (Pollinations) and routers
+            // on this computer work without one. A provider that needs a key
+            // answers chat with a clear "needs an API key" message.
             let id = format!("cp-{}", uuid_v4());
             cfg.cloud_providers.push(CloudProvider {
                 id: id.clone(),

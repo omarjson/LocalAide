@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { slide } from "svelte/transition";
+  import { fly, slide } from "svelte/transition";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
@@ -14,16 +14,21 @@
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
   import { openInBrowser } from "../lib/links";
-  import { dur } from "../lib/motion";
+  import { dur, enterScreen } from "../lib/motion";
+  import { openLegal } from "../lib/legal.svelte";
+  import { settingsRequest } from "../lib/nav.svelte";
+  import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import { applyTheme, currentTheme } from "../lib/theme";
   import type {
     BackupConfigDto,
     BackupEntry,
     CloudConfigStatus,
     CloudProviderPreset,
+    ProviderModel,
     SystemHealthResponse,
     ToolAuditEntry,
     UpdateCheckResponse,
+    UpdateProgressEvent,
     WebProviderStatus,
   } from "../lib/api/bindings";
 
@@ -63,6 +68,8 @@
   ];
   let diagBusy = $state(false);
   let updateBusy = $state(false);
+  let installProgress = $state<UpdateProgressEvent | null>(null);
+  let installError = $state<string | null>(null);
 
   let backupConfig = $state<BackupConfigDto | null>(null);
   let backups = $state<BackupEntry[]>([]);
@@ -103,6 +110,42 @@
   let webBusy = $state(false);
   let webNotice = $state<string | null>(null);
   const appliedPreset = $derived(webPresets.find((preset) => preset.id === appliedPresetId) ?? null);
+  const presetGroups = $derived([
+    { title: "No key needed", items: webPresets.filter((p) => !p.needs_key && !p.local) },
+    { title: "On this computer", items: webPresets.filter((p) => p.local) },
+    { title: "Free key", items: webPresets.filter((p) => p.needs_key && p.free && !p.local) },
+    { title: "Paid", items: webPresets.filter((p) => p.needs_key && !p.free && !p.local) },
+  ].filter((g) => g.items.length > 0));
+
+  let providerModels = $state<ProviderModel[]>([]);
+  let modelsBusy = $state(false);
+  let modelsError = $state<string | null>(null);
+  let modelQuery = $state("");
+  let freeOnly = $state(false);
+  const shownModels = $derived(
+    providerModels
+      .filter((m) => !freeOnly || m.free)
+      .filter((m) => {
+        const q = modelQuery.trim().toLowerCase();
+        return !q || m.id.toLowerCase().includes(q) || (m.name ?? "").toLowerCase().includes(q);
+      })
+      .slice(0, 200),
+  );
+
+  const loadProviderModels = async () => {
+    modelsBusy = true;
+    modelsError = null;
+    try {
+      providerModels = await api.cloudListModels(providerUrl.trim(), providerKey.trim() || undefined, editingProviderId ?? undefined);
+      freeOnly = providerModels.some((m) => m.free) && !providerModels.every((m) => m.free) && !providerModel;
+      if (providerModels.length === 0) modelsError = "The provider sent an empty list. Type the model name instead.";
+    } catch (e: unknown) {
+      providerModels = [];
+      modelsError = errorMessage(e);
+    } finally {
+      modelsBusy = false;
+    }
+  };
   let confirmation = $state<Confirmation | null>(null);
 
   let theme = $state<"dark" | "light">(currentTheme());
@@ -174,9 +217,17 @@
     }
   };
 
+  const choosePreset = (id: string) => {
+    appliedPresetId = id;
+    applyPreset();
+  };
+
   const applyPreset = () => {
     const preset = webPresets.find((item) => item.id === appliedPresetId);
     if (!preset) return;
+    providerModels = [];
+    modelsError = null;
+    modelQuery = "";
     providerLabel = preset.label;
     providerUrl = preset.base_url;
     providerModel = preset.model;
@@ -235,6 +286,8 @@
     providerKey = "";
     providerFormError = null;
     appliedPresetId = null;
+    providerModels = [];
+    modelsError = null;
     void loadPresets();
     showProviderForm = true;
   };
@@ -367,6 +420,7 @@
 
   const checkForUpdates = async () => {
     updateBusy = true;
+    installError = null;
     try {
       updateInfo = await api.checkForUpdate();
     } catch (e: unknown) {
@@ -375,6 +429,33 @@
       updateBusy = false;
     }
   };
+
+  // Downloads, checks the signature and installs. The app restarts itself
+  // when it is done; your chats and models are kept.
+  const installUpdate = async () => {
+    installError = null;
+    installProgress = { stage: "downloading", downloaded: 0, total: null };
+    try {
+      await api.installUpdate((event) => { installProgress = event; });
+    } catch (e: unknown) {
+      installError = errorMessage(e);
+      installProgress = null;
+    }
+  };
+
+  const installPercent = $derived(
+    installProgress?.total ? Math.min(100, Math.round((installProgress.downloaded / installProgress.total) * 100)) : null,
+  );
+
+  // The command palette can open a section (and start an update check).
+  $effect(() => {
+    if (settingsRequest.tick === 0 || !settingsRequest.section) return;
+    selectSection(settingsRequest.section);
+    if (settingsRequest.checkUpdates) {
+      settingsRequest.checkUpdates = false;
+      void checkForUpdates();
+    }
+  });
 
   const loadBackup = async () => {
     backupBusy = true;
@@ -533,11 +614,11 @@
           type="button"
           aria-current={activeTab === section.id ? "page" : undefined}
           onclick={() => selectSection(section.id)}
-          class={`relative flex h-9 items-center gap-3 rounded-md px-3 text-left text-sm transition-colors ${activeTab === section.id
+          class={`relative flex h-9 items-center gap-3 rounded-md px-3 text-left text-sm transition-colors duration-150 ${activeTab === section.id
             ? "bg-ink-800 font-semibold text-ink-50"
             : "text-ink-300 hover:bg-veil/5 hover:text-ink-50"}`}
         >
-          {#if activeTab === section.id}<span class="absolute left-0 top-2.5 h-4 w-[3px] rounded-full bg-ember-500" aria-hidden="true"></span>{/if}
+          <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${activeTab === section.id ? "h-4 opacity-100" : "h-0 opacity-0"}`} aria-hidden="true"></span>
           <Icon name={section.icon} class="h-[18px] w-[18px]" />
           {section.label}
         </button>
@@ -549,6 +630,8 @@
         <div class="mb-4"><ErrorBanner message={settingsNotice} onRetry={() => selectSection(activeTab)} onDismiss={() => settingsNotice = null} /></div>
       {/if}
 
+      {#key activeTab}
+      <div in:fly={enterScreen()}>
       {#if activeTab === "general"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">General</h2>
@@ -611,7 +694,7 @@
       {:else if activeTab === "online"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Online providers</h2>
-          <p class="mt-1 text-sm text-ink-400">Optional cloud chat with a provider you choose.</p>
+          <p class="mt-1 text-sm text-ink-400">Optional cloud chat with a provider you choose. Some are free, and some need no key at all.</p>
 
           {#if cloudError}<div class="mt-4"><ErrorBanner message={cloudError} onRetry={() => void loadCloud()} onDismiss={() => cloudError = null} /></div>{/if}
           <div class="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-200">
@@ -631,7 +714,7 @@
                   disabled={cloudBusy || !cloud || cloud.providers.length === 0}
                   class={`relative h-5 w-10 rounded-full border transition-colors disabled:opacity-50 ${cloud?.cloud_enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
                 >
-                  <span class={`absolute top-0.5 h-3 w-3 rounded-full transition-transform ${cloud?.cloud_enabled ? "translate-x-5 bg-on-ember" : "left-1 bg-ink-300"}`}></span>
+                  <span class={`absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${cloud?.cloud_enabled ? "translate-x-[18px] bg-on-ember" : "bg-ink-300"}`}></span>
                 </button>
               {/snippet}
             </SettingsRow>
@@ -652,7 +735,7 @@
                         <span class="font-semibold text-ink-50">{provider.label}</span>
                         {#if provider.is_active}<StatusBadge label="Selected" tone="ok" dot />{/if}
                       </div>
-                      <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · key {provider.api_key_hint}</div>
+                      <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · {provider.api_key_hint ? `key ${provider.api_key_hint}` : "no key"}</div>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                       {#if !provider.is_active}<Button variant="secondary" disabled={cloudBusy} onclick={() => void activateProvider(provider.id)}>Use this</Button>{/if}
@@ -672,21 +755,87 @@
                 <h3 class="font-semibold text-ink-50">{editingProviderId ? "Edit provider" : "Add provider"}</h3>
                 <Button variant="subtle" ariaLabel="Close provider form" onclick={() => showProviderForm = false}><Icon name="close" class="h-4 w-4" /></Button>
               </div>
-              <label class="mt-4 block text-sm text-ink-400">
-                Start with a provider preset
-                <select bind:value={appliedPresetId} onchange={applyPreset} class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none focus:border-edge">
-                  <option value={null}>Choose a provider…</option>
-                  {#each webPresets as preset (preset.id)}<option value={preset.id}>{preset.label}</option>{/each}
-                </select>
-              </label>
+              {#if !editingProviderId}
+                <div class="mt-4 space-y-4">
+                  {#each presetGroups as group (group.title)}
+                    <div>
+                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">{group.title}</div>
+                      <div class="grid gap-2 sm:grid-cols-2">
+                        {#each group.items as preset (preset.id)}
+                          <button
+                            type="button"
+                            aria-pressed={appliedPresetId === preset.id}
+                            onclick={() => choosePreset(preset.id)}
+                            class={`lift flex min-h-[52px] items-center gap-3 rounded-md border px-3 py-2 text-left text-sm ${appliedPresetId === preset.id ? "border-ember-500/60 bg-ember-500/10 text-ink-50" : "border-ink-700 bg-ink-950 text-ink-200 hover:border-edge"}`}
+                          >
+                            <span class={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${appliedPresetId === preset.id ? "bg-ember-500/20 text-ember-300" : "bg-ink-800 text-ink-300"}`}>
+                              <Icon name={preset.local ? "computer" : preset.needs_key ? "key" : "sparkle"} class="h-4 w-4" />
+                            </span>
+                            <span class="min-w-0 flex-1 font-medium leading-snug">{preset.label}</span>
+                            {#if appliedPresetId === preset.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ember-300" />{/if}
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="skeleton h-24"></div>
+                  {/each}
+                </div>
+              {/if}
               {#if appliedPreset}
-                <p class="mt-2 text-sm text-ink-400">{appliedPreset.note} {#if appliedPreset.key_url}<a class="text-ember-300 hover:underline" href={appliedPreset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, appliedPreset?.key_url ?? "")}>Get a key</a>{/if}</p>
+                <div class="mt-4 rounded-md border border-ink-800 bg-ink-950 p-3 text-sm text-ink-300" in:slide={{ duration: dur(150) }}>
+                  {appliedPreset.note}
+                  {#if appliedPreset.key_url}
+                    <a class="ml-1 inline-flex items-center gap-1 text-ember-300 hover:underline" href={appliedPreset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, appliedPreset?.key_url ?? "")}>{appliedPreset.needs_key ? "Get a key" : appliedPreset.local ? "How to install it" : "More about it"}<Icon name="external" class="h-3.5 w-3.5" /></a>
+                  {/if}
+                </div>
               {/if}
               <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                <label class="text-sm text-ink-400">Name<input bind:value={providerLabel} placeholder="A name for this provider" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
-                <label class="text-sm text-ink-400">Model<input bind:value={providerModel} placeholder="Model name" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
-                <label class="text-sm text-ink-400 sm:col-span-2">Provider address<input bind:value={providerUrl} placeholder="https://api.example.com/v1" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
-                <label class="text-sm text-ink-400 sm:col-span-2">API key {editingProviderId ? "(leave empty to keep the saved key)" : ""}<input type="password" bind:value={providerKey} placeholder="Paste your key" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /></label>
+                <label class="text-sm text-ink-400">Name<input bind:value={providerLabel} placeholder="A name for this provider" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
+                <label class="text-sm text-ink-400">Provider address<input bind:value={providerUrl} placeholder="https://api.example.com/v1" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
+                <label class="text-sm text-ink-400 sm:col-span-2">API key {editingProviderId ? "(leave empty to keep the saved key)" : appliedPreset && !appliedPreset.needs_key ? "(optional for this provider)" : ""}<input type="password" bind:value={providerKey} placeholder={appliedPreset && !appliedPreset.needs_key ? "Not needed" : "Paste your key"} autocomplete="off" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
+                <div class="sm:col-span-2">
+                  <label class="text-sm text-ink-400" for="provider-model">Model</label>
+                  <div class="mt-1 flex gap-2">
+                    <input id="provider-model" bind:value={providerModel} placeholder="Model name, or load the list" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" />
+                    <Button variant="secondary" class="h-10" disabled={modelsBusy || !providerUrl.trim()} onclick={() => void loadProviderModels()}>
+                      <Icon name="refresh" class={`h-4 w-4 ${modelsBusy ? "animate-spin" : ""}`} />
+                      {modelsBusy ? "Loading…" : "Load models"}
+                    </Button>
+                  </div>
+                  {#if modelsError}<p class="mt-2 text-sm text-amber-300" in:slide={{ duration: dur(120) }}>{modelsError}</p>{/if}
+                  {#if providerModels.length > 0}
+                    <div class="mt-2 overflow-hidden rounded-md border border-ink-700 bg-ink-950" in:slide={{ duration: dur(180) }}>
+                      <div class="flex items-center gap-2 border-b border-ink-800 px-2 py-1.5">
+                        <span class="field-shell flex h-8 min-w-0 flex-1 items-center gap-2 rounded border border-transparent px-2">
+                          <Icon name="search" class="h-4 w-4 shrink-0 text-ink-400" />
+                          <input type="search" bind:value={modelQuery} aria-label="Filter models" placeholder={`Filter ${providerModels.length} models`} class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500" />
+                        </span>
+                        {#if providerModels.some((m) => m.free)}
+                          <label class="flex shrink-0 items-center gap-1.5 text-sm text-ink-300"><input type="checkbox" bind:checked={freeOnly} class="accent-ember-600" />Free only</label>
+                        {/if}
+                      </div>
+                      <div class="max-h-56 overflow-y-auto p-1" role="listbox" aria-label="Models">
+                        {#each shownModels as m (m.id)}
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={providerModel === m.id}
+                            onclick={() => providerModel = m.id}
+                            class={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${providerModel === m.id ? "bg-ember-500/10 text-ink-50" : "text-ink-200 hover:bg-veil/5"}`}
+                          >
+                            <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{m.id}</span>
+                            {#if m.context_length}<span class="shrink-0 text-xs text-ink-500">{Math.round(m.context_length / 1000)}k</span>{/if}
+                            {#if m.free}<span class="shrink-0 rounded bg-emerald-500/15 px-1.5 text-xs font-semibold text-emerald-300">Free</span>{/if}
+                            {#if providerModel === m.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ember-300" />{/if}
+                          </button>
+                        {:else}
+                          <p class="px-2 py-3 text-sm text-ink-400">No models match.</p>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               </div>
               {#if providerFormError}<div class="mt-3"><ErrorBanner message={providerFormError} onRetry={() => void saveProvider()} onDismiss={() => providerFormError = null} /></div>{/if}
               <p class="mt-3 text-sm text-ink-400">The key stays in this app's local settings and is sent only to the address above.</p>
@@ -802,9 +951,90 @@
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><div><h3 class="font-semibold text-ink-50">LocalAide</h3><p class="mt-1 text-sm text-ink-400">Version {appVersion || "unknown"}</p></div><StatusBadge label="Local by default" tone="ok" dot /></div></div>
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Updates</h3>
           <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
-            <div class="flex flex-wrap items-center justify-between gap-3"><div class="font-semibold text-ink-50">Release check</div><Button variant="secondary" disabled={updateBusy} onclick={() => void checkForUpdates()}>{updateBusy ? "Checking…" : "Check for updates"}</Button></div>
-            {#if updateInfo?.update_available}<div class="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Version {updateInfo.latest_version} is available. LocalAide never installs updates by itself. <a href={updateInfo.release_url} class="font-semibold underline" onclick={(e) => openInBrowser(e, updateInfo?.release_url ?? "")}>Open the download page</a></div>{:else}<p class="mt-3 text-sm text-ink-400">{updateInfo ? `You have the latest version, ${updateInfo.current_version}.` : "Not checked yet. LocalAide contacts GitHub only when you press Check for updates."}</p>{/if}
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="font-semibold text-ink-50">Check for a new version</div>
+                <p class="mt-0.5 text-sm text-ink-400">LocalAide asks GitHub only when you press the button. Updates keep your chats, notes and models.</p>
+              </div>
+              <Button variant="secondary" disabled={updateBusy || installProgress !== null} onclick={() => void checkForUpdates()}>
+                <Icon name="refresh" class={`h-4 w-4 ${updateBusy ? "animate-spin" : ""}`} />
+                {updateBusy ? "Checking…" : "Check for updates"}
+              </Button>
+            </div>
+            {#if updateInfo?.update_available}
+              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4" in:slide={{ duration: dur(180) }}>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div class="font-semibold text-ink-50">Version {updateInfo.latest_version} is ready</div>
+                    <p class="text-sm text-ink-400">You have {updateInfo.current_version}.</p>
+                  </div>
+                  {#if updateInfo.can_install}
+                    <Button variant="primary" disabled={installProgress !== null} onclick={() => void installUpdate()}>
+                      <Icon name="download" class="h-4 w-4" />
+                      {installProgress ? "Installing…" : "Install and restart"}
+                    </Button>
+                  {:else}
+                    <Button variant="primary" onclick={(e) => openInBrowser(e, updateInfo?.release_url ?? "")}>
+                      <Icon name="external" class="h-4 w-4" />
+                      Open the download page
+                    </Button>
+                  {/if}
+                </div>
+                {#if installProgress}
+                  <div class="mt-4" in:slide={{ duration: dur(150) }}>
+                    <div class="h-1.5 overflow-hidden rounded-full bg-ink-800">
+                      {#if installPercent !== null && installProgress.stage === "downloading"}
+                        <div class="h-full rounded-full bg-ember-500 transition-[width] duration-300 ease-out" style={`width:${installPercent}%`}></div>
+                      {:else}
+                        <div class="progress-indeterminate h-full w-1/3 rounded-full bg-ember-500"></div>
+                      {/if}
+                    </div>
+                    <p class="mt-2 text-sm text-ink-400" aria-live="polite">
+                      {#if installProgress.stage === "downloading"}
+                        Downloading{installPercent !== null ? ` · ${installPercent}%` : ""}{installProgress.total ? ` of ${formatBytes(installProgress.total)}` : ""}
+                      {:else if installProgress.stage === "installing"}
+                        Checking the signature and installing…
+                      {:else}
+                        Restarting LocalAide…
+                      {/if}
+                    </p>
+                  </div>
+                {/if}
+                {#if installError}
+                  <div class="mt-3"><ErrorBanner message={installError} onRetry={() => void installUpdate()} onDismiss={() => installError = null} /></div>
+                {/if}
+                {#if !updateInfo.can_install}
+                  <p class="mt-3 text-sm text-ink-400">This copy cannot install updates by itself. Download the new version and open it; it replaces this one and keeps your data.</p>
+                {/if}
+                {#if updateInfo.notes}
+                  <details class="group mt-3">
+                    <summary class="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-ember-300 hover:underline">
+                      <Icon name="chevron-right" class="h-4 w-4 transition-transform duration-200 group-open:rotate-90" />
+                      What's new
+                    </summary>
+                    <div class="mt-2 max-h-64 overflow-y-auto rounded-md border border-ink-800 bg-ink-950 p-3">
+                      <MarkdownDoc source={updateInfo.notes} />
+                    </div>
+                  </details>
+                {/if}
+              </div>
+            {:else}
+              <p class="mt-3 text-sm text-ink-400">{updateInfo ? `You have the newest version, ${updateInfo.current_version}.` : "Not checked yet."}</p>
+            {/if}
           </div>
+
+          <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Legal</h3>
+          <SettingsGroup>
+            <SettingsRow icon="shield" title="Privacy Policy" description="What LocalAide stores, and when it uses the internet.">
+              {#snippet control()}<Button variant="subtle" onclick={() => openLegal("privacy")}>Read</Button>{/snippet}
+            </SettingsRow>
+            <SettingsRow icon="scale" title="Terms of Use" description="The rules for using LocalAide and the models it downloads." class="border-t border-ink-800">
+              {#snippet control()}<Button variant="subtle" onclick={() => openLegal("terms")}>Read</Button>{/snippet}
+            </SettingsRow>
+            <SettingsRow icon="file" title="Open-source notices" description="LocalAide is MIT licensed and built on open-source software." class="border-t border-ink-800">
+              {#snippet control()}<Button variant="subtle" onclick={() => openLegal("notices")}>Read</Button>{/snippet}
+            </SettingsRow>
+          </SettingsGroup>
           {#if health}
             <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Local systems</h3>
             <SettingsGroup>
@@ -819,6 +1049,8 @@
           <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><h3 class="font-semibold text-ink-50">Local log</h3><div class="flex items-center gap-2"><Tabs items={logTabs} value={logSource} onChange={(value) => { if (value === "app" || value === "engine") { logSource = value; void loadDiagnostics(); } }} ariaLabel="Which log" /><Button variant="subtle" disabled={diagBusy} onclick={() => void loadDiagnostics()}>Refresh</Button></div></div>{#if logLines.length === 0}<p class="mt-3 text-sm text-ink-400">No log output yet.</p>{:else}<pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{logLines.join("\n")}</pre>{/if}</div>
         </div>
       {/if}
+      </div>
+      {/key}
     </div>
   </div>
 </div>

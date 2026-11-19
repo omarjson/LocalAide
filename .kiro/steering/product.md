@@ -15,7 +15,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - **Offline inference by default.** Chat runs on a local GGUF model through the llama-server sidecar (ADR-0007). With cloud mode off — the default — the chat path makes no network calls.
 - **Zero telemetry.** No analytics, crash beacons or remote logging.
 - **Local by default.** An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. Changing a provider's address to another site requires the key again. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
-- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" in Settings → About, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
+- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" or "Install and restart" in Settings → About, browsing or importing skills from GitHub on the Skills screen, "Load models" for an online provider, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
 
 ## Key features (0.1.0, verified in code)
 
@@ -35,15 +35,19 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - **Tool actions are list, read, write and search.** Command execution does not exist, so there is no execution approval path.
 - **The audit log is not append-only.** "Clear" exists; it leaves one row that says how many entries it removed.
 - **Image input is code-complete but not runtime-verified.** No real vision model has been driven end to end yet; add that check before demoing the feature.
-- **Releases are unsigned and there is no in-app updater.** Signing is wired to optional CI secrets; the updater needs a key pair the owner must create (`docs/release.md`).
+- **Releases are not code-signed.** Signing is wired to optional CI secrets. The in-app updater (Settings → About, user-confirmed, signature-checked) is built in since 0.1.2, but it only offers installs once the owner creates the update key pair (`docs/release.md`); until then it links to the release page.
 
 ## Non-goals for this release
 
 - Voice (speech to text and text to speech). Deferred by ADR-0006.
 - Vision beyond the shipped image-input path: no screen capture, no Candle vision models.
 - Cloud inference is never a silent fallback. The only cloud path is the opt-in Online Providers mode above; the app never ships a provider, a key, or an automatic failover to the cloud.
-- Hot-swapping components in the app. Updates ship as whole packages; updater signing is future work (ADR-0005).
+- Hot-swapping components in the app. Updates ship as whole signed packages (ADR-0005).
 - Any telemetry.
+
+## Legal
+
+- `PRIVACY.md` and `TERMS.md` ship in the app (Settings → About → Legal, the command palette, the setup wizard) and as the Windows installer's license page. Keep them true to the code: when a feature adds a network call or stores something new, update `PRIVACY.md` in the same change.
 
 ## Principles
 

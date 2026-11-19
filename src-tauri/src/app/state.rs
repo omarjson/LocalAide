@@ -8,6 +8,7 @@ use crate::services::library::rerank::RerankEngine;
 use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
 use crate::services::skills::SkillsService;
+use crate::services::skills::discover::SkillDiscovery;
 use crate::services::tools::ToolService;
 use crate::services::websearch::WebSearchEngine;
 use std::sync::atomic::AtomicBool;
@@ -24,6 +25,8 @@ pub struct AppState {
     pub library: Arc<LibraryService>,
     pub memory: Arc<MemoryService>,
     pub skills: Arc<SkillsService>,
+    /// Browses public skill collections on GitHub (only on user action).
+    pub skill_discovery: Arc<SkillDiscovery>,
     pub tools: Arc<ToolService>,
     pub web: Arc<WebSearchEngine>,
     pub config_store: Arc<Mutex<ConfigStore>>,
@@ -56,6 +59,7 @@ impl AppState {
             library,
             memory,
             skills,
+            skill_discovery: Arc::new(SkillDiscovery::new()),
             tools,
             // Web search is stateless beyond its HTTP client; provider keys
             // are read from config per request.

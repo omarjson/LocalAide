@@ -125,7 +125,7 @@
           aria-label="File name in the workspace folder"
           bind:value={toolPath}
           placeholder="File name in the workspace folder, like notes.txt"
-          class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 font-mono"
+          class="flex-1 bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder:text-ink-400 focus:outline-none focus:border-ember-500 font-mono"
         />
         <button
           type="button"
@@ -149,7 +149,7 @@
         bind:value={toolContent}
         rows={3}
         placeholder="Text to write into the file above. Files stay in the LocalAide workspace folder, and LocalAide asks you first."
-        class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-ember-500 resize-none"
+        class="w-full bg-ink-950 border border-edge rounded-xl px-3 py-2 text-sm text-ink-200 placeholder:text-ink-400 focus:outline-none focus:border-ember-500 resize-none"
       ></textarea>
     </div>
   {/if}
@@ -212,7 +212,7 @@
       aria-busy={streaming}
       rows={1}
       onkeydown={handleKeydown}
-      class="flex-1 bg-ink-900 border border-edge rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder-ink-500 focus:outline-none focus:border-ember-500 resize-none"
+      class="flex-1 bg-ink-900 border border-edge rounded-xl px-4 py-2.5 text-sm text-ink-100 placeholder:text-ink-500 focus:outline-none focus:border-ember-500 resize-none"
     ></textarea>
 
     {#if streaming}

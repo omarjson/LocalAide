@@ -59,6 +59,10 @@ jobs:
       # not for the CI machine's own CPU, so the server runs on users' PCs.
       # GGML_OPENMP=OFF: ggml's own thread pool, so no OpenMP runtime
       # library (vcomp140.dll, libgomp) has to be on the user's machine.
+      # LLAMA_BUILD_UI=OFF and LLAMA_USE_PREBUILT_UI=OFF: no embedded web
+      # chat page. LocalAide only calls the server's API, and the prebuilt
+      # page is downloaded from a Hugging Face bucket at build time, which
+      # broke every build on 2026-11-18 when the pinned "b1" assets went away.
       - name: Configure (server only, static, portable CPU, no OpenSSL)
         shell: bash
         working-directory: llama.cpp
@@ -73,6 +77,8 @@ jobs:
             -DLLAMA_BUILD_EXAMPLES=OFF \
             -DLLAMA_OPENSSL=OFF \
             -DLLAMA_CURL=OFF \
+            -DLLAMA_BUILD_UI=OFF \
+            -DLLAMA_USE_PREBUILT_UI=OFF \
             ${{ matrix.cmake_extra }}
 
       - name: Build llama-server

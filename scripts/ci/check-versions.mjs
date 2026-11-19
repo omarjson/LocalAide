@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Fails when the app version differs between package.json, Cargo.toml and
-// tauri.conf.json, or, on a tag build, from the tag (v1.2.3 means 1.2.3).
+// tauri.conf.json, or, on a tag build, from the tag (v1.2.3 means 1.2.3),
+// or when a tag build has no CHANGELOG.md section for its version.
 // Writes `version=<x>` to $GITHUB_OUTPUT for later jobs.
 
 import { appendFileSync, readFileSync } from 'node:fs';
+import { changelogSection } from './changelog.mjs';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -41,5 +43,11 @@ if (!toolchainFile || toolchainFile !== ciToolchain) {
 }
 
 const [version] = distinct;
+
+// A release needs its notes: CHANGELOG.md must have this version's section.
+if (process.env.GITHUB_REF_TYPE === 'tag' && !changelogSection(version)) {
+  console.log(`::error title=changelog::CHANGELOG.md has no "## [${version}] - date" section.`);
+  process.exit(1);
+}
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
 console.log(`All files agree on ${version}.`);

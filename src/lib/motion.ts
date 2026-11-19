@@ -1,4 +1,5 @@
 import { prefersReducedMotion } from "svelte/motion";
+import { cubicOut, quintOut } from "svelte/easing";
 
 /**
  * Duration helper for Svelte's JS-driven transitions (fade/fly/scale/slide).
@@ -9,3 +10,33 @@ import { prefersReducedMotion } from "svelte/motion";
 export function dur(ms: number): number {
   return prefersReducedMotion.current ? 0 : ms;
 }
+
+/** One set of timings for the whole app, so motion feels like one product. */
+export const motion = {
+  /** Hover and press feedback. */
+  fast: 120,
+  /** Menus, dialogs, toasts. */
+  base: 180,
+  /** Screen and section changes. */
+  slow: 260,
+  ease: cubicOut,
+  enter: quintOut,
+} as const;
+
+/** A screen or section entering: a short rise plus fade. */
+export const enterScreen = () => ({ y: 8, duration: dur(motion.slow), easing: motion.enter });
+
+/** A dialog panel entering. */
+export const enterDialog = () => ({ start: 0.96, duration: dur(motion.base), easing: motion.enter });
+export const leaveDialog = () => ({ start: 0.98, duration: dur(motion.fast) });
+
+/** Items in a list entering one after another (capped so long lists stay quick). */
+export const stagger = (index: number) => ({
+  y: 6,
+  duration: dur(motion.base),
+  delay: dur(Math.min(index, 8) * 30),
+  easing: motion.enter,
+});
+
+/** Reordering lists (`animate:flip`). */
+export const flipOptions = () => ({ duration: dur(motion.base), easing: motion.ease });

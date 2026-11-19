@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { fly } from "svelte/transition";
   import Icon, { type IconName } from "./Icon.svelte";
+  import { dur, motion } from "../lib/motion";
 
   let {
     icon = "info",
@@ -15,11 +17,26 @@
   } = $props();
 </script>
 
-<div class="rounded-lg border border-ink-700 bg-ink-900 px-6 py-14 text-center">
-  <div class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-ink-800 text-ink-300">
-    <Icon name={icon} class="h-5 w-5" />
+<div class="ember-glow rounded-lg border border-ink-700 bg-ink-900 px-6 py-14 text-center" in:fly={{ y: 6, duration: dur(motion.slow), easing: motion.enter }}>
+  <div class="empty-icon mx-auto grid h-12 w-12 place-items-center rounded-xl border border-ink-700 bg-ink-800 text-ember-300 shadow-sm">
+    <Icon name={icon} class="h-6 w-6" />
   </div>
   <h2 class="mt-4 font-semibold text-ink-50">{title}</h2>
   <p class="mx-auto mt-1 max-w-md text-sm leading-6 text-ink-400">{description}</p>
   {#if action}<div class="mt-4 flex justify-center">{@render action()}</div>{/if}
 </div>
+
+<style>
+  .empty-icon {
+    animation: empty-float 4s ease-in-out infinite;
+  }
+  @keyframes empty-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+</style>

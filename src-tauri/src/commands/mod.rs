@@ -11,6 +11,7 @@ pub mod settings;
 pub mod skills;
 pub mod system;
 pub mod tools;
+pub mod updates;
 pub mod web;
 
 pub use backup::*;
@@ -26,4 +27,5 @@ pub use settings::*;
 pub use skills::*;
 pub use system::*;
 pub use tools::*;
+pub use updates::*;
 pub use web::*;

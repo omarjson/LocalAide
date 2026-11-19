@@ -1,6 +1,6 @@
 [package]
 name = "ai-desktop-assistant"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
@@ -29,6 +29,8 @@ tauri-plugin-dialog = "2"
 # Opens http(s) links in the user's browser. Only its `open_url` function is
 # used; the plugin is not registered, so the web page cannot call it directly.
 tauri-plugin-opener = "2"
+# In-app updates (ADR-0005). Signed packages only; the user confirms each one.
+tauri-plugin-updater = "2"
 sysinfo = "0.32"
 # reqwest 0.13 puts `.form()` behind the "form" feature (web search uses it).
 reqwest = { version = "0.13", features = ["json", "stream", "blocking", "form"] }
@@ -78,5 +80,3 @@ opt-level = 3
 [profile.release]
 lto = "thin"
 strip = true
-
-

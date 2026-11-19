@@ -31,7 +31,15 @@
     | "cloud"
     | "database"
     | "globe"
-    | "chevron-right";
+    | "chevron-right"
+    | "chevron-down"
+    | "flame"
+    | "heart"
+    | "clock"
+    | "external"
+    | "scale"
+    | "key"
+    | "sparkle";
 
   interface Props {
     name: IconName;
@@ -137,5 +145,26 @@
     <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
   {:else if name === "chevron-right"}
     <path d="m9 6 6 6-6 6" />
+  {:else if name === "chevron-down"}
+    <path d="m6 9 6 6 6-6" />
+  {:else if name === "flame"}
+    <path d="M12 21c-3.9 0-7-2.7-7-6.5 0-3 2-5 3.5-6.5.3 1.6 1.2 2.8 2.5 3.3C11 8 12.5 5 15 3c0 3 4 5.5 4 10.5 0 4-3.1 7.5-7 7.5z" />
+    <path d="M12 21c-1.7 0-3-1.3-3-3 0-1.5 1-2.5 2-3.5.3 1 1 1.6 2 1.8.6-.9 1-2 1-3.3 1.2 1 2 2.6 2 4.5 0 2-1.6 3.5-4 3.5z" />
+  {:else if name === "heart"}
+    <path d="M12 20s-7.5-4.5-7.5-10A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 3c0 5.5-7.5 10-7.5 10z" />
+  {:else if name === "clock"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  {:else if name === "external"}
+    <path d="M14 4h6v6M20 4l-9 9" />
+    <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  {:else if name === "scale"}
+    <path d="M12 4v16M7 20h10M5 7h14M12 4l-1 3h2z" />
+    <path d="M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z" />
+  {:else if name === "key"}
+    <circle cx="8" cy="15" r="4" />
+    <path d="m11 12 9-9M16 7l3 3M14 9l2 2" />
+  {:else if name === "sparkle"}
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
   {/if}
 </svg>

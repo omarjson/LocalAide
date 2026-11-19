@@ -11,9 +11,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+pub mod discover;
+
 /// Maximum body size for one skill file, so a runaway paste cannot bloat
 /// the folder (mirrors the 1 MB read cap in the workspace jail).
-const MAX_SKILL_BYTES: u64 = 256 * 1024;
+pub const MAX_SKILL_BYTES: u64 = 256 * 1024;
 const MAX_SKILLS: usize = 200;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,6 +29,13 @@ pub struct Skill {
     pub body: String,
     /// Absolute path of the backing markdown file.
     pub path: String,
+    /// Where an imported skill came from (a web address). None for skills
+    /// the user wrote.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// The license line of an imported skill, when its source had one.
+    #[serde(default)]
+    pub license: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,7 +153,26 @@ impl SkillsService {
         tags: Vec<String>,
         body: &str,
     ) -> Result<Skill, AppError> {
-        let name = name.trim();
+        self.create_with_origin(name, description, tags, body, None, None)
+    }
+
+    /// Create a skill that remembers where it came from (imports).
+    pub fn create_with_origin(
+        &self,
+        name: &str,
+        description: &str,
+        tags: Vec<String>,
+        body: &str,
+        source: Option<String>,
+        license: Option<String>,
+    ) -> Result<Skill, AppError> {
+        let name = one_line(name);
+        let name = name.as_str();
+        if body.len() as u64 > MAX_SKILL_BYTES {
+            return Err(AppError::invalid_input(
+                "This skill is too long to save (over 256 KB).",
+            ));
+        }
         if name.is_empty() || body.trim().is_empty() {
             return Err(AppError::invalid_input(
                 "A skill needs a name and a prompt body",
@@ -162,17 +190,37 @@ impl SkillsService {
             )));
         }
 
-        let path = self.dir.join(format!("{}.md", slugify(name)));
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|e| AppError::storage(format!("Failed to create skills folder: {e}")))?;
+        let path = self.free_path(name);
         let skill = Skill {
             name: name.to_string(),
-            description: description.trim().to_string(),
+            description: one_line(description),
             tags,
             body: body.to_string(),
             path: path.display().to_string(),
+            source: source.map(|s| one_line(&s)).filter(|s| !s.is_empty()),
+            license: license.map(|s| one_line(&s)).filter(|s| !s.is_empty()),
         };
         std::fs::write(&path, render_skill_file(&skill))
             .map_err(|e| AppError::storage(format!("Could not write skill file: {e}")))?;
         Ok(skill)
+    }
+
+    /// A file name for a new skill that does not overwrite another one:
+    /// "code-review.md", then "code-review-2.md", and so on.
+    fn free_path(&self, name: &str) -> PathBuf {
+        let mut slug = slugify(name);
+        if slug.is_empty() {
+            slug = "skill".to_string();
+        }
+        let mut candidate = self.dir.join(format!("{slug}.md"));
+        let mut n = 2;
+        while candidate.exists() {
+            candidate = self.dir.join(format!("{slug}-{n}.md"));
+            n += 1;
+        }
+        candidate
     }
 
     pub fn update(
@@ -184,12 +232,16 @@ impl SkillsService {
         body: &str,
     ) -> Result<Skill, AppError> {
         let path = self.guard_path(path)?;
+        // Editing keeps where an imported skill came from.
+        let previous = Self::read_skill_file(&path).ok();
         let skill = Skill {
-            name: name.trim().to_string(),
-            description: description.trim().to_string(),
+            name: one_line(name),
+            description: one_line(description),
             tags,
             body: body.to_string(),
             path: path.display().to_string(),
+            source: previous.as_ref().and_then(|p| p.source.clone()),
+            license: previous.and_then(|p| p.license),
         };
         if skill.name.is_empty() || skill.body.trim().is_empty() {
             return Err(AppError::invalid_input(
@@ -263,6 +315,8 @@ impl SkillsService {
             tags,
             body: body.trim().to_string(),
             path: path.display().to_string(),
+            source: front.get("source").cloned().filter(|s| !s.is_empty()),
+            license: front.get("license").cloned().filter(|s| !s.is_empty()),
         })
     }
 }
@@ -300,12 +354,25 @@ fn render_skill_file(skill: &Skill) -> String {
     out.push_str(&format!("name: {}\n", skill.name));
     out.push_str(&format!("description: {}\n", skill.description));
     if !skill.tags.is_empty() {
-        out.push_str(&format!("tags: {}\n", skill.tags.join(", ")));
+        let tags: Vec<String> = skill.tags.iter().map(|t| one_line(t)).collect();
+        out.push_str(&format!("tags: {}\n", tags.join(", ")));
+    }
+    if let Some(source) = &skill.source {
+        out.push_str(&format!("source: {}\n", one_line(source)));
+    }
+    if let Some(license) = &skill.license {
+        out.push_str(&format!("license: {}\n", one_line(license)));
     }
     out.push_str("---\n\n");
     out.push_str(skill.body.trim());
     out.push('\n');
     out
+}
+
+/// Frontmatter values are single lines. Collapse whitespace and newlines so
+/// an imported description cannot end the header early.
+pub(crate) fn one_line(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// File-name-safe slug: lowercase, alphanumerics and dashes only.
@@ -340,6 +407,40 @@ mod tests {
         let (front, body) = split_frontmatter("Just a prompt.");
         assert!(front.is_empty());
         assert_eq!(body, "Just a prompt.");
+    }
+
+    #[test]
+    fn imported_skills_keep_their_origin() {
+        let dir = std::env::temp_dir().join(format!("localaide-skills-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let service = SkillsService::with_dir(dir.clone());
+        let first = service
+            .create_with_origin(
+                "Code Review!",
+                "Line one\nline two",
+                vec!["imported".into()],
+                "Review this.",
+                Some("https://github.com/a/b".into()),
+                Some("MIT".into()),
+            )
+            .unwrap();
+        assert_eq!(first.description, "Line one line two");
+        // A different name with the same slug gets its own file.
+        let second = service
+            .create("Code Review?", "", vec![], "Again.")
+            .unwrap();
+        assert_ne!(first.path, second.path);
+        let listed = service.list().unwrap();
+        assert_eq!(listed.len(), 2);
+        let read = service.read(&first.path).unwrap();
+        assert_eq!(read.source.as_deref(), Some("https://github.com/a/b"));
+        assert_eq!(read.license.as_deref(), Some("MIT"));
+        // Editing keeps the origin.
+        let edited = service
+            .update(&first.path, "Code Review!", "New", vec![], "Changed.")
+            .unwrap();
+        assert_eq!(edited.source.as_deref(), Some("https://github.com/a/b"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

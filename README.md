@@ -4,7 +4,7 @@
 
 **A private, local-first desktop AI assistant**
 
-*Local by default. Zero telemetry. Opt-in cloud with your own key.*
+*Local by default. Zero telemetry. Opt-in cloud, including free providers that need no key.*
 
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg)](https://github.com/omarjson/LocalAide/releases)
@@ -98,7 +98,9 @@ The local engine needs a 64-bit CPU with AVX2 (most PCs from 2013 on) or an Appl
 - **Windows**: SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
 - **macOS**: Gatekeeper says the app cannot be checked. Open **System Settings → Privacy & Security**, then choose **Open Anyway** for LocalAide.
 
-**Updates.** LocalAide does not update itself. Open **Settings → About → Check for updates**; it asks GitHub for the newest release and links to its download page. Nothing is checked unless you press the button.
+**Updates.** Open **Settings → About → Check for updates**. When a new version exists, LocalAide shows what changed and offers **Install and restart**: it downloads the update, checks its signature, installs it and keeps your data. Nothing is checked unless you press the button. Builds made without the update key (see `docs/release.md`) link to the download page instead.
+
+**Legal.** The [Privacy Policy](PRIVACY.md) and [Terms of Use](TERMS.md) ship inside the app (Settings → About → Legal).
 
 How releases are built, and what signing needs, is in [docs/release.md](docs/release.md).
 
@@ -161,7 +163,7 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 
 - **Shipped in 0.1.0**: local GGUF chat via the sidecar, image input with vision models, the model catalog and manager (plus the HF community browser, also in the first-run wizard), the SQLite WAL document library with keyword/semantic/hybrid search and the reranker second stage, Markdown memory notes with RAG citations, local skills, encrypted backups, safe file tools in the workspace jail, opt-in online providers with 9Router-derived presets, and keyless-first web search with page reading ([ADR-0011](docs/adr/0011-web-search.md)).
 - **Deferred**: speech (STT/TTS) — it needs a second runtime (`.kiro/specs/engine-upgrade/tasks.md`); vision runtime verification — image input is wired but has not been exercised against a real vision model end to end.
-- **Non-goals**: telemetry of any kind, silent cloud failover, and in-app component hot-swapping (updates ship as whole packages; updater signing is future work per ADR-0005).
+- **Non-goals**: telemetry of any kind, silent cloud failover, and in-app component hot-swapping (updates ship as whole signed packages, ADR-0005).
 
 ## Architecture Decision Records (ADRs)
 

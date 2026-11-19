@@ -75,7 +75,13 @@ export interface HfRepo {
   gated: boolean;
   /** License tag on the repo (for example "apache-2.0"), when present. */
   license: string | null;
+  /** True when the repo says its safety tuning was removed. */
+  uncensored: boolean;
+  created_at: string | null;
 }
+
+export type HfSort = "trending" | "downloads" | "likes" | "newest";
+export type HfTag = "uncensored" | "abliterated";
 
 /** A pinned GGUF file inside a repository. */
 export interface HfFileInfo {
@@ -345,9 +351,25 @@ export interface CloudProviderPreset {
   id: string;
   label: string;
   base_url: string;
+  /** Empty when the user should load the model list. */
   model: string;
   key_url: string;
   note: string;
+  /** False when the provider works without any key. */
+  needs_key: boolean;
+  /** True for routers and servers on this computer. */
+  local: boolean;
+  /** True when there is a free way in. */
+  free: boolean;
+}
+
+/** One model a provider serves (cloud_list_models). */
+export interface ProviderModel {
+  id: string;
+  name: string | null;
+  owned_by: string | null;
+  context_length: number | null;
+  free: boolean;
 }
 
 /** A saved prompt skill: one markdown file under ~/.aiassistant/skills/. */
@@ -357,6 +379,36 @@ export interface Skill {
   tags: string[];
   body: string;
   path: string;
+  /** Web address an imported skill came from. */
+  source?: string | null;
+  license?: string | null;
+}
+
+/** A public skill collection (skills_sources). */
+export interface SkillSource {
+  id: string;
+  label: string;
+  description: string;
+  url: string;
+  license_note: string;
+}
+
+/** One skill in a collection listing. */
+export interface RemoteSkill {
+  id: string;
+  name: string;
+  preview: string | null;
+  url: string;
+}
+
+/** A listed skill's full text. */
+export interface RemoteSkillDetail {
+  id: string;
+  name: string;
+  description: string;
+  body: string;
+  license: string | null;
+  url: string;
 }
 
 /** A custom prompt reused often enough for the save-as-skill hint. */
@@ -400,12 +452,22 @@ export interface SystemHealthResponse {
   config_ok: boolean;
 }
 
-/** Result of the display-only update check against GitHub Releases. */
+/** Result of "Check for updates" (commands/updates.rs). */
 export interface UpdateCheckResponse {
   current_version: string;
   latest_version: string | null;
   update_available: boolean;
   release_url: string;
+  /** True when this build can download and install the update itself. */
+  can_install: boolean;
+  notes: string | null;
+}
+
+/** Progress of an in-app update install. */
+export interface UpdateProgressEvent {
+  stage: "downloading" | "installing" | "restarting";
+  downloaded: number;
+  total: number | null;
 }
 
 /** Encrypted local backup settings (ADR-0009). */
