@@ -1,6 +1,6 @@
 # LocalAide Privacy Policy
 
-Effective date: November 18, 2026. Applies to LocalAide 0.2.0 and later.
+Effective date: November 18, 2026. Applies to LocalAide 0.1.2 and later.
 
 LocalAide is a desktop app that runs AI models on your own computer. This policy explains what the app does with your information. It is written from what the app's code actually does.
 

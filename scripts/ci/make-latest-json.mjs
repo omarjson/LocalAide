@@ -15,6 +15,7 @@
 
 import { copyFileSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
+import { changelogSection } from "./changelog.mjs";
 
 const [artifactsDir, releaseDir] = process.argv.slice(2);
 if (!artifactsDir || !releaseDir) {
@@ -46,19 +47,6 @@ function classify(file) {
   return null;
 }
 
-/** The CHANGELOG section for this version, as release notes. */
-function notesFor(v) {
-  const path = join(root, "CHANGELOG.md");
-  if (!existsSync(path)) return `LocalAide ${v}`;
-  const text = readFileSync(path, "utf8");
-  const start = text.search(new RegExp(`^## \\[${v.replace(/\./g, "\\.")}\\]`, "m"));
-  if (start < 0) return v === "Unreleased" ? `LocalAide ${version}` : notesFor("Unreleased");
-  const rest = text.slice(start);
-  const next = rest.slice(3).search(/^## \[/m);
-  const section = next < 0 ? rest : rest.slice(0, next + 3);
-  return section.split("\n").slice(1).join("\n").trim() || `LocalAide ${v}`;
-}
-
 const platforms = {};
 for (const sig of walk(artifactsDir).filter((f) => f.endsWith(".sig"))) {
   const file = sig.slice(0, -4);
@@ -84,7 +72,8 @@ if (Object.keys(platforms).length === 0) {
 
 const feed = {
   version,
-  notes: notesFor(version),
+  // Shown in Settings → About under "What's new".
+  notes: changelogSection(version) ?? `LocalAide ${version}`,
   pub_date: new Date().toISOString(),
   platforms,
 };

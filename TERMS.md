@@ -1,6 +1,6 @@
 # LocalAide Terms of Use
 
-Effective date: November 18, 2026. Applies to LocalAide 0.2.0 and later.
+Effective date: November 18, 2026. Applies to LocalAide 0.1.2 and later.
 
 By installing or using LocalAide you agree to these terms. If you do not agree, do not install or use the app.
 

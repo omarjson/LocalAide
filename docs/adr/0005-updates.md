@@ -19,7 +19,7 @@ The legacy application claimed SHA-256 verification of models, but:
    - The SHA-256 hash is computed incrementally in 64 KB buffers during download, with no secondary full-file read and no RAM buffering.
    - Interrupted downloads keep their `.part` file; HTTP `Range` requests resume from the byte boundary.
    - Only when the finalized digest matches the catalog entry is the file atomically renamed to `model.gguf`; a failed check deletes the file and returns `CHECKSUM_MISMATCH`.
-3. **Application updates (wired in 0.2.0)**:
+3. **Application updates (wired in 0.1.2)**:
    - `tauri-plugin-updater` reads `latest.json` from the newest published GitHub Release. Packages are signed in CI with the owner's update key and verified against the public key built into the app before install.
    - Updates need two presses (check, then "Install and restart"), show release notes, and never run in the background or at startup (`src-tauri/src/commands/updates.rs`).
    - Builds without a public key fall back to linking the release page. Creating the key pair is an owner step (`docs/release.md`). Ed25519 for the catalog stays open work.

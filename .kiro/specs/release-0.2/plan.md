@@ -1,4 +1,4 @@
-# LocalAide 0.2: install, trust and polish
+# LocalAide 0.1.2: install, trust and polish
 
 Status: implemented on branch `release/0.2-polish`; waiting for CI and for a test on real machines. Written 2026-11-18 from Omar's test of v0.1.1 on an Intel (x64) Mac and on Windows 11.
 

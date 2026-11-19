@@ -5,7 +5,7 @@ This page explains how a release is built, what CI checks, and the steps that ne
 ## How a release is built
 
 1. Set one version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`. The `version-gate` job fails if they differ, or if a tag does not match them.
-2. Push a tag such as `v0.2.0`, or run the "CI & Release Pipeline" workflow by hand with "Create a draft GitHub Release" ticked.
+2. Push a tag such as `v0.1.3`, or run the "CI & Release Pipeline" workflow by hand with "Create a draft GitHub Release" ticked.
 3. CI builds `llama-server` for each platform, checks that it starts, then builds the installers.
 4. The `publish-release` job makes a **draft** release with the installers, `SHA256SUMS.txt` and `localaide-sbom.spdx.json`. Nothing is public yet.
 5. A person downloads the installers from the draft, tries them on a real machine, then presses "Publish".
@@ -87,7 +87,7 @@ If the command needs a tool (such as `trusted-signing-cli`), add a step that ins
 
 ## Updates
 
-Since 0.2.0, LocalAide can update itself, through `tauri-plugin-updater` (ADR-0005). Nothing runs at startup:
+Since 0.1.2, LocalAide can update itself, through `tauri-plugin-updater` (ADR-0005). Nothing runs at startup:
 
 1. The user opens Settings → About and presses "Check for updates". The app reads `https://github.com/omarjson/LocalAide/releases/latest/download/latest.json`.
 2. When a newer version is listed, the app shows its notes and an "Install and restart" button.
@@ -95,7 +95,7 @@ Since 0.2.0, LocalAide can update itself, through `tauri-plugin-updater` (ADR-00
 
 User data in `~/.aiassistant/` is not touched by an update or by uninstalling.
 
-A build with no public key (`plugins.updater.pubkey` empty) never offers "Install and restart"; it links to the release page instead, as 0.1.x did. Version 0.1.x has no updater, so people on 0.1.x install 0.2.0 by hand once. On Windows the new installer replaces the old version in place; on macOS drag the new app over the old one.
+A build with no public key (`plugins.updater.pubkey` empty) never offers "Install and restart"; it links to the release page instead, as 0.1.1 did. Versions 0.1.0 and 0.1.1 have no updater, so people on them install 0.1.2 by hand once. On Windows the new installer replaces the old version in place; on macOS drag the new app over the old one.
 
 ### One-time setup (owner)
 

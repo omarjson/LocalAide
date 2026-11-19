@@ -35,7 +35,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - **Tool actions are list, read, write and search.** Command execution does not exist, so there is no execution approval path.
 - **The audit log is not append-only.** "Clear" exists; it leaves one row that says how many entries it removed.
 - **Image input is code-complete but not runtime-verified.** No real vision model has been driven end to end yet; add that check before demoing the feature.
-- **Releases are not code-signed.** Signing is wired to optional CI secrets. The in-app updater (Settings → About, user-confirmed, signature-checked) is built in since 0.2.0, but it only offers installs once the owner creates the update key pair (`docs/release.md`); until then it links to the release page.
+- **Releases are not code-signed.** Signing is wired to optional CI secrets. The in-app updater (Settings → About, user-confirmed, signature-checked) is built in since 0.1.2, but it only offers installs once the owner creates the update key pair (`docs/release.md`); until then it links to the release page.
 
 ## Non-goals for this release
 
