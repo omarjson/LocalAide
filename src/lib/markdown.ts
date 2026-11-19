@@ -8,6 +8,7 @@
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "bold"; text: string }
+  | { kind: "italic"; text: string }
   | { kind: "code"; text: string }
   | { kind: "link"; text: string; href: string };
 
@@ -17,7 +18,7 @@ export type Block =
   | { kind: "list"; ordered: boolean; items: Inline[][] }
   | { kind: "table"; header: Inline[][]; rows: Inline[][][] };
 
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s)|]+)/g;
+const INLINE = /(\*\*[^*]+\*\*|\*[^*\s][^*\n]*?\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s)|]+)/g;
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
@@ -28,6 +29,8 @@ export function parseInline(text: string): Inline[] {
     if (at > last) out.push({ kind: "text", text: text.slice(last, at) });
     if (token.startsWith("**")) {
       out.push({ kind: "bold", text: token.slice(2, -2) });
+    } else if (token.startsWith("*")) {
+      out.push({ kind: "italic", text: token.slice(1, -1) });
     } else if (token.startsWith("`")) {
       out.push({ kind: "code", text: token.slice(1, -1) });
     } else if (token.startsWith("[")) {

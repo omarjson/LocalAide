@@ -11,6 +11,7 @@
 {#snippet inline(parts: Inline[])}
   {#each parts as part, i (i)}
     {#if part.kind === "bold"}<strong class="font-semibold text-ink-50">{part.text}</strong>
+    {:else if part.kind === "italic"}<em class="italic">{part.text}</em>
     {:else if part.kind === "code"}<code class="rounded bg-ink-800 px-1 py-0.5 font-mono text-[0.85em] text-ink-100">{part.text}</code>
     {:else if part.kind === "link"}<a href={part.href} rel="noreferrer" class="text-ember-300 underline-offset-2 hover:underline" onclick={(e) => openInBrowser(e, part.href)}>{part.text}</a>
     {:else}{part.text}{/if}

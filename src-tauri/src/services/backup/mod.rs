@@ -135,6 +135,11 @@ impl BackupEngine {
                 web.insert(slot.to_string(), serde_json::Value::String(String::new()));
             }
         }
+        if !include_api_keys
+            && let Some(opencode) = config.get_mut("opencode").and_then(|v| v.as_object_mut())
+        {
+            opencode.insert("password".to_string(), serde_json::Value::Null);
+        }
         // Stamp the backup time inside the config so a restore can refuse
         // to clobber a config newer than the archive.
         if let Some(obj) = config.as_object_mut() {

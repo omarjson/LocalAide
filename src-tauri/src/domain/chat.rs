@@ -32,6 +32,16 @@ pub struct ChatStreamRequest {
     /// Images attached to `message`, as `data:image/...;base64,` URLs.
     #[serde(default)]
     pub images: Vec<String>,
+    /// "standard" (default), "strict", "unrestricted" or "autonomous".
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Look in the user's notes and documents. Default true.
+    #[serde(default)]
+    pub use_recall: Option<bool>,
+    /// Search the web for this message. Default false; the user turns it
+    /// on for each chat, so no web request happens without their choice.
+    #[serde(default)]
+    pub use_web: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

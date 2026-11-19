@@ -4,14 +4,16 @@
   import { listen } from "@tauri-apps/api/event";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import { dur, stagger } from "../lib/motion";
+  import { dur, motion, stagger } from "../lib/motion";
+  import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
+  import { isChatMode, MODE_ICONS } from "../lib/chatModes";
+  import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
-  import PageHeader from "../components/PageHeader.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ChatMessage, ChatThread, EngineStatusEvent, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
@@ -50,6 +52,7 @@
 
   let model = $state("Local model");
 
+
   // Set when the opt-in online provider is active. Shows a cloud badge in the
   // header so it is always clear which engine is answering.
   let cloudChat = $state<{ label: string; model: string } | null>(null);
@@ -72,8 +75,42 @@
   let showMoreActions = $state(false);
   let pendingDeleteThreadId = $state<string | null>(null);
   let modelsChecked = $state(false);
+  const engineLabel = $derived(
+    cloudChat ? `${cloudChat.model} · ${cloudChat.label}` : engineLoaded && activeModelName ? `${activeModelName} · on this computer` : "",
+  );
 
   let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
+
+  // Mode and context switches, remembered between sessions.
+  const OPTIONS_KEY = "localaide-chat-options";
+  const savedOptions = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as { mode?: unknown; web?: unknown; recall?: unknown };
+    } catch {
+      return {};
+    }
+  })();
+  let mode = $state<ChatModeId>(isChatMode(savedOptions.mode) ? savedOptions.mode : "standard");
+  let useWeb = $state(savedOptions.web === true);
+  let useRecall = $state(savedOptions.recall !== false);
+  $effect(() => {
+    try {
+      localStorage.setItem(OPTIONS_KEY, JSON.stringify({ mode, web: useWeb, recall: useRecall }));
+    } catch {
+      // Storage can be unavailable; the switches still work for this session.
+    }
+  });
+  const webAvailable = $derived(moduleOn("web_in_chat"));
+  const recallAvailable = $derived(moduleOn("memory"));
+  const changeMode = (next: ChatModeId) => {
+    mode = next;
+    // Autonomous researches on its own, so it turns the web on (the user
+    // can switch it off again).
+    if (next === "autonomous" && webAvailable) useWeb = true;
+  };
+  const currentModeInfo = $derived(chatModes().find((m) => m.id === mode));
+  let showSettingsPanel = $state(false);
+  let threadQuery = $state("");
 
   // The saved model loads in the background at startup. Show progress, and show a
   // failed load in the chat so the user knows why nothing answers.
@@ -303,7 +340,7 @@
     }
 
     // Saved chats keep text only. Images would be sent and then dropped.
-    const textOnly = $state.snapshot(messages).map(({ images: _images, ...rest }) => rest);
+    const textOnly = $state.snapshot(messages).map(({ images: _images, steps: _steps, stats: _stats, ...rest }) => rest);
     try {
       await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, textOnly);
       await loadThreads();
@@ -344,8 +381,10 @@
     void savePrefs();
 
     const assistantIdx = messages.length;
-    messages.push({ role: "assistant", content: "", ts: Date.now() });
+    messages.push({ role: "assistant", content: "", ts: Date.now(), steps: [] });
     let acc = "";
+    const started = performance.now();
+    let firstTokenAt: number | null = null;
 
     try {
       activeJobId = await api.streamChat(
@@ -357,15 +396,31 @@
           system_prompt: systemPrompt,
           temperature,
           max_tokens: maxTokens,
+          mode,
+          use_web: webAvailable && useWeb,
+          use_recall: recallAvailable && useRecall,
         },
         (event) => {
           if (event.type === "token") {
+            if (firstTokenAt === null) firstTokenAt = performance.now();
             acc += event.payload.token;
             messages[assistantIdx].content = acc;
+          } else if (event.type === "status") {
+            const steps = messages[assistantIdx].steps ?? [];
+            // "Writing the answer" is implied by the text itself; keep the
+            // research steps only.
+            if (event.payload.label !== "Writing the answer") {
+              messages[assistantIdx].steps = [...steps, event.payload.label];
+            }
           } else if (event.type === "citation") {
             const cur = messages[assistantIdx].citations || [];
             messages[assistantIdx].citations = [...cur, event.payload];
           } else if (event.type === "done") {
+            messages[assistantIdx].stats = {
+              tokens: event.payload.total_tokens,
+              ms: performance.now() - started,
+              firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
+            };
             streaming = false;
             activeJobId = null;
             liveStatus = "Answer ready.";
@@ -525,6 +580,50 @@
     persistCurrentThread();
   };
 
+  // Hand a task over to the user's OpenCode server. For an answer, the
+  // question that led to it goes along, so OpenCode has the whole task.
+  const sendToOpenCode = async (index: number) => {
+    const msg = messages[index];
+    if (!msg) return;
+    let task = msg.content;
+    if (msg.role === "assistant") {
+      const question = messages.slice(0, index).reverse().find((m) => m.role === "user");
+      task = question ? `${question.content}\n\nNotes from LocalAide:\n${msg.content}` : msg.content;
+    }
+    try {
+      const handoff = await api.opencodeSend(task, activeThreadTitle === "New Conversation" ? undefined : activeThreadTitle);
+      showToast(`Sent to OpenCode as “${handoff.title}”.`);
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      if (err?.code === "OPENCODE_NOT_LINKED") {
+        showToast("Link OpenCode first: Settings → Integrations.", "error");
+        requestSettings("integrations");
+      } else {
+        showToast(`OpenCode: ${errorMessage(e)}`, "error");
+      }
+    }
+  };
+
+  // Group saved chats by when they were last used.
+  const threadGroups = $derived.by(() => {
+    const q = threadQuery.trim().toLowerCase();
+    const list = threads.filter((t) => !q || t.title.toLowerCase().includes(q));
+    const day = 24 * 60 * 60 * 1000;
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+    const groups: { label: string; items: ChatThread[] }[] = [
+      { label: "Today", items: [] },
+      { label: "Yesterday", items: [] },
+      { label: "This week", items: [] },
+      { label: "Older", items: [] },
+    ];
+    for (const t of [...list].sort((a, b) => b.updated_at - a.updated_at)) {
+      const at = t.updated_at < 1e12 ? t.updated_at * 1000 : t.updated_at;
+      const i = at >= startOfToday ? 0 : at >= startOfToday - day ? 1 : at >= startOfToday - 6 * day ? 2 : 3;
+      groups[i].items.push(t);
+    }
+    return groups.filter((g) => g.items.length > 0);
+  });
+
   // Load the chosen model into the engine and make it the chat default.
   const switchModel = async (id: string, name: string) => {
     pickerOpen = false;
@@ -555,6 +654,11 @@
   // The message box and open menus handle Escape first and mark it handled.
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && (showSettingsPanel || showThreads) && !event.defaultPrevented) {
+        showSettingsPanel = false;
+        showThreads = false;
+        return;
+      }
       if (event.key === "Escape" && streaming && !event.defaultPrevented) {
         event.preventDefault();
         void stopGenerating();
@@ -574,91 +678,28 @@
   });
 </script>
 
-<div class="max-w-4xl mx-auto h-full flex flex-col relative">
-  <PageHeader
-    title="Chat"
-    description={cloudChat ? `Online provider: ${cloudChat.label}.` : "Ask questions on this computer. Your messages stay here."}
-  >
-    {#snippet actions()}
-      <Button variant="primary" onclick={newChat}><Icon name="plus" class="h-[18px] w-[18px]" />New chat</Button>
-      <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
-        <Button variant="subtle" ariaLabel="More chat actions" ariaExpanded={showMoreActions} ariaHaspopup="menu" onclick={() => showMoreActions = !showMoreActions}>
-          <Icon name="more" class="h-[18px] w-[18px]" />
-          More
-        </Button>
-        {#if showMoreActions}
-          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
-            <button type="button" role="menuitem" onclick={() => { showSystem = !showSystem; showMoreActions = false; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">Response style</button>
-            <button type="button" role="menuitem" onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none disabled:opacity-40">Save chat as a file</button>
-            <button type="button" role="menuitem" onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none disabled:opacity-40">Summarize last answer</button>
-          </div>
-        {/if}
-      </div>
-    {/snippet}
-  </PageHeader>
+<div class="chat-root relative flex h-full flex-col">
+  <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
+  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
+    <button
+      type="button"
+      aria-expanded={showThreads}
+      aria-controls="chat-history"
+      onclick={() => { showThreads = !showThreads; if (showThreads) void loadThreads(); }}
+      class="flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-ink-100 transition-colors hover:bg-veil/5"
+      title="Saved chats"
+    >
+      <Icon name="clock" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
+      <span class="max-w-[16rem] truncate font-semibold">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</span>
+      <Icon name="chevron-down" class={`h-4 w-4 shrink-0 text-ink-500 transition-transform duration-200 ${showThreads ? "rotate-180" : ""}`} />
+    </button>
 
-  <div class="relative mb-3 flex items-center justify-between gap-3 border-b border-ink-800 pb-3">
-    <div class="relative min-w-0" use:popover={{ open: showThreads, onClose: () => showThreads = false }}>
-      <button
-        type="button"
-        aria-expanded={showThreads}
-        aria-haspopup="dialog"
-        onclick={() => showThreads = !showThreads}
-        class="flex min-w-0 items-center gap-2 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm font-semibold text-ink-200 hover:bg-ink-800"
-      >
-        <Icon name="chat" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
-        <span class="max-w-[180px] truncate">{activeThreadTitle}</span>
-        <span class="text-sm text-ink-400">({threads.length})</span>
-      </button>
-
-      <!-- Saved chats. Each row has its own open and delete buttons. -->
-      {#if showThreads}
-        <div
-          role="dialog"
-          aria-label="Saved chats"
-          class="absolute left-0 top-12 z-20 w-72 bg-ink-900 border border-edge rounded-2xl shadow-2xl p-3 space-y-2 max-h-96 overflow-y-auto"
-          transition:fly={{ y: -6, duration: dur(120) }}
-        >
-          <div class="flex items-center justify-between pb-2 border-b border-edge text-xs font-semibold text-ink-300">
-            <span>Saved chats</span>
-            <button type="button" onclick={() => { newChat(); showThreads = false; }} class="text-xs text-ember-400 hover:underline">+ New</button>
-          </div>
-          {#if threads.length === 0}
-            <div class="text-xs text-ink-400 py-3 text-center">No saved chats yet.</div>
-          {:else}
-            {#each threads as t (t.id)}
-              <div class={`group flex items-center gap-1 rounded-xl text-xs transition-colors ${t.id === activeThreadId ? 'bg-ember-500/10 border border-ember-500/30 text-ink-100' : 'hover:bg-ink-800/50 text-ink-300'}`}>
-                <button
-                  type="button"
-                  data-popover-item
-                  aria-current={t.id === activeThreadId ? "true" : undefined}
-                  onclick={() => selectThread(t)}
-                  class="min-w-0 flex-1 rounded-xl p-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ember-500"
-                >
-                  <div class="font-medium truncate">{t.title}</div>
-                  <div class="text-sm text-ink-400">{t.message_count} messages</div>
-                </button>
-                <button
-                  type="button"
-                  onclick={() => askDeleteThread(t.id)}
-                  class="mr-1 shrink-0 rounded p-1 text-ink-400 opacity-0 transition-opacity hover:text-rose-400 focus:opacity-100 group-hover:opacity-100"
-                  title="Delete chat"
-                  aria-label={`Delete chat ${t.title}`}
-                >
-                  <Icon name="close" class="w-3 h-3" />
-                </button>
-              </div>
-            {/each}
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    <div class="hidden items-center gap-2 sm:flex">
+    <div class="ml-auto flex items-center gap-1.5">
       {#if cloudChat}
-        <span class="text-sm text-amber-300" title="Chat uses your chosen online provider.">Online: {cloudChat.model} · {cloudChat.label}</span>
+        <span class="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex" title="Chat uses your chosen online provider.">
+          <Icon name="cloud" class="h-3.5 w-3.5" />{cloudChat.model}
+        </span>
       {:else if installedModels.length > 0}
-        <span class={`h-2 w-2 rounded-full ${engineLoaded ? 'bg-emerald-500' : 'bg-ink-600'}`} aria-hidden="true"></span>
         <div class="relative" use:popover={{ open: pickerOpen, onClose: () => pickerOpen = false }}>
           <button
             type="button"
@@ -666,19 +707,21 @@
             aria-haspopup="menu"
             onclick={togglePicker}
             disabled={switchingModel || engineLoading}
-            class="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-200 disabled:opacity-50"
+            class="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-950 px-3 py-1.5 text-xs font-medium text-ink-200 transition-colors hover:border-edge hover:text-ink-50 disabled:opacity-60"
             title="Choose the model that answers"
           >
-            {#if switchingModel || engineLoading}Loading…{:else if engineLoaded && activeModelName}{activeModelName}{:else}Load a model{/if}
-            <Icon name="chevron-right" class={`h-4 w-4 transition-transform ${pickerOpen ? 'rotate-90' : ''}`} />
+            <span class={`h-2 w-2 rounded-full ${engineLoaded ? "bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/60" : switchingModel || engineLoading ? "animate-pulse bg-amber-400" : "bg-ink-600"}`} aria-hidden="true"></span>
+            <span class="max-w-[12rem] truncate">{#if switchingModel || engineLoading}Loading…{:else if engineLoaded && activeModelName}{activeModelName}{:else}Load a model{/if}</span>
+            <Icon name="chevron-down" class={`h-3.5 w-3.5 transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
           </button>
           {#if switchError}
-            <div class="absolute right-0 top-9 z-20 flex w-[300px] items-start gap-2 rounded-md border border-rose-500/40 bg-rose-950/90 px-3 py-2 text-sm text-rose-200" role="alert">
+            <div class="absolute right-0 top-10 z-30 flex w-[300px] items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-950/95 px-3 py-2 text-sm text-rose-200 shadow-xl" role="alert">
               <span class="min-w-0 flex-1 break-words">{switchError}</span>
               <button type="button" aria-label="Dismiss" onclick={() => switchError = null} class="shrink-0 rounded p-0.5 hover:bg-rose-500/20"><Icon name="close" class="h-3.5 w-3.5" /></button>
             </div>
           {:else if pickerOpen}
-            <div role="menu" aria-label="Models on this computer" class="absolute right-0 top-9 z-20 max-h-64 min-w-[240px] overflow-y-auto rounded-md border border-edge bg-ink-950 py-1 shadow-xl">
+            <div role="menu" aria-label="Models on this computer" class="absolute right-0 top-10 z-30 max-h-72 min-w-[260px] overflow-y-auto rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
+              <div class="px-2.5 pb-1 pt-1 text-xs font-semibold text-ink-500">On this computer</div>
               {#each installedModels as installed (installed.id)}
                 {@const current = engineLoaded && activeModelName === installed.name}
                 <button
@@ -687,173 +730,263 @@
                   aria-checked={current}
                   data-popover-item
                   onclick={() => void switchModel(installed.id, installed.name)}
-                  class={`w-full px-3 py-2 text-left text-sm hover:bg-ink-900 focus:bg-ink-900 focus:outline-none ${current ? 'text-ember-300' : 'text-ink-300'}`}
-                >{installed.name}</button>
+                  class={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-veil/5 focus:bg-veil/5 focus:outline-none ${current ? "text-ember-200" : "text-ink-200"}`}
+                ><Icon name="models" class="h-4 w-4 shrink-0 text-ink-400" /><span class="min-w-0 flex-1 truncate">{installed.name}</span>{#if current}<Icon name="check" class="h-4 w-4 text-ember-300" />{/if}</button>
               {/each}
+              {#if onOpenModels}
+                <button type="button" data-popover-item onclick={() => { pickerOpen = false; onOpenModels?.(); }} class="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-ink-800 px-2.5 py-2 text-left text-sm text-ink-400 hover:bg-veil/5 hover:text-ink-100"><Icon name="plus" class="h-4 w-4" />Get more models</button>
+              {/if}
             </div>
           {/if}
         </div>
       {/if}
-    </div>
-  </div>
 
-  <!-- Response style / System Prompt Selector -->
-  {#if showSystem}
-    <div class="p-3 bg-ink-900/60 border-b border-edge text-xs space-y-2">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="text-ink-400">Styles:</span>
-        {#each systemPresets as p}
-          <button
-            onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }}
-            class={`px-2 py-1 rounded text-sm transition-colors ${systemPrompt === p.prompt ? 'bg-ember-600 text-on-ember font-medium' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'}`}
-          >
-            {p.label}
-          </button>
-        {/each}
-        <span class="ml-auto flex items-center gap-2 text-ink-400">
-          Creativity
-          <input
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            bind:value={temperature}
-            onchange={savePrefs}
-            class="w-24 accent-ember-600"
-            aria-label="Sampling temperature"
-          />
-          <span class="text-sm text-ink-300">{temperature.toFixed(1)}</span>
-        </span>
+      <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
+      <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
+        <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
+        {#if showMoreActions}
+          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Save chat as a file</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="menu-item"><Icon name="file" class="h-4 w-4" />Summarize last answer</button>
+          </div>
+        {/if}
       </div>
-      <textarea
-        bind:value={systemPrompt}
-        rows={2}
-        onblur={savePrefs}
-        class="w-full bg-ink-950 border border-edge rounded-lg p-2 text-ink-200 text-sm leading-6 focus:outline-none focus:border-ink-600"
-      ></textarea>
+      <button type="button" onclick={newChat} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-sm shadow-ember-900/40 transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
+    </div>
+  </header>
+
+  <!-- Saved chats drawer -->
+  {#if showThreads}
+    <div role="presentation" class="absolute inset-0 top-14 z-20 bg-black/30" onclick={() => showThreads = false} in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(motion.fast) }}></div>
+    <div
+      id="chat-history"
+      role="dialog"
+      aria-label="Saved chats"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === "Escape") showThreads = false; }}
+      class="absolute bottom-0 left-0 top-14 z-30 flex w-80 max-w-[85vw] flex-col border-r border-edge bg-ink-950 shadow-2xl"
+      transition:fly={{ x: -24, duration: dur(motion.base), easing: motion.enter }}
+    >
+      <div class="flex items-center gap-2 border-b border-ink-800 p-3">
+        <span class="field-shell flex h-9 flex-1 items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-2.5">
+          <Icon name="search" class="h-4 w-4 shrink-0 text-ink-500" />
+          <input type="search" bind:value={threadQuery} aria-label="Find a chat" placeholder="Find a chat" class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500" />
+        </span>
+        <button type="button" aria-label="Close saved chats" onclick={() => showThreads = false} class="chat-icon-btn"><Icon name="close" class="h-4 w-4" /></button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-2">
+        {#each threadGroups as group (group.label)}
+          <div class="px-2 pb-1 pt-3 text-xs font-semibold text-ink-500">{group.label}</div>
+          {#each group.items as t (t.id)}
+            <div class={`group flex items-center rounded-lg transition-colors ${t.id === activeThreadId ? "bg-ember-500/10 text-ink-50" : "text-ink-300 hover:bg-veil/5"}`}>
+              <button type="button" aria-current={t.id === activeThreadId ? "true" : undefined} onclick={() => selectThread(t)} class="min-w-0 flex-1 px-2.5 py-2 text-left">
+                <div class="truncate text-sm font-medium">{t.title}</div>
+                <div class="text-xs text-ink-500">{t.message_count} messages</div>
+              </button>
+              <button type="button" onclick={() => askDeleteThread(t.id)} class="mr-1 rounded p-1.5 text-ink-500 opacity-0 transition-opacity hover:text-rose-400 focus:opacity-100 group-hover:opacity-100" aria-label={`Delete chat ${t.title}`} title="Delete chat"><Icon name="trash" class="h-4 w-4" /></button>
+            </div>
+          {/each}
+        {:else}
+          <p class="px-3 py-8 text-center text-sm text-ink-500">{threadQuery ? "No chat matches." : "No saved chats yet. Chats save themselves after the first answer."}</p>
+        {/each}
+      </div>
     </div>
   {/if}
 
-  {#if chatError}
-    <div class="mb-3"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
+  <!-- Chat settings sheet -->
+  {#if showSettingsPanel}
+    <div
+      role="dialog"
+      aria-label="Chat settings"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === "Escape") showSettingsPanel = false; }}
+      class="absolute bottom-0 right-0 top-14 z-30 flex w-96 max-w-[90vw] flex-col border-l border-edge bg-ink-950 shadow-2xl"
+      transition:fly={{ x: 24, duration: dur(motion.base), easing: motion.enter }}
+    >
+      <div class="flex items-center justify-between border-b border-ink-800 px-4 py-3">
+        <h2 class="font-semibold text-ink-50">Chat settings</h2>
+        <button type="button" aria-label="Close chat settings" onclick={() => showSettingsPanel = false} class="chat-icon-btn"><Icon name="close" class="h-4 w-4" /></button>
+      </div>
+      <div class="flex-1 space-y-6 overflow-y-auto p-4">
+        <section>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Response style</h3>
+          <div class="grid grid-cols-2 gap-2">
+            {#each systemPresets as p (p.label)}
+              <button type="button" onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }} aria-pressed={systemPrompt === p.prompt} class={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${systemPrompt === p.prompt ? "border-ember-500/50 bg-ember-500/10 text-ink-50" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}>{p.label}</button>
+            {/each}
+          </div>
+        </section>
+
+        <section>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Mode</h3>
+          <div class="space-y-1.5">
+            {#each chatModes() as m (m.id)}
+              <button type="button" onclick={() => changeMode(m.id)} aria-pressed={mode === m.id} class={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${mode === m.id ? "border-ember-500/50 bg-ember-500/10" : "border-ink-700 hover:border-edge"}`}>
+                <Icon name={MODE_ICONS[m.id]} class={`mt-0.5 h-4 w-4 shrink-0 ${mode === m.id ? "text-ember-300" : "text-ink-400"}`} />
+                <span><span class="block text-sm font-semibold text-ink-100">{m.label}</span><span class="block text-xs leading-5 text-ink-400">{m.description}</span></span>
+              </button>
+            {/each}
+          </div>
+        </section>
+
+        {#if flag("sampling_controls")}
+          <section>
+            <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />Sampling</h3>
+            <label class="block text-sm text-ink-300">
+              <span class="flex justify-between"><span>Creativity (temperature)</span><span class="font-mono text-ink-100">{temperature.toFixed(1)}{mode === "strict" ? " · capped at 0.3" : ""}</span></span>
+              <input type="range" min="0" max="2" step="0.1" bind:value={temperature} onchange={savePrefs} class="mt-1 w-full accent-ember-500" aria-label="Temperature" />
+            </label>
+            <label class="mt-3 block text-sm text-ink-300">
+              <span class="flex justify-between"><span>Longest answer</span><span class="font-mono text-ink-100">{maxTokens} tokens</span></span>
+              <input type="range" min="64" max="8192" step="64" bind:value={maxTokens} onchange={savePrefs} class="mt-1 w-full accent-ember-500" aria-label="Longest answer in tokens" />
+            </label>
+          </section>
+        {/if}
+
+        {#if flag("system_prompt_editor")}
+          <section>
+            <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />System prompt</h3>
+            <textarea bind:value={systemPrompt} rows={6} onblur={savePrefs} aria-label="System prompt" class="w-full resize-y rounded-lg border border-ink-700 bg-ink-900 p-3 font-mono text-[13px] leading-6 text-ink-100"></textarea>
+            {#if currentModeInfo?.instruction}
+              <p class="mb-1 mt-3 text-xs font-semibold text-ink-400">{currentModeInfo.label} mode adds:</p>
+              <p class="rounded-lg border border-ink-800 bg-ink-900/60 p-3 font-mono text-[12px] leading-5 text-ink-400">{currentModeInfo.instruction}</p>
+            {/if}
+          </section>
+        {:else}
+          <p class="text-xs leading-5 text-ink-500">Turn on developer mode in Settings to write your own system prompt and adjust sampling.</p>
+        {/if}
+      </div>
+    </div>
   {/if}
 
   <!-- One short status per answer for screen readers. The stream itself is not
        a live region, so tokens are not read out one by one. -->
   <p class="sr-only" aria-live="polite">{liveStatus}</p>
 
-  <!-- Message Stream Container -->
-  <div
-    bind:this={scrollEl}
-    onscroll={handleScroll}
-    role="region"
-    aria-label="Conversation"
-    class="flex-1 overflow-y-auto p-4 space-y-2 relative"
-  >
+  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative flex-1 overflow-y-auto">
     {#if messages.length === 0}
-      <!-- Empty state: says what to do next, based on whether a model is active -->
-      <div class="ember-glow h-full flex flex-col justify-center items-center text-center p-6 gap-7 rounded-lg">
-        <div class="flex flex-col items-center gap-2 max-w-md" in:fly={{ y: 8, duration: dur(320) }}>
-          <div class="relative mb-2">
-            <div class="absolute inset-0 -z-10 scale-150 rounded-full bg-ember-500/15 blur-2xl" aria-hidden="true"></div>
-            <LogoMark class="w-16 h-16 drop-shadow-lg" />
+      <div class="ember-glow mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center gap-8 px-5 py-10 text-center">
+        <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
+          <div class="relative mb-3">
+            <div class="absolute inset-0 -z-10 scale-[1.8] rounded-full bg-ember-500/20 blur-3xl" aria-hidden="true"></div>
+            <LogoMark class="h-16 w-16 drop-shadow-xl" />
           </div>
-          {#if cloudChat}
-            <h3 class="text-xl font-semibold text-ink-50">{greeting} What can I help with?</h3>
-            <p class="text-sm text-ink-400">Running {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
-          {:else if !modelsChecked}
-            <h3 class="text-xl font-semibold text-ink-50">Checking for a model…</h3>
-          {:else if !activeModelName}
-            <h3 class="text-xl font-semibold text-ink-50">Pick a model to start chatting</h3>
-            <p class="text-sm text-ink-400">Models run on this computer. Download one in Models, or connect a free online provider in Settings.</p>
-            {#if onOpenModels}
-              <Button variant="primary" class="mt-2 h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>
-            {/if}
+          {#if !modelsChecked}
+            <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Getting ready…</h1>
+          {:else if !cloudChat && !activeModelName}
+            <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Pick a model to start</h1>
+            <p class="text-[15px] leading-6 text-ink-400">Models run on this computer. Download one, or connect a free online provider such as Kilo Code in Settings.</p>
+            <div class="mt-3 flex flex-wrap justify-center gap-2">
+              {#if onOpenModels}<Button variant="primary" class="h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>{/if}
+              {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={() => requestSettings("online")}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
+            </div>
           {:else}
-            <h3 class="text-xl font-semibold text-ink-50">{greeting} What can I help with?</h3>
-            {#if engineLoading}
-              <p class="flex items-center gap-2 text-sm text-ink-400" role="status"><span class="h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeModelName}. This can take a minute.</p>
+            <h1 class="text-[28px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
+            {#if cloudChat}
+              <p class="text-[15px] text-ink-400">Answers come from {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
+            {:else if engineLoading}
+              <p class="flex items-center gap-2 text-[15px] text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeModelName}. This can take a minute.</p>
             {:else if !engineLoaded}
-              <p class="text-sm text-ink-400">{activeModelName} is not loaded. Choose it in the model menu above.</p>
+              <p class="text-[15px] text-ink-400">{activeModelName} is not loaded yet. Choose it in the model menu at the top.</p>
             {:else}
-              <p class="text-sm text-ink-400">Running {activeModelName}. Nothing leaves this computer.</p>
+              <p class="text-[15px] text-ink-400">Running {activeModelName} on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches you turned on" : ""}.</p>
+            {/if}
+            {#if mode !== "standard" && currentModeInfo}
+              <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-ember-500/40 bg-ember-500/10 px-3 py-1 text-xs font-medium text-ember-200"><Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />{currentModeInfo.label} mode</span>
             {/if}
           {/if}
         </div>
 
         {#if cloudChat || activeModelName}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-xl w-full">
-          {#each starterPrompts as sp, i (sp.title)}
-            <button
-              type="button"
-              onclick={() => { input = sp.prompt; send(); }}
-              in:fly={stagger(i + 2)}
-              class="lift group flex items-start gap-3 text-left p-3.5 rounded-lg border border-ink-700 bg-ink-900/70 hover:border-edge hover:bg-ink-900"
-            >
-              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-300 transition-colors group-hover:bg-ember-500/15 group-hover:text-ember-300"><Icon name={sp.icon} class="h-4 w-4" /></span>
-              <span class="min-w-0">
-                <span class="block text-sm font-semibold text-ink-100">{sp.title}</span>
-                <span class="block text-sm text-ink-400">{sp.prompt}</span>
-              </span>
-            </button>
-          {/each}
-        </div>
-        {#if skills.length > 0}
-          <div class="flex max-w-xl flex-wrap items-center justify-center gap-2" in:fade={{ duration: dur(300), delay: dur(200) }}>
-            <span class="text-xs text-ink-500">Your skills:</span>
-            {#each skills.slice(0, 5) as skill (skill.path)}
-              <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 px-3 py-1 text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
+          <div class="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {#each starterPrompts as sp, i (sp.title)}
+              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} class="lift group flex items-start gap-3 rounded-xl border border-ink-700 bg-ink-900/80 p-3.5 text-left hover:border-edge hover:bg-ink-900">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-300 transition-colors group-hover:bg-ember-500/15 group-hover:text-ember-300"><Icon name={sp.icon} class="h-[18px] w-[18px]" /></span>
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold text-ink-100">{sp.title}</span>
+                  <span class="block text-sm text-ink-400">{sp.prompt}</span>
+                </span>
+              </button>
             {/each}
           </div>
-        {/if}
+          {#if skills.length > 0 && moduleOn("skills")}
+            <div class="flex max-w-2xl flex-wrap items-center justify-center gap-2" in:fade={{ duration: dur(300), delay: dur(200) }}>
+              <span class="text-xs text-ink-500">Your skills:</span>
+              {#each skills.slice(0, 6) as skill (skill.path)}
+                <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 px-3 py-1 text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
+              {/each}
+            </div>
+          {/if}
         {/if}
       </div>
     {:else}
-      {#each messages as msg, idx}
-        <MessageBubble
-          role={msg.role}
-          content={msg.content}
-          images={msg.images}
-          ts={msg.ts}
-          streaming={streaming && idx === messages.length - 1}
-          citations={msg.citations}
-          onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
-          onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
-        />
-      {/each}
-    {/if}
-
-    <!-- Unpinned Scroll Button -->
-    {#if userScrolledUp}
-      <button
-        onclick={() => scrollToBottom(true)}
-        in:fly={{ y: 8, duration: dur(120) }}
-        out:fade={{ duration: dur(100) }}
-        class="absolute bottom-28 right-4 z-10 px-3 py-1.5 rounded-full bg-ink-800/90 border border-edge text-xs text-ink-200 shadow-xl hover:bg-ink-700 transition-colors flex items-center gap-1.5"
-      >
-        <Icon name="arrow-down" class="w-3.5 h-3.5" />
-        <span>Scroll to bottom</span>
-      </button>
+      <div class={`mx-auto w-full max-w-3xl px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
+        {#each messages as msg, idx (idx)}
+          <MessageBubble
+            role={msg.role}
+            content={msg.content}
+            images={msg.images}
+            ts={msg.ts}
+            streaming={streaming && idx === messages.length - 1}
+            citations={msg.citations}
+            steps={msg.steps}
+            stats={flag("answer_stats") ? msg.stats ?? null : null}
+            allowRaw={flag("raw_messages")}
+            isLast={idx === messages.length - 1}
+            onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
+            onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
+            onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
+          />
+        {/each}
+      </div>
     {/if}
   </div>
 
-  <!-- Input Field -->
-  <ChatInput
-    bind:input={input}
-    bind:toolPath={toolPath}
-    bind:toolContent={toolContent}
-    bind:showTools={showTools}
-    streaming={streaming}
-    onSend={send}
-    onCancel={stopGenerating}
-    onReadFile={readFile}
-    onWriteFile={writeFile}
-    pendingImages={pendingImages}
-    onPickImages={addImages}
-    onRemoveImage={removeImage}
-    {skills}
-    onPickSkill={(body) => { input = body; }}
-  />
+  {#if userScrolledUp}
+    <button
+      type="button"
+      onclick={() => scrollToBottom(true)}
+      aria-label="Scroll to the newest message"
+      in:fly={{ y: 8, duration: dur(motion.base) }}
+      out:fade={{ duration: dur(100) }}
+      class="absolute bottom-40 left-1/2 z-10 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-edge bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
+    ><Icon name="arrow-down" class="h-4 w-4" /></button>
+  {/if}
+
+  <div class="shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 md:px-6">
+    <div class="mx-auto max-w-3xl">
+      {#if chatError}
+        <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
+      {/if}
+      <ChatInput
+        bind:input={input}
+        bind:toolPath={toolPath}
+        bind:toolContent={toolContent}
+        bind:showTools={showTools}
+        streaming={streaming}
+        onSend={send}
+        onCancel={stopGenerating}
+        onReadFile={readFile}
+        onWriteFile={writeFile}
+        pendingImages={pendingImages}
+        onPickImages={addImages}
+        onRemoveImage={removeImage}
+        skills={moduleOn("skills") ? skills : []}
+        onPickSkill={(body) => { input = body; }}
+        {mode}
+        modes={chatModes()}
+        onModeChange={changeMode}
+        {useWeb}
+        {webAvailable}
+        onToggleWeb={() => useWeb = !useWeb}
+        {useRecall}
+        {recallAvailable}
+        onToggleRecall={() => useRecall = !useRecall}
+        {engineLabel}
+      />
+      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts{cloudChat ? `. Messages go to ${cloudChat.label}` : ""}.</p>
+    </div>
+  </div>
 
   <ToolApprovalModal
     show={showApproval}
@@ -874,3 +1007,39 @@
     />
   {/if}
 </div>
+
+<style>
+  .chat-icon-btn {
+    display: grid;
+    height: 2.25rem;
+    width: 2.25rem;
+    place-items: center;
+    border-radius: 0.6rem;
+    color: var(--color-ink-400);
+    transition: background-color 150ms ease-out, color 150ms ease-out;
+  }
+  .chat-icon-btn:hover,
+  .chat-icon-btn[aria-pressed="true"] {
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
+    color: var(--color-ink-50);
+  }
+  .menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.6rem;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--color-ink-200);
+  }
+  .menu-item:hover,
+  .menu-item:focus {
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
+    outline: none;
+  }
+  .menu-item:disabled {
+    opacity: 0.4;
+  }
+</style>

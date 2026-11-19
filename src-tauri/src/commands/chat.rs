@@ -10,6 +10,7 @@ use crate::domain::chat::{
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::PromptMessage;
 use crate::services::inference::context::ContextBudget;
+use crate::services::inference::modes::{ChatMode, compose_system_prompt};
 use std::fs;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -189,34 +190,51 @@ pub async fn chat_stream(
     }
 
     let max_tokens = req.max_tokens.unwrap_or(512);
-    let temperature = req.temperature.unwrap_or(0.7);
+    let mode = ChatMode::parse(req.mode.as_deref());
+    let temperature = mode.temperature(req.temperature.unwrap_or(0.7));
 
     validate_images(&req.images)?;
+
+    let modules = {
+        let store = state
+            .config_store
+            .lock()
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        store
+            .load()
+            .map(|cfg| cfg.developer.modules)
+            .unwrap_or_default()
+    };
+    let module_on = |id: &str| modules.get(id).copied().unwrap_or(true);
+    let use_recall = req.use_recall.unwrap_or(true) && module_on("memory");
+    let use_web = req.use_web.unwrap_or(false) && module_on("web_in_chat");
 
     // RAG Recall: Retrieve context from MemoryService / LibraryService. The
     // query embeds against the local engine when it is running, so hybrid
     // ranking uses vectors; without it recall is keyword-ranked.
     // Recall runs on a worker thread, so a busy engine cannot stall the window.
     // The embedding is used only if it answers in time; otherwise recall is keyword-ranked.
-    let recall_text = req.message.clone();
-    let rag_res = with_app_state(&state, move |owned| {
-        let engine = owned.embedding_engine.clone();
-        let vector_text = recall_text.clone();
-        let query_vector = answer_within(RECALL_EMBED_LIMIT, move || {
-            engine.embed_query(&vector_text).ok()
+    let rag_res = if use_recall {
+        let _ = channel.send(ChatStreamEvent::Status {
+            label: "Looking in your notes and files".to_string(),
         });
-        Ok(owned
-            .memory
-            .recall(&recall_text, query_vector.as_deref(), Some(512))
-            .unwrap_or_else(|_| crate::services::memory::rag::RagRecallResult {
-                citations: Vec::new(),
-                context_prompt: String::new(),
-                total_tokens: 0,
-            }))
-    })
-    .await?;
+        let recall_text = req.message.clone();
+        with_app_state(&state, move |owned| {
+            let engine = owned.embedding_engine.clone();
+            let vector_text = recall_text.clone();
+            let query_vector = answer_within(RECALL_EMBED_LIMIT, move || {
+                engine.embed_query(&vector_text).ok()
+            });
+            Ok(owned
+                .memory
+                .recall(&recall_text, query_vector.as_deref(), Some(512))
+                .unwrap_or_else(|_| empty_recall()))
+        })
+        .await?
+    } else {
+        empty_recall()
+    };
 
-    // Send citation events to frontend channel before generation
     for cit in &rag_res.citations {
         let _ = channel.send(ChatStreamEvent::Citation {
             index: cit.index,
@@ -227,15 +245,58 @@ pub async fn chat_stream(
         });
     }
 
-    // Build effective system prompt with RAG context
-    let effective_system_prompt = match req.system_prompt.as_deref() {
-        Some(sys) if !rag_res.context_prompt.is_empty() => {
-            Some(format!("{sys}\n{}", rag_res.context_prompt))
+    // Web context: on when the user switched "Web" on for this chat.
+    // Autonomous mode also reads the best result in full.
+    let mut context = rag_res.context_prompt.clone();
+    if use_web {
+        let first_index = rag_res.citations.len() + 1;
+        let query = req.message.clone();
+        let read_top = mode.gathers_web();
+        let max_chars = (status.context_size.max(2048) as usize).clamp(2048, 16_384);
+        let status_channel = channel.clone();
+        let gathered = with_app_state(&state, move |owned| {
+            Ok(gather_web_context(
+                &owned,
+                &query,
+                first_index,
+                read_top,
+                max_chars,
+                &|label| {
+                    let _ = status_channel.send(ChatStreamEvent::Status { label });
+                },
+            ))
+        })
+        .await?;
+        match gathered {
+            Ok((web_context, citations)) => {
+                for cit in citations {
+                    let _ = channel.send(ChatStreamEvent::Citation {
+                        index: cit.index,
+                        source: cit.source,
+                        title: cit.title,
+                        snippet: cit.snippet,
+                        score: cit.score,
+                    });
+                }
+                if !web_context.is_empty() {
+                    context.push('\n');
+                    context.push_str(&web_context);
+                }
+            }
+            // A failed search must not block the answer; say so instead.
+            Err(e) => {
+                let _ = channel.send(ChatStreamEvent::Status {
+                    label: format!("Web search failed: {}", e.message),
+                });
+            }
         }
-        None if !rag_res.context_prompt.is_empty() => Some(rag_res.context_prompt),
-        Some(sys) => Some(sys.to_string()),
-        None => None,
-    };
+    }
+
+    let effective_system_prompt =
+        compose_system_prompt(req.system_prompt.as_deref(), mode, &context);
+    let _ = channel.send(ChatStreamEvent::Status {
+        label: "Writing the answer".to_string(),
+    });
 
     // Apply context budget
     let budget = ContextBudget::new(status.context_size as usize, max_tokens as usize);
@@ -283,6 +344,86 @@ pub async fn chat_stream(
     });
 
     Ok(job_id)
+}
+
+fn empty_recall() -> crate::services::memory::rag::RagRecallResult {
+    crate::services::memory::rag::RagRecallResult {
+        citations: Vec::new(),
+        context_prompt: String::new(),
+        total_tokens: 0,
+    }
+}
+
+/// Search the web for the message and turn the results into numbered
+/// context. With `read_top`, the best result is read in full (shortened to
+/// fit). Returns the context text and one citation per result.
+fn gather_web_context(
+    state: &AppState,
+    query: &str,
+    first_index: usize,
+    read_top: bool,
+    max_chars: usize,
+    status: &dyn Fn(String),
+) -> Result<(String, Vec<crate::domain::memory::Citation>), AppError> {
+    let (provider, keys) = crate::commands::web::web_settings(state)?;
+    let short: String = query.chars().take(60).collect();
+    status(format!("Searching the web for “{}”", short.trim()));
+    let hits = state.web.search(&provider, query, 5, &keys)?;
+    if hits.is_empty() {
+        status("The web search found nothing".to_string());
+        return Ok((String::new(), Vec::new()));
+    }
+
+    let mut page_text = None;
+    if read_top && let Some(top) = hits.first() {
+        let host = url::Url::parse(&top.url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_else(|| top.url.clone());
+        status(format!("Reading {host}"));
+        if let Ok(page) = state.web.read_page(&top.url, "auto", &keys) {
+            page_text = Some(page.content);
+        }
+    }
+
+    let mut citations = Vec::new();
+    let mut chunks = Vec::new();
+    let mut used = 0usize;
+    for (offset, hit) in hits.iter().enumerate() {
+        let index = first_index + offset;
+        let body = if offset == 0 {
+            page_text.as_deref().unwrap_or(&hit.snippet)
+        } else {
+            &hit.snippet
+        };
+        let room = max_chars.saturating_sub(used);
+        if room < 200 {
+            break;
+        }
+        let excerpt: String = body
+            .chars()
+            .take(room.min(if offset == 0 { 6000 } else { 800 }))
+            .collect();
+        used += excerpt.len();
+        chunks.push(format!(
+            "[{index}] {} ({})\n{}",
+            hit.title,
+            hit.url,
+            excerpt.trim()
+        ));
+        citations.push(crate::domain::memory::Citation {
+            index,
+            source: hit.url.clone(),
+            title: hit.title.clone(),
+            snippet: hit.snippet.clone(),
+            score: 1.0 - offset as f32 * 0.1,
+        });
+    }
+    let context = format!(
+        "Web results for the user's message (searched just now):\n{}\nWhen you use them, cite them as [n]. They may be incomplete or wrong; say so when they conflict.",
+        chunks.join("\n\n")
+    );
+    Ok((context, citations))
 }
 
 #[tauri::command]

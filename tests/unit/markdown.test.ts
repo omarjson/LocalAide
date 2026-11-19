@@ -43,3 +43,13 @@ test("bare links drop trailing punctuation", () => {
 test("html stays text", () => {
   assert.deepEqual(parseInline("<script>alert(1)</script>"), [{ kind: "text", text: "<script>alert(1)</script>" }]);
 });
+
+test("italic text and bold do not clash", () => {
+  assert.deepEqual(parseInline("Read *The Book* and **this**"), [
+    { kind: "text", text: "Read " },
+    { kind: "italic", text: "The Book" },
+    { kind: "text", text: " and " },
+    { kind: "bold", text: "this" },
+  ]);
+  assert.deepEqual(parseInline("2 * 3 * 4"), [{ kind: "text", text: "2 * 3 * 4" }]);
+});

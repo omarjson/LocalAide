@@ -1,4 +1,18 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke, Channel, type InvokeArgs } from "@tauri-apps/api/core";
+import { recordRequest } from "../requestLog.svelte";
+
+/** Every backend call goes through here, so the developer request log can time it. */
+async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
+  const started = performance.now();
+  try {
+    const value = await tauriInvoke<T>(command, args);
+    recordRequest(command, performance.now() - started, true);
+    return value;
+  } catch (e: unknown) {
+    recordRequest(command, performance.now() - started, false, e);
+    throw e;
+  }
+}
 import type {
   AppConfigDto,
   AppError,
@@ -39,6 +53,12 @@ import type {
   HfFileInfo,
   HfRepo,
   RemoteSkill,
+  SkillDescription,
+  DeveloperSettings,
+  DeveloperUpdate,
+  OpenCodeSettings,
+  OpenCodeHealth,
+  OpenCodeHandoff,
   RemoteSkillDetail,
   SkillSource,
   HfSort,
@@ -400,6 +420,42 @@ export class ApiClient {
     return invoke<void>("web_set_default", { provider });
   }
 
+  /** Use a Firecrawl server on this computer (null clears it). */
+  async webSetFirecrawlUrl(url: string | null): Promise<void> {
+    return invoke<void>("web_set_firecrawl_url", { url });
+  }
+
+  // Developer mode
+  async developerGet(): Promise<DeveloperSettings> {
+    return invoke<DeveloperSettings>("developer_get");
+  }
+
+  async developerSet(update: DeveloperUpdate): Promise<DeveloperSettings> {
+    return invoke<DeveloperSettings>("developer_set", { update });
+  }
+
+  async developerReset(): Promise<DeveloperSettings> {
+    return invoke<DeveloperSettings>("developer_reset");
+  }
+
+  // OpenCode link
+  async opencodeGet(): Promise<OpenCodeSettings> {
+    return invoke<OpenCodeSettings>("opencode_get");
+  }
+
+  /** password: undefined keeps the saved one, "" clears it. */
+  async opencodeSet(baseUrl: string | null, password?: string): Promise<OpenCodeSettings> {
+    return invoke<OpenCodeSettings>("opencode_set", { baseUrl, password: password ?? null });
+  }
+
+  async opencodeCheck(): Promise<OpenCodeHealth> {
+    return invoke<OpenCodeHealth>("opencode_check");
+  }
+
+  async opencodeSend(task: string, title?: string): Promise<OpenCodeHandoff> {
+    return invoke<OpenCodeHandoff>("opencode_send", { task, title: title ?? null });
+  }
+
   async cloudProviderPresets(): Promise<CloudProviderPreset[]> {
     return invoke<CloudProviderPreset[]>("cloud_provider_presets");
   }
@@ -462,6 +518,11 @@ export class ApiClient {
   /** List a collection. Contacts GitHub. `repo` is owner/name for source "github". */
   async skillsDiscover(source: string, repo?: string): Promise<RemoteSkill[]> {
     return invoke<RemoteSkill[]>("skills_discover", { source, repo: repo ?? null });
+  }
+
+  /** Descriptions for listed skills, one page at a time. */
+  async skillsRemoteDescribe(source: string, ids: string[], repo?: string): Promise<SkillDescription[]> {
+    return invoke<SkillDescription[]>("skills_remote_describe", { source, ids, repo: repo ?? null });
   }
 
   async skillsRemoteDetail(source: string, id: string, repo?: string): Promise<RemoteSkillDetail> {
@@ -578,29 +639,4 @@ export class ApiClient {
 export const api = new ApiClient();
 export default api;
 
-/** Plain words for error codes whose backend text is too technical. */
-const FRIENDLY_ERRORS: Record<string, string> = {
-  CHECKSUM_MISMATCH: "The download was damaged. Download it again.",
-  UPDATE_CHECK_FAILED: "Could not reach the update server. Check your internet connection and try again.",
-};
-
-/** Text made from a Rust error reads "[CODE] message". Keep the message. */
-const withoutCode = (text: string): string => text.replace(/^\[[A-Z0-9_]+\]\s*/, "");
-
-/**
- * Extract a readable message from a Tauri rejection, which can be a string,
- * an Error, or the serialized AppError object from the backend.
- */
-export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return withoutCode(e) || "Something went wrong. Try again.";
-  if (e instanceof Error) return withoutCode(e.message) || "Something went wrong. Try again.";
-  if (typeof e === "object" && e !== null) {
-    if ("code" in e && typeof e.code === "string" && FRIENDLY_ERRORS[e.code]) {
-      return FRIENDLY_ERRORS[e.code];
-    }
-    if ("message" in e && typeof e.message === "string" && e.message.trim()) {
-      return withoutCode(e.message);
-    }
-  }
-  return "Something went wrong. Try again.";
-}
+export { errorMessage } from "./errors";

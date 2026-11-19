@@ -267,6 +267,15 @@ pub fn run() {
             commands::web_providers,
             commands::web_set_key,
             commands::web_set_default,
+            commands::web_set_firecrawl_url,
+            commands::developer_get,
+            commands::developer_set,
+            commands::developer_reset,
+            commands::opencode_get,
+            commands::opencode_set,
+            commands::opencode_check,
+            commands::opencode_send,
+            commands::skills_remote_describe,
         ])
         .setup(move |setup_app| {
             if let Some((model_id, path, context)) = pending_load {

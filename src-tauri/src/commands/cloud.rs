@@ -35,6 +35,9 @@ pub struct CloudProviderPreset {
     pub local: bool,
     /// True when the provider has a free way in (keyless or a free key).
     pub free: bool,
+    /// A shared, public key some keyless services expect (OpenCode Zen
+    /// uses "public"). Prefilled into the form; empty for most providers.
+    pub public_key: &'static str,
 }
 
 // One positional constructor keeps the table above readable as rows.
@@ -60,11 +63,37 @@ const fn preset(
         needs_key,
         local,
         free,
+        public_key: "",
     }
 }
 
 pub const PROVIDER_PRESETS: &[CloudProviderPreset] = &[
     // No key at all.
+    preset(
+        "kilo",
+        "Kilo Code (free, no key)",
+        "https://api.kilo.ai/api/openrouter",
+        "kilo-auto/free",
+        "https://kilo.ai",
+        "Kilo's gateway serves free models without a key or sign-up. \"kilo-auto/free\" picks the best free model for you; press Load models to choose one yourself. Free models change over time.",
+        false,
+        false,
+        true,
+    ),
+    CloudProviderPreset {
+        public_key: "public",
+        ..preset(
+            "opencode-zen",
+            "OpenCode Zen (free models)",
+            "https://opencode.ai/zen/v1",
+            "",
+            "https://opencode.ai/zen",
+            "OpenCode's model gateway. Its free models (names ending in -free, and big-pickle) work with the shared key \"public\", which is filled in for you. Press Load models and pick one. Paste your own Zen key to use the paid models.",
+            false,
+            false,
+            true,
+        )
+    },
     preset(
         "pollinations",
         "Pollinations (free, no key)",

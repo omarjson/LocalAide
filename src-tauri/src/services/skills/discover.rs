@@ -74,11 +74,25 @@ pub struct RemoteSkill {
     /// Stable within its source: a folder name or a prompt title.
     pub id: String,
     pub name: String,
+    /// What the skill is for, when already known (from its SKILL.md).
+    pub description: Option<String>,
     /// A short preview, when the listing has one.
     pub preview: Option<String>,
     /// Page to open in the browser.
     pub url: String,
 }
+
+/// A listed skill's description, from `describe`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SkillDescription {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub license: Option<String>,
+}
+
+/// At most this many skills are described per call (one page of the list).
+const MAX_DESCRIBE: usize = 60;
 
 /// A skill's full text, for preview and import.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -305,12 +319,47 @@ impl SkillDiscovery {
             .map(|d| RemoteSkill {
                 id: d.id.clone(),
                 name: d.name.clone(),
+                description: (!d.description.is_empty())
+                    .then(|| truncate(&d.description, PREVIEW_CHARS)),
                 preview: if d.body.is_empty() {
                     None
                 } else {
                     Some(truncate(&d.body, PREVIEW_CHARS))
                 },
                 url: d.url.clone(),
+            })
+            .collect())
+    }
+
+    /// Descriptions for listed skills, read from each skill's SKILL.md
+    /// frontmatter (eight files at a time, from raw.githubusercontent.com,
+    /// which has no hourly API limit). Read files stay cached, so a later
+    /// preview or import needs no download. Skills that fail are left out.
+    pub async fn describe(
+        &self,
+        source: &str,
+        repo: Option<&str>,
+        ids: &[String],
+    ) -> Result<Vec<SkillDescription>, AppError> {
+        use futures::StreamExt;
+        let wanted: Vec<String> = ids.iter().take(MAX_DESCRIBE).cloned().collect();
+        let details: Vec<RemoteSkillDetail> = futures::stream::iter(wanted)
+            .map(|id| async move { self.detail(source, repo, &id).await.ok() })
+            .buffer_unordered(8)
+            .filter_map(|d| async move { d })
+            .collect()
+            .await;
+        Ok(details
+            .into_iter()
+            .map(|d| SkillDescription {
+                description: if d.description.is_empty() {
+                    truncate(&d.body, PREVIEW_CHARS)
+                } else {
+                    truncate(&d.description, PREVIEW_CHARS)
+                },
+                id: d.id,
+                name: d.name,
+                license: d.license,
             })
             .collect())
     }

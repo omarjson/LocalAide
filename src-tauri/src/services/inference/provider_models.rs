@@ -136,7 +136,7 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                 name: None,
                 owned_by: None,
                 context_length: None,
-                free: id.ends_with(":free"),
+                free: looks_free(id),
             },
             Value::Object(map) => {
                 let text = |key: &str| map.get(key).and_then(Value::as_str).map(str::to_string);
@@ -165,7 +165,7 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                     zero("prompt") && zero("completion")
                 });
                 ProviderModel {
-                    free: id.ends_with(":free") || priced_free,
+                    free: looks_free(&id) || priced_free,
                     id,
                     name,
                     owned_by: text("owned_by"),
@@ -179,6 +179,13 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
         }
     }
     out
+}
+
+/// Free models are marked in their names: ":free" (OpenRouter, Kilo),
+/// "-free" (OpenCode Zen) or "/free" (Kilo's auto router).
+fn looks_free(id: &str) -> bool {
+    let id = id.to_ascii_lowercase();
+    id.ends_with(":free") || id.ends_with("-free") || id.ends_with("/free") || id == "big-pickle"
 }
 
 #[cfg(test)]
@@ -224,6 +231,15 @@ mod tests {
             ["openai", "mistral"]
         );
         assert!(parse_models(&json!({"error": "nope"})).is_empty());
+    }
+
+    #[test]
+    fn free_names_are_recognised() {
+        let list = parse_models(&json!({"data": [
+            {"id": "kilo-auto/free"}, {"id": "glm-4.7-free"}, {"id": "big-pickle"}, {"id": "claude-sonnet"}
+        ]}));
+        let free: Vec<bool> = list.iter().map(|m| m.free).collect();
+        assert_eq!(free, [true, true, true, false]);
     }
 
     #[test]

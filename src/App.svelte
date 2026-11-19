@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import { api, errorMessage } from "./lib/api/client";
   import { dur, enterDialog, enterScreen, leaveDialog, motion } from "./lib/motion";
   import { formatBytes } from "./lib/format";
   import { applyTheme, currentTheme } from "./lib/theme";
   import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
-  import { requestSettings } from "./lib/nav.svelte";
+  import { requestSettings, screenRequest } from "./lib/nav.svelte";
+  import { loadDev, moduleOn } from "./lib/dev.svelte";
   import MarkdownDoc from "./components/MarkdownDoc.svelte";
   import Modal from "./components/Modal.svelte";
   import type { IconName } from "./components/Icon.svelte";
@@ -35,6 +36,27 @@
   let cmdQuery = $state("");
   let cmdInput = $state<HTMLInputElement>();
   let mobileNav = $state(false);
+  // The sidebar can shrink to icons. Remembered for the next launch.
+  const SIDEBAR_KEY = "localaide-sidebar";
+  let collapsed = $state((() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === "collapsed";
+    } catch {
+      return false;
+    }
+  })());
+  const toggleSidebar = () => {
+    collapsed = !collapsed;
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
+    } catch {
+      // Storage can be unavailable; the choice still applies now.
+    }
+  };
+  // Narrow labels only on large screens; the mobile drawer always shows them.
+  const showLabels = $derived(!collapsed || mobileNav);
+  const navVisible = (id: NavId): boolean =>
+    id === "search" ? moduleOn("search") : id === "memory" ? moduleOn("memory") : id === "skills" ? moduleOn("skills") : true;
   let showHelp = $state(false);
   // Set when the settings file cannot be read at startup. Showing setup then
   // would hide the real problem, so the app says what failed instead.
@@ -58,6 +80,18 @@
     mobileNav = false;
     return true;
   };
+
+  // Screens can ask for another screen (for example chat opening Settings).
+  let handledScreenTick = 0;
+  $effect(() => {
+    const tick = screenRequest.tick;
+    const target = screenRequest.screen;
+    if (tick === handledScreenTick || !target) return;
+    handledScreenTick = tick;
+    untrack(() => {
+      if (screen !== target) navigate(target);
+    });
+  });
 
   $effect(() => {
     if (cmdOpen) {
@@ -88,6 +122,7 @@
     { id: "models", label: "Models", hint: `${mod}5`, icon: "models", group: "Go to", run: () => navigate("models") },
     { id: "settings", label: "Settings", hint: `${mod}6`, icon: "settings", group: "Go to", run: () => navigate("settings") },
     { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) chatResetTick += 1; } },
+    { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
     { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
     { id: "updates", label: "Check for updates", icon: "download", group: "Actions", run: () => { if (navigate("settings")) requestSettings("about", true); } },
@@ -98,7 +133,10 @@
 
   let cmdIndex = $state(0);
   const filteredCommands = $derived(
-    commands.filter((c) => c.label.toLowerCase().includes(cmdQuery.trim().toLowerCase())),
+    commands
+      .filter((c) => c.group !== "Go to" || navVisible(c.id as NavId))
+      .filter((c) => c.id !== "providers" || moduleOn("online"))
+      .filter((c) => c.label.toLowerCase().includes(cmdQuery.trim().toLowerCase())),
   );
 
   const closePalette = () => {
@@ -170,6 +208,7 @@
       } catch (e: unknown) {
         console.error("Theme could not load", e);
       }
+      await loadDev();
       await decideStartScreen();
       await refreshProbe();
     })();
@@ -180,7 +219,10 @@
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        cmdOpen = !cmdOpen;
+        if (moduleOn("command_palette")) cmdOpen = !cmdOpen;
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && !isInput) {
+        e.preventDefault();
+        toggleSidebar();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
         if (navigate("chat")) {
@@ -193,7 +235,7 @@
       } else if ((e.metaKey || e.ctrlKey) && /^[1-6]$/.test(e.key)) {
         e.preventDefault();
         const targetScreen = shortcutScreens[Number(e.key) - 1];
-        if (targetScreen) navigate(targetScreen);
+        if (targetScreen && navVisible(targetScreen)) navigate(targetScreen);
       } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
         e.preventDefault();
         navigate("search");
@@ -238,44 +280,57 @@
   {#if mobileNav}
     <div role="presentation" class="fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
   {/if}
-  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 w-64 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 transition-transform duration-300 ease-out ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-    <div class="h-12 flex items-center gap-2.5 px-3 shrink-0">
-      <LogoMark class="w-5 h-5 shrink-0" />
-      <span class="text-sm font-semibold text-ink-50">LocalAide</span>
+  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
+    <div class={`h-12 flex items-center gap-2.5 shrink-0 ${showLabels ? 'px-3' : 'px-0 justify-center'}`}>
+      <LogoMark class="w-6 h-6 shrink-0" />
+      {#if showLabels}<span class="text-sm font-semibold tracking-tight text-ink-50" in:fade={{ duration: dur(motion.fast) }}>LocalAide</span>{/if}
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
     {#snippet navItem(id: NavId, label: string)}
       <button
         onclick={() => navigate(id)}
         aria-current={screen === id ? "page" : undefined}
-        class={`group relative w-full flex items-center gap-3.5 h-10 px-3 rounded-md text-sm text-left transition-[background-color,color] duration-150 ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold' : 'text-ink-200 hover:bg-veil/5 hover:text-ink-50'}`}
+        aria-label={showLabels ? undefined : label}
+        title={showLabels ? undefined : label}
+        class={`group relative w-full flex items-center h-10 rounded-lg text-sm text-left transition-[background-color,color] duration-150 ${showLabels ? 'gap-3.5 px-3' : 'justify-center px-0'} ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold shadow-sm' : 'text-ink-300 hover:bg-veil/5 hover:text-ink-50'}`}
       >
         <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${screen === id ? 'h-4 opacity-100' : 'h-0 opacity-0'}`} aria-hidden="true"></span>
-        <Icon name={id} class={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 ease-out ${screen === id ? '' : 'group-hover:scale-110'}`} />
-        {label}
+        <Icon name={id} class={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 ease-out ${screen === id ? 'text-ember-300' : 'group-hover:scale-110'}`} />
+        {#if showLabels}<span class="truncate">{label}</span>{/if}
       </button>
     {/snippet}
-    <nav class="flex-1 overflow-y-auto space-y-0.5" aria-label="Screens">
+    <nav class="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pt-1" aria-label="Screens">
       {@render navItem("chat", "Chat")}
-      {@render navItem("search", "Search")}
-      {@render navItem("memory", "Memory")}
-      {@render navItem("skills", "Skills")}
+      {#if navVisible("search")}{@render navItem("search", "Search")}{/if}
+      {#if navVisible("memory")}{@render navItem("memory", "Memory")}{/if}
+      {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
       {@render navItem("models", "Models")}
     </nav>
-    <div class="shrink-0 space-y-1 pt-1.5 border-t border-ink-800">
+    <div class="shrink-0 space-y-0.5 pt-1.5 border-t border-ink-800">
       {@render navItem("settings", "Settings")}
+      <button
+        type="button"
+        onclick={toggleSidebar}
+        aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+        title={collapsed ? "Expand the sidebar (Ctrl+B)" : "Collapse the sidebar (Ctrl+B)"}
+        aria-expanded={!collapsed}
+        class={`hidden lg:flex w-full items-center h-9 rounded-lg text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-50 ${showLabels ? 'gap-3.5 px-3' : 'justify-center'}`}
+      >
+        <Icon name="sidebar" class={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
+        {#if showLabels}<span>Collapse</span>{/if}
+      </button>
     </div>
   </aside>
 
-  <section class="flex-1 overflow-y-auto bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-lg">
-    <div class="lg:hidden sticky top-0 z-30 bg-ink-950 p-3 border-b border-edge flex items-center gap-3">
+  <section class={`app-canvas flex-1 min-w-0 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+    <div class="lg:hidden sticky top-0 z-30 shrink-0 bg-ink-950 p-3 border-b border-edge flex items-center gap-3">
       <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-md hover:bg-veil/5 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
       <LogoMark class="w-6 h-6 shrink-0" />
       <span class="font-semibold">LocalAide</span>
     </div>
-    <div class="min-h-full p-6 md:p-10">
+    <div class={screen === "chat" ? "flex-1 min-h-0" : "flex-1 p-6 md:p-10"}>
       {#key screen}
-        <div in:fly={enterScreen()}>
+        <div in:fly={enterScreen()} class={screen === "chat" ? "h-full" : ""}>
       {#if startupError}
         <div class="max-w-xl mx-auto my-12 p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center" role="alert">
           <div class="text-rose-300 mb-3 flex justify-center"><Icon name="alert" class="w-7 h-7" /></div>

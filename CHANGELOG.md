@@ -5,6 +5,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-19
+
+A new chat, chat modes, developer mode, web search that works without keys, and free providers from Kilo Code and OpenCode. If you have 0.1.2 and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
+
+### Added
+- **New chat design.** A full-height conversation with a centred reading column, answers without bubbles, a rounded message box that grows as you type, a round send button, a typing indicator, and source cards under answers. Saved chats open in a side panel with search, grouped by Today, Yesterday, This week and Older.
+- **Chat modes.** Pick how LocalAide answers from the message box: **Standard**; **Strict** (careful, cites sources, says when it is unsure, lower temperature); **Unrestricted** (direct answers without lectures or needless refusals; the model's own rules and the law still apply); **Autonomous** (plans, gathers sources from the web and your files, works through the task, then checks the result). Each answer shows what LocalAide did first, such as "Searching the web" and "Reading rust-lang.org".
+- **Web in chat.** A **Web** switch in the message box searches the web for your message and cites the results. A **Notes** switch decides whether chat looks in your notes and documents.
+- **Developer mode** (Settings → Developer): edit the system prompt and see each mode's instruction, sampling controls, answer statistics (tokens, time, speed), a plain-text view of answers, a request log with timings, a switch to turn off animations, and a compact layout.
+- **Modules** (Settings → Developer): switch off Notes and file recall, the Search screen, Web in chat, Skills, Online providers, the OpenCode link or the command palette. Switched-off parts disappear from the app.
+- **Collapsible sidebar.** Shrink the sidebar to icons with the button at its bottom or Ctrl/⌘+B. LocalAide remembers your choice.
+- **Kilo Code** as a free online provider with no key or sign-up (`kilo-auto/free` picks a free model for you).
+- **OpenCode.** OpenCode Zen's free models as an online provider (its shared "public" key is filled in). Settings → Integrations links an OpenCode server on this computer (`opencode serve`); the code button under any message then starts an OpenCode session with that task. OpenChamber and other OpenCode front ends see the same session.
+- **Skill descriptions.** Discover now shows what each skill in a collection does, read from its SKILL.md, and search matches descriptions too.
+- The UI UX Pro Max design skill (MIT) in `.kiro/skills/ui-ux-pro-max/`, used for this redesign.
+
+### Changed
+- **Web search works without keys.** Exa runs keyless through its public endpoint, and Firecrawl through its free keyless tier; a key only raises the limits. Firecrawl can also use a server you run yourself (for example `http://localhost:3002`). The new default, **Automatic**, tries DuckDuckGo, then Exa, then Wikipedia, and each result says which one found it. Reading a page falls back from Jina Reader to Exa.
+- Softer, more modern corners, larger click targets, a faint warm light behind each screen, and thin scrollbars.
+- The Privacy Policy and Terms of Use describe the new network uses (Web in chat, OpenCode, skill descriptions) and the chat modes.
+
+### Fixed
+- **Web search found nothing.** DuckDuckGo's results page writes `href` before `class` and uses single quotes, and the reader expected the opposite, so every search came back empty. It now reads attributes in any order and quote style, and the fixture is the real page layout.
+- Releases attach only the installers; 0.1.2's draft also picked up the `llama-server` build.
+
 ## [0.1.2] - 2026-11-18
 
 Installs, updates and polish, from testing 0.1.1 on an Intel Mac and on Windows 11. This is the first version that can update itself, so people on 0.1.0 or 0.1.1 install it by hand once. On Windows the new installer replaces the old version; on macOS drag the new app over the old one. Your chats, notes, models and settings in `~/.aiassistant/` are kept.

@@ -82,7 +82,7 @@
   const matchingRemote = $derived(
     remote.filter((r) => {
       const q = remoteQuery.trim().toLowerCase();
-      return !q || r.name.toLowerCase().includes(q) || (r.preview ?? "").toLowerCase().includes(q);
+      return !q || r.name.toLowerCase().includes(q) || (r.description ?? r.preview ?? "").toLowerCase().includes(q);
     }),
   );
 
@@ -106,6 +106,42 @@
       remoteError = errMsg(e);
     } finally {
       remoteBusy = false;
+    }
+    void describeVisible();
+  };
+
+  $effect(() => {
+    void remoteQuery;
+    if (!activeSource || remote.length === 0) return;
+    const timer = setTimeout(() => void describeVisible(), 400);
+    return () => clearTimeout(timer);
+  });
+
+  // Skill folders list names only; read the descriptions of what is on
+  // screen (one page at a time) so each card says what the skill does.
+  let describing = $state(false);
+  const describeVisible = async () => {
+    const source = activeSource;
+    if (!source || describing) return;
+    const ids = matchingRemote
+      .slice(0, remoteLimit)
+      .filter((r) => !r.description && !r.preview)
+      .map((r) => r.id)
+      .slice(0, 60);
+    if (ids.length === 0) return;
+    describing = true;
+    try {
+      const found = await api.skillsRemoteDescribe(source, ids, activeRepo);
+      if (source !== activeSource) return;
+      const byId = new Map(found.map((d) => [d.id, d]));
+      remote = remote.map((r) => {
+        const d = byId.get(r.id);
+        return d ? { ...r, name: d.name || r.name, description: d.description } : r;
+      });
+    } catch (e: unknown) {
+      console.warn("Skill descriptions could not load", e);
+    } finally {
+      describing = false;
     }
   };
 
@@ -373,7 +409,11 @@
                     <span class="truncate font-medium text-ink-50">{item.name}</span>
                     {#if owned.has(item.name.toLowerCase())}<span class="shrink-0 rounded bg-emerald-500/15 px-1.5 text-xs font-semibold text-emerald-300">Saved</span>{/if}
                   </div>
-                  {#if item.preview}<p class="mt-1 line-clamp-2 text-sm text-ink-400">{item.preview}</p>{/if}
+                  {#if item.description || item.preview}
+                    <p class="mt-1 line-clamp-2 text-sm text-ink-400" in:fade={{ duration: dur(motion.base) }}>{item.description ?? item.preview}</p>
+                  {:else if describing}
+                    <div class="mt-2 space-y-1.5" aria-hidden="true"><div class="skeleton h-3 w-11/12"></div><div class="skeleton h-3 w-2/3"></div></div>
+                  {/if}
                 </div>
                 <div class="flex shrink-0 gap-1">
                   <Button variant="subtle" disabled={previewBusy !== null} onclick={() => void openPreview(item)}>{previewBusy === item.id ? "Opening…" : "Preview"}</Button>
@@ -385,7 +425,7 @@
             {/each}
           </div>
           {#if matchingRemote.length > remoteLimit}
-            <div class="mt-4 flex justify-center"><Button variant="secondary" onclick={() => remoteLimit += 60}>Show more ({(matchingRemote.length - remoteLimit).toLocaleString()} left)</Button></div>
+            <div class="mt-4 flex justify-center"><Button variant="secondary" onclick={() => { remoteLimit += 60; void describeVisible(); }}>Show more ({(matchingRemote.length - remoteLimit).toLocaleString()} left)</Button></div>
           {/if}
         {/if}
       </div>
