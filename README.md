@@ -49,6 +49,7 @@ Search is BM25 keyword search over SQLite FTS5 by default; with the local embedd
 - **Local chat**: token streaming with a working Stop control and `Esc` (cancellation applies at the next streamed token), conversation history in JSON thread files, and message actions (retry, edit-and-resend, copy, delete thread).
 - **Image input with vision models**: attach up to 4 images (PNG, JPEG, WEBP, GIF, 20 MB total); the sidecar loads the model's `mmproj` projector when one is present and rejects image input for text-only models.
 - **Opt-in online providers**: add an OpenAI-compatible provider with your own API key, or start from a preset list aggregated from the open 9Router registry — LLM7, Synthetic, Groq, Cerebras, NVIDIA NIM, OpenRouter, Chutes, Mistral, api.airforce, plus your own local Ollama (no key needed for proxies on this machine). Off by default; the key is stored in the local config file, masked in the UI, and sent only to the provider's base URL.
+- **Tools the model chooses, visible thinking, one model menu, MCP** ([ADR-0012](docs/adr/0012-chat-tools-and-mcp.md), 0.1.4): in chat the model decides when to search the web, read a page, search your notes, use a skill or read workspace files; each call shows as a card, and writes ask first. Thinking models show a collapsible "Thought for N s" block with an effort setting. The model menu lists local models and every online provider you switch on, with thinking, image and tool icons and the context size. Attach or drop files, and add MCP servers (local programs or web addresses) in Settings → Tools and MCP. Not yet driven against a real tool-calling model or MCP server; see the ADR.
 - **Web search & page reading** ([ADR-0011](docs/adr/0011-web-search.md)): the Search screen's Web mode searches the open internet. DuckDuckGo, Wikipedia, and the Jina Reader work keylessly out of the box; Exa and Firecrawl run after you paste an API key in Settings → Web search. Every request is an explicit click — nothing crawls in the background — and keys are stored locally, sent only to their own provider, and excluded from backups unless you opt in.
 - **Sliding-window context budget**: older turns are pruned when the conversation exceeds the model's context, preserving the system prompt, the retrieved context block, and the latest message.
 - **Document library**: index folders of Markdown, text, source, and PDF files; chunking follows natural boundaries (1500 characters, 250 overlap); search runs FTS5 BM25 keyword matching — or semantic and hybrid retrieval with reciprocal-rank fusion when the local embedding engine is running, re-ranked by a local reranker model when that engine is running too, with a one-click backfill for existing indexes.
@@ -145,6 +146,7 @@ How releases are built, and what signing needs, is in [docs/release.md](docs/rel
 | `Esc` | Abort generation / close modal |
 | `?` | Keyboard shortcuts help (outside inputs) |
 | `Enter` / `Shift+Enter` | Send / newline in chat input |
+| `Cmd/Ctrl+Shift+M` | Open the model menu in Chat |
 
 ## Verification & Quality Gates
 
@@ -178,6 +180,7 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 - [ADR-0009: Encrypted Local Backups](docs/adr/0009-encrypted-backups.md)
 - [ADR-0010: Community Models from the Hugging Face Hub](docs/adr/0010-community-models.md)
 - [ADR-0011: Web Search and Page Reading](docs/adr/0011-web-search.md)
+- [ADR-0012: Chat Tools, Thinking, the Model Picker and MCP](docs/adr/0012-chat-tools-and-mcp.md)
 
 ## Security Disclosure
 

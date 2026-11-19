@@ -2,8 +2,10 @@
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { listen } from "@tauri-apps/api/event";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
+  import { appendReasoning, appendText, finishTool, partsForSaving, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
   import { dur, motion, stagger } from "../lib/motion";
   import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
@@ -13,11 +15,13 @@
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, ModelChoice, ModelChoices, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
   import ChatInput from "../components/ChatInput.svelte";
+  import ModelPicker from "../components/ModelPicker.svelte";
+  import EffortPicker from "../components/EffortPicker.svelte";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -52,19 +56,14 @@
 
   let model = $state("Local model");
 
-
-  // Set when the opt-in online provider is active. Shows a cloud badge in the
-  // header so it is always clear which engine is answering.
-  let cloudChat = $state<{ label: string; model: string } | null>(null);
-
-  // Shown in the empty state: which model is active, or none yet.
-  let activeModelName = $state<string | null>(null);
-  // Installed models for the header picker; switching loads the chosen one
-  // through the same path the Models screen uses.
-  let installedModels = $state<{ id: string; name: string }[]>([]);
+  // The model picker: local models and the models of every online provider
+  // the user switched on. The active one answers.
+  let choices = $state<ModelChoices | null>(null);
   let pickerOpen = $state(false);
-  let switchingModel = $state(false);
-  let switchError = $state<string | null>(null);
+  let pickerBusy = $state(false);
+  let refreshingProvider = $state<string | null>(null);
+  const activeChoice = $derived<ModelChoice | null>(choices?.models.find((m) => m.active) ?? null);
+  const onlineChoice = $derived(activeChoice && activeChoice.provider_id !== null ? activeChoice : null);
   // Whether a local model is loaded in the engine right now.
   let engineLoaded = $state(false);
   let chatError = $state<string | null>(null);
@@ -75,9 +74,16 @@
   let showMoreActions = $state(false);
   let pendingDeleteThreadId = $state<string | null>(null);
   let modelsChecked = $state(false);
-  const engineLabel = $derived(
-    cloudChat ? `${cloudChat.model} · ${cloudChat.label}` : engineLoaded && activeModelName ? `${activeModelName} · on this computer` : "",
-  );
+
+  // Files waiting to go with the next message.
+  let pendingFiles = $state<ChatAttachment[]>([]);
+  let attaching = $state(false);
+  let dragging = $state(false);
+  // Tool calls waiting for the user's OK, by tool call id.
+  let approvals = $state<Record<string, { approval_id: string; preview: string }>>({});
+  // Tools the user allowed for the rest of this chat.
+  let allowedTools = $state<string[]>([]);
+  let mcpList = $state<McpServer[]>([]);
 
   let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
 
@@ -85,7 +91,15 @@
   const OPTIONS_KEY = "localaide-chat-options";
   const savedOptions = (() => {
     try {
-      return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as { mode?: unknown; web?: unknown; recall?: unknown };
+      return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as {
+        mode?: unknown;
+        web?: unknown;
+        recall?: unknown;
+        files?: unknown;
+        skills?: unknown;
+        mcpOff?: unknown;
+        efforts?: unknown;
+      };
     } catch {
       return {};
     }
@@ -93,9 +107,21 @@
   let mode = $state<ChatModeId>(isChatMode(savedOptions.mode) ? savedOptions.mode : "standard");
   let useWeb = $state(savedOptions.web === true);
   let useRecall = $state(savedOptions.recall !== false);
+  let useFiles = $state(savedOptions.files !== false);
+  let useSkills = $state(savedOptions.skills !== false);
+  // MCP servers switched off in chat (they stay on in Settings).
+  let mcpOff = $state<string[]>(Array.isArray(savedOptions.mcpOff) ? savedOptions.mcpOff.filter((v): v is string => typeof v === "string") : []);
+  // The thinking effort chosen for each model, by picker key.
+  let efforts = $state<Record<string, string>>(
+    savedOptions.efforts && typeof savedOptions.efforts === "object" ? (savedOptions.efforts as Record<string, string>) : {},
+  );
+  const effort = $derived(activeChoice ? efforts[activeChoice.key] ?? "auto" : "auto");
   $effect(() => {
     try {
-      localStorage.setItem(OPTIONS_KEY, JSON.stringify({ mode, web: useWeb, recall: useRecall }));
+      localStorage.setItem(
+        OPTIONS_KEY,
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts }),
+      );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
     }
@@ -126,7 +152,10 @@
         const stop = await listen<EngineStatusEvent>("engine-status", (event) => {
           const { state, message } = event.payload;
           engineLoading = state === "loading";
-          if (state === "ready") engineLoaded = true;
+          if (state === "ready") {
+            engineLoaded = true;
+            void loadChoices();
+          }
           if (state === "failed") {
             engineLoaded = false;
             sendFailed = false;
@@ -148,34 +177,38 @@
     };
   });
 
-  onMount(async () => {
+  const loadChoices = async () => {
     try {
-      const models = await api.listModels();
-      activeModelName = models.find((m) => m.active)?.name ?? null;
-      installedModels = models
-        .filter((m) => m.installed)
-        .map((m) => ({ id: m.id, name: m.name }));
+      choices = await api.chatModels();
+      engineLoaded = choices.local_loaded;
     } catch (e: unknown) {
-      activeModelName = null;
-      chatError = errorMessage(e);
+      chatError = `The model list could not load: ${errorMessage(e)}`;
     } finally {
       modelsChecked = true;
     }
+  };
+
+  const loadMcp = async () => {
+    if (!moduleOn("mcp")) return;
     try {
-      const cloud = await api.getCloudConfig();
-      const provider = cloud.providers.find((p) => p.id === cloud.active_provider_id);
-      cloudChat = cloud.cloud_enabled && provider ? { label: provider.label, model: provider.model } : null;
-    } catch (e: unknown) {
-      cloudChat = null;
-      chatError = `Online settings could not load: ${errorMessage(e)}`;
+      mcpList = (await api.mcpServers()).filter((s) => s.enabled);
+    } catch {
+      mcpList = [];
     }
+  };
+
+  onMount(async () => {
+    await loadChoices();
+    void loadMcp();
     // Restore the chat preferences from the last session (honest local
     // adaptation: what the user chose, not a profile).
     try {
       const prefs = await api.getChatPrefs();
       if (prefs.system_prompt) systemPrompt = prefs.system_prompt;
       if (prefs.temperature !== null) temperature = prefs.temperature;
-      if (prefs.max_tokens !== null) maxTokens = prefs.max_tokens;
+      // 512 was the old default, saved on every send; it is too short once
+      // a model thinks, so it moves up to the new default.
+      if (prefs.max_tokens !== null && prefs.max_tokens !== 512) maxTokens = prefs.max_tokens;
       if (prefs.persona) persona = prefs.persona;
     } catch (e: unknown) {
       chatError = `Chat settings could not load: ${errorMessage(e)}`;
@@ -204,7 +237,7 @@
   };
   let systemPrompt = $state("You are a helpful local AI assistant.");
   let temperature = $state(0.7);
-  let maxTokens = $state(512);
+  let maxTokens = $state(2048);
   let persona = $state("General");
   let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
@@ -279,6 +312,9 @@
     activeThreadId = `t_${Date.now()}`;
     activeThreadTitle = "New Conversation";
     messages = [];
+    pendingFiles = [];
+    allowedTools = [];
+    approvals = {};
   };
 
   // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
@@ -297,6 +333,8 @@
     if (streaming) return;
     activeThreadId = t.id;
     activeThreadTitle = t.title;
+    allowedTools = [];
+    approvals = {};
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(t.id);
@@ -340,7 +378,11 @@
     }
 
     // Saved chats keep text only. Images would be sent and then dropped.
-    const textOnly = $state.snapshot(messages).map(({ images: _images, steps: _steps, stats: _stats, ...rest }) => rest);
+    const textOnly = $state.snapshot(messages).map(({ images: _images, steps: _steps, stats: _stats, ...rest }) => ({
+      ...rest,
+      parts: rest.parts && rest.parts.length > 0 ? partsForSaving(rest.parts) : undefined,
+      attachments: rest.attachments?.map((a) => ({ ...a, data_url: null })),
+    }));
     try {
       await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, textOnly);
       await loadThreads();
@@ -361,19 +403,34 @@
     }
   };
 
+  // The user's local date and time, so the model knows what "today" is.
+  const nowLabel = () => {
+    const d = new Date();
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return `${d.toLocaleString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}${zone ? ` (${zone})` : ""}`;
+  };
+
   const send = async () => {
-    if ((!input.trim() && pendingImages.length === 0) || streaming) return;
+    const files = $state.snapshot(pendingFiles).filter((f) => !f.error);
+    if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
 
     // Earlier turns only. The new message is sent separately as `message`.
-    const history = messages
-      .filter(m => m.content.trim() && !m.content.startsWith("[Chat Error"))
-      .map(m => ({ role: m.role, content: m.content }));
+    // Failed answers are left out, so the model does not repeat them.
+    const history = $state
+      .snapshot(messages)
+      .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments?.filter((a) => a.kind === "text").map((a) => ({ ...a, data_url: null })),
+      }));
 
     const images = $state.snapshot(pendingImages);
     pendingImages = [];
-    messages.push({ role: "user", content: userMsg, ts: Date.now(), images });
+    pendingFiles = [];
+    messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
     streaming = true;
     sendFailed = false;
     liveStatus = "LocalAide is answering.";
@@ -381,10 +438,34 @@
     void savePrefs();
 
     const assistantIdx = messages.length;
-    messages.push({ role: "assistant", content: "", ts: Date.now(), steps: [] });
-    let acc = "";
+    messages.push({
+      role: "assistant",
+      content: "",
+      ts: Date.now(),
+      steps: [],
+      parts: [],
+      model: activeChoice ? (activeChoice.provider_id ? `${activeChoice.name} · ${activeChoice.provider_label}` : activeChoice.name) : undefined,
+    });
     const started = performance.now();
     let firstTokenAt: number | null = null;
+    const answer = () => messages[assistantIdx];
+    const parts = () => {
+      const msg = answer();
+      if (!msg.parts) msg.parts = [];
+      return msg.parts;
+    };
+    const fail = (message: string) => {
+      settleParts(parts(), performance.now());
+      if (!answer().content.trim()) answer().content = "I could not answer that. Try again.";
+      answer().error = true;
+      chatError = message;
+      sendFailed = true;
+      streaming = false;
+      activeJobId = null;
+      approvals = {};
+      liveStatus = "LocalAide could not answer.";
+      void persistCurrentThread();
+    };
 
     try {
       activeJobId = await api.streamChat(
@@ -399,51 +480,62 @@
           mode,
           use_web: webAvailable && useWeb,
           use_recall: recallAvailable && useRecall,
+          use_files: useFiles,
+          use_skills: moduleOn("skills") && useSkills,
+          mcp_servers: mcpList.filter((m) => !mcpOff.includes(m.id)).map((m) => m.id),
+          allowed_tools: [...allowedTools],
+          target: activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined,
+          effort,
+          attachments: files,
+          now: nowLabel(),
         },
         (event) => {
+          const now = performance.now();
           if (event.type === "token") {
-            if (firstTokenAt === null) firstTokenAt = performance.now();
-            acc += event.payload.token;
-            messages[assistantIdx].content = acc;
+            if (firstTokenAt === null) firstTokenAt = now;
+            appendText(parts(), event.payload.token, now);
+            answer().content = textOf(parts());
+          } else if (event.type === "reasoning") {
+            if (firstTokenAt === null) firstTokenAt = now;
+            appendReasoning(parts(), event.payload.text, now);
+          } else if (event.type === "tool_call") {
+            startTool(parts(), event.payload, now);
+          } else if (event.type === "tool_approval") {
+            setToolStatus(parts(), event.payload.id, "waiting");
+            approvals[event.payload.id] = { approval_id: event.payload.approval_id, preview: event.payload.preview };
+            liveStatus = `LocalAide asks before it can ${event.payload.title.toLowerCase()}.`;
+          } else if (event.type === "tool_result") {
+            finishTool(parts(), event.payload);
+            delete approvals[event.payload.id];
           } else if (event.type === "status") {
-            const steps = messages[assistantIdx].steps ?? [];
-            // "Writing the answer" is implied by the text itself; keep the
-            // research steps only.
-            if (event.payload.label !== "Writing the answer") {
-              messages[assistantIdx].steps = [...steps, event.payload.label];
+            const label = event.payload.label;
+            if (label.startsWith("Answering with ")) {
+              answer().model = label.slice("Answering with ".length);
+            } else if (label !== "Writing the answer") {
+              answer().steps = [...(answer().steps ?? []), label];
             }
           } else if (event.type === "citation") {
-            const cur = messages[assistantIdx].citations || [];
-            messages[assistantIdx].citations = [...cur, event.payload];
+            const cur = answer().citations || [];
+            if (!cur.some((c) => c.index === event.payload.index)) answer().citations = [...cur, event.payload];
           } else if (event.type === "done") {
-            messages[assistantIdx].stats = {
+            settleParts(parts(), now);
+            answer().stats = {
               tokens: event.payload.total_tokens,
-              ms: performance.now() - started,
+              ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
             };
             streaming = false;
             activeJobId = null;
+            approvals = {};
             liveStatus = "Answer ready.";
-            persistCurrentThread();
+            void persistCurrentThread();
           } else if (event.type === "error") {
-            messages[assistantIdx].content = "I could not answer that. Try again.";
-            chatError = errorMessage(event.payload.error);
-            sendFailed = true;
-            streaming = false;
-            activeJobId = null;
-            liveStatus = "LocalAide could not answer.";
-            persistCurrentThread();
+            fail(errorMessage(event.payload.error));
           }
-        }
+        },
       );
     } catch (e: unknown) {
-      messages[assistantIdx].content = "I could not answer that. Try again.";
-      chatError = errorMessage(e);
-      sendFailed = true;
-      streaming = false;
-      activeJobId = null;
-      liveStatus = "LocalAide could not answer.";
-      persistCurrentThread();
+      fail(errorMessage(e));
     }
   };
 
@@ -458,6 +550,9 @@
     }
     streaming = false;
     activeJobId = null;
+    approvals = {};
+    const last = messages.at(-1);
+    if (last?.role === "assistant" && last.parts) settleParts(last.parts, performance.now());
     liveStatus = "Answer stopped.";
     persistCurrentThread();
   };
@@ -475,6 +570,7 @@
     messages = messages.slice(0, userIdx);
     input = lastUser.content;
     pendingImages = [...(lastUser.images ?? [])];
+    pendingFiles = [...(lastUser.attachments ?? [])];
     void send();
   };
 
@@ -624,25 +720,127 @@
     return groups.filter((g) => g.items.length > 0);
   });
 
-  // Load the chosen model into the engine and make it the chat default.
-  const switchModel = async (id: string, name: string) => {
-    pickerOpen = false;
-    switchingModel = true;
-    switchError = null;
+  // Make the chosen model the one that answers. A local model loads first.
+  const selectModel = async (choice: ModelChoice) => {
+    if (choice.active) return;
+    pickerBusy = true;
     try {
-      await api.loadInferenceModel(id);
-      activeModelName = name;
-      engineLoaded = true;
+      choices = await api.setChatTarget({ provider_id: choice.provider_id, model: choice.model });
+      engineLoaded = choices.local_loaded;
     } catch (e: unknown) {
-      switchError = errorMessage(e);
+      sendFailed = false;
+      chatError = `${choice.name} could not be used: ${errorMessage(e)}`;
     } finally {
-      switchingModel = false;
+      pickerBusy = false;
     }
   };
 
-  const togglePicker = () => {
-    switchError = null;
-    pickerOpen = !pickerOpen;
+  const toggleFavorite = async (key: string) => {
+    try {
+      const starred = await api.toggleFavoriteModel(key);
+      if (choices) for (const m of choices.models) m.favorite = starred.includes(m.key);
+    } catch (e: unknown) {
+      chatError = `The star could not be saved: ${errorMessage(e)}`;
+    }
+  };
+
+  const refreshProvider = async (providerId: string) => {
+    refreshingProvider = providerId;
+    try {
+      await api.refreshProviderModels(providerId);
+      await loadChoices();
+    } catch (e: unknown) {
+      sendFailed = false;
+      chatError = `The model list could not load: ${errorMessage(e)}`;
+    } finally {
+      refreshingProvider = null;
+    }
+  };
+
+  const setEffort = (value: string) => {
+    if (activeChoice) efforts = { ...efforts, [activeChoice.key]: value };
+  };
+
+  const toggleMcp = (id: string) => {
+    mcpOff = mcpOff.includes(id) ? mcpOff.filter((x) => x !== id) : [...mcpOff, id];
+  };
+
+  // Files from the attach menu or a drop. Images join the image list.
+  const addAttachments = (files: ChatAttachment[]) => {
+    for (const file of files) {
+      if (file.kind === "image" && file.data_url) {
+        if (pendingImages.length < MAX_IMAGES) pendingImages.push(file.data_url);
+      } else if (!pendingFiles.some((f) => f.name === file.name && f.chars === file.chars)) {
+        pendingFiles.push(file);
+      }
+    }
+  };
+
+  const attachFiles = async () => {
+    attaching = true;
+    try {
+      addAttachments(await api.attachFiles());
+    } catch (e: unknown) {
+      chatError = `The files could not be read: ${errorMessage(e)}`;
+    } finally {
+      attaching = false;
+    }
+  };
+
+  const attachDropped = async (paths: string[]) => {
+    if (paths.length === 0) return;
+    attaching = true;
+    try {
+      addAttachments(await api.attachDropped(paths));
+    } catch (e: unknown) {
+      chatError = `The files could not be read: ${errorMessage(e)}`;
+    } finally {
+      attaching = false;
+    }
+  };
+
+  // Files dropped on the window attach to the next message.
+  onMount(() => {
+    let stop: (() => void) | undefined;
+    let closed = false;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const p = event.payload;
+        if (p.type === "enter" || p.type === "over") dragging = true;
+        else if (p.type === "leave") dragging = false;
+        else if (p.type === "drop") {
+          dragging = false;
+          void attachDropped(p.paths);
+        }
+      })
+      .then((unlisten) => {
+        if (closed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => undefined);
+    return () => {
+      closed = true;
+      stop?.();
+    };
+  });
+
+  // The user's answer to a tool that wants to change something.
+  const decideTool = async (toolId: string, decision: "allow" | "allow_chat" | "deny") => {
+    const pending = approvals[toolId];
+    if (!pending) return;
+    const answer = messages.at(-1);
+    const part = answer?.parts?.find((p) => p.type === "tool" && p.id === toolId);
+    if (answer?.parts) setToolStatus(answer.parts, toolId, decision === "deny" ? "denied" : "running");
+    if (decision === "allow_chat" && part?.type === "tool" && !allowedTools.includes(part.name)) {
+      allowedTools = [...allowedTools, part.name];
+    }
+    delete approvals[toolId];
+    try {
+      const delivered = await api.decideTool(pending.approval_id, decision);
+      if (!delivered) showToast("That question was already closed.", "error");
+    } catch (e: unknown) {
+      chatError = `Your answer could not be sent: ${errorMessage(e)}`;
+    }
   };
 
   onMount(() => {
@@ -654,6 +852,11 @@
   // The message box and open menus handle Escape first and mark it handled.
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        pickerOpen = !pickerOpen;
+        return;
+      }
       if (event.key === "Escape" && (showSettingsPanel || showThreads) && !event.defaultPrevented) {
         showSettingsPanel = false;
         showThreads = false;
@@ -695,50 +898,10 @@
     </button>
 
     <div class="ml-auto flex items-center gap-1.5">
-      {#if cloudChat}
-        <span class="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex" title="Chat uses your chosen online provider.">
-          <Icon name="cloud" class="h-3.5 w-3.5" />{cloudChat.model}
+      {#if onlineChoice}
+        <span class="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex" title={`Messages go to ${onlineChoice.provider_label}.`}>
+          <Icon name="cloud" class="h-3.5 w-3.5" />Online · {onlineChoice.provider_label}
         </span>
-      {:else if installedModels.length > 0}
-        <div class="relative" use:popover={{ open: pickerOpen, onClose: () => pickerOpen = false }}>
-          <button
-            type="button"
-            aria-expanded={pickerOpen}
-            aria-haspopup="menu"
-            onclick={togglePicker}
-            disabled={switchingModel || engineLoading}
-            class="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-950 px-3 py-1.5 text-xs font-medium text-ink-200 transition-colors hover:border-edge hover:text-ink-50 disabled:opacity-60"
-            title="Choose the model that answers"
-          >
-            <span class={`h-2 w-2 rounded-full ${engineLoaded ? "bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/60" : switchingModel || engineLoading ? "animate-pulse bg-amber-400" : "bg-ink-600"}`} aria-hidden="true"></span>
-            <span class="max-w-[12rem] truncate">{#if switchingModel || engineLoading}Loading…{:else if engineLoaded && activeModelName}{activeModelName}{:else}Load a model{/if}</span>
-            <Icon name="chevron-down" class={`h-3.5 w-3.5 transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
-          </button>
-          {#if switchError}
-            <div class="absolute right-0 top-10 z-30 flex w-[300px] items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-950/95 px-3 py-2 text-sm text-rose-200 shadow-xl" role="alert">
-              <span class="min-w-0 flex-1 break-words">{switchError}</span>
-              <button type="button" aria-label="Dismiss" onclick={() => switchError = null} class="shrink-0 rounded p-0.5 hover:bg-rose-500/20"><Icon name="close" class="h-3.5 w-3.5" /></button>
-            </div>
-          {:else if pickerOpen}
-            <div role="menu" aria-label="Models on this computer" class="absolute right-0 top-10 z-30 max-h-72 min-w-[260px] overflow-y-auto rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
-              <div class="px-2.5 pb-1 pt-1 text-xs font-semibold text-ink-500">On this computer</div>
-              {#each installedModels as installed (installed.id)}
-                {@const current = engineLoaded && activeModelName === installed.name}
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={current}
-                  data-popover-item
-                  onclick={() => void switchModel(installed.id, installed.name)}
-                  class={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-veil/5 focus:bg-veil/5 focus:outline-none ${current ? "text-ember-200" : "text-ink-200"}`}
-                ><Icon name="models" class="h-4 w-4 shrink-0 text-ink-400" /><span class="min-w-0 flex-1 truncate">{installed.name}</span>{#if current}<Icon name="check" class="h-4 w-4 text-ember-300" />{/if}</button>
-              {/each}
-              {#if onOpenModels}
-                <button type="button" data-popover-item onclick={() => { pickerOpen = false; onOpenModels?.(); }} class="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-ink-800 px-2.5 py-2 text-left text-sm text-ink-400 hover:bg-veil/5 hover:text-ink-100"><Icon name="plus" class="h-4 w-4" />Get more models</button>
-              {/if}
-            </div>
-          {/if}
-        </div>
       {/if}
 
       <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
@@ -873,23 +1036,23 @@
           </div>
           {#if !modelsChecked}
             <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Getting ready…</h1>
-          {:else if !cloudChat && !activeModelName}
+          {:else if !activeChoice}
             <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Pick a model to start</h1>
-            <p class="text-[15px] leading-6 text-ink-400">Models run on this computer. Download one, or connect a free online provider such as Kilo Code in Settings.</p>
+            <p class="text-[15px] leading-6 text-ink-400">{choices && choices.models.length > 0 ? "Choose one in the model menu under the message box." : "Models run on this computer. Download one, or connect a free online provider such as Kilo Code in Settings."}</p>
             <div class="mt-3 flex flex-wrap justify-center gap-2">
               {#if onOpenModels}<Button variant="primary" class="h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>{/if}
               {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={() => requestSettings("online")}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
             </div>
           {:else}
             <h1 class="text-[28px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
-            {#if cloudChat}
-              <p class="text-[15px] text-ink-400">Answers come from {cloudChat.model} via {cloudChat.label}. Messages are sent to that provider.</p>
-            {:else if engineLoading}
-              <p class="flex items-center gap-2 text-[15px] text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeModelName}. This can take a minute.</p>
+            {#if onlineChoice}
+              <p class="text-[15px] text-ink-400">Answers come from {onlineChoice.name} via {onlineChoice.provider_label}. Messages are sent to that provider.</p>
+            {:else if engineLoading || pickerBusy}
+              <p class="flex items-center gap-2 text-[15px] text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeChoice.name}. This can take a minute.</p>
             {:else if !engineLoaded}
-              <p class="text-[15px] text-ink-400">{activeModelName} is not loaded yet. Choose it in the model menu at the top.</p>
+              <p class="text-[15px] text-ink-400">{activeChoice.name} is not loaded yet. Choose it in the model menu under the message box.</p>
             {:else}
-              <p class="text-[15px] text-ink-400">Running {activeModelName} on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches you turned on" : ""}.</p>
+              <p class="text-[15px] text-ink-400">Running {activeChoice.name} on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches the model makes" : ""}.</p>
             {/if}
             {#if mode !== "standard" && currentModeInfo}
               <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-ember-500/40 bg-ember-500/10 px-3 py-1 text-xs font-medium text-ember-200"><Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />{currentModeInfo.label} mode</span>
@@ -897,7 +1060,7 @@
           {/if}
         </div>
 
-        {#if cloudChat || activeModelName}
+        {#if activeChoice}
           <div class="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
             {#each starterPrompts as sp, i (sp.title)}
               <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} class="lift group flex items-start gap-3 rounded-xl border border-ink-700 bg-ink-900/80 p-3.5 text-left hover:border-edge hover:bg-ink-900">
@@ -930,6 +1093,11 @@
             streaming={streaming && idx === messages.length - 1}
             citations={msg.citations}
             steps={msg.steps}
+            parts={msg.parts}
+            attachments={msg.attachments}
+            model={msg.model}
+            approvals={idx === messages.length - 1 ? approvals : {}}
+            onDecide={(toolId, decision) => void decideTool(toolId, decision)}
             stats={flag("answer_stats") ? msg.stats ?? null : null}
             allowRaw={flag("raw_messages")}
             isLast={idx === messages.length - 1}
@@ -982,11 +1150,50 @@
         {useRecall}
         {recallAvailable}
         onToggleRecall={() => useRecall = !useRecall}
-        {engineLabel}
-      />
-      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts{cloudChat ? `. Messages go to ${cloudChat.label}` : ""}.</p>
+        attachments={pendingFiles}
+        {attaching}
+        onAttachFiles={() => void attachFiles()}
+        onRemoveAttachment={(i) => pendingFiles.splice(i, 1)}
+        {useFiles}
+        onToggleFiles={() => useFiles = !useFiles}
+        {useSkills}
+        skillsAvailable={moduleOn("skills")}
+        onToggleSkills={() => useSkills = !useSkills}
+        mcpServers={mcpList.map((m) => ({ id: m.id, name: m.name, on: !mcpOff.includes(m.id) }))}
+        mcpAvailable={moduleOn("mcp")}
+        onToggleMcp={toggleMcp}
+        onManageTools={() => requestSettings("tools")}
+      >
+        {#snippet trailing()}
+          {#if activeChoice && activeChoice.efforts.length > 0}
+            <EffortPicker efforts={activeChoice.efforts} value={effort} onChange={setEffort} />
+          {/if}
+          <ModelPicker
+            {choices}
+            bind:open={pickerOpen}
+            busy={pickerBusy || engineLoading}
+            onSelect={(m) => void selectModel(m)}
+            onToggleFavorite={(key) => void toggleFavorite(key)}
+            onRefresh={(id) => void refreshProvider(id)}
+            refreshing={refreshingProvider}
+            onManageProviders={moduleOn("online") ? () => requestSettings("online") : undefined}
+            onGetModels={onOpenModels}
+          />
+        {/snippet}
+      </ChatInput>
+      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts{onlineChoice ? `. Messages go to ${onlineChoice.provider_label}` : ""}.</p>
     </div>
   </div>
+
+  {#if dragging}
+    <div class="pointer-events-none absolute inset-3 z-40 grid place-items-center rounded-2xl border-2 border-dashed border-ember-500/60 bg-ink-950/80" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(motion.fast) }}>
+      <div class="flex flex-col items-center gap-2 text-center">
+        <Icon name="paperclip" class="h-8 w-8 text-ember-300" />
+        <p class="text-base font-semibold text-ink-50">Drop files to attach them</p>
+        <p class="text-sm text-ink-400">Text, code, PDF and images. The model reads them with your message.</p>
+      </div>
+    </div>
+  {/if}
 
   <ToolApprovalModal
     show={showApproval}

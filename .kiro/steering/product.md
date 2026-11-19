@@ -15,7 +15,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - **Offline inference by default.** Chat runs on a local GGUF model through the llama-server sidecar (ADR-0007). With cloud mode off — the default — the chat path makes no network calls.
 - **Zero telemetry.** No analytics, crash beacons or remote logging.
 - **Local by default.** An opt-in Online Providers mode lets the user bring their own OpenAI-compatible API key and route chat to that provider; the key stays in the local config file and is sent only to the provider's base URL. Changing a provider's address to another site requires the key again. The mode is off unless the user turns it on (decided 2026-11-13, `.kiro/specs/kiroween-2026/plan.md` §0). No subscription is required for any shipped feature.
-- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" or "Install and restart" in Settings → About, browsing or importing skills from GitHub on the Skills screen, "Load models" for an online provider, a chat message sent with the **Web** switch on (or Autonomous mode with Web on), linking or sending a task to OpenCode, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
+- Network access happens only for explicit user actions: downloading a model (built-in catalog or Hugging Face search), a web search or "Read page" on the Search screen, "Check for updates" or "Install and restart" in Settings → About, browsing or importing skills from GitHub on the Skills screen, "Load models" for an online provider, a web search or page read the model makes in chat while the **Web** switch is on, a tool call to a remote MCP server the user added, "Load models"/"Refresh" for a provider, linking or sending a task to OpenCode, and — when the user switches cloud mode on — chat requests to the provider they configured. Nothing is contacted at startup.
 
 ## Key features (0.1.0, verified in code)
 
@@ -32,7 +32,7 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 
 - **Meaning search is not runtime-verified.** The code writes chunk vectors and passes a query vector when the embedding engine runs, but no real embedding model was driven end to end in the 2026-11-14 audit.
 - **The catalog "signature" is a SHA-256 digest, not Ed25519.** It checks the catalog for internal consistency only. It does not prove who published it.
-- **Tool actions are list, read, write and search.** Command execution does not exist, so there is no execution approval path.
+- **Built-in workspace tool actions are list, read, write and search.** LocalAide has no shell tool. MCP servers the user adds can do more (a local MCP server is a program running with the user's permissions); their tools ask before they run unless the user trusts the server.
 - **The audit log is not append-only.** "Clear" exists; it leaves one row that says how many entries it removed.
 - **Image input is code-complete but not runtime-verified.** No real vision model has been driven end to end yet; add that check before demoing the feature.
 - **Releases are not code-signed.** Signing is wired to optional CI secrets. The in-app updater (Settings → About, user-confirmed, signature-checked) is built in since 0.1.2, but it only offers installs once the owner creates the update key pair (`docs/release.md`); until then it links to the release page.
@@ -44,6 +44,13 @@ A non-technical user. They open the app, pick a small local model, and chat in p
 - Cloud inference is never a silent fallback. The only cloud path is the opt-in Online Providers mode above; the app never ships a provider, a key, or an automatic failover to the cloud.
 - Hot-swapping components in the app. Updates ship as whole signed packages (ADR-0005).
 - Any telemetry.
+
+## Tools, thinking and the model picker (0.1.4, ADR-0012)
+
+- The model decides when to call tools (`services/agent/`). Web, Notes, Files, Skills and each MCP server are permissions, not automatic actions. Anything that changes a file or note, and MCP tools unless the server is trusted, waits for the user's OK in the chat. Every tool call gets an activity-log row.
+- Thinking streams as its own event and shows in a collapsible block. Effort is sent per model.
+- The picker lists local models plus every enabled provider's models. A message goes online only when the picked model is online.
+- Not runtime-verified yet: real llama-server tool calls, real providers and real MCP servers.
 
 ## Chat modes and developer mode (0.1.3)
 

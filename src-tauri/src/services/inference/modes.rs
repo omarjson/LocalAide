@@ -45,7 +45,7 @@ pub const MODES: &[ChatModeInfo] = &[
         id: "autonomous",
         label: "Autonomous",
         description: "Works through the whole task on its own: plans, gathers sources from the web and your files, then answers.",
-        instruction: "Autonomous mode. Work on the task on your own until it is done. Do not ask the user follow-up questions; when something is unclear, pick the most reasonable assumption and state it in one line. Start with a short plan as a numbered list, carry it out step by step, and finish with a short check of what you delivered and anything still open. Use the context provided (web results, documents and notes) and cite it as [n].",
+        instruction: "Autonomous mode. Work on the task on your own until it is done. Do not ask the user follow-up questions; when something is unclear, pick the most reasonable assumption and state it in one line. Start with a short plan as a numbered list, carry it out step by step with your tools where they help, and finish with a short check of what you delivered and anything still open. Cite web results, documents and notes as [n].",
     },
 ];
 
@@ -89,6 +89,58 @@ impl ChatMode {
     pub fn gathers_web(self) -> bool {
         self == Self::Autonomous
     }
+
+    /// How many rounds of tool calls one answer may take.
+    pub fn max_rounds(self) -> usize {
+        match self {
+            Self::Autonomous => 16,
+            Self::Strict => 6,
+            _ => 8,
+        }
+    }
+}
+
+/// Which tool groups are on, for the guidance below.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ToolGroups {
+    pub web: bool,
+    pub notes: bool,
+    pub files: bool,
+    pub skills: bool,
+    pub mcp: bool,
+}
+
+/// How the model should use its tools. Small models need this said plainly,
+/// or they search for everything or for nothing.
+pub fn tool_guidance(groups: ToolGroups, mode: ChatMode) -> String {
+    let mut uses = Vec::new();
+    if groups.web {
+        uses.push("search the web for recent events, prices, versions or facts you are not sure about, and read a page when a snippet is not enough");
+    }
+    if groups.notes {
+        uses.push("search the user's notes and documents when the question is about their own information, and save a note when they ask you to remember something");
+    }
+    if groups.files {
+        uses.push("read and write files in the LocalAide workspace folder when the user asks");
+    }
+    if groups.skills {
+        uses.push("look at the user's saved skills when a task may match one");
+    }
+    if groups.mcp {
+        uses.push("use the tools from the user's MCP servers for what they describe");
+    }
+    if uses.is_empty() {
+        return String::new();
+    }
+    let effort = if mode == ChatMode::Autonomous {
+        "Use tools freely to research and check your work before you answer."
+    } else {
+        "Use a tool only when it helps. Answer directly, without tools, when you already know the answer or the question is about something general."
+    };
+    format!(
+        "You have tools. {effort} You can {}. Cite sources from tool results as [n]. Never make up a tool result; if a tool fails, say so.",
+        uses.join("; ")
+    )
 }
 
 /// The system prompt the model receives: the user's prompt, then the mode

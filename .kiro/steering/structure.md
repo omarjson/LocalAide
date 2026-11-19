@@ -24,7 +24,7 @@ inclusion: always
 - `main.ts`, `App.svelte`: entry point, global keyboard handling, screen routing, the shared message (toast).
 - `main.css`: Tailwind v4 entry and the theme tokens.
 - `screens/`: one file per screen. `ChatScreen`, `SearchScreen`, `MemoryScreen`, `SkillsScreen`, `ModelManagerScreen`, `SettingsScreen`, `SetupWizard`.
-- `components/`: shared pieces. `Button`, `ChatInput`, `MessageBubble`, `ToolApprovalModal`, `ConfirmDialog`, `ErrorBanner`, `FocusTrap`, `Tabs`, `Settings*`, `Icon` (the single hand-rolled inline-SVG icon set), `Modal`, `MarkdownDoc` (renders shipped markdown without `{@html}`), and others.
+- `components/`: shared pieces. `Button`, `ChatInput`, `MessageBubble`, `ToolApprovalModal`, `ConfirmDialog`, `ErrorBanner`, `FocusTrap`, `Tabs`, `Settings*`, `Icon` (the single hand-rolled inline-SVG icon set), `Modal`, `MarkdownDoc` (renders shipped markdown without `{@html}`), `ModelPicker`, `EffortPicker`, `ThinkingBlock`, `ToolCallCard`, `AnswerText`, `McpSettings`, and others. `lib/chatParts.ts` builds an answer's thinking, tool and text parts from the stream (unit-tested).
 - `lib/api/bindings.ts`: typed DTOs that mirror the Rust domain types.
 - `lib/api/client.ts`: the typed IPC client and `errorMessage`. Screens call the backend through it.
 - `lib/actions/popover.ts`: the shared menu behaviour (Escape, outside click, arrow keys, focus return).
@@ -37,7 +37,7 @@ Put new Svelte screens in `src/screens/`, reusable UI in `src/components/`, and 
 ## Backend (`src-tauri/src/`)
 
 - `app/`: `state.rs` (`AppState`, the single state owner), `paths.rs` (all `~/.aiassistant/` paths), `error.rs` (`AppError`), `jobs.rs` (job registry with cancel flags; cancel by kind), `events.rs`, `blocking.rs` (`run_blocking`, `with_app_state`), `lifecycle.rs` (single instance, kill-on-close job object, console hiding, fatal startup errors).
-- `commands/`: Tauri command handlers, one file per area: `backup`, `chat`, `cloud`, `desktop` (file pickers, open links), `diagnostics`, `hf`, `library`, `memory`, `models`, `settings`, `skills`, `system`, `tools`, `developer` (flags, modules, mode table), `integrations` (OpenCode link), `updates` (update check and the in-app updater), `web`. Keep them thin. Each one takes a DTO and calls a service. Slow ones are `async` and use `app/blocking.rs`.
+- `commands/`: Tauri command handlers, one file per area: `backup`, `chat`, `cloud`, `desktop` (file pickers, open links), `diagnostics`, `hf`, `library`, `memory`, `models`, `settings`, `skills`, `system`, `tools`, `developer` (flags, modules, mode table), `integrations` (OpenCode link), `updates` (update check and the in-app updater), `web`, `picker` (model picker, chat target, favourites), `attach` (file attachments, drop allowlist), `mcp` (MCP server settings). Keep them thin. Each one takes a DTO and calls a service. Slow ones are `async` and use `app/blocking.rs`.
 - `domain/`: DTO and domain types shared with the frontend: `chat`, `cloud`, `document`, `memory`, `model`, `settings`, `system`, `tool`.
 - `services/`:
   - `inference/`: `mod.rs` (the `InferenceEngine` trait), `sidecar.rs` (local llama-server child process on 127.0.0.1), `remote.rs` (opt-in OpenAI-compatible cloud engine), `router.rs` (routes local vs cloud; cloud is off unless the user enables it), `provider_models.rs` (a provider's `GET /models` list), `modes.rs` (chat modes), `context.rs` (token budget). The model's own chat template (`--jinja`) formats prompts, so there is no prompt builder. Voice is deferred (ADR-0006); only feature-gated Cargo deps remain, no voice module.
@@ -45,6 +45,9 @@ Put new Svelte screens in `src/screens/`, reusable UI in `src/components/`, and 
   - `memory/`: `notes.rs` (markdown notes on disk), `rag.rs` (recall and citations), `mod.rs`.
   - `tools/`: `sandbox.rs` (`WorkspaceJail`), `approval.rs`, `mod.rs` (`ToolService`, audit).
   - `models/`: `catalog.rs` (built-in catalog and manifest check), `custom.rs` (community models), `hf.rs`, `refresh.rs`, `download.rs` (resumable downloads), `verify.rs` (SHA-256), `mod.rs`.
+  - `agent/`: the chat tool loop (`mod.rs`), built-in tools and their runners (`tools.rs`), approvals (`approval.rs`).
+  - `mcp/`: MCP client (`mod.rs` sessions, `transport.rs` stdio and Streamable HTTP, `import.rs` other apps' config formats, `presets.rs`).
+  - `inference/openai_stream.rs` (shared streaming: text, thinking, tool calls, refused-field retries) and `inference/capabilities.rs` (thinking, vision, tools, context, effort levels).
   - `opencode.rs` (link to a user-run `opencode serve`: health check and task hand-off).
   - `backup/` (encrypted backups, ADR-0009), `skills/` (saved prompts; `discover.rs` browses GitHub skill collections), `websearch/` (web search and page reading, ADR-0011).
 - Top-level modules `model_manager.rs` (the active-model record in `models/state.json`, the setup presets, and model removal) and `config.rs` (config load and atomic save).

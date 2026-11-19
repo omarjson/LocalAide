@@ -2,11 +2,13 @@
   import FocusTrap from "./FocusTrap.svelte";
   import Icon from "./Icon.svelte";
   import LogoMark from "./LogoMark.svelte";
-  import MarkdownDoc from "./MarkdownDoc.svelte";
+  import AnswerText from "./AnswerText.svelte";
+  import ThinkingBlock from "./ThinkingBlock.svelte";
+  import ToolCallCard from "./ToolCallCard.svelte";
   import { openInBrowser } from "../lib/links";
   import { dur, motion } from "../lib/motion";
   import { fade, fly, scale } from "svelte/transition";
-  import type { Citation } from "../lib/api/bindings";
+  import type { ChatAttachment, Citation, MessagePart } from "../lib/api/bindings";
   import type { AnswerStats } from "../lib/chatModes";
 
   interface Props {
@@ -26,6 +28,14 @@
     onSendToOpenCode?: () => void;
     /** The newest message keeps its actions visible. */
     isLast?: boolean;
+    /** The answer in order: thinking, tools, text. */
+    parts?: MessagePart[];
+    attachments?: ChatAttachment[];
+    /** Which model wrote the answer. */
+    model?: string;
+    /** Tool calls waiting for the user, by tool call id. */
+    approvals?: Record<string, { approval_id: string; preview: string }>;
+    onDecide?: (toolId: string, decision: "allow" | "allow_chat" | "deny") => void;
   }
 
   let {
@@ -42,10 +52,14 @@
     allowRaw = false,
     onSendToOpenCode,
     isLast = false,
+    parts = [],
+    attachments = [],
+    model = "",
+    approvals = {},
+    onDecide,
   }: Props = $props();
 
   let copied = $state(false);
-  let copiedBlock = $state<number | null>(null);
   let copyError = $state<string | null>(null);
   let isEditing = $state(false);
   let editDraft = $state("");
@@ -69,41 +83,10 @@
     }
   };
 
-  const copyCode = async (code: string, idx: number) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      copiedBlock = idx;
-      copyError = null;
-      setTimeout(() => { copiedBlock = null; }, 1600);
-    } catch {
-      copyError = "Copy failed. Try again.";
-    }
-  };
-
   const submitEdit = () => {
     if (editDraft.trim() && onEdit) onEdit(editDraft);
     isEditing = false;
   };
-
-  type Segment = { type: "text"; text: string } | { type: "code"; lang: string; code: string };
-
-  // Code blocks are split out first; a block that is still streaming (no
-  // closing fence yet) shows as code too, so it does not flicker.
-  const segments = $derived.by<Segment[]>(() => {
-    if (!content) return [];
-    const parts: Segment[] = [];
-    const fence = /```([\w+-]*)\n([\s\S]*?)(```|$)/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    while ((m = fence.exec(content)) !== null) {
-      if (m.index > last) parts.push({ type: "text", text: content.slice(last, m.index) });
-      parts.push({ type: "code", lang: m[1] || "code", code: m[2].trimEnd() });
-      last = m.index + m[0].length;
-      if (m[0].length === 0) break;
-    }
-    if (last < content.length) parts.push({ type: "text", text: content.slice(last) });
-    return parts;
-  });
 
   const host = (source: string): string => {
     try {
@@ -118,6 +101,12 @@
     if (isWeb(cit.source)) openInBrowser(event, cit.source);
     else activeCitation = cit;
   };
+
+  // After a tool finishes, the model reads its result before it writes again.
+  const betweenRounds = $derived.by(() => {
+    const last = parts.at(-1);
+    return last?.type === "tool" && last.status !== "running" && last.status !== "waiting";
+  });
 
   const speed = $derived(stats && stats.ms > 0 ? (stats.tokens / (stats.ms / 1000)).toFixed(1) : null);
   const timeLabel = $derived(ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
@@ -151,6 +140,15 @@
             {/each}
           </div>
         {/if}
+        {#if attachments.length > 0}
+          <div class="mb-2 flex flex-wrap justify-end gap-2">
+            {#each attachments as file, i (file.name + i)}
+              <span class="flex max-w-[16rem] items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-sm text-ink-200" title={file.name}>
+                <Icon name="file" class="h-4 w-4 shrink-0 text-ink-400" /><span class="truncate">{file.name}</span>
+              </span>
+            {/each}
+          </div>
+        {/if}
         {#if content}
           <div class="whitespace-pre-wrap break-words rounded-3xl rounded-br-lg bg-ink-800 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{content}</div>
         {/if}
@@ -169,26 +167,27 @@
     <div class="min-w-0 flex-1">
       <div class="mb-1 flex h-7 items-center gap-2 text-sm">
         <span class="font-semibold text-ink-100">LocalAide</span>
-        {#if timeLabel}<span class="text-xs text-ink-500">{timeLabel}</span>{/if}
+        {#if model}<span class="truncate text-xs text-ink-500" title="The model that wrote this answer">{model}</span>{/if}
+        {#if timeLabel}<span class="shrink-0 text-xs text-ink-500">{timeLabel}</span>{/if}
       </div>
 
       {#if steps.length > 0}
-        <ol class="mb-3 space-y-1.5 border-l-2 border-ink-800 pl-3" aria-label="What LocalAide did">
+        <ul class="mb-2 space-y-1" aria-label="Notes about this answer">
           {#each steps as step, i (i)}
-            {@const active = streaming && i === steps.length - 1 && !content}
+            {@const active = streaming && i === steps.length - 1 && !content && parts.length === 0}
             <li class="flex items-center gap-2 text-sm text-ink-400" in:fly={{ x: -4, duration: dur(motion.base) }}>
               {#if active}
                 <span class="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
               {:else}
-                <Icon name="check" class="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <Icon name="info" class="h-3.5 w-3.5 shrink-0 text-ink-500" />
               {/if}
               <span class={active ? "text-ink-200" : ""}>{step}</span>
             </li>
           {/each}
-        </ol>
+        </ul>
       {/if}
 
-      {#if streaming && !content.trim()}
+      {#if streaming && !content.trim() && parts.length === 0}
         <div class="typing flex h-7 items-center gap-1.5" role="status" aria-label="LocalAide is thinking">
           <span></span><span></span><span></span>
         </div>
@@ -196,25 +195,35 @@
 
       {#if raw}
         <pre class="whitespace-pre-wrap break-words rounded-xl border border-ink-800 bg-ink-950 p-3 font-mono text-[13px] leading-6 text-ink-200">{content}</pre>
-      {:else}
-        <div class="answer space-y-3 text-[15px] leading-7 text-ink-100">
-          {#each segments as seg, idx (idx)}
-            {#if seg.type === "text"}
-              <MarkdownDoc source={seg.text} class="answer-text" />
-            {:else}
-              <div class="overflow-hidden rounded-xl border border-ink-700 bg-ink-950">
-                <div class="flex items-center justify-between border-b border-ink-800 bg-ink-900/70 px-3 py-1.5 font-mono text-xs text-ink-400">
-                  <span>{seg.lang}</span>
-                  <button type="button" onclick={() => copyCode(seg.code, idx)} class="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-veil/5 hover:text-ink-100">
-                    <Icon name={copiedBlock === idx ? "check" : "copy"} class="h-3.5 w-3.5" />{copiedBlock === idx ? "Copied" : "Copy"}
-                  </button>
-                </div>
-                <pre class="overflow-x-auto p-3 font-mono text-[13px] leading-6 text-ink-100"><code>{seg.code}</code></pre>
+      {:else if parts.length > 0}
+        <div class="space-y-2">
+          {#each parts as part, i (i)}
+            {#if part.type === "reasoning"}
+              <ThinkingBlock text={part.text} ms={part.ms ?? null} live={streaming && i === parts.length - 1} />
+            {:else if part.type === "tool"}
+              <ToolCallCard
+                title={part.title}
+                detail={part.detail}
+                group={part.group}
+                status={part.status}
+                summary={part.summary}
+                arguments={part.arguments}
+                output={part.output}
+                approval={approvals[part.id] ? { preview: approvals[part.id].preview } : null}
+                onDecide={(decision) => onDecide?.(part.id, decision)}
+              />
+            {:else if part.text.trim()}
+              <div class={i > 0 ? "pt-1" : ""}>
+                <AnswerText text={part.text} caret={streaming && i === parts.length - 1} />
               </div>
             {/if}
           {/each}
-          {#if streaming && content.trim()}<span class="caret" aria-hidden="true"></span>{/if}
+          {#if streaming && betweenRounds}
+            <div class="typing flex h-6 items-center gap-1.5 pl-1" aria-hidden="true"><span></span><span></span><span></span></div>
+          {/if}
         </div>
+      {:else}
+        <AnswerText text={content} caret={streaming && !!content.trim()} />
       {/if}
 
       {#if citations.length > 0}
@@ -226,7 +235,7 @@
                 href={isWeb(cit.source) ? cit.source : "#"}
                 rel="noreferrer"
                 onclick={(e) => { e.preventDefault(); openCitation(e, cit); }}
-                class="lift flex min-w-0 items-start gap-2.5 rounded-lg border border-ink-700 border-l-2 border-l-ember-500/70 bg-ink-900 px-3 py-2 hover:border-edge"
+                class="lift flex min-w-0 items-start gap-2.5 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 hover:border-edge"
                 in:fade={{ duration: dur(motion.base) }}
               >
                 <span class="mt-0.5 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-ember-500/15 px-1 text-xs font-semibold text-ember-300">{cit.index}</span>
@@ -354,26 +363,5 @@
       opacity: 1;
       transform: translateY(-3px);
     }
-  }
-  .caret {
-    display: inline-block;
-    height: 1.1em;
-    width: 0.5rem;
-    margin-left: 0.125rem;
-    vertical-align: text-bottom;
-    border-radius: 2px;
-    background: var(--color-ember-400);
-    animation: caret-blink 1s steps(2, start) infinite;
-  }
-  @keyframes caret-blink {
-    to {
-      visibility: hidden;
-    }
-  }
-  /* Chat answers read like prose: a little more room than settings text. */
-  :global(.answer-text) {
-    font-size: 15px !important;
-    line-height: 1.75rem !important;
-    color: var(--color-ink-100) !important;
   }
 </style>

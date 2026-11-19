@@ -5,6 +5,7 @@
 export type SettingsSectionId =
   | "general"
   | "online"
+  | "tools"
   | "web"
   | "integrations"
   | "privacy"

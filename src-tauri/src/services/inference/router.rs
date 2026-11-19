@@ -6,7 +6,9 @@
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::time::Duration;
 
+use super::openai_stream::{Endpoint, Flavor};
 use super::remote::{RemoteEngine, RemoteTarget};
 use super::sidecar::SidecarEngine;
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken, PromptMessage};
@@ -22,14 +24,82 @@ pub struct RouterEngine {
     local: SidecarEngine,
     remote: RemoteEngine,
     mode: Mutex<EngineMode>,
+    /// One client for tool-using chat, local and online. Redirects are not
+    /// followed: a redirect would carry the conversation and the key to an
+    /// address the user never entered.
+    chat_client: reqwest::blocking::Client,
+}
+
+/// Which engine answers one message: the local model, or a model of an
+/// online provider the user chose in the picker.
+#[derive(Clone)]
+pub enum ChatTarget {
+    Local,
+    Remote(RemoteTarget),
 }
 
 impl RouterEngine {
     pub fn new() -> Self {
+        let chat_client = reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(60 * 60))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
         Self {
             local: SidecarEngine::new(),
             remote: RemoteEngine::new(),
             mode: Mutex::new(EngineMode::Local),
+            chat_client,
+        }
+    }
+
+    pub fn chat_client(&self) -> &reqwest::blocking::Client {
+        &self.chat_client
+    }
+
+    /// The local server, for its address and `/props`.
+    pub fn local(&self) -> &SidecarEngine {
+        &self.local
+    }
+
+    /// The default target: what the picker last chose.
+    pub fn current_target(&self) -> ChatTarget {
+        match (self.mode(), self.cloud_target()) {
+            (EngineMode::Cloud, Some(t)) => ChatTarget::Remote(t),
+            _ => ChatTarget::Local,
+        }
+    }
+
+    /// Where a chat request for `target` goes.
+    pub fn endpoint_for(&self, target: &ChatTarget) -> Result<Endpoint, AppError> {
+        match target {
+            ChatTarget::Local => {
+                let ep = self.local.endpoint().ok_or_else(|| {
+                    AppError::model_not_installed(
+                        "No model is loaded. Pick a model in the model menu.",
+                    )
+                })?;
+                Ok(Endpoint {
+                    url: format!("http://127.0.0.1:{}/v1/chat/completions", ep.port),
+                    bearer: Some(ep.api_key),
+                    label: "The local model".to_string(),
+                    flavor: Flavor::LlamaServer,
+                    model: String::new(),
+                    require_done: false,
+                })
+            }
+            ChatTarget::Remote(t) => {
+                crate::config::validate_base_url(&t.base_url).map_err(AppError::invalid_input)?;
+                Ok(Endpoint {
+                    url: format!("{}/chat/completions", t.base_url.trim_end_matches('/')),
+                    bearer: Some(t.api_key.clone()).filter(|k| !k.trim().is_empty()),
+                    label: t.label.clone(),
+                    flavor: Flavor::for_base_url(&t.base_url),
+                    model: t.model.clone(),
+                    require_done: true,
+                })
+            }
         }
     }
 

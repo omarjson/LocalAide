@@ -53,6 +53,57 @@ pub struct AppConfig {
     /// (Settings → Developer).
     #[serde(default)]
     pub developer: DeveloperConfig,
+    /// The model chosen in the chat's model picker for the active online
+    /// provider. None = the provider's own default model.
+    #[serde(default)]
+    pub active_cloud_model: Option<String>,
+    /// Starred models in the picker, as "local:<id>" or "<provider id>:<model>".
+    #[serde(default)]
+    pub favorite_models: Vec<String>,
+    /// MCP servers the user added (Settings → Tools and MCP). Their tools
+    /// are offered to the model in chat while the server is switched on.
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
+}
+
+/// One MCP server. A local server is a program LocalAide starts; a remote
+/// one is an address it posts to. Header values and environment values may
+/// hold tokens, so backups leave them out unless keys are included.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Run this server's tools without asking each time.
+    #[serde(default)]
+    pub auto_approve: bool,
+    pub transport: McpTransport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum McpTransport {
+    /// A program on this computer, spoken to over its standard input and output.
+    Stdio {
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        env: std::collections::BTreeMap<String, String>,
+        #[serde(default)]
+        cwd: Option<String>,
+    },
+    /// A server reached over Streamable HTTP.
+    Http {
+        url: String,
+        #[serde(default)]
+        headers: std::collections::BTreeMap<String, String>,
+    },
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Default and limits for `AppConfig::model_memory_percent`.
@@ -136,6 +187,13 @@ pub struct CloudProvider {
     pub base_url: String,
     pub model: String,
     pub api_key: String,
+    /// Shown in the chat's model picker. Several providers can be on at once.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// The provider's model list from the last "Load models", kept so the
+    /// picker can show it without asking the provider again.
+    #[serde(default)]
+    pub models: Vec<crate::services::inference::provider_models::ProviderModel>,
 }
 
 impl Default for AppConfig {
@@ -156,6 +214,9 @@ impl Default for AppConfig {
             model_memory_percent: None,
             opencode: OpenCodeConfig::default(),
             developer: DeveloperConfig::default(),
+            active_cloud_model: None,
+            favorite_models: Vec::new(),
+            mcp_servers: Vec::new(),
         }
     }
 }
@@ -256,6 +317,8 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o-mini".into(),
             api_key: "sk-test".into(),
+            enabled: true,
+            models: Vec::new(),
         });
         cfg.active_cloud_provider = Some("p1".into());
         let json = serde_json::to_string(&cfg).unwrap();

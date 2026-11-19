@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use super::capabilities::{LocalProps, parse_props};
 use super::{EngineStatus, GenerationMetrics, InferenceEngine, InferenceToken, PromptMessage};
 use crate::app::error::AppError;
 use crate::app::lifecycle;
@@ -45,8 +46,20 @@ struct Running {
     has_mmproj: bool,
 }
 
+/// The running server's address and key, for the shared chat client.
+#[derive(Clone)]
+pub struct LocalEndpoint {
+    pub port: u16,
+    pub api_key: String,
+    pub has_mmproj: bool,
+    pub context_size: i32,
+    pub model_path: PathBuf,
+}
+
 pub struct SidecarEngine {
     running: Mutex<Option<Running>>,
+    /// `/props` of the loaded model, keyed by its path.
+    props_cache: Mutex<Option<(PathBuf, LocalProps)>>,
     client: reqwest::blocking::Client,
     /// Held for a whole load, so two loads never run two servers at once.
     load_lock: Mutex<()>,
@@ -63,6 +76,7 @@ impl SidecarEngine {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
         Self {
             running: Mutex::new(None),
+            props_cache: Mutex::new(None),
             client,
             load_lock: Mutex::new(()),
             epoch: AtomicU64::new(0),
@@ -76,6 +90,51 @@ impl SidecarEngine {
             let _ = r.child.kill();
             let _ = r.child.wait();
         }
+    }
+
+    /// Where the running server listens, for the shared chat client.
+    pub fn endpoint(&self) -> Option<LocalEndpoint> {
+        let mut guard = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        let r = guard.as_mut()?;
+        if matches!(r.child.try_wait(), Ok(Some(_)) | Err(_)) {
+            *guard = None;
+            return None;
+        }
+        Some(LocalEndpoint {
+            port: r.port,
+            api_key: r.api_key.clone(),
+            has_mmproj: r.has_mmproj,
+            context_size: r.context_size,
+            model_path: r.model_path.clone(),
+        })
+    }
+
+    /// What the server says about its model (`GET /props`): the chat
+    /// template's thinking and tool support, and vision. Read once per load.
+    pub fn props(&self) -> Option<LocalProps> {
+        let ep = self.endpoint()?;
+        {
+            let cache = self.props_cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((path, props)) = cache.as_ref()
+                && *path == ep.model_path
+            {
+                return Some(props.clone());
+            }
+        }
+        let json: Value = self
+            .client
+            .get(format!("http://127.0.0.1:{}/props", ep.port))
+            .bearer_auth(&ep.api_key)
+            .timeout(Duration::from_secs(3))
+            .send()
+            .ok()
+            .filter(|r| r.status().is_success())?
+            .json()
+            .ok()?;
+        let props = parse_props(&json);
+        *self.props_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((ep.model_path, props.clone()));
+        Some(props)
     }
 
     fn health_ok(&self, port: u16) -> bool {

@@ -1,6 +1,8 @@
+pub mod agent;
 pub mod backup;
 pub mod inference;
 pub mod library;
+pub mod mcp;
 pub mod memory;
 pub mod models;
 pub mod opencode;

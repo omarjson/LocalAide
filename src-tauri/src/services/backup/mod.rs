@@ -140,6 +140,25 @@ impl BackupEngine {
         {
             opencode.insert("password".to_string(), serde_json::Value::Null);
         }
+        // MCP header and environment values often hold tokens: keep the
+        // names, empty the values.
+        if !include_api_keys
+            && let Some(servers) = config.get_mut("mcp_servers").and_then(|v| v.as_array_mut())
+        {
+            for server in servers {
+                let Some(transport) = server.get_mut("transport").and_then(|t| t.as_object_mut())
+                else {
+                    continue;
+                };
+                for slot in ["env", "headers"] {
+                    if let Some(map) = transport.get_mut(slot).and_then(|m| m.as_object_mut()) {
+                        for value in map.values_mut() {
+                            *value = serde_json::Value::String(String::new());
+                        }
+                    }
+                }
+            }
+        }
         // Stamp the backup time inside the config so a restore can refuse
         // to clobber a config newer than the archive.
         if let Some(obj) = config.as_object_mut() {

@@ -96,6 +96,12 @@ pub const MODULES: &[Toggle] = &[
         default: true,
     },
     Toggle {
+        id: "mcp",
+        label: "MCP servers",
+        description: "Tools from MCP servers you add in Settings → Tools and MCP.",
+        default: true,
+    },
+    Toggle {
         id: "online",
         label: "Online providers",
         description: "Settings for cloud and router providers.",

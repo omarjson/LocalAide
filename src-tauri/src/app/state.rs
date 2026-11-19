@@ -1,10 +1,12 @@
 use crate::app::jobs::JobRegistry;
 use crate::config::ConfigStore;
 use crate::model_manager::ModelManager;
+use crate::services::agent::AgentState;
 use crate::services::inference::RouterEngine;
 use crate::services::library::LibraryService;
 use crate::services::library::embedding::EmbeddingEngine;
 use crate::services::library::rerank::RerankEngine;
+use crate::services::mcp::McpManager;
 use crate::services::memory::MemoryService;
 use crate::services::models::ModelService;
 use crate::services::skills::SkillsService;
@@ -32,6 +34,14 @@ pub struct AppState {
     pub config_store: Arc<Mutex<ConfigStore>>,
     /// True while the saved model loads at startup.
     pub engine_loading: Arc<AtomicBool>,
+    /// Sessions with the user's MCP servers (ADR-0012).
+    pub mcp: Arc<McpManager>,
+    /// The chat loop's approvals and what it learned about models.
+    pub agent: Arc<AgentState>,
+    /// Files the user dropped on the window lately. Chat reads a dropped
+    /// file only when its path is in this list, so the window cannot ask
+    /// for any path it likes.
+    pub dropped_paths: Arc<Mutex<Vec<(std::path::PathBuf, std::time::Instant)>>>,
 }
 
 impl AppState {
@@ -66,6 +76,9 @@ impl AppState {
             web: Arc::new(WebSearchEngine::new()),
             config_store: Arc::new(Mutex::new(ConfigStore::new())),
             engine_loading: Arc::new(AtomicBool::new(false)),
+            mcp: Arc::new(McpManager::new()),
+            agent: Arc::new(AgentState::new()),
+            dropped_paths: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }

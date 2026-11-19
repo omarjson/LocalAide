@@ -21,6 +21,7 @@
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
   import type { OpenCodeSettings } from "../lib/api/bindings";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
+  import McpSettings from "../components/McpSettings.svelte";
   import { applyTheme, currentTheme } from "../lib/theme";
   import type {
     BackupConfigDto,
@@ -43,9 +44,10 @@
     action: () => void | Promise<void>;
   };
 
-  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" }[] = [
+  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" | "wrench" }[] = [
     { id: "general", label: "General", icon: "sun" },
     { id: "online", label: "Online providers", icon: "cloud" },
+    { id: "tools", label: "Tools and MCP", icon: "wrench" },
     { id: "web", label: "Web search", icon: "globe" },
     { id: "integrations", label: "Integrations", icon: "plug" },
     { id: "privacy", label: "Privacy & files", icon: "lock" },
@@ -430,6 +432,18 @@
     };
   };
 
+  const toggleProviderEnabled = async (id: string, enabled: boolean) => {
+    cloudBusy = true;
+    cloudError = null;
+    try {
+      cloud = await api.setProviderEnabled(id, enabled);
+    } catch (e: unknown) {
+      cloudError = errorMessage(e);
+    } finally {
+      cloudBusy = false;
+    }
+  };
+
   const toggleCloud = async () => {
     if (!cloud) return;
     cloudBusy = true;
@@ -777,16 +791,16 @@
       {:else if activeTab === "online"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Online providers</h2>
-          <p class="mt-1 text-sm text-ink-400">Optional cloud chat with a provider you choose. Some are free, and some need no key at all.</p>
+          <p class="mt-1 text-sm text-ink-400">Optional cloud chat with providers you choose. Some are free, and some need no key at all. Turn on as many as you like: their models appear in the chat's model menu, and a message goes online only when you pick one of them.</p>
 
           {#if cloudError}<div class="mt-4"><ErrorBanner message={cloudError} onRetry={() => void loadCloud()} onDismiss={() => cloudError = null} /></div>{/if}
           <div class="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-200">
-            When this is on, your chat messages go to the provider below. When it is off, nothing leaves this computer.
+            While chat uses an online model, your messages go to that model's provider. With a model on this computer, nothing leaves it.
           </div>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Your providers</h3>
           <SettingsGroup>
-            <SettingsRow icon="cloud" title="Online chat" description={cloud?.cloud_enabled ? "Online chat is on." : "Online chat is off."}>
+            <SettingsRow icon="cloud" title="Chat uses an online model" description={cloud?.cloud_enabled ? "On. Switch off to go back to the model on this computer." : "Off. Pick an online model in the chat's model menu, or switch this on for the selected provider."}>
               {#snippet control()}
                 <button
                   type="button"
@@ -818,9 +832,23 @@
                         <span class="font-semibold text-ink-50">{provider.label}</span>
                         {#if provider.is_active}<StatusBadge label="Selected" tone="ok" dot />{/if}
                       </div>
-                      <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · {provider.api_key_hint ? `key ${provider.api_key_hint}` : "no key"}</div>
+                      <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · {provider.api_key_hint ? `key ${provider.api_key_hint}` : "no key"}{provider.model_count ? ` · ${provider.model_count} models listed` : ""}</div>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
+                      <label class="mr-1 flex items-center gap-2 text-sm text-ink-300" title="Show this provider's models in the chat's model menu">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={provider.enabled}
+                          aria-label={`Show ${provider.label} in the model menu`}
+                          onclick={() => void toggleProviderEnabled(provider.id, !provider.enabled)}
+                          disabled={cloudBusy}
+                          class={`relative h-5 w-10 rounded-full border transition-colors disabled:opacity-50 ${provider.enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
+                        >
+                          <span class={`absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${provider.enabled ? "translate-x-[18px] bg-on-ember" : "bg-ink-300"}`}></span>
+                        </button>
+                        <span class="hidden md:inline">In model menu</span>
+                      </label>
                       {#if !provider.is_active}<Button variant="secondary" disabled={cloudBusy} onclick={() => void activateProvider(provider.id)}>Use this</Button>{/if}
                       <Button variant="subtle" disabled={cloudBusy} onclick={() => openEditProvider(provider.id)}>Edit</Button>
                       <Button variant="danger" disabled={cloudBusy} onclick={() => deleteProvider(provider.id)}>Remove</Button>
@@ -926,6 +954,8 @@
             </div>
           {/if}
         </div>
+      {:else if activeTab === "tools"}
+        <McpSettings />
       {:else if activeTab === "web"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Web search</h2>

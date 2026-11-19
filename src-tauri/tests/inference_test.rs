@@ -9,13 +9,13 @@ fn test_context_budget_within_limits() {
             role: "user".to_string(),
             content: "Hello assistant".to_string(),
             ts: Some(100),
-            citations: None,
+            ..Default::default()
         },
         ChatMessage {
             role: "assistant".to_string(),
             content: "Hello! How can I help you today?".to_string(),
             ts: Some(101),
-            citations: None,
+            ..Default::default()
         },
     ];
 
@@ -45,13 +45,13 @@ fn test_context_budget_truncates_oldest_turns() {
             role: "user".to_string(),
             content: long_old_msg, // Oldest turn, should be dropped
             ts: Some(1),
-            citations: None,
+            ..Default::default()
         },
         ChatMessage {
             role: "assistant".to_string(),
             content: medium_msg, // More recent turn
             ts: Some(2),
-            citations: None,
+            ..Default::default()
         },
     ];
 
