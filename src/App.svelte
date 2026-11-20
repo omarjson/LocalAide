@@ -451,6 +451,7 @@
           <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, ...)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘1 – ⌘6</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / Dismiss dialog</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Esc</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Enter</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Choose the model (in Chat)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘⇧M / Ctrl+Shift+M</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">?</kbd></div>
         </div>
         <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-md bg-veil/5 border border-edge text-sm hover:bg-veil/10">Close</button>

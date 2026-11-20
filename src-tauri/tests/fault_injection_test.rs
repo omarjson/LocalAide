@@ -124,13 +124,13 @@ fn test_benchmark_bounded_memory_and_turn_budget() {
                 "Question turn {i}: What are the key architectural tenets of local-first computing?"
             ),
             ts: Some(i as u64),
-            citations: None,
+            ..Default::default()
         });
         history.push(ChatMessage {
             role: "assistant".to_string(),
             content: format!("Answer turn {i}: Local-first computing prioritizes local state ownership, offline functionality, cryptographic data sovereignty, and user privacy."),
             ts: Some(i as u64 + 1),
-            citations: None,
+            ..Default::default()
         });
     }
 

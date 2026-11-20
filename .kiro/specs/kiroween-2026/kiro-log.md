@@ -114,3 +114,9 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Light theme + contrast:** semantic tokens `on-ember` and `edge` introduced; 27 `text-ink-950` and ~230 `border-ink-800/700` usages mechanically swapped; light ramp inverts the ink scale and darkens ember/emerald/rose/amber text roles; theme persisted via `settings_theme`/`settings_set_theme` and applied on boot. Border a11y row flipped to PASS at token level (3.35:1 dark / 3.58:1 light).
 - **Wizard:** the preset step gained a collapsible Hugging Face community browser (search → repo → file → install through the hash-verified pipeline; Cancel hits the community job).
 - **Backup:** restore path verified end to end (command + passphrase + config flag + report); stance documented as local-only portable archive — the OneDrive/Drive OAuth open item is closed by decision ("user uploads wherever they want").
+
+## 2026-11-19 — 0.1.4: tools the model chooses, thinking, model picker, MCP
+
+- **Kiro artifact:** `.kiro/specs/release-0.1.4/plan.md` (request-to-code table) and `docs/adr/0012-chat-tools-and-mcp.md`; steering files updated with the new modules and network uses.
+- **What changed:** a tool loop replaced the "search every message" Web switch; thinking streams into collapsible blocks; one picker lists local models and every enabled provider with capability icons and an effort control; files attach and drop; an MCP client (stdio and Streamable HTTP) with Settings, presets and config import.
+- **How Kiro worked:** Kiro Web in Vibe mode. With no WebKitGTK in the sandbox, it checked the Rust crate by stubbing pkg-config files, ran the new pure modules' tests in a separate crate, and used the Playwright power against a fake Tauri backend to screenshot the chat, picker, tools menu, inline approval and Settings. The impeccable craft floor caught two rule breaks (a thick coloured left border on citations and gradient text in the thinking shimmer); both were fixed.

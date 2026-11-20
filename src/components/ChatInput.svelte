@@ -1,11 +1,18 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, type Snippet } from "svelte";
   import { fly } from "svelte/transition";
-  import Icon from "./Icon.svelte";
+  import Icon, { type IconName } from "./Icon.svelte";
   import { MODE_ICONS } from "../lib/chatModes";
   import { popover } from "../lib/actions/popover";
   import { dur, motion } from "../lib/motion";
-  import type { ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
+  import type { ChatAttachment, ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
+
+  /** An MCP server as the tools menu shows it. */
+  export interface ToolServer {
+    id: string;
+    name: string;
+    on: boolean;
+  }
 
   interface Props {
     input: string;
@@ -20,6 +27,10 @@
     pendingImages?: string[];
     onPickImages?: (files: FileList | null) => void;
     onRemoveImage?: (index: number) => void;
+    attachments?: ChatAttachment[];
+    attaching?: boolean;
+    onAttachFiles?: () => void;
+    onRemoveAttachment?: (index: number) => void;
     /** Saved prompt skills; typing / opens the picker. */
     skills?: Skill[];
     onPickSkill?: (body: string) => void;
@@ -32,8 +43,17 @@
     useRecall?: boolean;
     recallAvailable?: boolean;
     onToggleRecall?: () => void;
-    /** Shown under the box: which engine answers. */
-    engineLabel?: string;
+    useFiles?: boolean;
+    onToggleFiles?: () => void;
+    useSkills?: boolean;
+    skillsAvailable?: boolean;
+    onToggleSkills?: () => void;
+    mcpServers?: ToolServer[];
+    mcpAvailable?: boolean;
+    onToggleMcp?: (id: string) => void;
+    onManageTools?: () => void;
+    /** The model and thinking pickers, at the right of the box. */
+    trailing?: Snippet;
   }
 
   let {
@@ -49,6 +69,10 @@
     pendingImages = [],
     onPickImages,
     onRemoveImage,
+    attachments = [],
+    attaching = false,
+    onAttachFiles,
+    onRemoveAttachment,
     skills = [],
     onPickSkill,
     mode = "standard",
@@ -60,13 +84,24 @@
     useRecall = true,
     recallAvailable = true,
     onToggleRecall,
-    engineLabel = "",
+    useFiles = true,
+    onToggleFiles,
+    useSkills = true,
+    skillsAvailable = true,
+    onToggleSkills,
+    mcpServers = [],
+    mcpAvailable = true,
+    onToggleMcp,
+    onManageTools,
+    trailing,
   }: Props = $props();
 
   let textareaEl = $state<HTMLTextAreaElement>();
   let fileInputEl = $state<HTMLInputElement>();
   let skillCursor = $state(0);
   let modeMenuOpen = $state(false);
+  let attachMenuOpen = $state(false);
+  let toolsMenuOpen = $state(false);
   onMount(() => textareaEl?.focus());
 
   const currentMode = $derived(modes.find((m) => m.id === mode));
@@ -92,17 +127,11 @@
 
   // Slash menu: typing "/word" filters the skill list; Enter or click
   // inserts the skill body as the message text (the user can edit it).
-  const slashMatch = $derived(
-    input.length > 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null
-  );
+  const slashMatch = $derived(input.length > 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null);
   const skillMatches = $derived(
     slashMatch === null
       ? []
-      : skills.filter(
-          (s) =>
-            s.name.toLowerCase().includes(slashMatch) ||
-            s.description.toLowerCase().includes(slashMatch)
-        )
+      : skills.filter((s) => s.name.toLowerCase().includes(slashMatch) || s.description.toLowerCase().includes(slashMatch)),
   );
 
   const pickSkill = (skill: Skill) => {
@@ -148,7 +177,30 @@
     }
   };
 
-  const canSend = $derived(!!input.trim() || pendingImages.length > 0);
+  // Pasted images attach like picked ones.
+  const handlePaste = (e: ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0 && Array.from(files).some((f) => f.type.startsWith("image/"))) {
+      e.preventDefault();
+      onPickImages?.(files);
+    }
+  };
+
+  const readyAttachments = $derived(attachments.filter((a) => !a.error));
+  const canSend = $derived(!!input.trim() || pendingImages.length > 0 || readyAttachments.length > 0);
+
+  type ToolRow = { id: string; label: string; hint: string; icon: IconName; on: boolean; toggle?: () => void };
+  const toolRows = $derived.by<ToolRow[]>(() => {
+    const rows: ToolRow[] = [];
+    if (webAvailable) rows.push({ id: "web", label: "Web search", hint: "Search and read pages when it helps", icon: "globe", on: useWeb, toggle: onToggleWeb });
+    if (recallAvailable) rows.push({ id: "notes", label: "Notes and documents", hint: "Search your notes and library, save notes", icon: "memory", on: useRecall, toggle: onToggleRecall });
+    rows.push({ id: "files", label: "Workspace files", hint: "Read files; writing asks you first", icon: "folder", on: useFiles, toggle: onToggleFiles });
+    if (skillsAvailable) rows.push({ id: "skills", label: "Skills", hint: "Use your saved skills", icon: "skills", on: useSkills, toggle: onToggleSkills });
+    return rows;
+  });
+  const toolsOn = $derived(toolRows.filter((r) => r.on).length + (mcpAvailable ? mcpServers.filter((s) => s.on).length : 0));
+
+  const fileSize = (chars: number) => (chars >= 1000 ? `${Math.round(chars / 1000)}K characters` : `${chars} characters`);
 </script>
 
 <div class="relative">
@@ -166,8 +218,8 @@
           role="option"
           aria-selected={i === skillCursor}
           onclick={() => pickSkill(skill)}
-          onmouseenter={() => skillCursor = i}
-          class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${i === skillCursor ? 'bg-veil/10' : ''}`}
+          onmouseenter={() => (skillCursor = i)}
+          class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${i === skillCursor ? "bg-veil/10" : ""}`}
         >
           <Icon name="skills" class="h-4 w-4 shrink-0 text-ember-400" />
           <span class="shrink-0 font-mono text-ink-100">/{skill.name}</span>
@@ -182,7 +234,7 @@
       <div class="space-y-2 border-b border-ink-800 p-3" in:fly={{ y: -4, duration: dur(motion.base) }}>
         <div class="flex items-center justify-between text-xs text-ink-400">
           <span class="flex items-center gap-1.5 font-semibold text-ink-300"><Icon name="folder" class="h-3.5 w-3.5" />Workspace files</span>
-          <span>LocalAide asks before it writes anything.</span>
+          <span class="flex items-center gap-2">LocalAide asks before it writes anything.<button type="button" aria-label="Close the file panel" onclick={() => (showTools = false)} class="rounded p-0.5 hover:bg-veil/5 hover:text-ink-100"><Icon name="close" class="h-3.5 w-3.5" /></button></span>
         </div>
         <div class="flex gap-2">
           <input
@@ -204,11 +256,11 @@
       </div>
     {/if}
 
-    {#if pendingImages.length > 0}
+    {#if pendingImages.length > 0 || attachments.length > 0 || attaching}
       <div class="flex flex-wrap gap-2 px-3 pt-3">
         {#each pendingImages as src, i (i)}
           <div class="group relative" in:fly={{ y: 4, duration: dur(motion.base) }}>
-            <img src={src} alt="Attachment {i + 1}" class="h-16 w-16 rounded-lg border border-ink-700 object-cover" />
+            <img {src} alt="Attachment {i + 1}" class="h-16 w-16 rounded-lg border border-ink-700 object-cover" />
             <button
               type="button"
               onclick={() => onRemoveImage?.(i)}
@@ -217,6 +269,27 @@
             ><Icon name="close" class="h-3 w-3" /></button>
           </div>
         {/each}
+        {#each attachments as file, i (file.name + i)}
+          <div
+            class={`flex h-16 max-w-[16rem] items-center gap-2.5 rounded-lg border px-2.5 ${file.error ? "border-rose-500/40 bg-rose-500/10" : "border-ink-700 bg-ink-900"}`}
+            in:fly={{ y: 4, duration: dur(motion.base) }}
+            title={file.error ?? file.name}
+          >
+            <span class={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${file.error ? "bg-rose-500/15 text-rose-300" : "bg-ink-800 text-ink-300"}`}>
+              <Icon name={file.error ? "alert" : "file"} class="h-4 w-4" />
+            </span>
+            <span class="min-w-0">
+              <span class="block truncate text-sm font-medium text-ink-100">{file.name}</span>
+              <span class={`block truncate text-xs ${file.error ? "text-rose-300" : "text-ink-500"}`}>{file.error ?? `${fileSize(file.chars)}${file.truncated ? ", shortened" : ""}`}</span>
+            </span>
+            <button type="button" onclick={() => onRemoveAttachment?.(i)} aria-label={`Remove ${file.name}`} class="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink-400 transition-colors hover:bg-veil/10 hover:text-ink-100"><Icon name="close" class="h-3.5 w-3.5" /></button>
+          </div>
+        {/each}
+        {#if attaching}
+          <div class="flex h-16 items-center gap-2 rounded-lg border border-ink-700 px-3 text-sm text-ink-400" role="status">
+            <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>Reading files…
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -229,11 +302,12 @@
       aria-busy={streaming}
       rows={1}
       onkeydown={handleKeydown}
+      onpaste={handlePaste}
       oninput={resize}
       class="field-bare block max-h-60 w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 text-ink-50 placeholder:text-ink-500"
     ></textarea>
 
-    <div class="flex items-center gap-1 px-2 pb-2 pt-1">
+    <div class="flex flex-wrap items-center gap-1 px-2 pb-2 pt-1">
       <input
         bind:this={fileInputEl}
         type="file"
@@ -243,48 +317,90 @@
         tabindex="-1"
         aria-hidden="true"
         disabled={streaming}
-        onchange={(e) => { onPickImages?.((e.currentTarget as HTMLInputElement).files); (e.currentTarget as HTMLInputElement).value = ""; }}
+        onchange={(e) => {
+          onPickImages?.((e.currentTarget as HTMLInputElement).files);
+          (e.currentTarget as HTMLInputElement).value = "";
+        }}
       />
-      <button
-        type="button"
-        onclick={() => fileInputEl?.click()}
-        disabled={streaming}
-        aria-label="Attach an image"
-        title="Attach an image (needs a vision model)"
-        class="composer-tool"
-      ><Icon name="image" class="h-[18px] w-[18px]" /></button>
-      <button
-        type="button"
-        onclick={() => showTools = !showTools}
-        aria-pressed={showTools}
-        aria-label="Workspace files"
-        title="Read or write a file in the LocalAide workspace"
-        class="composer-tool"
-      ><Icon name="folder" class="h-[18px] w-[18px]" /></button>
 
-      <span class="mx-1 h-5 w-px bg-ink-800" aria-hidden="true"></span>
+      <div class="relative" use:popover={{ open: attachMenuOpen, onClose: () => (attachMenuOpen = false) }}>
+        <button type="button" aria-haspopup="menu" aria-expanded={attachMenuOpen} onclick={() => (attachMenuOpen = !attachMenuOpen)} disabled={streaming} aria-label="Attach" title="Attach files or images" class="composer-tool"><Icon name="plus" class="h-[18px] w-[18px]" /></button>
+        {#if attachMenuOpen}
+          <div role="menu" aria-label="Attach" class="menu bottom-full left-0 mb-2 w-72" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { attachMenuOpen = false; onAttachFiles?.(); }} class="menu-row">
+              <Icon name="paperclip" class="h-4 w-4 text-ink-300" /><span><span class="block text-sm text-ink-50">Attach files</span><span class="block text-xs text-ink-400">Text, code, Markdown, CSV, JSON or PDF. You can also drop files here.</span></span>
+            </button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { attachMenuOpen = false; fileInputEl?.click(); }} class="menu-row">
+              <Icon name="image" class="h-4 w-4 text-ink-300" /><span><span class="block text-sm text-ink-50">Add an image</span><span class="block text-xs text-ink-400">For models that read images. Pasting works too.</span></span>
+            </button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { attachMenuOpen = false; showTools = true; }} class="menu-row">
+              <Icon name="folder" class="h-4 w-4 text-ink-300" /><span><span class="block text-sm text-ink-50">Read or write a workspace file</span><span class="block text-xs text-ink-400">Do it yourself, without the model.</span></span>
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
+        <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
+          <Icon name="wrench" class="h-4 w-4" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs tabular-nums text-ink-200">{toolsOn}</span>{/if}
+        </button>
+        {#if toolsMenuOpen}
+          <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+            <div class="px-2.5 pb-1 pt-1.5 text-xs text-ink-500">The model decides when to use these.</div>
+            {#each toolRows as row (row.id)}
+              <button type="button" role="menuitemcheckbox" aria-checked={row.on} data-popover-item onclick={() => row.toggle?.()} class="menu-row items-center">
+                <Icon name={row.icon} class="h-4 w-4 text-ink-300" />
+                <span class="min-w-0 flex-1"><span class="block text-sm text-ink-50">{row.label}</span><span class="block truncate text-xs text-ink-400">{row.hint}</span></span>
+                <span class={`switch ${row.on ? "switch-on" : ""}`} aria-hidden="true"><span></span></span>
+              </button>
+            {/each}
+            {#if mcpAvailable}
+              <div class="mt-1 border-t border-ink-800 px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">MCP servers</div>
+              {#each mcpServers as server (server.id)}
+                <button type="button" role="menuitemcheckbox" aria-checked={server.on} data-popover-item onclick={() => onToggleMcp?.(server.id)} class="menu-row items-center">
+                  <Icon name="plug" class="h-4 w-4 text-ink-300" />
+                  <span class="min-w-0 flex-1 truncate text-sm text-ink-50">{server.name}</span>
+                  <span class={`switch ${server.on ? "switch-on" : ""}`} aria-hidden="true"><span></span></span>
+                </button>
+              {:else}
+                <p class="px-2.5 pb-1 text-xs leading-5 text-ink-400">None yet. MCP servers add tools such as library docs, GitHub or a browser.</p>
+              {/each}
+            {/if}
+            {#if onManageTools}
+              <button type="button" role="menuitem" data-popover-item onclick={() => { toolsMenuOpen = false; onManageTools?.(); }} class="menu-row mt-1 items-center border-t border-ink-800 text-ink-400">
+                <Icon name="settings" class="h-4 w-4" /><span class="text-sm">Manage tools and MCP servers</span>
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      {#if webAvailable}
+        <button
+          type="button"
+          aria-pressed={useWeb}
+          onclick={onToggleWeb}
+          title={useWeb ? "The model may search the web when it needs to" : "Let the model search the web when it needs to"}
+          class={`composer-chip ${useWeb ? "composer-chip-on" : ""}`}
+        ><Icon name="globe" class="h-4 w-4" /><span class="hidden sm:inline">Web</span></button>
+      {/if}
 
       {#if modes.length > 0}
-        <div class="relative" use:popover={{ open: modeMenuOpen, onClose: () => modeMenuOpen = false }}>
+        <div class="relative" use:popover={{ open: modeMenuOpen, onClose: () => (modeMenuOpen = false) }}>
           <button
             type="button"
             aria-haspopup="menu"
             aria-expanded={modeMenuOpen}
-            onclick={() => modeMenuOpen = !modeMenuOpen}
+            onclick={() => (modeMenuOpen = !modeMenuOpen)}
             class={`composer-chip ${mode !== "standard" ? "composer-chip-on" : ""}`}
             title={currentMode?.description}
           >
             <Icon name={MODE_ICONS[mode]} class="h-4 w-4" />
-            <span>{currentMode?.label ?? "Standard"}</span>
+            <span class="hidden md:inline">{currentMode?.label ?? "Standard"}</span>
             <Icon name="chevron-down" class={`h-3.5 w-3.5 transition-transform duration-200 ${modeMenuOpen ? "rotate-180" : ""}`} />
           </button>
           {#if modeMenuOpen}
-            <div
-              role="menu"
-              aria-label="Chat mode"
-              class="absolute bottom-full left-0 z-30 mb-2 w-80 overflow-hidden rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl"
-              in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}
-            >
+            <div role="menu" aria-label="Chat mode" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
               <div class="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-ink-500">How LocalAide answers</div>
               {#each modes as m (m.id)}
                 <button
@@ -293,7 +409,7 @@
                   aria-checked={m.id === mode}
                   data-popover-item
                   onclick={() => { onModeChange?.(m.id); modeMenuOpen = false; }}
-                  class={`flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-veil/5 focus:bg-veil/5 focus:outline-none ${m.id === mode ? "bg-ember-500/10" : ""}`}
+                  class={`menu-row ${m.id === mode ? "bg-ember-500/10" : ""}`}
                 >
                   <span class={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md ${m.id === mode ? "bg-ember-500/20 text-ember-300" : "bg-ink-800 text-ink-300"}`}><Icon name={MODE_ICONS[m.id]} class="h-4 w-4" /></span>
                   <span class="min-w-0 flex-1">
@@ -308,26 +424,8 @@
         </div>
       {/if}
 
-      {#if webAvailable}
-        <button
-          type="button"
-          aria-pressed={useWeb}
-          onclick={onToggleWeb}
-          title={useWeb ? "Web search is on for your messages" : "Search the web for your messages"}
-          class={`composer-chip ${useWeb ? "composer-chip-on" : ""}`}
-        ><Icon name="globe" class="h-4 w-4" /><span class="hidden sm:inline">Web</span></button>
-      {/if}
-      {#if recallAvailable}
-        <button
-          type="button"
-          aria-pressed={useRecall}
-          onclick={onToggleRecall}
-          title={useRecall ? "Using your notes and files" : "Not using your notes and files"}
-          class={`composer-chip ${useRecall ? "composer-chip-on" : ""}`}
-        ><Icon name="memory" class="h-4 w-4" /><span class="hidden sm:inline">Notes</span></button>
-      {/if}
-
-      <span class="ml-auto hidden truncate pr-2 text-xs text-ink-500 md:inline">{engineLabel}</span>
+      <span class="ml-auto"></span>
+      {#if trailing}{@render trailing()}{/if}
 
       {#if streaming}
         <button
@@ -335,7 +433,7 @@
           onclick={onCancel}
           aria-label="Stop the answer"
           title="Stop (Esc)"
-          class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950 transition-transform hover:scale-105 active:scale-95"
+          class="ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950 transition-transform hover:scale-105 active:scale-95"
         ><Icon name="stop" class="h-4 w-4" /></button>
       {:else}
         <button
@@ -344,7 +442,7 @@
           disabled={!canSend}
           aria-label="Send"
           title="Send (Enter)"
-          class={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-md shadow-ember-900/40 hover:bg-ember-400 hover:scale-105" : "bg-ink-800 text-ink-500"}`}
+          class={`ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-md shadow-ember-900/40 hover:scale-105 hover:bg-ember-400" : "bg-ink-800 text-ink-500"}`}
         ><Icon name="arrow-up" class="h-[18px] w-[18px]" /></button>
       {/if}
     </div>
@@ -362,7 +460,7 @@
     transition: background-color 150ms ease-out, color 150ms ease-out;
   }
   .composer-tool:hover:not(:disabled),
-  .composer-tool[aria-pressed="true"] {
+  .composer-tool[aria-expanded="true"] {
     background: color-mix(in oklab, var(--color-veil) 6%, transparent);
     color: var(--color-ink-50);
   }
@@ -381,7 +479,8 @@
     color: var(--color-ink-300);
     transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
   }
-  .composer-chip:hover {
+  .composer-chip:hover,
+  .composer-chip[aria-expanded="true"] {
     border-color: var(--color-edge);
     color: var(--color-ink-50);
   }
@@ -389,5 +488,59 @@
     border-color: color-mix(in oklab, var(--color-ember-500) 45%, transparent);
     background: color-mix(in oklab, var(--color-ember-500) 12%, transparent);
     color: var(--color-ember-200);
+  }
+  .menu {
+    position: absolute;
+    z-index: 40;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink-950);
+    padding: 0.375rem;
+    box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55);
+  }
+  .menu-row {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.75rem;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    text-align: left;
+    transition: background-color 150ms ease-out;
+  }
+  .menu-row:hover,
+  .menu-row:focus {
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
+    outline: none;
+  }
+  .switch {
+    position: relative;
+    height: 1.125rem;
+    width: 2rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink-800);
+    transition: background-color 150ms ease-out, border-color 150ms ease-out;
+  }
+  .switch span {
+    position: absolute;
+    left: 0.15rem;
+    top: 50%;
+    height: 0.7rem;
+    width: 0.7rem;
+    transform: translateY(-50%);
+    border-radius: 9999px;
+    background: var(--color-ink-300);
+    transition: transform 180ms ease-out, background-color 150ms ease-out;
+  }
+  .switch-on {
+    border-color: var(--color-ember-600);
+    background: var(--color-ember-600);
+  }
+  .switch-on span {
+    transform: translate(0.85rem, -50%);
+    background: var(--color-on-ember);
   }
 </style>

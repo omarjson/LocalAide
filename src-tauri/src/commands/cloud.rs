@@ -8,7 +8,7 @@ use crate::app::state::AppState;
 use crate::config::{CloudProvider, is_local_host, validate_base_url};
 use crate::domain::cloud::{
     CloudConfigStatus, CloudModeRequest, CloudModelsRequest, CloudProviderDto,
-    CloudProviderSaveRequest,
+    CloudProviderSaveRequest, ProviderEnableRequest,
 };
 use crate::services::inference::provider_models::{ProviderModel, list_models};
 use crate::services::inference::remote::RemoteTarget;
@@ -325,7 +325,12 @@ pub async fn cloud_list_models(
             None => String::new(),
         },
     };
-    list_models(&base_url, &key).await
+    let models = list_models(&base_url, &key).await?;
+    // An edit of a saved provider also refreshes the picker's list.
+    if let Some(id) = req.provider_id.as_deref() {
+        store_models(&state, id, &base_url, &models)?;
+    }
+    Ok(models)
 }
 
 /// Plain-HTTP proxies on this machine (Ollama, LM Studio, llama-server)
@@ -356,10 +361,103 @@ fn provider_dto(p: &CloudProvider, active_id: Option<&str>) -> CloudProviderDto 
         model: p.model.clone(),
         api_key_hint: key_hint(&p.api_key),
         is_active: active_id == Some(p.id.as_str()),
+        enabled: p.enabled,
+        model_count: p.models.len(),
     }
 }
 
-fn load_config(state: &State<'_, AppState>) -> Result<crate::config::AppConfig, AppError> {
+fn status_of(cfg: &crate::config::AppConfig) -> CloudConfigStatus {
+    let active = cfg.active_cloud_provider.clone();
+    CloudConfigStatus {
+        cloud_enabled: cfg.cloud_llm_enabled,
+        providers: cfg
+            .cloud_providers
+            .iter()
+            .map(|p| provider_dto(p, active.as_deref()))
+            .collect(),
+        active_provider_id: active,
+    }
+}
+
+/// The engine target for a provider and a model, or its default model.
+pub(crate) fn remote_target(p: &CloudProvider, model: Option<&str>) -> RemoteTarget {
+    RemoteTarget {
+        label: p.label.clone(),
+        base_url: p.base_url.clone(),
+        model: model
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .unwrap_or(&p.model)
+            .to_string(),
+        api_key: p.api_key.clone(),
+    }
+}
+
+/// Show or hide a provider's models in the chat's model picker. Several
+/// providers can be on at once. Hiding the provider chat uses moves chat
+/// back to this computer.
+#[tauri::command]
+pub fn cloud_provider_set_enabled(
+    state: State<'_, AppState>,
+    req: ProviderEnableRequest,
+) -> Result<CloudConfigStatus, AppError> {
+    let mut cfg = load_config(&state)?;
+    let Some(provider) = cfg
+        .cloud_providers
+        .iter_mut()
+        .find(|p| p.id == req.provider_id)
+    else {
+        return Err(AppError::invalid_input("That provider no longer exists."));
+    };
+    provider.enabled = req.enabled;
+    if !req.enabled && cfg.active_cloud_provider.as_deref() == Some(req.provider_id.as_str()) {
+        cfg.cloud_llm_enabled = false;
+    }
+    save_config(&state, &cfg)?;
+    apply_engine_mode(&state, &cfg);
+    Ok(status_of(&cfg))
+}
+
+/// Ask a saved provider for its models again and keep the list for the
+/// picker. Runs only when the user presses Refresh.
+#[tauri::command]
+pub async fn cloud_models_refresh(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> Result<Vec<ProviderModel>, AppError> {
+    let cfg = load_config(&state)?;
+    let provider = cfg
+        .cloud_providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .cloned()
+        .ok_or_else(|| AppError::invalid_input("That provider no longer exists."))?;
+    let models = list_models(&provider.base_url, &provider.api_key).await?;
+    store_models(&state, &provider_id, &provider.base_url, &models)?;
+    Ok(models)
+}
+
+/// Keep a provider's model list, when the address is still the one the
+/// list came from.
+fn store_models(
+    state: &AppState,
+    provider_id: &str,
+    base_url: &str,
+    models: &[ProviderModel],
+) -> Result<(), AppError> {
+    let mut cfg = load_config(state)?;
+    if let Some(p) = cfg
+        .cloud_providers
+        .iter_mut()
+        .find(|p| p.id == provider_id && same_origin(&p.base_url, base_url))
+    {
+        p.models = models.to_vec();
+        save_config(state, &cfg)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn load_config(state: &AppState) -> Result<crate::config::AppConfig, AppError> {
     let store = state
         .config_store
         .lock()
@@ -367,8 +465,8 @@ fn load_config(state: &State<'_, AppState>) -> Result<crate::config::AppConfig, 
     store.load().map_err(AppError::internal)
 }
 
-fn save_config(
-    state: &State<'_, AppState>,
+pub(crate) fn save_config(
+    state: &AppState,
     cfg: &crate::config::AppConfig,
 ) -> Result<(), AppError> {
     let store = state
@@ -379,17 +477,14 @@ fn save_config(
 }
 
 /// Switch the runtime engine to match the stored config.
-fn apply_engine_mode(state: &State<'_, AppState>, cfg: &crate::config::AppConfig) {
+pub(crate) fn apply_engine_mode(state: &AppState, cfg: &crate::config::AppConfig) {
     if cfg.cloud_llm_enabled
         && let Some(id) = cfg.active_cloud_provider.as_deref()
-        && let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id)
+        && let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled)
     {
-        state.inference_engine.set_cloud_target(RemoteTarget {
-            label: p.label.clone(),
-            base_url: p.base_url.clone(),
-            model: p.model.clone(),
-            api_key: p.api_key.clone(),
-        });
+        state
+            .inference_engine
+            .set_cloud_target(remote_target(p, cfg.active_cloud_model.as_deref()));
         return;
     }
     state.inference_engine.set_local();
@@ -470,6 +565,10 @@ pub fn cloud_provider_save(
                 }
             }
             provider.label = label;
+            // A list from another address does not describe this one.
+            if !same_origin(&provider.base_url, &base_url) {
+                provider.models.clear();
+            }
             provider.base_url = base_url;
             provider.model = model;
             if let Some(key) = new_key {
@@ -493,6 +592,8 @@ pub fn cloud_provider_save(
                 base_url,
                 model,
                 api_key: key.unwrap_or_default().to_string(),
+                enabled: true,
+                models: Vec::new(),
             });
             id
         }

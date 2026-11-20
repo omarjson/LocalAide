@@ -172,6 +172,24 @@ impl ToolService {
         }
     }
 
+    /// Record a chat tool that is not a workspace action (web search, notes,
+    /// MCP), so the activity log shows everything the model did.
+    pub fn record_event(
+        &self,
+        tool_name: &str,
+        action: &str,
+        path: &str,
+        status: &str,
+        details: Option<&str>,
+    ) {
+        if let Err(e) = self
+            .db
+            .record_tool_audit(tool_name, action, path, true, status, details)
+        {
+            log::warn!("Could not record a chat tool action: {e}");
+        }
+    }
+
     pub fn list_audits(&self, limit: usize) -> Result<Vec<ToolAuditEntry>, AppError> {
         let db_audits = self.db.list_tool_audits(limit)?;
         let entries = db_audits

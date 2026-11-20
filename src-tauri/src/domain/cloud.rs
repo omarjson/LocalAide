@@ -12,6 +12,62 @@ pub struct CloudProviderDto {
     pub model: String,
     pub api_key_hint: String,
     pub is_active: bool,
+    /// Shown in the chat's model picker.
+    pub enabled: bool,
+    /// Models saved from the last "Load models".
+    pub model_count: usize,
+}
+
+/// One model in the chat's model picker.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelChoice {
+    /// "local:<model id>" or "<provider id>:<model>".
+    pub key: String,
+    /// None for models on this computer.
+    pub provider_id: Option<String>,
+    pub provider_label: String,
+    /// The id sent to the engine.
+    pub model: String,
+    pub name: String,
+    pub local: bool,
+    pub reasoning: bool,
+    pub vision: bool,
+    pub tools: bool,
+    pub context: Option<u64>,
+    /// Thinking levels to offer, lowest first; "off" when it can be switched off.
+    pub efforts: Vec<String>,
+    pub free: bool,
+    pub favorite: bool,
+    /// The picker's current choice.
+    pub active: bool,
+    /// For local models: the file size, to show how big it is.
+    pub size_bytes: Option<u64>,
+}
+
+/// An online provider's group in the picker.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelGroup {
+    pub provider_id: String,
+    pub label: String,
+    pub enabled: bool,
+    pub local_router: bool,
+    /// True when the model list was never loaded.
+    pub needs_refresh: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelChoices {
+    pub models: Vec<ModelChoice>,
+    pub groups: Vec<ModelGroup>,
+    pub active_key: Option<String>,
+    /// The local engine is running a model.
+    pub local_loaded: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProviderEnableRequest {
+    pub provider_id: String,
+    pub enabled: bool,
 }
 
 /// Save request for one provider. An existing `id` updates that provider;

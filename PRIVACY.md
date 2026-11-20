@@ -1,6 +1,6 @@
 # LocalAide Privacy Policy
 
-Effective date: November 19, 2026. Applies to LocalAide 0.1.3 and later.
+Effective date: November 19, 2026. Applies to LocalAide 0.1.4 and later.
 
 LocalAide is a desktop app that runs AI models on your own computer. This policy explains what the app does with your information. It is written from what the app's code actually does.
 
@@ -37,7 +37,10 @@ Nothing is contacted when the app starts. The app connects only when you take on
 |---|---|---|
 | Download a model, refresh the model catalog, or browse Hugging Face | Hugging Face (`huggingface.co`) and GitHub (`raw.githubusercontent.com`) | The model or search words you chose |
 | Search the web or read a web page from the Search screen | The search provider you picked (for example DuckDuckGo, Wikipedia, Jina, Exa or Firecrawl; "Automatic" tries DuckDuckGo, then Exa, then Wikipedia) | Your search words or the page address, plus your key for that provider if you added one |
-| Send a chat message with **Web** turned on, or in Autonomous mode with Web on | The same search provider, and the reader for the best result | Your message as the search words, and the address of the page it reads |
+| Send a chat message with **Web** turned on | The same search provider, and the page reader, only when the model decides to search or read a page | The search words the model chose, and the addresses of pages it reads. The tool cards under the answer show each one |
+| Switch on an MCP server that is a web address, and chat | That server (for example Context7 or DeepWiki), only when the model calls one of its tools | The tool's input the model wrote (shown in the tool card), plus any header, such as a token, you saved for it |
+| Add an MCP server that is a program on your computer | Whatever that program connects to. LocalAide starts it with your permissions and sends it the tool input the model writes | Depends on the program. Add only programs you trust |
+| Press **Load models** or **Refresh** for an online provider | That provider | A request for its model list, with your key for it |
 | Use a Firecrawl server you run yourself | Your own server only | Search words and page addresses |
 | Browse or import skills | GitHub (`api.github.com`, `raw.githubusercontent.com`) | The name of the collection you opened, and which skills' descriptions to show |
 | Send a message to OpenCode | The OpenCode server address you linked (usually on your own computer) | The message you chose to send, and its password if you set one |
@@ -46,7 +49,9 @@ Nothing is contacted when the app starts. The app connects only when you take on
 
 Like any website, each service sees your computer's IP address when the app connects. Each of these services has its own privacy policy, and the developer of LocalAide has no control over them. Read their policies before you send them anything sensitive. Requests go straight from your computer to that service. They do not pass through any server run by the developer of LocalAide.
 
-When online chat is off (the default), your messages are processed only by the model on your computer.
+While chat uses a model on your computer (the default), your messages are processed only by that model. You can switch on several online providers; their models show in the chat's model menu, and a message goes online only when you pick one of them. Files you attach are read on your computer, and their text goes to the model that answers.
+
+Tools that change something (writing a workspace file, saving a note, most MCP tools) ask you first. Every tool the model uses is recorded in the activity log. MCP header and environment values are stored like API keys and left out of backups unless you include keys.
 
 ## Children
 

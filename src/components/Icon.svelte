@@ -53,7 +53,15 @@
     | "plug"
     | "eye"
     | "layers"
-    | "target";
+    | "target"
+    | "brain"
+    | "wrench"
+    | "paperclip"
+    | "star"
+    | "star-filled"
+    | "x-circle"
+    | "window"
+    | "terminal";
 
   interface Props {
     name: IconName;
@@ -219,5 +227,25 @@
     <circle cx="12" cy="12" r="1" />
   {:else if name === "sparkle"}
     <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
+  {:else if name === "brain"}
+    <path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.1A3 3 0 0 0 4.5 10a3 3 0 0 0 .9 2.1A3 3 0 0 0 6 17.5 2.5 2.5 0 0 0 9.5 20 2.5 2.5 0 0 0 12 17.5v-11A2.5 2.5 0 0 0 9.5 4z" />
+    <path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.1a3 3 0 0 1 2.5 3.4 3 3 0 0 1-.9 2.1 3 3 0 0 1-.6 5.4A2.5 2.5 0 0 1 14.5 20 2.5 2.5 0 0 1 12 17.5" />
+  {:else if name === "wrench"}
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L4 16.7V20h3.3l5.3-5.3a4 4 0 0 0 5.1-5.4l-2.5 2.5-2.5-2.5z" />
+  {:else if name === "paperclip"}
+    <path d="m20 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
+  {:else if name === "star"}
+    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+  {:else if name === "star-filled"}
+    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="currentColor" />
+  {:else if name === "x-circle"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="m9 9 6 6M15 9l-6 6" />
+  {:else if name === "window"}
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M3 9h18" />
+  {:else if name === "terminal"}
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="m7 9 3 3-3 3M12 15h5" />
   {/if}
 </svg>

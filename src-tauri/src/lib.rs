@@ -95,16 +95,11 @@ pub fn run() {
             let active = cfg
                 .active_cloud_provider
                 .as_deref()
-                .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id));
+                .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled));
             if let Some(p) = active {
                 if crate::config::validate_base_url(&p.base_url).is_ok() {
                     app_state.inference_engine.set_cloud_target(
-                        crate::services::inference::remote::RemoteTarget {
-                            label: p.label.clone(),
-                            base_url: p.base_url.clone(),
-                            model: p.model.clone(),
-                            api_key: p.api_key.clone(),
-                        },
+                        crate::commands::cloud::remote_target(p, cfg.active_cloud_model.as_deref()),
                     );
                     restored_cloud = true;
                     log::info!("Cloud mode restored: {label}", label = p.label);
@@ -145,6 +140,7 @@ pub fn run() {
     let startup_state = app_state.clone();
     let shutdown_state = app_state.clone();
     let engine_loading = app_state.engine_loading.clone();
+    let drop_state = app_state.clone();
 
     // Logs go to a rotated file in the app folder in every build, so a user can
     // send that file when something goes wrong.
@@ -171,6 +167,12 @@ pub fn run() {
         // Settings, and builds without an update key never offer to install.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
+        // Files dropped on the window may be read by chat; nothing else may.
+        .on_window_event(move |_window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                commands::attach::remember_drop(&drop_state, paths);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::system_probe,
             commands::model_list,
@@ -276,6 +278,21 @@ pub fn run() {
             commands::opencode_check,
             commands::opencode_send,
             commands::skills_remote_describe,
+            commands::chat_tool_decide,
+            commands::chat_models,
+            commands::chat_target_set,
+            commands::chat_favorite_toggle,
+            commands::chat_attach_pick,
+            commands::chat_attach_dropped,
+            commands::cloud_provider_set_enabled,
+            commands::cloud_models_refresh,
+            commands::mcp_servers_list,
+            commands::mcp_presets,
+            commands::mcp_server_save,
+            commands::mcp_server_toggle,
+            commands::mcp_server_delete,
+            commands::mcp_server_test,
+            commands::mcp_import,
         ])
         .setup(move |setup_app| {
             if let Some((model_id, path, context)) = pending_load {
@@ -325,6 +342,7 @@ pub fn run() {
                 let _ = shutdown_state.inference_engine.unload();
                 shutdown_state.embedding_engine.stop();
                 shutdown_state.rerank_engine.stop();
+                shutdown_state.mcp.disconnect_all();
                 // Fold the database log into the file, so the next start is quick.
                 if let Err(e) = shutdown_state.library.checkpoint() {
                     log::warn!("Database checkpoint at exit failed: {e}");

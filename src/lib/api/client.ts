@@ -79,6 +79,14 @@ import type {
   ToolExecutionRequest,
   ToolExecutionResponse,
   WatchFolderResponse,
+  ChatAttachment,
+  ChatTarget,
+  ModelChoices,
+  McpImportResult,
+  McpPreset,
+  McpServer,
+  McpServerSaveRequest,
+  McpTool,
 } from "./bindings";
 
 export class ApiClient {
@@ -633,6 +641,78 @@ export class ApiClient {
 
   async setCloudMode(req: CloudModeRequest): Promise<CloudConfigStatus> {
     return invoke<CloudConfigStatus>("cloud_mode_set", { req });
+  }
+
+  /** Show or hide a provider's models in the chat's model picker. */
+  async setProviderEnabled(providerId: string, enabled: boolean): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_provider_set_enabled", { req: { provider_id: providerId, enabled } });
+  }
+
+  /** Ask a saved provider for its models again (an explicit network call). */
+  async refreshProviderModels(providerId: string): Promise<ProviderModel[]> {
+    return invoke<ProviderModel[]>("cloud_models_refresh", { providerId });
+  }
+
+  // Model picker
+
+  async chatModels(): Promise<ModelChoices> {
+    return invoke<ModelChoices>("chat_models");
+  }
+
+  /** Make a model the one chat uses. A local model loads first. */
+  async setChatTarget(target: ChatTarget): Promise<ModelChoices> {
+    return invoke<ModelChoices>("chat_target_set", { req: target });
+  }
+
+  async toggleFavoriteModel(key: string): Promise<string[]> {
+    return invoke<string[]>("chat_favorite_toggle", { key });
+  }
+
+  // Chat tools and attachments
+
+  /** Answer a tool approval question: "allow", "allow_chat" or "deny". */
+  async decideTool(approvalId: string, decision: "allow" | "allow_chat" | "deny"): Promise<boolean> {
+    return invoke<boolean>("chat_tool_decide", { req: { approval_id: approvalId, decision } });
+  }
+
+  async attachFiles(): Promise<ChatAttachment[]> {
+    return invoke<ChatAttachment[]>("chat_attach_pick");
+  }
+
+  /** Read files that were just dropped on the window. */
+  async attachDropped(paths: string[]): Promise<ChatAttachment[]> {
+    return invoke<ChatAttachment[]>("chat_attach_dropped", { paths });
+  }
+
+  // MCP servers
+
+  async mcpServers(): Promise<McpServer[]> {
+    return invoke<McpServer[]>("mcp_servers_list");
+  }
+
+  async mcpPresets(): Promise<McpPreset[]> {
+    return invoke<McpPreset[]>("mcp_presets");
+  }
+
+  async saveMcpServer(req: McpServerSaveRequest): Promise<McpServer[]> {
+    return invoke<McpServer[]>("mcp_server_save", { req });
+  }
+
+  async toggleMcpServer(id: string, change: { enabled?: boolean; auto_approve?: boolean }): Promise<McpServer[]> {
+    return invoke<McpServer[]>("mcp_server_toggle", { req: { id, ...change } });
+  }
+
+  async deleteMcpServer(id: string): Promise<McpServer[]> {
+    return invoke<McpServer[]>("mcp_server_delete", { id });
+  }
+
+  /** Connect and list the server's tools. */
+  async testMcpServer(id: string): Promise<McpTool[]> {
+    return invoke<McpTool[]>("mcp_server_test", { id });
+  }
+
+  async importMcpServers(text: string): Promise<McpImportResult> {
+    return invoke<McpImportResult>("mcp_import", { text });
   }
 }
 

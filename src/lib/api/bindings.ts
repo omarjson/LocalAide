@@ -106,6 +106,151 @@ export interface ChatMessage {
   steps?: string[];
   /** Session only: answer statistics (developer flag). */
   stats?: { tokens: number; ms: number; firstTokenMs: number | null } | null;
+  /** The answer in order: thinking, tool calls and text. Saved with the chat. */
+  parts?: MessagePart[];
+  /** Files attached to a user message, with their text. */
+  attachments?: ChatAttachment[];
+  /** Which model wrote an answer. */
+  model?: string;
+  /** The answer failed; it is not sent back as history. */
+  error?: boolean;
+}
+
+export type ToolStatus = "running" | "waiting" | "done" | "failed" | "denied";
+
+export type MessagePart =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string; ms?: number | null }
+  | {
+      type: "tool";
+      id: string;
+      name: string;
+      title: string;
+      detail: string;
+      /** "web", "notes", "skills", "files" or "mcp". */
+      group: string;
+      arguments: string;
+      status: ToolStatus;
+      summary: string;
+      output: string;
+    };
+
+/** A file attached to a message (chat_attach_pick / chat_attach_dropped). */
+export interface ChatAttachment {
+  name: string;
+  /** "text" or "image". */
+  kind: string;
+  text?: string | null;
+  data_url?: string | null;
+  chars: number;
+  truncated: boolean;
+  error?: string | null;
+}
+
+/** The model the picker chose. No provider = the local model. */
+export interface ChatTarget {
+  provider_id?: string | null;
+  model: string;
+}
+
+/** One model in the chat's model picker (chat_models). */
+export interface ModelChoice {
+  key: string;
+  provider_id: string | null;
+  provider_label: string;
+  model: string;
+  name: string;
+  local: boolean;
+  reasoning: boolean;
+  vision: boolean;
+  tools: boolean;
+  context: number | null;
+  /** Thinking levels, lowest first; "off" when thinking can be switched off. */
+  efforts: string[];
+  free: boolean;
+  favorite: boolean;
+  active: boolean;
+  size_bytes: number | null;
+}
+
+export interface ModelGroup {
+  provider_id: string;
+  label: string;
+  enabled: boolean;
+  local_router: boolean;
+  needs_refresh: boolean;
+}
+
+export interface ModelChoices {
+  models: ModelChoice[];
+  groups: ModelGroup[];
+  active_key: string | null;
+  local_loaded: boolean;
+}
+
+/** Settings → Tools and MCP. */
+export interface KeyValueHint {
+  name: string;
+  hint: string;
+}
+
+export interface KeyValueInput {
+  name: string;
+  /** Omit to keep the stored value. */
+  value?: string;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  enabled: boolean;
+  auto_approve: boolean;
+  kind: "stdio" | "http";
+  command: string;
+  args: string[];
+  cwd: string | null;
+  url: string;
+  env: KeyValueHint[];
+  headers: KeyValueHint[];
+  connected: boolean;
+}
+
+export interface McpServerSaveRequest {
+  id?: string;
+  name: string;
+  enabled: boolean;
+  auto_approve: boolean;
+  kind: "stdio" | "http";
+  command: string;
+  args: string[];
+  cwd?: string | null;
+  url: string;
+  env: KeyValueInput[];
+  headers: KeyValueInput[];
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+}
+
+export interface McpImportResult {
+  added: number;
+  skipped: number;
+  servers: McpServer[];
+}
+
+export interface McpPreset {
+  id: string;
+  name: string;
+  description: string;
+  kind: "stdio" | "http";
+  url: string;
+  command: string;
+  args: string[];
+  requirement: string;
+  needs_key: boolean;
+  homepage: string;
 }
 
 export interface ChatThread {
@@ -127,10 +272,25 @@ export interface ChatStreamRequest {
   images?: string[];
   /** Chat mode; the backend adds its instruction to the system prompt. */
   mode?: ChatModeId;
-  /** Look in notes and documents (default true). */
+  /** Let the model search notes and documents (default true). */
   use_recall?: boolean;
-  /** Search the web for this message (default false). */
+  /** Let the model search the web (default false). */
   use_web?: boolean;
+  /** Let the model read and (with approval) write workspace files (default true). */
+  use_files?: boolean;
+  /** Let the model read saved skills (default true). */
+  use_skills?: boolean;
+  /** MCP servers on for this chat; omit for every enabled server. */
+  mcp_servers?: string[];
+  /** Tools the user allowed for the rest of this chat. */
+  allowed_tools?: string[];
+  /** The picker's model; omit for the default. */
+  target?: ChatTarget;
+  /** "auto", "off", "on", "low", "medium", "high"… */
+  effort?: string;
+  attachments?: ChatAttachment[];
+  /** The user's local date and time. */
+  now?: string;
 }
 
 export type ChatModeId = "standard" | "strict" | "unrestricted" | "autonomous";
@@ -148,7 +308,17 @@ export type ChatStreamEvent =
   | { type: "citation"; payload: Citation }
   | { type: "status"; payload: { label: string } }
   | { type: "done"; payload: { finish_reason: string; total_tokens: number } }
-  | { type: "error"; payload: { error: string } };
+  | { type: "error"; payload: { error: string } }
+  | { type: "reasoning"; payload: { text: string } }
+  | {
+      type: "tool_call";
+      payload: { id: string; name: string; title: string; detail: string; group: string; arguments: string };
+    }
+  | {
+      type: "tool_approval";
+      payload: { approval_id: string; id: string; title: string; detail: string; preview: string };
+    }
+  | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } };
 
 export interface SummarizeRequest {
   text: string;
@@ -298,6 +468,10 @@ export interface CloudProviderDto {
   model: string;
   api_key_hint: string;
   is_active: boolean;
+  /** Shown in the chat's model picker. */
+  enabled: boolean;
+  /** Models saved from the last "Load models". */
+  model_count: number;
 }
 
 export interface CloudConfigStatus {
@@ -438,6 +612,9 @@ export interface ProviderModel {
   owned_by: string | null;
   context_length: number | null;
   free: boolean;
+  reasoning?: boolean | null;
+  vision?: boolean | null;
+  tools?: boolean | null;
 }
 
 /** A saved prompt skill: one markdown file under ~/.aiassistant/skills/. */

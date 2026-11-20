@@ -27,6 +27,14 @@ pub struct ProviderModel {
     pub context_length: Option<u64>,
     /// True when the provider marks the model as free to use.
     pub free: bool,
+    /// What the provider says the model can do. None = the provider did not
+    /// say, and the picker guesses from the name.
+    #[serde(default)]
+    pub reasoning: Option<bool>,
+    #[serde(default)]
+    pub vision: Option<bool>,
+    #[serde(default)]
+    pub tools: Option<bool>,
 }
 
 /// Where a provider lists its models. Almost every provider uses
@@ -137,6 +145,9 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                 owned_by: None,
                 context_length: None,
                 free: looks_free(id),
+                reasoning: None,
+                vision: None,
+                tools: None,
             },
             Value::Object(map) => {
                 let text = |key: &str| map.get(key).and_then(Value::as_str).map(str::to_string);
@@ -151,7 +162,36 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                 let context_length = map
                     .get("context_length")
                     .or_else(|| map.get("context_window"))
+                    .or_else(|| map.get("max_context_length"))
+                    .or_else(|| {
+                        map.get("top_provider")
+                            .and_then(|t| t.get("context_length"))
+                    })
                     .and_then(Value::as_u64);
+                // OpenRouter and gateways built on it list the request
+                // fields a model accepts and its input kinds.
+                let params: Option<Vec<&str>> = map
+                    .get("supported_parameters")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect());
+                let reasoning = params
+                    .as_ref()
+                    .map(|p| {
+                        p.iter()
+                            .any(|x| *x == "reasoning" || *x == "include_reasoning")
+                    })
+                    .or_else(|| map.get("reasoning").and_then(Value::as_bool));
+                let tools = params
+                    .as_ref()
+                    .map(|p| p.contains(&"tools"))
+                    .or_else(|| map.get("tool_call").and_then(Value::as_bool));
+                let vision = map
+                    .get("architecture")
+                    .and_then(|a| a.get("input_modalities"))
+                    .or_else(|| map.get("input_modalities"))
+                    .and_then(Value::as_array)
+                    .map(|m| m.iter().any(|x| x.as_str() == Some("image")))
+                    .or_else(|| map.get("vision").and_then(Value::as_bool));
                 let priced_free = map.get("pricing").is_some_and(|p| {
                     let zero = |key: &str| {
                         p.get(key)
@@ -170,6 +210,9 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                     name,
                     owned_by: text("owned_by"),
                     context_length,
+                    reasoning,
+                    vision,
+                    tools,
                 }
             }
             _ => continue,
@@ -219,6 +262,21 @@ mod tests {
         assert!(list[0].free);
         assert_eq!(list[0].name.as_deref(), Some("A B"));
         assert!(!list[1].free);
+    }
+
+    #[test]
+    fn openrouter_capabilities_are_read() {
+        let list = parse_models(&json!({"data": [{
+            "id": "a/b",
+            "supported_parameters": ["tools", "reasoning", "max_tokens"],
+            "architecture": {"input_modalities": ["text", "image"]},
+            "top_provider": {"context_length": 65536}
+        }, {"id": "c/d"}]}));
+        assert_eq!(list[0].reasoning, Some(true));
+        assert_eq!(list[0].tools, Some(true));
+        assert_eq!(list[0].vision, Some(true));
+        assert_eq!(list[0].context_length, Some(65536));
+        assert_eq!(list[1].reasoning, None);
     }
 
     #[test]

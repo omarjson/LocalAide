@@ -25,6 +25,38 @@ pub enum ChatStreamEvent {
     Error {
         error: String,
     },
+    /// A piece of the model's thinking, shown in the collapsible
+    /// "Thinking" block above the answer.
+    Reasoning {
+        text: String,
+    },
+    /// The model asked for a tool. `group` is "web", "notes", "skills",
+    /// "files" or "mcp", for the icon.
+    ToolCall {
+        id: String,
+        name: String,
+        title: String,
+        detail: String,
+        group: String,
+        /// The arguments as the model wrote them, pretty-printed.
+        arguments: String,
+    },
+    /// The tool changes something, so the chat asks the user. The answer
+    /// goes back through `chat_tool_decide` with `approval_id`.
+    ToolApproval {
+        approval_id: String,
+        id: String,
+        title: String,
+        detail: String,
+        /// What will be written or sent, shortened.
+        preview: String,
+    },
+    ToolResult {
+        id: String,
+        ok: bool,
+        summary: String,
+        output: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -4,16 +4,24 @@ use crate::app::events::ChatStreamEvent;
 use crate::app::paths::conversations_dir;
 use crate::app::state::AppState;
 use crate::domain::chat::{
-    ChatMessage, ChatStreamRequest, ChatThread, SummarizeRequest, SummarizeResponse,
-    ThreadExportRequest, ThreadExportResponse,
+    ChatAttachment, ChatMessage, ChatStreamRequest, ChatTargetRequest, ChatThread,
+    SummarizeRequest, SummarizeResponse, ThreadExportRequest, ThreadExportResponse,
+    ToolDecisionRequest,
 };
+use crate::services::agent::AgentRun;
+use crate::services::agent::approval::Decision;
+use crate::services::agent::tools::Permissions;
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::PromptMessage;
+use crate::services::inference::capabilities::effort_for_request;
 use crate::services::inference::context::ContextBudget;
-use crate::services::inference::modes::{ChatMode, compose_system_prompt};
+use crate::services::inference::modes::{
+    ChatMode, ToolGroups, compose_system_prompt, tool_guidance,
+};
+use crate::services::inference::openai_stream::{ChatTurn, Effort};
+use crate::services::inference::router::ChatTarget;
 use std::fs;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 use tauri::State;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -28,9 +36,6 @@ struct StoredThread {
 
 const MAX_IMAGES: usize = 4;
 const MAX_IMAGES_BYTES: usize = 20 * 1024 * 1024;
-/// How long a chat waits for the query embedding before it falls back to keyword recall.
-const RECALL_EMBED_LIMIT: Duration = Duration::from_secs(3);
-
 /// Reject unsupported or oversized attachments before any model work starts.
 fn validate_images(images: &[String]) -> Result<(), AppError> {
     if images.len() > MAX_IMAGES {
@@ -76,19 +81,6 @@ fn validate_thread_id(thread_id: &str) -> Result<(), AppError> {
             "That conversation id is not valid.",
         ))
     }
-}
-
-/// Runs `work` on a helper thread and waits at most `limit` for its answer. A
-/// slow answer returns None, and the helper finishes in the background.
-fn answer_within<T: Send + 'static>(
-    limit: Duration,
-    work: impl FnOnce() -> Option<T> + Send + 'static,
-) -> Option<T> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(work());
-    });
-    rx.recv_timeout(limit).ok().flatten()
 }
 
 /// What the chat screen needs to know about the local engine.
@@ -176,164 +168,234 @@ pub async fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError
     .await
 }
 
+/// A message as the model reads it: the text, then each attached file.
+pub(crate) fn history_text(content: &str, attachments: &[ChatAttachment]) -> String {
+    let mut out = content.to_string();
+    for file in attachments {
+        let Some(text) = file.text.as_deref().filter(|_| file.kind == "text") else {
+            continue;
+        };
+        let name = file.name.replace('"', "'");
+        out.push_str(&format!(
+            "\n\n<attached_file name=\"{name}\"{}>\n{text}\n</attached_file>",
+            if file.truncated {
+                " shortened=\"yes\""
+            } else {
+                ""
+            }
+        ));
+    }
+    out
+}
+
+/// The model this message goes to: the picker's choice, or the default.
+fn resolve_target(
+    state: &AppState,
+    cfg: &crate::config::AppConfig,
+    requested: Option<&ChatTargetRequest>,
+) -> Result<(ChatTarget, ChatTargetRequest, String), AppError> {
+    if let Some(req) = requested
+        && let Some(pid) = req.provider_id.as_deref()
+    {
+        let provider = cfg
+            .cloud_providers
+            .iter()
+            .find(|p| p.id == pid && p.enabled)
+            .ok_or_else(|| {
+                AppError::invalid_input(
+                    "That online provider is switched off or removed. Pick another model.",
+                )
+            })?;
+        let target = crate::commands::cloud::remote_target(provider, Some(&req.model));
+        let label = format!("{} · {}", target.model, provider.label);
+        return Ok((ChatTarget::Remote(target), req.clone(), label));
+    }
+    match state.inference_engine.current_target() {
+        ChatTarget::Remote(t) if requested.is_none() => {
+            let provider_id = cfg.active_cloud_provider.clone();
+            let label = format!("{} · {}", t.model, t.label);
+            let req = ChatTargetRequest {
+                provider_id,
+                model: t.model.clone(),
+            };
+            Ok((ChatTarget::Remote(t), req, label))
+        }
+        _ => {
+            let id = state.model_manager.active_model_id().unwrap_or_default();
+            let label = state
+                .model_service
+                .get_model_entry(&id)
+                .map(|e| e.name)
+                .unwrap_or_else(|| "Local model".to_string());
+            if state.inference_engine.local().endpoint().is_none() {
+                return Err(AppError::model_not_installed(
+                    "No model is loaded. Pick a model in the model menu.",
+                ));
+            }
+            Ok((
+                ChatTarget::Local,
+                ChatTargetRequest {
+                    provider_id: None,
+                    model: id,
+                },
+                label,
+            ))
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn chat_stream(
     state: State<'_, AppState>,
     req: ChatStreamRequest,
     channel: tauri::ipc::Channel<ChatStreamEvent>,
 ) -> Result<String, AppError> {
-    let status = state.inference_engine.status();
-    if !status.loaded {
-        return Err(AppError::model_not_installed(
-            "No model loaded in inference engine. Please select and activate a model.",
-        ));
-    }
-
-    let max_tokens = req.max_tokens.unwrap_or(512);
-    let mode = ChatMode::parse(req.mode.as_deref());
-    let temperature = mode.temperature(req.temperature.unwrap_or(0.7));
-
     validate_images(&req.images)?;
-
-    let modules = {
+    let cfg = {
         let store = state
             .config_store
             .lock()
             .map_err(|e| AppError::internal(e.to_string()))?;
-        store
-            .load()
-            .map(|cfg| cfg.developer.modules)
-            .unwrap_or_default()
+        store.load().map_err(AppError::internal)?
     };
+    let (target, target_req, model_label) = resolve_target(&state, &cfg, req.target.as_ref())?;
+    let caps = crate::commands::picker::caps_for_target(&state, &cfg, &target_req);
+
+    let mode = ChatMode::parse(req.mode.as_deref());
+    let temperature = mode.temperature(req.temperature.unwrap_or(0.7));
+    let answer_tokens = req.max_tokens.unwrap_or(2048).clamp(64, 32_768);
+    let effort = Effort::parse(effort_for_request(req.effort.as_deref()).as_deref());
+    let thinks = caps.reasoning && !effort.is_off();
+    // Only send an effort the model understands.
+    let effort = if caps.reasoning { effort } else { Effort::Auto };
+
+    let modules = &cfg.developer.modules;
     let module_on = |id: &str| modules.get(id).copied().unwrap_or(true);
-    let use_recall = req.use_recall.unwrap_or(true) && module_on("memory");
-    let use_web = req.use_web.unwrap_or(false) && module_on("web_in_chat");
-
-    // RAG Recall: Retrieve context from MemoryService / LibraryService. The
-    // query embeds against the local engine when it is running, so hybrid
-    // ranking uses vectors; without it recall is keyword-ranked.
-    // Recall runs on a worker thread, so a busy engine cannot stall the window.
-    // The embedding is used only if it answers in time; otherwise recall is keyword-ranked.
-    let rag_res = if use_recall {
-        let _ = channel.send(ChatStreamEvent::Status {
-            label: "Looking in your notes and files".to_string(),
-        });
-        let recall_text = req.message.clone();
-        with_app_state(&state, move |owned| {
-            let engine = owned.embedding_engine.clone();
-            let vector_text = recall_text.clone();
-            let query_vector = answer_within(RECALL_EMBED_LIMIT, move || {
-                engine.embed_query(&vector_text).ok()
-            });
-            Ok(owned
-                .memory
-                .recall(&recall_text, query_vector.as_deref(), Some(512))
-                .unwrap_or_else(|_| empty_recall()))
-        })
-        .await?
+    let wanted_mcp = req.mcp_servers.clone();
+    let mcp: Vec<_> = if module_on("mcp") {
+        cfg.mcp_servers
+            .iter()
+            .filter(|s| s.enabled)
+            .filter(|s| wanted_mcp.as_ref().is_none_or(|ids| ids.contains(&s.id)))
+            .cloned()
+            .collect()
     } else {
-        empty_recall()
+        Vec::new()
+    };
+    let perms = Permissions {
+        web: req.use_web.unwrap_or(false) && module_on("web_in_chat"),
+        notes: req.use_recall.unwrap_or(true) && module_on("memory"),
+        files: req.use_files.unwrap_or(true),
+        skills: req.use_skills.unwrap_or(true) && module_on("skills"),
+        mcp,
     };
 
-    for cit in &rag_res.citations {
-        let _ = channel.send(ChatStreamEvent::Citation {
-            index: cit.index,
-            source: cit.source.clone(),
-            title: cit.title.clone(),
-            snippet: cit.snippet.clone(),
-            score: cit.score,
-        });
+    let context_tokens = match &target {
+        ChatTarget::Local => state
+            .inference_engine
+            .local()
+            .endpoint()
+            .map(|ep| ep.context_size.max(1024) as usize)
+            .unwrap_or(4096),
+        ChatTarget::Remote(_) => caps.context.unwrap_or(16_384).clamp(4096, 262_144) as usize,
+    };
+
+    // The system prompt: the user's prompt, the mode, today's date and how
+    // to use the tools this chat has.
+    let mut extra = Vec::new();
+    if let Some(now) = req.now.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        let now: String = now.chars().take(120).collect();
+        extra.push(format!("The user's current date and time: {now}."));
     }
-
-    // Web context: on when the user switched "Web" on for this chat.
-    // Autonomous mode also reads the best result in full.
-    let mut context = rag_res.context_prompt.clone();
-    if use_web {
-        let first_index = rag_res.citations.len() + 1;
-        let query = req.message.clone();
-        let read_top = mode.gathers_web();
-        let max_chars = (status.context_size.max(2048) as usize).clamp(2048, 16_384);
-        let status_channel = channel.clone();
-        let gathered = with_app_state(&state, move |owned| {
-            Ok(gather_web_context(
-                &owned,
-                &query,
-                first_index,
-                read_top,
-                max_chars,
-                &|label| {
-                    let _ = status_channel.send(ChatStreamEvent::Status { label });
-                },
-            ))
-        })
-        .await?;
-        match gathered {
-            Ok((web_context, citations)) => {
-                for cit in citations {
-                    let _ = channel.send(ChatStreamEvent::Citation {
-                        index: cit.index,
-                        source: cit.source,
-                        title: cit.title,
-                        snippet: cit.snippet,
-                        score: cit.score,
-                    });
-                }
-                if !web_context.is_empty() {
-                    context.push('\n');
-                    context.push_str(&web_context);
-                }
-            }
-            // A failed search must not block the answer; say so instead.
-            Err(e) => {
-                let _ = channel.send(ChatStreamEvent::Status {
-                    label: format!("Web search failed: {}", e.message),
-                });
-            }
-        }
-    }
-
-    let effective_system_prompt =
-        compose_system_prompt(req.system_prompt.as_deref(), mode, &context);
-    let _ = channel.send(ChatStreamEvent::Status {
-        label: "Writing the answer".to_string(),
-    });
-
-    // Apply context budget
-    let budget = ContextBudget::new(status.context_size as usize, max_tokens as usize);
-    let messages = budget.build_messages(
-        effective_system_prompt.as_deref(),
-        &req.history,
-        &req.message,
-        &req.images,
+    let guidance = tool_guidance(
+        ToolGroups {
+            web: perms.web,
+            notes: perms.notes,
+            files: perms.files,
+            skills: perms.skills,
+            mcp: !perms.mcp.is_empty(),
+        },
+        mode,
     );
+    if caps.tools && !guidance.is_empty() {
+        extra.push(guidance);
+    }
+    let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
+
+    // History the model reads: failed answers are left out, attached files
+    // are written out.
+    let history: Vec<ChatMessage> = req
+        .history
+        .iter()
+        .filter(|m| m.error != Some(true) && !m.content.trim().is_empty())
+        .map(|m| ChatMessage {
+            role: m.role.clone(),
+            content: history_text(&m.content, m.attachments.as_deref().unwrap_or(&[])),
+            ..Default::default()
+        })
+        .collect();
+    let message = history_text(&req.message, &req.attachments);
+    let thinking_room = if thinks {
+        effort.thinking_allowance()
+    } else {
+        0
+    };
+    let budget = ContextBudget::new(context_tokens, (answer_tokens + thinking_room) as usize);
+    let turns: Vec<ChatTurn> = budget
+        .build_messages(system.as_deref(), &history, &message, &req.images)
+        .into_iter()
+        .map(|m| match m.role.as_str() {
+            "system" => ChatTurn::System(m.content),
+            "assistant" => ChatTurn::Assistant {
+                text: m.content,
+                tool_calls: Vec::new(),
+            },
+            _ => ChatTurn::User {
+                text: m.content,
+                images: m.images,
+            },
+        })
+        .collect();
 
     let (job_id, cancel_flag) = state.jobs.create_job("inference_chat");
-    let engine = state.inference_engine.clone();
+    let run = AgentRun {
+        job_id: job_id.clone(),
+        target,
+        turns,
+        answer_tokens,
+        temperature,
+        effort,
+        thinks,
+        // A model known to have no tools still gets web results and notes,
+        // gathered before it answers.
+        use_tools: caps.tools,
+        perms,
+        max_rounds: mode.max_rounds(),
+        context_tokens,
+        auto_approve: req.allowed_tools.iter().cloned().collect(),
+        first_citation: 1,
+        user_message: req.message.clone(),
+        read_top_page: mode.gathers_web(),
+    };
+    let owned: AppState = (*state).clone();
     let jobs = state.jobs.clone();
     let jid = job_id.clone();
+    let _ = channel.send(ChatStreamEvent::Status {
+        label: format!("Answering with {model_label}"),
+    });
 
     std::thread::spawn(move || {
-        let ch_tok = channel.clone();
-        let eval_res = engine.generate(
-            &messages,
-            max_tokens,
-            temperature,
-            cancel_flag,
-            Box::new(move |tok| {
-                let _ = ch_tok.send(ChatStreamEvent::Token { token: tok.token });
-            }),
-        );
-
-        match eval_res {
-            Ok(metrics) => {
+        let result = crate::services::agent::run(&owned, run, &cancel_flag, &channel);
+        match result {
+            Ok(done) => {
                 jobs.complete_job(&jid);
                 let _ = channel.send(ChatStreamEvent::Done {
-                    finish_reason: if metrics.cancelled {
+                    finish_reason: if done.cancelled {
                         "cancelled".to_string()
                     } else {
-                        "stop".to_string()
+                        done.finish_reason
                     },
-                    total_tokens: metrics.total_tokens,
+                    total_tokens: done.tokens,
                 });
             }
             Err(e) => {
@@ -346,84 +408,15 @@ pub async fn chat_stream(
     Ok(job_id)
 }
 
-fn empty_recall() -> crate::services::memory::rag::RagRecallResult {
-    crate::services::memory::rag::RagRecallResult {
-        citations: Vec::new(),
-        context_prompt: String::new(),
-        total_tokens: 0,
-    }
-}
-
-/// Search the web for the message and turn the results into numbered
-/// context. With `read_top`, the best result is read in full (shortened to
-/// fit). Returns the context text and one citation per result.
-fn gather_web_context(
-    state: &AppState,
-    query: &str,
-    first_index: usize,
-    read_top: bool,
-    max_chars: usize,
-    status: &dyn Fn(String),
-) -> Result<(String, Vec<crate::domain::memory::Citation>), AppError> {
-    let (provider, keys) = crate::commands::web::web_settings(state)?;
-    let short: String = query.chars().take(60).collect();
-    status(format!("Searching the web for “{}”", short.trim()));
-    let hits = state.web.search(&provider, query, 5, &keys)?;
-    if hits.is_empty() {
-        status("The web search found nothing".to_string());
-        return Ok((String::new(), Vec::new()));
-    }
-
-    let mut page_text = None;
-    if read_top && let Some(top) = hits.first() {
-        let host = url::Url::parse(&top.url)
-            .ok()
-            .and_then(|u| u.host_str().map(str::to_string))
-            .unwrap_or_else(|| top.url.clone());
-        status(format!("Reading {host}"));
-        if let Ok(page) = state.web.read_page(&top.url, "auto", &keys) {
-            page_text = Some(page.content);
-        }
-    }
-
-    let mut citations = Vec::new();
-    let mut chunks = Vec::new();
-    let mut used = 0usize;
-    for (offset, hit) in hits.iter().enumerate() {
-        let index = first_index + offset;
-        let body = if offset == 0 {
-            page_text.as_deref().unwrap_or(&hit.snippet)
-        } else {
-            &hit.snippet
-        };
-        let room = max_chars.saturating_sub(used);
-        if room < 200 {
-            break;
-        }
-        let excerpt: String = body
-            .chars()
-            .take(room.min(if offset == 0 { 6000 } else { 800 }))
-            .collect();
-        used += excerpt.len();
-        chunks.push(format!(
-            "[{index}] {} ({})\n{}",
-            hit.title,
-            hit.url,
-            excerpt.trim()
-        ));
-        citations.push(crate::domain::memory::Citation {
-            index,
-            source: hit.url.clone(),
-            title: hit.title.clone(),
-            snippet: hit.snippet.clone(),
-            score: 1.0 - offset as f32 * 0.1,
-        });
-    }
-    let context = format!(
-        "Web results for the user's message (searched just now):\n{}\nWhen you use them, cite them as [n]. They may be incomplete or wrong; say so when they conflict.",
-        chunks.join("\n\n")
-    );
-    Ok((context, citations))
+/// The user's answer to a tool approval question.
+#[tauri::command]
+pub fn chat_tool_decide(
+    state: State<'_, AppState>,
+    req: ToolDecisionRequest,
+) -> Result<bool, AppError> {
+    let decision = Decision::parse(&req.decision)
+        .ok_or_else(|| AppError::invalid_input("Answer allow, allow_chat or deny."))?;
+    Ok(state.agent.approvals.decide(&req.approval_id, decision))
 }
 
 #[tauri::command]
@@ -706,17 +699,38 @@ fn chat_thread_export_work(req: ThreadExportRequest) -> Result<ThreadExportRespo
 
 #[cfg(test)]
 mod tests {
-    use super::{answer_within, export_file_stem, validate_thread_id};
-    use std::time::Duration;
+    use super::{export_file_stem, history_text, validate_thread_id};
+    use crate::domain::chat::ChatAttachment;
 
     #[test]
-    fn answer_within_gives_up_on_slow_work() {
-        assert_eq!(answer_within(Duration::from_secs(5), || Some(7)), Some(7));
-        let slow = answer_within(Duration::from_millis(50), || {
-            std::thread::sleep(Duration::from_millis(500));
-            Some(7)
-        });
-        assert_eq!(slow, None);
+    fn attached_files_are_written_out_for_the_model() {
+        let files = vec![
+            ChatAttachment {
+                name: "a \"b\".md".into(),
+                kind: "text".into(),
+                text: Some("hello".into()),
+                data_url: None,
+                chars: 5,
+                truncated: true,
+                error: None,
+            },
+            ChatAttachment {
+                name: "pic.png".into(),
+                kind: "image".into(),
+                text: None,
+                data_url: Some("data:image/png;base64,AA".into()),
+                chars: 0,
+                truncated: false,
+                error: None,
+            },
+        ];
+        let text = history_text("Summarize", &files);
+        assert!(
+            text.starts_with("Summarize\n\n<attached_file name=\"a 'b'.md\" shortened=\"yes\">")
+        );
+        assert!(text.contains("hello\n</attached_file>"));
+        assert!(!text.contains("pic.png"));
+        assert_eq!(history_text("x", &[]), "x");
     }
 
     #[test]
