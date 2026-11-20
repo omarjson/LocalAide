@@ -99,7 +99,9 @@ mod tests {
         assert_eq!(t.check(&r), Some(Role::Remote));
         assert_eq!(t.check(""), None);
         assert_eq!(t.check(&v.to_uppercase()), None, "a changed token fails");
-        assert_eq!(t.check(&format!("{}0", &v[..47])), None);
+        // Swap the last digit for a different one.
+        let last = if v.ends_with('0') { '1' } else { '0' };
+        assert_eq!(t.check(&format!("{}{last}", &v[..47])), None);
         assert_eq!(bearer(Some("Bearer abc")), Some("abc"));
         assert_eq!(bearer(Some("Basic abc")), None);
     }
