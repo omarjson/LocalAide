@@ -10,6 +10,7 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { showToast } from "../lib/toast.svelte";
+  import { updateVoice, voice } from "../lib/voice.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
   import type { CatalogStatus, HfFileInfo, HfRepo, HfSort, ModelInfo, ModelPreset } from "../lib/api/bindings";
@@ -95,6 +96,7 @@
     { value: "code", label: "Code" },
     { value: "embedding", label: "Meaning" },
     { value: "reranker", label: "Ranking" },
+    { value: "stt", label: "Voice" },
   ];
 
   const refresh = async () => {
@@ -410,7 +412,7 @@
   const remainingModels = $derived(
     filtered.filter((model) => !recommended.some((item) => item.id === model.id))
   );
-  const helperModels = $derived(filtered.filter((model) => model.kind === "embedding" || model.kind === "reranker"));
+  const helperModels = $derived(filtered.filter((model) => model.kind === "embedding" || model.kind === "reranker" || model.kind === "stt"));
   const catalogCount = $derived(catalog?.model_count ?? models.length);
 
   const kindLabel = (kind?: string) => {
@@ -419,12 +421,14 @@
       case "code": return "Code";
       case "embedding": return "Meaning";
       case "reranker": return "Ranking";
+      case "stt": return "Voice";
       default: return kind?.toUpperCase() ?? "MODEL";
     }
   };
 
   const modelDescription = (model: Model) => {
     if (model.kind === "embedding") return `Helps Search find related ideas. ${model.size} download.`;
+    if (model.kind === "stt") return `Turns speech into text for the microphone button. ${model.size} download.`;
     if (model.kind === "reranker") return `Helps Search sort results. ${model.size} download.`;
     if (model.kind === "code") return `For code and technical questions. ${model.size} download.`;
     return `${model.vision ? "Can read images. " : "For everyday questions. "}${model.size} download.`;
@@ -654,7 +658,13 @@
                     {#if verifyStatus[model.id] || model.verified}
                       <StatusBadge label="Checked" tone="ok" />
                     {/if}
-                    {#if model.active}
+                    {#if model.kind === "stt"}
+                      {#if voice.settings?.model === model.id}
+                        <StatusBadge label="Used for voice" tone="ok" dot />
+                      {:else}
+                        <Button variant="secondary" onclick={() => void updateVoice({ model: model.id }).then(() => showToast("The microphone now uses this model.")).catch((e) => (actionError = errorMessage(e)))}>Use for voice</Button>
+                      {/if}
+                    {:else if model.active}
                       <Button variant="secondary" onclick={unloadModel}>Stop using</Button>
                     {:else}
                       <Button variant="secondary" disabled={loadingModelId !== null} onclick={() => void activateModel(model.id)}>{loadingModelId === model.id ? "Loading…" : "Use this"}</Button>

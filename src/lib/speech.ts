@@ -24,15 +24,24 @@ export function speechAvailable(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
 }
 
+/** The system's voices, for the picker in Settings → Voice. */
+export function systemVoices(): SpeechSynthesisVoice[] {
+  return speechAvailable() ? window.speechSynthesis.getVoices() : [];
+}
+
 /** Read text aloud, stopping anything already being read. `onDone` runs when it ends or is stopped. */
-export function speak(text: string, onDone: () => void): void {
+export function speak(text: string, onDone: () => void, opts: { voiceName?: string | null; rate?: number } = {}): void {
   if (!speechAvailable()) {
     onDone();
     return;
   }
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(speakableText(text));
-  utterance.lang = document.documentElement.lang || navigator.language || "en";
+  const chosen = opts.voiceName ? systemVoices().find((v) => v.name === opts.voiceName) : undefined;
+  if (chosen) utterance.voice = chosen;
+  utterance.rate = Math.min(2, Math.max(0.5, opts.rate ?? 1));
+  // Arabic text is read with an Arabic voice when no voice is chosen.
+  utterance.lang = chosen?.lang || (/[\u0600-\u06FF]/.test(text) ? "ar" : document.documentElement.lang || navigator.language || "en");
   utterance.onend = onDone;
   utterance.onerror = onDone;
   window.speechSynthesis.speak(utterance);

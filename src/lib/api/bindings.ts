@@ -910,3 +910,96 @@ export interface CloudCall {
   status: string;
   detail: string | null;
 }
+
+/** Settings → Voice. */
+export interface VoiceSettings {
+  enabled: boolean;
+  /** A local model id ("stt-whisper-tiny") or "online:<provider>:<model>:<live|batch>". */
+  model: string;
+  local_only: boolean;
+  cleanup: boolean;
+  auto_send: boolean;
+  read_aloud: boolean;
+  voice_name: string | null;
+  rate: number;
+  /** The end of each saved key, by provider id. */
+  key_hints: Record<string, string>;
+}
+
+export type VoiceUpdate = Partial<Omit<VoiceSettings, "key_hints" | "voice_name">> & { voice_name?: string };
+
+export interface LocalVoiceModel {
+  id: string;
+  name: string;
+  params: string;
+  description: string;
+  license: string;
+  size_bytes: number;
+  installed: boolean;
+}
+
+export interface OnlineVoiceModel {
+  key: string;
+  provider: string;
+  provider_label: string;
+  host: string;
+  key_url: string;
+  model: string;
+  label: string;
+  delivery: "live" | "batch";
+  note: string;
+  has_key: boolean;
+}
+
+/** A program LocalAide fetches once (voice engine, cloudflared). */
+export interface ProgramStatus {
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  download_bytes: number | null;
+  available: boolean;
+}
+
+export interface VoiceModels {
+  local: LocalVoiceModel[];
+  online: OnlineVoiceModel[];
+  engine: ProgramStatus;
+}
+
+export interface Transcript {
+  text: string;
+  model: string;
+  ms: number;
+  online: boolean;
+  language: string | null;
+}
+
+export type LiveEvent =
+  | { type: "open" }
+  | { type: "interim"; text: string }
+  | { type: "final"; text: string }
+  | { type: "done"; text: string }
+  | { type: "error"; message: string };
+
+export interface VoiceCleanup {
+  text: string;
+  changed: boolean;
+  skipped: string | null;
+}
+
+/** Settings → Share my assistant. */
+export interface ShareStatus {
+  on: boolean;
+  url: string | null;
+  started_at: number | null;
+  requests: number;
+  refused: number;
+  last_seen: number | null;
+  cloudflared: ProgramStatus;
+}
+
+export interface ShareStarted {
+  status: ShareStatus;
+  viewer_link: string;
+  remote_link: string;
+}

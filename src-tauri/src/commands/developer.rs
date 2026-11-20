@@ -66,12 +66,6 @@ pub const FLAGS: &[Toggle] = &[
         default: false,
     },
     Toggle {
-        id: "read_aloud",
-        label: "Read answers aloud",
-        description: "Add a speaker button under each answer that reads it with your system's voice. Nothing leaves this computer.",
-        default: false,
-    },
-    Toggle {
         id: "send_ctrl_enter",
         label: "Send with Ctrl+Enter",
         description: "Enter starts a new line, and Ctrl+Enter (Cmd+Enter on a Mac) sends the message.",

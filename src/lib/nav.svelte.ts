@@ -7,6 +7,8 @@ export type SettingsSectionId =
   | "online"
   | "tools"
   | "web"
+  | "voice"
+  | "share"
   | "integrations"
   | "privacy"
   | "backups"

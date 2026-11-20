@@ -7,6 +7,8 @@
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { slashItems, type SlashItem } from "../lib/slash";
+  import VoiceButton from "./VoiceButton.svelte";
+  import { voice } from "../lib/voice.svelte";
   import type { ChatAttachment, ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
 
   /** An MCP server as the tools menu shows it. */
@@ -375,6 +377,17 @@
           </div>
         {/if}
       </div>
+
+      {#if voice.settings?.enabled}
+        <VoiceButton
+          disabled={streaming}
+          onText={(text) => {
+            input = input.trim() ? `${input.trimEnd()} ${text}` : text;
+            if (voice.settings?.auto_send) void tick().then(() => onSend());
+            else void tick().then(() => textareaEl?.focus());
+          }}
+        />
+      {/if}
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">

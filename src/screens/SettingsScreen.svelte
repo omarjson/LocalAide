@@ -16,6 +16,8 @@
   import ProviderForm from "../components/ProviderForm.svelte";
   import CloudAuditLog from "../components/CloudAuditLog.svelte";
   import SelfTest from "../components/SelfTest.svelte";
+  import VoiceSettings from "../components/VoiceSettings.svelte";
+  import ShareSettings from "../components/ShareSettings.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
@@ -50,11 +52,13 @@
     action: () => void | Promise<void>;
   };
 
-  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" | "wrench" }[] = [
+  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" | "wrench" | "mic" | "link" }[] = [
     { id: "general", label: "General", icon: "sun" },
     { id: "online", label: "Online providers", icon: "cloud" },
     { id: "tools", label: "Tools and MCP", icon: "wrench" },
     { id: "web", label: "Web search", icon: "globe" },
+    { id: "voice", label: "Voice", icon: "mic" },
+    { id: "share", label: "Share my assistant", icon: "link" },
     { id: "integrations", label: "Integrations", icon: "plug" },
     { id: "privacy", label: "Privacy & files", icon: "lock" },
     { id: "backups", label: "Backups", icon: "database" },
@@ -842,6 +846,10 @@
           </div>
           <p class="mt-4 text-sm text-ink-400">Keys stay in this app's local settings and are sent only to their own provider. Without a key, free limits apply per computer. Backups leave keys out unless you choose to include them.</p>
         </div>
+      {:else if activeTab === "voice"}
+        <VoiceSettings />
+      {:else if activeTab === "share"}
+        <ShareSettings />
       {:else if activeTab === "integrations"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Integrations</h2>

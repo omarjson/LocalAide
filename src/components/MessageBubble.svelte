@@ -11,6 +11,7 @@
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { speak, speechAvailable, stopSpeaking } from "../lib/speech";
+  import { voice } from "../lib/voice.svelte";
   import { onDestroy } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import type { ChatAttachment, Citation, MessagePart } from "../lib/api/bindings";
@@ -88,8 +89,8 @@
   let referencesOpen = $state(false);
   let raw = $state(false);
   let speaking = $state(false);
-  // Experimental "Read answers aloud", where the system has a voice.
-  const canSpeak = $derived(flag("read_aloud") && speechAvailable());
+  // Settings → Voice → Read answers aloud, where the system has a voice.
+  const canSpeak = $derived(!!voice.settings?.read_aloud && speechAvailable());
 
   const toggleSpeak = () => {
     if (speaking) {
@@ -98,7 +99,7 @@
       return;
     }
     speaking = true;
-    speak(content, () => { speaking = false; });
+    speak(content, () => { speaking = false; }, { voiceName: voice.settings?.voice_name, rate: voice.settings?.rate });
   };
 
   onDestroy(() => { if (speaking) stopSpeaking(); });
