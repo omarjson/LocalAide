@@ -108,6 +108,12 @@ pub const MODULES: &[Toggle] = &[
         default: true,
     },
     Toggle {
+        id: "terminal",
+        label: "Terminal commands",
+        description: "Chat may run commands in the workspace folder. Commands that change something ask first; destructive ones never run.",
+        default: true,
+    },
+    Toggle {
         id: "skills",
         label: "Skills",
         description: "The Skills screen and the / menu in chat.",

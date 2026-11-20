@@ -1,5 +1,14 @@
 pub mod approval;
 pub mod sandbox;
+pub mod shell;
+
+/// A finished terminal command and where it ran.
+pub struct CommandRun {
+    pub output: shell::RunOutput,
+    /// The folder inside the workspace, empty for the top.
+    pub cwd: String,
+    pub workspace: std::path::PathBuf,
+}
 
 use crate::app::error::AppError;
 use crate::domain::tool::{
@@ -188,6 +197,89 @@ impl ToolService {
         {
             log::warn!("Could not record a chat tool action: {e}");
         }
+    }
+
+    /// Run a terminal command in the workspace (or a folder inside it).
+    /// The audit row is written before the command starts, so a run that
+    /// crashes the app is still on record, and finished afterwards.
+    /// `source` names who asked, for example "chat" or "share".
+    pub fn run_command(
+        &self,
+        source: &str,
+        command: &str,
+        cwd: Option<&str>,
+        timeout: std::time::Duration,
+        cancel: &std::sync::atomic::AtomicBool,
+        note: Option<&str>,
+    ) -> Result<CommandRun, AppError> {
+        if let shell::Verdict::Blocked(reason) = shell::classify(command) {
+            self.record_event(
+                &format!("{source}:execute_command"),
+                "shell",
+                command,
+                "blocked",
+                Some(&reason),
+            );
+            return Err(AppError::new("COMMAND_BLOCKED", reason));
+        }
+        let folder = match cwd.map(str::trim).filter(|c| !c.is_empty() && *c != ".") {
+            Some(dir) => {
+                let path = self.jail.resolve_path(dir)?;
+                if !path.is_dir() {
+                    return Err(AppError::invalid_input(format!(
+                        "There is no folder called {dir} in the workspace."
+                    )));
+                }
+                path
+            }
+            None => self.jail.root_path().to_path_buf(),
+        };
+        let shown_cwd = folder
+            .strip_prefix(self.jail.root_path())
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        let audit_id = self.db.record_tool_audit(
+            &format!("{source}:execute_command"),
+            "shell",
+            command,
+            true,
+            "started",
+            Some(&format!(
+                "in workspace/{shown_cwd}{}",
+                note.map(|n| format!(" · {n}")).unwrap_or_default()
+            )),
+        )?;
+        let output = match shell::run(command, &folder, timeout, cancel) {
+            Ok(o) => o,
+            Err(message) => {
+                let _ = self.db.finish_tool_audit(audit_id, "error", Some(&message));
+                return Err(AppError::invalid_input(message));
+            }
+        };
+        let status = if output.timed_out {
+            "timeout"
+        } else if output.cancelled {
+            "cancelled"
+        } else if output.exit_code == Some(0) {
+            "success"
+        } else {
+            "error"
+        };
+        let summary = format!(
+            "exit {} · {} ms · {} bytes of output",
+            output
+                .exit_code
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "none".into()),
+            output.millis,
+            output.total_bytes
+        );
+        let _ = self.db.finish_tool_audit(audit_id, status, Some(&summary));
+        Ok(CommandRun {
+            output,
+            cwd: shown_cwd,
+            workspace: self.jail.root_path().to_path_buf(),
+        })
     }
 
     pub fn list_audits(&self, limit: usize) -> Result<Vec<ToolAuditEntry>, AppError> {

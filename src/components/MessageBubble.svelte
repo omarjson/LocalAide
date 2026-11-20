@@ -5,6 +5,8 @@
   import AnswerText from "./AnswerText.svelte";
   import ThinkingBlock from "./ThinkingBlock.svelte";
   import ToolCallCard from "./ToolCallCard.svelte";
+  import QuestionCard from "./QuestionCard.svelte";
+  import { parseQuestion } from "../lib/questions";
   import { openInBrowser } from "../lib/links";
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
@@ -39,6 +41,10 @@
     /** Tool calls waiting for the user, by tool call id. */
     approvals?: Record<string, { approval_id: string; preview: string }>;
     onDecide?: (toolId: string, decision: "allow" | "allow_chat" | "deny") => void;
+    /** Set on the newest answer: send a tapped option as the reply. */
+    onAnswer?: (text: string, questionId: string | null) => void;
+    /** "Other…": put the cursor in the chat box. */
+    onOther?: () => void;
   }
 
   let {
@@ -60,7 +66,17 @@
     model = "",
     approvals = {},
     onDecide,
+    onAnswer,
+    onOther,
   }: Props = $props();
+
+  // A question at the end of a plain answer gets buttons too, when the
+  // model did not use ask_user.
+  const parsedQuestion = $derived(
+    role === "assistant" && isLast && !streaming && onAnswer && !parts.some((p) => p.type === "question")
+      ? parseQuestion(content)
+      : null,
+  );
 
   let copied = $state(false);
   let copyError = $state<string | null>(null);
@@ -219,6 +235,15 @@
           {#each parts as part, i (i)}
             {#if part.type === "reasoning"}
               <ThinkingBlock text={part.text} ms={part.ms ?? null} live={streaming && i === parts.length - 1} />
+            {:else if part.type === "question"}
+              <QuestionCard
+                question={part.question}
+                options={part.options}
+                multiple={part.multiple}
+                answer={part.answer ?? null}
+                onAnswer={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, part.id) : undefined}
+                {onOther}
+              />
             {:else if part.type === "tool"}
               <ToolCallCard
                 title={part.title}
@@ -243,6 +268,19 @@
         </div>
       {:else}
         <AnswerText text={content} caret={streaming && !!content.trim()} />
+      {/if}
+
+      {#if parsedQuestion}
+        <div class="mt-3">
+          <QuestionCard
+            question={parsedQuestion.question}
+            options={parsedQuestion.options}
+            multiple={parsedQuestion.multiple}
+            showQuestion={false}
+            onAnswer={(text) => onAnswer?.(text, null)}
+            {onOther}
+          />
+        </div>
       {/if}
 
       {#if citations.length > 0}

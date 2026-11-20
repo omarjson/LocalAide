@@ -107,6 +107,7 @@ pub struct ToolGroups {
     pub notes: bool,
     pub files: bool,
     pub skills: bool,
+    pub shell: bool,
     pub mcp: bool,
 }
 
@@ -125,6 +126,9 @@ pub fn tool_guidance(groups: ToolGroups, mode: ChatMode) -> String {
     }
     if groups.skills {
         uses.push("look at the user's saved skills when a task may match one");
+    }
+    if groups.shell {
+        uses.push("run terminal commands in the workspace when the user asks you to run, build or check something, and read the output before you answer");
     }
     if groups.mcp {
         uses.push("use the tools from the user's MCP servers for what they describe");

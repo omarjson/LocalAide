@@ -1,6 +1,6 @@
 [package]
 name = "ai-desktop-assistant"
-version = "0.1.5"
+version = "0.1.6"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
@@ -60,6 +60,10 @@ aes-gcm = "0.11"
 argon2 = "0.6"
 # Wipes backup keys and decrypted backups from memory after use.
 zeroize = "1"
+
+# The terminal tool kills a command's whole process group on timeout.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # Async tests for the HTTP clients (OpenCode link, skill discovery).
 [dev-dependencies]

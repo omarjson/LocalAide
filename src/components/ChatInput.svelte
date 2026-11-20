@@ -51,6 +51,9 @@
     useSkills?: boolean;
     skillsAvailable?: boolean;
     onToggleSkills?: () => void;
+    useShell?: boolean;
+    shellAvailable?: boolean;
+    onToggleShell?: () => void;
     mcpServers?: ToolServer[];
     mcpAvailable?: boolean;
     onToggleMcp?: (id: string) => void;
@@ -93,6 +96,9 @@
     useSkills = true,
     skillsAvailable = true,
     onToggleSkills,
+    useShell = true,
+    shellAvailable = false,
+    onToggleShell,
     mcpServers = [],
     mcpAvailable = true,
     onToggleMcp,
@@ -218,6 +224,7 @@
     if (recallAvailable) rows.push({ id: "notes", label: "Notes and documents", hint: "Search your notes and library, save notes", icon: "memory", on: useRecall, toggle: onToggleRecall });
     rows.push({ id: "files", label: "Workspace files", hint: "Read files; writing asks you first", icon: "folder", on: useFiles, toggle: onToggleFiles });
     if (skillsAvailable) rows.push({ id: "skills", label: "Skills", hint: "Use your saved skills", icon: "skills", on: useSkills, toggle: onToggleSkills });
+    if (shellAvailable) rows.push({ id: "shell", label: "Terminal", hint: "Run commands in the workspace; changes ask first", icon: "terminal", on: useShell, toggle: onToggleShell });
     return rows;
   });
   const toolsOn = $derived(toolRows.filter((r) => r.on).length + (mcpAvailable ? mcpServers.filter((s) => s.on).length : 0));

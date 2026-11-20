@@ -46,6 +46,17 @@ export function startTool(
   parts.push({ type: "tool", ...call, status: "running", summary: "", output: "" });
 }
 
+/** The model asked the user something (`ask_user`). */
+export function addQuestion(
+  parts: MessagePart[],
+  q: { id: string; question: string; options: string[]; multiple: boolean },
+  now: number,
+): void {
+  closeReasoning(parts, now);
+  if (parts.some((p) => p.type === "question" && p.id === q.id)) return;
+  parts.push({ type: "question", ...q, answer: null });
+}
+
 function findTool(parts: MessagePart[], id: string): ToolPart | undefined {
   return parts.find((p): p is ToolPart => p.type === "tool" && p.id === id);
 }

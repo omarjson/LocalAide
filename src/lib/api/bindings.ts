@@ -137,6 +137,16 @@ export type MessagePart =
       status: ToolStatus;
       summary: string;
       output: string;
+    }
+  | {
+      /** A question the model asked with `ask_user`. */
+      type: "question";
+      id: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+      /** What the user picked, once answered. */
+      answer?: string | null;
     };
 
 /** A file attached to a message (chat_attach_pick / chat_attach_dropped). */
@@ -290,6 +300,9 @@ export interface ChatStreamRequest {
   mcp_servers?: string[];
   /** Tools the user allowed for the rest of this chat. */
   allowed_tools?: string[];
+  /** Let the model run terminal commands in the workspace. */
+  use_shell?: boolean;
+  approval_mode?: ApprovalMode;
   /** The picker's model; omit for the default. */
   target?: ChatTarget;
   /** "auto", "off", "on", "low", "medium", "high"… */
@@ -324,7 +337,11 @@ export type ChatStreamEvent =
       type: "tool_approval";
       payload: { approval_id: string; id: string; title: string; detail: string; preview: string };
     }
-  | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } };
+  | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } }
+  | { type: "question"; payload: { id: string; question: string; options: string[]; multiple: boolean } };
+
+/** How much the chat asks before tools run. */
+export type ApprovalMode = "ask" | "chat" | "auto";
 
 export interface SummarizeRequest {
   text: string;

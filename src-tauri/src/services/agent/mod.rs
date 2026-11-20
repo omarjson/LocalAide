@@ -71,6 +71,37 @@ impl AgentState {
     }
 }
 
+/// How much the chat asks before a tool runs (the switch in the chat
+/// header). Blocked commands never run, whatever the mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ApprovalMode {
+    /// Ask for every tool that changes something.
+    #[default]
+    Ask,
+    /// Allowed for this chat: no questions until the chat ends.
+    Chat,
+    /// Every chat: no questions.
+    Auto,
+}
+
+impl ApprovalMode {
+    pub fn parse(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            Some("chat") => Self::Chat,
+            Some("auto") => Self::Auto,
+            _ => Self::Ask,
+        }
+    }
+
+    fn note(self) -> Option<&'static str> {
+        match self {
+            Self::Ask => None,
+            Self::Chat => Some("allowed for this chat"),
+            Self::Auto => Some("auto-approved"),
+        }
+    }
+}
+
 /// One answer to run.
 pub struct AgentRun {
     pub job_id: String,
@@ -90,6 +121,9 @@ pub struct AgentRun {
     pub context_tokens: usize,
     /// Tools the user allowed for this whole chat.
     pub auto_approve: HashSet<String>,
+    pub approval_mode: ApprovalMode,
+    /// "chat", or "share" for a request through a shared link.
+    pub source: &'static str,
     /// The number of the next source, after any the chat already listed.
     pub first_citation: usize,
     /// The user's message, for the tool-less fallback.
@@ -334,17 +368,31 @@ pub fn run(
             text: outcome.content,
             tool_calls: calls.clone(),
         });
+        let mut asked = false;
         for call in &calls {
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
             tool_calls_run += 1;
+            if call.name == "ask_user" && specs.iter().any(|s| s.name == "ask_user") {
+                if ask_question(call, sink) {
+                    asked = true;
+                    break;
+                }
+                run.turns.push(ChatTurn::Tool {
+                    call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    content: "Error: ask_user needs a question and 2 to 6 options.".into(),
+                });
+                continue;
+            }
             let content = run_call(
                 state,
                 &run.job_id,
                 call,
                 &specs,
                 &mut run.auto_approve,
+                (run.approval_mode, run.source),
                 max_chars,
                 &mut next_citation,
                 cancel,
@@ -355,6 +403,11 @@ pub fn run(
                 name: call.name.clone(),
                 content,
             });
+        }
+        if asked {
+            // The user's choice is the next message.
+            finish_reason = "question".into();
+            break;
         }
         round += 1;
     }
@@ -367,6 +420,46 @@ pub fn run(
     })
 }
 
+/// Show an `ask_user` question. False when the arguments are unusable.
+fn ask_question(call: &ToolCall, sink: &dyn Sink) -> bool {
+    let Ok(args) = tools::parse_arguments(&call.arguments) else {
+        return false;
+    };
+    let question: String = args
+        .get("question")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .chars()
+        .take(400)
+        .collect();
+    let options: Vec<String> = args
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(Value::as_str)
+                .map(|o| o.trim().chars().take(120).collect::<String>())
+                .filter(|o| !o.is_empty())
+                .take(6)
+                .collect()
+        })
+        .unwrap_or_default();
+    if question.is_empty() || options.len() < 2 {
+        return false;
+    }
+    sink.emit(ChatStreamEvent::Question {
+        id: call.id.clone(),
+        question,
+        options,
+        multiple: args
+            .get("multiple")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    });
+    true
+}
+
 /// Run one tool call and return what goes back to the model.
 #[allow(clippy::too_many_arguments)]
 fn run_call(
@@ -375,6 +468,7 @@ fn run_call(
     call: &ToolCall,
     specs: &[ToolSpec],
     auto_approve: &mut HashSet<String>,
+    (mode, source): (ApprovalMode, &'static str),
     max_chars: usize,
     next_citation: &mut usize,
     cancel: &AtomicBool,
@@ -426,7 +520,34 @@ fn run_call(
             .collect(),
     });
 
-    if spec.needs_approval() && !auto_approve.contains(&spec.name) {
+    if let Some(reason) = spec.refusal(&args) {
+        state.tools.record_event(
+            &format!("{source}:{}", spec.name),
+            spec.kind.group(),
+            &detail,
+            "blocked",
+            Some(&reason),
+        );
+        sink.emit(ChatStreamEvent::ToolResult {
+            id: call.id.clone(),
+            ok: false,
+            summary: "Blocked".into(),
+            output: reason.clone(),
+        });
+        return format!(
+            "Error: this command is not allowed and did not run. {reason} Tell the user, and suggest a safer way if there is one."
+        );
+    }
+
+    let needs = spec.needs_approval_for(&args);
+    let mut note = None;
+    if needs && mode != ApprovalMode::Ask {
+        note = mode.note();
+    }
+    if needs && mode == ApprovalMode::Ask && auto_approve.contains(&spec.name) {
+        note = Some("allowed for this chat");
+    }
+    if needs && mode == ApprovalMode::Ask && !auto_approve.contains(&spec.name) {
         let approval_id = format!("{job_id}:{}", call.id);
         let rx = state.agent.approvals.ask(&approval_id);
         sink.emit(ChatStreamEvent::ToolApproval {
@@ -443,7 +564,7 @@ fn run_call(
         {
             Decision::Deny => {
                 state.tools.record_event(
-                    &format!("chat:{}", spec.name),
+                    &format!("{source}:{}", spec.name),
                     spec.kind.group(),
                     &detail,
                     "denied",
@@ -464,7 +585,23 @@ fn run_call(
         }
     }
 
-    let outcome = tools::run(state, spec, &args, max_chars, next_citation);
+    if let Some(n) = note
+        && spec.kind != tools::ToolKind::RunCommand
+    {
+        state.tools.record_event(
+            &format!("{source}:{}", spec.name),
+            spec.kind.group(),
+            &detail,
+            "approved",
+            Some(n),
+        );
+    }
+    let ctx = tools::RunContext {
+        source,
+        note,
+        cancel,
+    };
+    let outcome = tools::run(state, spec, &args, max_chars, next_citation, &ctx);
     emit_citations(sink, outcome.citations);
     sink.emit(ChatStreamEvent::ToolResult {
         id: call.id.clone(),
@@ -486,6 +623,18 @@ fn approval_preview(spec: &ToolSpec, args: &Value) -> String {
     let preview = match spec.kind {
         tools::ToolKind::WriteFile => text("content"),
         tools::ToolKind::SaveNote => format!("{}\n\n{}", text("title"), text("content")),
+        tools::ToolKind::RunCommand => {
+            let cwd = text("cwd");
+            format!(
+                "$ {}{}",
+                text("command"),
+                if cwd.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!("\n(in workspace/{cwd})")
+                }
+            )
+        }
         _ => serde_json::to_string_pretty(args).unwrap_or_default(),
     };
     let cut: String = preview.chars().take(1500).collect();
@@ -509,6 +658,12 @@ fn add_gathered_context(
     if query.is_empty() {
         return;
     }
+    let never = AtomicBool::new(false);
+    let gather_ctx = tools::RunContext {
+        source: run.source,
+        note: None,
+        cancel: &never,
+    };
     if run.perms.notes {
         status(sink, "Looking in your notes and files");
         let spec = tools::builtin_specs(&Permissions {
@@ -519,7 +674,7 @@ fn add_gathered_context(
         .find(|s| s.name == "search_notes");
         if let Some(spec) = spec {
             let args = serde_json::json!({ "query": query });
-            let outcome = tools::run(state, &spec, &args, 6000, next_citation);
+            let outcome = tools::run(state, &spec, &args, 6000, next_citation, &gather_ctx);
             if !outcome.citations.is_empty() {
                 blocks.push(outcome.for_model);
                 emit_citations(sink, outcome.citations);
@@ -535,7 +690,7 @@ fn add_gathered_context(
         });
         if let Some(search) = specs.iter().find(|s| s.name == "web_search") {
             let args = serde_json::json!({ "query": query, "max_results": 5 });
-            let outcome = tools::run(state, search, &args, 8000, next_citation);
+            let outcome = tools::run(state, search, &args, 8000, next_citation, &gather_ctx);
             let top = outcome.citations.first().map(|c| c.source.clone());
             if outcome.ok && !outcome.citations.is_empty() {
                 blocks.push(outcome.for_model);
@@ -553,7 +708,7 @@ fn add_gathered_context(
                     .unwrap_or_else(|| url.clone());
                 status(sink, format!("Reading {host}"));
                 let args = serde_json::json!({ "url": url });
-                let outcome = tools::run(state, read, &args, 6000, next_citation);
+                let outcome = tools::run(state, read, &args, 6000, next_citation, &gather_ctx);
                 if outcome.ok {
                     blocks.push(outcome.for_model);
                     emit_citations(sink, outcome.citations);

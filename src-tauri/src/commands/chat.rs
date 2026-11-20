@@ -292,6 +292,9 @@ pub async fn chat_stream(
         notes: req.use_recall.unwrap_or(true) && module_on("memory"),
         files: req.use_files.unwrap_or(true),
         skills: req.use_skills.unwrap_or(true) && module_on("skills"),
+        shell: req.use_shell.unwrap_or(true) && module_on("terminal"),
+        // Autonomous mode works on without asking follow-up questions.
+        ask: mode != ChatMode::Autonomous,
         mcp,
     };
 
@@ -318,6 +321,7 @@ pub async fn chat_stream(
             notes: perms.notes,
             files: perms.files,
             skills: perms.skills,
+            shell: perms.shell,
             mcp: !perms.mcp.is_empty(),
         },
         mode,
@@ -378,6 +382,8 @@ pub async fn chat_stream(
         max_rounds: mode.max_rounds(),
         context_tokens,
         auto_approve: req.allowed_tools.iter().cloned().collect(),
+        approval_mode: crate::services::agent::ApprovalMode::parse(req.approval_mode.as_deref()),
+        source: "chat",
         first_citation: 1,
         user_message: req.message.clone(),
         read_top_page: mode.gathers_web(),

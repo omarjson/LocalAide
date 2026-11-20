@@ -142,6 +142,13 @@ pub struct ChatStreamRequest {
     /// Tools the user allowed for the rest of this chat.
     #[serde(default)]
     pub allowed_tools: Vec<String>,
+    /// Let the model run terminal commands in the workspace. Default true;
+    /// commands that change something still ask.
+    #[serde(default)]
+    pub use_shell: Option<bool>,
+    /// "ask" (default), "chat" (allowed for this chat) or "auto".
+    #[serde(default)]
+    pub approval_mode: Option<String>,
     /// The model chosen in the picker. None = the current default.
     #[serde(default)]
     pub target: Option<ChatTargetRequest>,

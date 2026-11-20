@@ -12,6 +12,7 @@ use crate::app::state::AppState;
 use crate::config::McpServerConfig;
 use crate::domain::memory::Citation;
 use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
+use crate::services::tools::shell;
 
 /// Which groups of tools this chat may use.
 #[derive(Debug, Clone, Default)]
@@ -20,13 +21,17 @@ pub struct Permissions {
     pub notes: bool,
     pub files: bool,
     pub skills: bool,
+    /// Run terminal commands in the workspace.
+    pub shell: bool,
+    /// Ask the user a question with buttons (off in Autonomous mode).
+    pub ask: bool,
     /// MCP servers switched on for this chat.
     pub mcp: Vec<McpServerConfig>,
 }
 
 impl Permissions {
     pub fn any(&self) -> bool {
-        self.web || self.notes || self.files || self.skills || !self.mcp.is_empty()
+        self.web || self.notes || self.files || self.skills || self.shell || !self.mcp.is_empty()
     }
 }
 
@@ -43,6 +48,8 @@ pub enum ToolKind {
     ReadFile,
     SearchFiles,
     WriteFile,
+    RunCommand,
+    AskUser,
     Mcp,
 }
 
@@ -54,6 +61,8 @@ impl ToolKind {
             Self::SearchNotes | Self::SaveNote => "notes",
             Self::ListSkills | Self::UseSkill => "skills",
             Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile => "files",
+            Self::RunCommand => "shell",
+            Self::AskUser => "question",
             Self::Mcp => "mcp",
         }
     }
@@ -93,6 +102,27 @@ impl ToolSpec {
             Some((server, _)) => !server.auto_approve,
             None => self.kind.changes_something(),
         }
+    }
+
+    /// Whether this call waits for the user. Terminal commands ask only
+    /// when they change something; read-only ones run straight away.
+    pub fn needs_approval_for(&self, args: &Value) -> bool {
+        if self.kind == ToolKind::RunCommand {
+            let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+            return shell::classify(command) != shell::Verdict::ReadOnly;
+        }
+        self.needs_approval()
+    }
+
+    /// A reason this call may never run, checked before asking the user.
+    pub fn refusal(&self, args: &Value) -> Option<String> {
+        if self.kind == ToolKind::RunCommand {
+            let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+            if let shell::Verdict::Blocked(reason) = shell::classify(command) {
+                return Some(reason);
+            }
+        }
+        None
     }
 }
 
@@ -208,6 +238,39 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
             ),
         ));
     }
+    if perms.shell {
+        specs.push(builtin(
+            "execute_command",
+            ToolKind::RunCommand,
+            &format!(
+                "Run a terminal command on the user's computer with {}, in the LocalAide workspace folder. Use it when the user asks you to run, build, check or inspect something with a command. Read-only commands (ls, cat, git status and similar) run at once; commands that change something wait for the user's OK; destructive commands (recursive deletes, disk formatting, piping downloads into a shell, administrator rights) are refused. The result has the exit code and the output, which may be shortened.",
+                shell::shell_name()
+            ),
+            object(
+                json!({
+                    "command": {"type": "string", "description": "The command line to run."},
+                    "cwd": {"type": "string", "description": "A folder inside the workspace to run in. Empty for the top."},
+                    "timeout_seconds": {"type": "integer", "description": "Time limit, 1 to 300. Default 60."}
+                }),
+                &["command"],
+            ),
+        ));
+    }
+    if perms.ask {
+        specs.push(builtin(
+            "ask_user",
+            ToolKind::AskUser,
+            "Ask the user a short question with answer options they can tap, when you need their choice before you can continue. Give 2 to 6 short options. Do not use it for questions you can answer yourself.",
+            object(
+                json!({
+                    "question": {"type": "string", "description": "The question, in one sentence."},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": "2 to 6 short answers."},
+                    "multiple": {"type": "boolean", "description": "True when the user may pick more than one."}
+                }),
+                &["question", "options"],
+            ),
+        ));
+    }
     specs
 }
 
@@ -293,6 +356,8 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadFile => "Read a file".to_string(),
         ToolKind::SearchFiles => "Searched workspace files".to_string(),
         ToolKind::WriteFile => "Write a file".to_string(),
+        ToolKind::RunCommand => "Run a command".to_string(),
+        ToolKind::AskUser => "Asked you".to_string(),
         ToolKind::Mcp => match &spec.mcp {
             Some((server, tool)) => format!("{} · {}", server.name, tool),
             None => spec.name.clone(),
@@ -305,6 +370,8 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::UseSkill => text("name"),
         ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile => text("path"),
         ToolKind::ListSkills => String::new(),
+        ToolKind::RunCommand => text("command"),
+        ToolKind::AskUser => text("question"),
         ToolKind::Mcp => {
             // The first short string argument says the most.
             args.as_object()
@@ -314,6 +381,131 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         }
     };
     (title, detail)
+}
+
+/// Where a tool call comes from and how it was allowed, for the audit log.
+pub struct RunContext<'a> {
+    /// "chat", or "share" for requests through a shared link.
+    pub source: &'a str,
+    /// Set when approval was skipped by the chat's approval mode.
+    pub note: Option<&'a str>,
+    pub cancel: &'a std::sync::atomic::AtomicBool,
+}
+
+/// Run a terminal command and describe the result for the model and the
+/// chat card. Long output is cut; the full text is saved in the workspace.
+fn run_command(state: &AppState, args: &Value, max_chars: usize, ctx: &RunContext) -> ToolOutcome {
+    let command = args
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let cwd = args.get("cwd").and_then(Value::as_str);
+    let secs = args
+        .get("timeout_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(shell::DEFAULT_TIMEOUT_SECS)
+        .clamp(1, shell::MAX_TIMEOUT_SECS);
+    let run = match state.tools.run_command(
+        ctx.source,
+        &command,
+        cwd,
+        std::time::Duration::from_secs(secs),
+        ctx.cancel,
+        ctx.note,
+    ) {
+        Ok(r) => r,
+        Err(e) => return failed(e.message),
+    };
+    let out = &run.output;
+    let mut text = String::new();
+    if !out.stdout.is_empty() {
+        text.push_str(&out.stdout);
+    }
+    if !out.stderr.is_empty() {
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&out.stderr);
+    }
+    let limit = max_chars.max(4000);
+    let (shown, cut_here) = cut(&text, limit);
+    let mut saved = None;
+    if cut_here || out.capture_cut {
+        let dir = run.workspace.join(".localaide").join("command-output");
+        let name = format!(
+            "{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+        if std::fs::create_dir_all(&dir).is_ok() && std::fs::write(dir.join(&name), &text).is_ok() {
+            saved = Some(format!(".localaide/command-output/{name}"));
+        }
+    }
+    let exit = out
+        .exit_code
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "none".into());
+    let status_line = if out.timed_out {
+        format!("The command was stopped after {secs} s (time limit).")
+    } else if out.cancelled {
+        "The command was stopped because the answer was cancelled.".to_string()
+    } else {
+        format!("Exit code {exit}, after {} ms.", out.millis)
+    };
+    let mut notes = Vec::new();
+    if cut_here || out.capture_cut {
+        notes.push(format!(
+            "The output was shortened ({} bytes in total).{}",
+            out.total_bytes,
+            saved
+                .as_ref()
+                .map(|p| format!(" The full output is in the workspace file {p}; read it with read_file if you need more."))
+                .unwrap_or_default()
+        ));
+    }
+    let body = if shown.trim().is_empty() {
+        "(no output)".to_string()
+    } else {
+        shown
+    };
+    let ok = out.exit_code == Some(0) && !out.timed_out && !out.cancelled;
+    let for_model = format!(
+        "$ {command}\n{status_line}\n{}\n--- output ---\n{body}",
+        notes.join(" ")
+    );
+    let summary = if out.timed_out {
+        format!("Stopped after {secs} s")
+    } else if out.cancelled {
+        "Stopped".to_string()
+    } else if ok {
+        format!("Done in {} ms", out.millis)
+    } else {
+        format!("Exit code {exit}")
+    };
+    // The chat card reads the first line as metadata.
+    let for_user = format!(
+        "{}\n{}",
+        serde_json::json!({
+            "exit": out.exit_code,
+            "ms": out.millis,
+            "timed_out": out.timed_out,
+            "cut": cut_here || out.capture_cut,
+            "saved": saved,
+            "cwd": run.cwd,
+        }),
+        cut(&body, 4000).0
+    );
+    ToolOutcome {
+        ok,
+        for_model,
+        summary,
+        for_user,
+        citations: Vec::new(),
+    }
 }
 
 /// What a finished tool returns.
@@ -354,6 +546,7 @@ pub fn run(
     args: &Value,
     max_chars: usize,
     next_citation: &mut usize,
+    ctx: &RunContext,
 ) -> ToolOutcome {
     let text = |key: &str| {
         args.get(key)
@@ -400,16 +593,30 @@ pub fn run(
             None,
             max_chars,
         ),
+        ToolKind::RunCommand => run_command(state, args, max_chars, ctx),
+        // Handled by the chat loop, which ends the answer with the question.
+        ToolKind::AskUser => ToolOutcome {
+            ok: true,
+            for_model: "The question was shown to the user.".into(),
+            summary: "Waiting for your answer".into(),
+            ..Default::default()
+        },
         ToolKind::Mcp => mcp_call(state, spec, args, max_chars),
     };
-    // Workspace actions write their own audit rows; the rest are recorded here.
+    // Workspace actions and commands write their own audit rows; the rest
+    // are recorded here.
     if !matches!(
         spec.kind,
-        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::SearchFiles | ToolKind::WriteFile
+        ToolKind::ListFiles
+            | ToolKind::ReadFile
+            | ToolKind::SearchFiles
+            | ToolKind::WriteFile
+            | ToolKind::RunCommand
+            | ToolKind::AskUser
     ) {
         let (_, detail) = describe(spec, args);
         state.tools.record_event(
-            &format!("chat:{}", spec.name),
+            &format!("{}:{}", ctx.source, spec.name),
             spec.kind.group(),
             &detail,
             if outcome.ok { "success" } else { "error" },
@@ -811,8 +1018,18 @@ mod tests {
             notes: true,
             files: true,
             skills: true,
+            shell: true,
+            ask: true,
             mcp: vec![],
         });
+        let cmd = all.iter().find(|s| s.name == "execute_command").unwrap();
+        assert!(!cmd.needs_approval_for(&serde_json::json!({"command": "git status"})));
+        assert!(cmd.needs_approval_for(&serde_json::json!({"command": "npm install"})));
+        assert!(
+            cmd.refusal(&serde_json::json!({"command": "rm -rf /"}))
+                .is_some()
+        );
+        assert!(cmd.refusal(&serde_json::json!({"command": "ls"})).is_none());
         assert!(
             all.iter()
                 .any(|s| s.name == "write_file" && s.needs_approval())

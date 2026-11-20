@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "ai-desktop-assistant"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -85,6 +85,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "hound",
+ "libc",
  "log",
  "notify",
  "pdf-extract",
