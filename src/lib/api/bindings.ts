@@ -38,6 +38,10 @@ export interface ModelInfo {
   verified: boolean;
   active: boolean;
   download_progress?: number | null;
+  /** Bytes already in partial files; > 0 on an uninstalled model means it can resume. */
+  partial_bytes?: number;
+  /** The model and its companion files together. */
+  total_bytes?: number;
 }
 
 /** Where the active model catalog came from (built-in or refreshed). */

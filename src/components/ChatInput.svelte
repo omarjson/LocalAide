@@ -129,7 +129,7 @@
 
   const slashCommands = [
     { id: "clear", label: "Start a new chat", description: "Clear this conversation", icon: "plus" as const },
-    { id: "compact", label: "Compact conversation", description: "Trim older turns before the next answer", icon: "layers" as const },
+    { id: "compact", label: "Compact conversation", description: "Stop sending older messages; they stay on screen", icon: "layers" as const },
     { id: "model", label: "Choose a model", description: "Open the model selector", icon: "models" as const },
     { id: "settings", label: "Chat settings", description: "Open response style and context settings", icon: "sliders" as const },
     { id: "export", label: "Export Markdown", description: "Save this conversation as a Markdown file", icon: "download" as const },
@@ -139,7 +139,7 @@
     { id: "scale", label: "Scale the answer", description: "Ask for a shorter or more detailed answer", icon: "layers" as const },
     { id: "remember", label: "Remember this", description: "Save a memory note after confirmation", icon: "memory" as const },
     { id: "create-skill", label: "Create a skill", description: "Turn a reusable instruction into a saved skill", icon: "skills" as const },
-    { id: "web", label: "Use web", description: "Allow web tools for the next message", icon: "globe" as const },
+    { id: "web", label: "Use web", description: "Let the model search the web in this chat", icon: "globe" as const },
     { id: "notes", label: "Use notes", description: "Allow notes and document recall", icon: "memory" as const },
     { id: "tools", label: "Use tools", description: "Open the tools menu", icon: "wrench" as const },
   ];
@@ -164,13 +164,24 @@
     textareaEl?.focus();
   };
 
+  // Clear the "/word" first, so a command that writes a prompt prefix (or a
+  // skill's body) is what stays in the box.
   const pickSlashItem = (item: (typeof slashItems)[number]) => {
-    if (item.kind === "command") onSlashCommand?.(item.value.id);
-    else pickSkill(item.value);
     input = "";
     skillCursor = 0;
+    if (item.kind === "command" && item.value.id === "tools") {
+      toolsMenuOpen = true;
+      return;
+    }
+    if (item.kind === "command") onSlashCommand?.(item.value.id);
+    else pickSkill(item.value);
     textareaEl?.focus();
   };
+
+  // A narrower match list must not leave the cursor past its end.
+  $effect(() => {
+    if (skillCursor >= slashItems.length) skillCursor = 0;
+  });
 
   const handleKeydown = (e: KeyboardEvent) => {
     if (slashItems.length > 0) {

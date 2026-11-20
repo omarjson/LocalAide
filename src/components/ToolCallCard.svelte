@@ -70,7 +70,7 @@
         <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
         <span class="text-ink-400">Working</span>
       {:else if status === "waiting"}
-        <span class="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">Needs your OK</span>
+        <span class="rounded-full bg-ember-500/15 px-2 py-0.5 font-medium text-ember-200">Needs your OK</span>
       {:else if status === "done"}
         <span class="max-w-[12rem] truncate text-ink-500">{summary}</span>
         <Icon name="check" class="h-3.5 w-3.5 text-emerald-400" />
@@ -128,7 +128,7 @@
     transition: border-color 150ms ease-out;
   }
   .tool-waiting {
-    border-color: color-mix(in oklab, var(--color-amber-400, #fbbf24) 45%, transparent);
+    border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent);
   }
   .tool-head {
     display: flex;

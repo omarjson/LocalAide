@@ -59,6 +59,8 @@ fn test_model_info_serialization() {
         verified: true,
         active: false,
         download_progress: Some(100.0),
+        partial_bytes: 0,
+        total_bytes: 400_000_000,
     };
 
     let json = serde_json::to_string(&model).expect("Serialization must succeed");

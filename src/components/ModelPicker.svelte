@@ -74,19 +74,21 @@
     return true;
   };
 
-  type Section = { id: string; label: string; providerId: string | null; needsRefresh: boolean; items: ModelChoice[] };
+  type Section = { id: string; label: string; providerId: string | null; needsRefresh: boolean; starred?: number; items: ModelChoice[] };
   const sections = $derived.by<Section[]>(() => {
     if (!choices) return [];
     const list = choices.models.filter(matches);
     const out: Section[] = [];
     const starred = list.filter((m) => m.favorite);
     if (starred.length) out.push({ id: "starred", label: "Starred", providerId: null, needsRefresh: false, items: starred });
-    const local = list.filter((m) => m.provider_id === null);
+    // A starred model shows once, under Starred, not again in its group.
+    const local = list.filter((m) => m.provider_id === null && !m.favorite);
     if (local.length) out.push({ id: "local", label: "On this computer", providerId: null, needsRefresh: false, items: local });
     for (const g of choices.groups.filter((g) => g.enabled)) {
-      const items = list.filter((m) => m.provider_id === g.provider_id);
+      const items = list.filter((m) => m.provider_id === g.provider_id && !m.favorite);
       if (items.length || !query.trim()) {
-        out.push({ id: g.provider_id, label: g.label, providerId: g.provider_id, needsRefresh: g.needs_refresh, items });
+        const starredHere = list.filter((m) => m.provider_id === g.provider_id && m.favorite).length;
+        out.push({ id: g.provider_id, label: g.label, providerId: g.provider_id, needsRefresh: g.needs_refresh, starred: starredHere, items });
       }
     }
     return out;
@@ -168,7 +170,7 @@
     {#if busy}
       <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
     {:else if active && !active.local}
-      <Icon name="cloud" class="h-4 w-4 text-amber-300" />
+      <Icon name="cloud" class="h-4 w-4 text-ember-300" />
     {:else}
       <span class={`h-2 w-2 shrink-0 rounded-full ${active && choices?.local_loaded ? "bg-emerald-400" : "bg-ink-600"}`} aria-hidden="true"></span>
     {/if}
@@ -277,7 +279,7 @@
             </div>
           {:else}
             {#if section.providerId}
-              <p class="px-3 pb-2 text-xs text-ink-500">{section.needsRefresh ? "Press Load models to see what this provider offers." : "No model matches."}</p>
+              <p class="px-3 pb-2 text-xs text-ink-500">{section.needsRefresh ? "Press Load models to see what this provider offers." : section.starred ? "Its starred models are listed above." : "No model matches."}</p>
             {/if}
           {/each}
         {/each}

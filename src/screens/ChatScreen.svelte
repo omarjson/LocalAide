@@ -23,6 +23,8 @@
   import ModelPicker from "../components/ModelPicker.svelte";
   import EffortPicker from "../components/EffortPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
+  import { compactionStart, contextUsage, fits } from "../lib/contextUsage";
+  import { conversationMarkdown, exportFileName } from "../lib/chatExport";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -318,6 +320,7 @@
     pendingFiles = [];
     allowedTools = [];
     approvals = {};
+    compactedBefore = 0;
   };
 
   // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
@@ -338,6 +341,7 @@
     activeThreadTitle = t.title;
     allowedTools = [];
     approvals = {};
+    compactedBefore = 0;
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(t.id);
@@ -395,25 +399,16 @@
     }
   };
 
-  const conversationMarkdown = () => {
-    const lines: string[] = [`# ${activeThreadTitle === "New Conversation" ? "Chat" : activeThreadTitle}`, ""];
-    for (const message of $state.snapshot(messages)) {
-      lines.push(`## ${message.role === "user" ? "You" : "LocalAide"}`, "");
-      if (message.attachments?.length) {
-        lines.push(...message.attachments.map((file) => `> Attached: ${file.name}${file.error ? ` (${file.error})` : ""}`), "");
-      }
-      if (message.content.trim()) lines.push(message.content.trim(), "");
-      if (message.citations?.length) {
-        lines.push("Sources:", ...message.citations.map((citation) => `- [${citation.index}] ${citation.title}: ${citation.source}`), "");
-      }
-    }
-    return lines.join("\n").trim() + "\n";
-  };
+  const chatMarkdown = () =>
+    conversationMarkdown($state.snapshot(messages), {
+      title: activeThreadTitle === "New Conversation" ? "Chat" : activeThreadTitle,
+      systemPrompt,
+    });
 
   const copyCurrentThread = async () => {
     if (messages.length === 0) return;
     try {
-      await navigator.clipboard.writeText(conversationMarkdown());
+      await navigator.clipboard.writeText(chatMarkdown());
       showToast("Conversation copied.");
     } catch {
       chatError = "The conversation could not be copied. Check clipboard permission and try again.";
@@ -423,8 +418,13 @@
   const exportCurrentThread = async (format: "markdown" | "json") => {
     if (!activeThreadId || messages.length === 0) return;
     try {
+      // Markdown is built here, the same text "Copy full conversation" gives.
+      // JSON is the saved file, so save first to include the newest answer.
       await persistCurrentThread();
-      const savedTo = await api.saveChatExport({ thread_id: activeThreadId, format });
+      const savedTo =
+        format === "markdown"
+          ? await api.saveChatMarkdown(exportFileName(activeThreadTitle, "md"), chatMarkdown())
+          : await api.saveChatExport({ thread_id: activeThreadId, format });
       if (savedTo) showToast(`Chat saved to ${savedTo}`);
     } catch (e: unknown) {
       sendFailed = false;
@@ -432,17 +432,29 @@
     }
   };
 
-  // The user's local date and time, so the model knows what "today" is.
-  const estimateConversationTokens = (items: ChatMessage[]) => items.reduce((sum, message) => sum + Math.ceil(message.content.length / 4), 0);
+  // Compaction never deletes messages. It moves this cut point: messages
+  // before it stay on screen and in the saved chat, but are not sent to the
+  // model. It resets with each chat.
+  let compactedBefore = $state(0);
+  const historyFrom = $derived(Math.min(compactedBefore, messages.length));
+  const answerReserve = $derived(maxTokens + (activeChoice?.reasoning && effort !== "off" ? 4096 : 0));
+  const usage = $derived(
+    contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve }),
+  );
 
-  const compactConversation = () => {
-    if (messages.length <= 5) return false;
-    messages = [{
-      role: "assistant",
-      content: "[Earlier conversation compacted. Ask if you need details from the omitted turns.]",
-      ts: Date.now(),
-      parts: [{ type: "text", text: "[Earlier conversation compacted. Ask if you need details from the omitted turns.]" }],
-    }, ...messages.slice(-4)];
+  /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
+  const compactConversation = (threshold = autoCompactAt, draft = "") => {
+    const limit = activeChoice?.context;
+    if (!limit) {
+      // No known window: keep the last four messages.
+      const next = Math.max(historyFrom, messages.length - 4);
+      if (next <= historyFrom) return false;
+      compactedBefore = next;
+      return true;
+    }
+    const next = compactionStart(messages, limit, threshold, { from: historyFrom, draft, systemPrompt, reserve: answerReserve });
+    if (next <= historyFrom) return false;
+    compactedBefore = next;
     return true;
   };
 
@@ -452,10 +464,11 @@
         newChat();
         break;
       case "compact":
-        if (compactConversation()) {
-          showToast("Older turns compacted for this chat.");
+        // A manual compact aims for half the window, leaving room to talk.
+        if (compactConversation(Math.min(50, autoCompactAt))) {
+          showToast("Older messages stay on screen but are no longer sent to the model.");
         } else {
-          showToast("This conversation is already short.");
+          showToast("This conversation already fits.");
         }
         break;
       case "model":
@@ -495,9 +508,6 @@
         useRecall = true;
         showToast("Notes and document recall enabled.");
         break;
-      case "tools":
-        showToast("Use the Tools button beside the message box to choose tools.");
-        break;
     }
   };
   const nowLabel = () => {
@@ -511,14 +521,15 @@
     if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
-    if (activeChoice?.context && estimateConversationTokens(messages) >= activeChoice.context * (autoCompactAt / 100)) {
-      if (compactConversation()) showToast(`Conversation compacted at ${autoCompactAt}% of the context window.`);
+    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, { from: historyFrom, draft: userMsg, systemPrompt, reserve: answerReserve }), autoCompactAt)) {
+      if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
     }
 
     // Earlier turns only. The new message is sent separately as `message`.
     // Failed answers are left out, so the model does not repeat them.
     const history = $state
       .snapshot(messages)
+      .slice(historyFrom)
       .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
       .map((m) => ({
         role: m.role,
@@ -620,7 +631,7 @@
             settleParts(parts(), now);
             answer().stats = {
               tokens: event.payload.total_tokens,
-              inputTokens: estimateConversationTokens(messages.slice(0, assistantIdx)),
+              inputTokens: contextUsage(messages.slice(0, assistantIdx), null, { from: historyFrom, systemPrompt }).used,
               outputTokens: event.payload.total_tokens,
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
@@ -1200,6 +1211,14 @@
     {:else}
       <div class={`mx-auto w-full max-w-3xl px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
         {#each messages as msg, idx (idx)}
+          {#if idx === historyFrom && historyFrom > 0}
+            <div class="flex items-center gap-3 text-xs text-ink-500" role="separator">
+              <span class="h-px flex-1 bg-ink-800"></span>
+              <span class="flex items-center gap-1.5"><Icon name="layers" class="h-3.5 w-3.5" />Earlier messages are not sent to the model</span>
+              <button type="button" class="rounded px-1.5 py-0.5 text-ember-300 underline underline-offset-2 hover:text-ember-200" onclick={() => (compactedBefore = 0)}>Send them again</button>
+              <span class="h-px flex-1 bg-ink-800"></span>
+            </div>
+          {/if}
           <MessageBubble
             role={msg.role}
             content={msg.content}
@@ -1281,7 +1300,7 @@
         onManageTools={() => requestSettings("tools")}
       >
         {#snippet trailing()}
-          <ContextMeter messages={messages} context={activeChoice?.context} {streaming} />
+          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} onCompact={() => handleSlashCommand("compact")} />
           {#if activeChoice && activeChoice.efforts.length > 0}
             <EffortPicker efforts={activeChoice.efforts} value={effort} onChange={setEffort} />
           {/if}

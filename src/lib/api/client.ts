@@ -143,8 +143,9 @@ export class ApiClient {
     return invoke<void>("model_download_cancel", { id });
   }
 
-  async pauseModelDownload(id: string): Promise<void> {
-    return invoke<void>("model_download_pause", { id });
+  /** True when a download was running and is now stopping. */
+  async pauseModelDownload(id: string): Promise<boolean> {
+    return invoke<boolean>("model_download_pause", { id });
   }
 
   async cancelPresetDownload(id: string): Promise<void> {
@@ -242,6 +243,11 @@ export class ApiClient {
   /** Asks where to save the chat and writes it. Null when the user cancels. */
   async saveChatExport(req: ThreadExportRequest): Promise<string | null> {
     return invoke<string | null>("chat_thread_export_save", { req });
+  }
+
+  /** Asks where to save, then writes this Markdown. Null when the user cancels. */
+  async saveChatMarkdown(fileName: string, content: string): Promise<string | null> {
+    return invoke<string | null>("chat_export_text_save", { fileName, content });
   }
 
   // Desktop: native pickers and web links

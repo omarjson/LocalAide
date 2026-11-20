@@ -87,8 +87,14 @@
   --color-emerald-400: #047857;
   --color-rose-300: #be123c;
   --color-rose-400: #be123c;
-  --color-amber-300: #92400e;
-  --color-amber-600: #b45309;
+  /* Warnings: pale yellow vanishes on the light page, so the whole amber
+     ramp turns into the deep ember family here. Text roles (200 to 400)
+     clear 4.5:1 on ink-950; fills and borders keep their alpha. */
+  --color-amber-200: #9a3f00;
+  --color-amber-300: #9a3f00;
+  --color-amber-400: #a84300;
+  --color-amber-500: #c2540a;
+  --color-amber-600: #b54a00;
 
   --color-on-ember: #ffffff;
   --color-edge: #80858d;

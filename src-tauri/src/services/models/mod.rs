@@ -30,6 +30,24 @@ pub struct ModelService {
     custom: CustomModels,
     refresher: CatalogRefresher,
     downloader: ModelDownloader,
+    /// Models being downloaded now. A second download of the same model
+    /// would write the same `.part` file from two places at once.
+    in_flight: std::sync::Mutex<std::collections::HashSet<String>>,
+}
+
+/// Removes a model from `in_flight` when its download ends, however it ends.
+struct InFlight<'a> {
+    set: &'a std::sync::Mutex<std::collections::HashSet<String>>,
+    id: String,
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        self.set
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.id);
+    }
 }
 
 impl ModelService {
@@ -77,6 +95,7 @@ impl ModelService {
             custom: CustomModels::load(custom_path),
             refresher: CatalogRefresher::new(),
             downloader: ModelDownloader::new(),
+            in_flight: std::sync::Mutex::new(std::collections::HashSet::new()),
         })
     }
 
@@ -234,6 +253,64 @@ impl ModelService {
         Ok(())
     }
 
+    /// Every file a model needs: the main file, then its companions.
+    fn model_files(&self, entry: &CatalogEntry) -> Vec<(String, String, u64, PathBuf)> {
+        let mut files = vec![(
+            entry.url.clone(),
+            entry.sha256.clone(),
+            entry.file_size,
+            self.model_file_path(&entry.id),
+        )];
+        for c in &entry.companions {
+            files.push((
+                c.url.clone(),
+                c.sha256.clone(),
+                c.file_size,
+                self.models_dir.join(&c.dest),
+            ));
+        }
+        files
+    }
+
+    /// (bytes on disk so far, total bytes) over the model and its companions.
+    /// Finished files count in full, unfinished ones by their `.part` file.
+    pub fn download_state(&self, id: &str) -> (u64, u64) {
+        let Some(entry) = self.get_model_entry(id) else {
+            return (0, 0);
+        };
+        let mut have = 0;
+        let mut total = 0;
+        for (_, _, size, dest) in self.model_files(&entry) {
+            total += size;
+            have += if dest.is_file() {
+                size
+            } else {
+                std::fs::metadata(dest.with_extension("part"))
+                    .map(|m| m.len().min(size))
+                    .unwrap_or(0)
+            };
+        }
+        (have, total)
+    }
+
+    /// Delete the model's partial files (Cancel). Finished files stay.
+    pub fn remove_partials(&self, id: &str) {
+        let Some(entry) = self.get_model_entry(id) else {
+            return;
+        };
+        for (_, _, _, dest) in self.model_files(&entry) {
+            let _ = std::fs::remove_file(dest.with_extension("part"));
+        }
+    }
+
+    /// True while this model is downloading.
+    pub fn is_downloading(&self, id: &str) -> bool {
+        self.in_flight
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(id)
+    }
+
     pub async fn download_model<F>(
         &self,
         id: &str,
@@ -247,33 +324,37 @@ impl ModelService {
             .get_model_entry(id)
             .ok_or_else(|| AppError::invalid_input(format!("Model '{id}' not found in catalog")))?;
 
+        // One download per model: a second one would write the same
+        // `.part` file at the same time and fail its checksum.
+        {
+            let mut set = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
+            if !set.insert(id.to_string()) {
+                return Err(AppError::new(
+                    "DOWNLOAD_BUSY",
+                    "This model is still downloading or still stopping. Wait a moment and try again.",
+                ));
+            }
+        }
+        let _guard = InFlight {
+            set: &self.in_flight,
+            id: id.to_string(),
+        };
+
         // The primary file plus every companion (such as a vision
         // projector) downloads here; without the companions a vision model
         // would be unusable even though it is marked installed.
-        let mut files: Vec<(String, String, u64, PathBuf)> = vec![(
-            entry.url.clone(),
-            entry.sha256.clone(),
-            entry.file_size,
-            self.model_file_path(id),
-        )];
-        for c in &entry.companions {
-            files.push((
-                c.url.clone(),
-                c.sha256.clone(),
-                c.file_size,
-                self.models_dir.join(&c.dest),
-            ));
-        }
+        let files = self.model_files(&entry);
+        let total: u64 = files.iter().map(|f| f.2).sum();
 
-        // Each file owns an equal slice of the overall percent; the
-        // per-file progress from the downloader is rescaled into its slice.
+        // Progress covers all files: bytes of earlier files are added to the
+        // current file's bytes, and the percent is of the whole model.
         let shared = Arc::new(std::sync::Mutex::new(progress_cb));
-        let weight = 100.0 / files.len() as f32;
+        let mut done_before = 0u64;
         let mut primary: Option<PathBuf> = None;
         for (idx, (url, sha, size, dest)) in files.iter().enumerate() {
-            let base = idx as f32 * weight;
             let shared = Arc::clone(&shared);
             let cancel = Arc::clone(&cancel);
+            let before = done_before;
             let downloaded = self
                 .downloader
                 .download_atomic(
@@ -283,12 +364,19 @@ impl ModelService {
                     sha,
                     cancel,
                     move |mut p: DownloadProgress| {
-                        p.percent = base + p.percent * weight / 100.0;
+                        p.bytes_downloaded = before + p.bytes_downloaded.min(p.bytes_total);
+                        p.bytes_total = total.max(p.bytes_downloaded);
+                        p.percent = if total > 0 {
+                            (p.bytes_downloaded as f64 / total as f64 * 100.0) as f32
+                        } else {
+                            0.0
+                        };
                         let mut cb = shared.lock().unwrap_or_else(|e| e.into_inner());
                         cb(p);
                     },
                 )
                 .await?;
+            done_before += *size;
             if idx == 0 {
                 primary = Some(downloaded);
             }

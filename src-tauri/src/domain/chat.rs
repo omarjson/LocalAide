@@ -1,9 +1,20 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Reads a whole number of milliseconds or seconds, also when the window
+/// sent it as a fraction (`performance.now()` gives `2214.0000000000146`).
+/// One stray fraction must never make a whole chat unsavable.
+fn lenient_u64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    let value = Option::<f64>::deserialize(d)?;
+    Ok(value
+        .filter(|v| v.is_finite())
+        .map(|v| v.max(0.0).round() as u64))
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(default, deserialize_with = "lenient_u64")]
     pub ts: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citations: Option<Vec<crate::domain::memory::Citation>>,
@@ -33,7 +44,7 @@ pub enum MessagePart {
     Reasoning {
         text: String,
         /// How long the model thought, in milliseconds.
-        #[serde(default)]
+        #[serde(default, deserialize_with = "lenient_u64")]
         ms: Option<u64>,
     },
     Tool {
@@ -176,4 +187,26 @@ pub struct ThreadExportRequest {
 pub struct ThreadExportResponse {
     pub content: String,
     pub filename: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fractional_times_from_the_window_still_save() {
+        let json = r#"{"role":"assistant","content":"hi","ts":1731542400000.4,
+            "parts":[{"type":"reasoning","text":"t","ms":2214.0000000000146}]}"#;
+        let m: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(m.ts, Some(1_731_542_400_000));
+        assert!(matches!(
+            &m.parts.unwrap()[0],
+            MessagePart::Reasoning { ms: Some(2214), .. }
+        ));
+        let none: ChatMessage = serde_json::from_str(r#"{"role":"user","content":"x"}"#).unwrap();
+        assert_eq!(none.ts, None);
+        let null: ChatMessage =
+            serde_json::from_str(r#"{"role":"user","content":"x","ts":null}"#).unwrap();
+        assert_eq!(null.ts, None);
+    }
 }

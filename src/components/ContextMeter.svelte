@@ -1,61 +1,78 @@
 <script lang="ts">
-  import Icon from "./Icon.svelte";
+  import { fly } from "svelte/transition";
+  import { popover } from "../lib/actions/popover";
+  import { dur, motion } from "../lib/motion";
   import { contextLabel } from "../lib/chatParts";
-  import type { ChatMessage } from "../lib/api/bindings";
+  import type { ContextUsage } from "../lib/contextUsage";
 
   interface Props {
-    messages: ChatMessage[];
-    context: number | null | undefined;
+    usage: ContextUsage;
     streaming?: boolean;
+    autoCompactAt: number;
+    /** Older messages are already left out. */
+    compacted?: boolean;
+    onCompact?: () => void;
   }
 
-  let { messages, context = null, streaming = false }: Props = $props();
+  let { usage, streaming = false, autoCompactAt, compacted = false, onCompact }: Props = $props();
   let open = $state(false);
 
-  const estimate = (text: string) => Math.ceil(text.length / 4);
-  const inputTokens = $derived(messages.filter((m) => m.role === "user").reduce((sum, m) => sum + estimate(m.content), 0));
-  const outputTokens = $derived(messages.filter((m) => m.role === "assistant").reduce((sum, m) => sum + estimate(m.content), 0));
-  const used = $derived(Math.max(0, inputTokens + outputTokens));
-  const limit = $derived(context ?? 0);
-  const percent = $derived(limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
-  const color = $derived(percent >= 90 ? "#c2410c" : percent >= 70 ? "#d97706" : "var(--color-ember-500)");
-
-  const formatTokens = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K` : String(value));
+  const known = $derived(usage.limit > 0);
+  // Ember until close to the auto-compact line, then a deeper burnt orange,
+  // so the meter warns without leaving the palette.
+  const warn = $derived(known && (usage.overflow || usage.percent >= autoCompactAt));
+  const tone = $derived(!known ? "var(--color-ink-600)" : warn ? "var(--color-ember-700)" : "var(--color-ember-500)");
+  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n));
 </script>
 
-<div class="relative" title="Context window usage">
+<div class="relative" use:popover={{ open, onClose: () => (open = false) }}>
   <button
     type="button"
     class="meter-button"
-    aria-label={`Context usage: ${formatTokens(used)} of ${contextLabel(limit) || "unknown"} tokens`}
+    aria-haspopup="dialog"
     aria-expanded={open}
+    aria-label={known ? `Context: about ${Math.round(usage.percent)}% used` : "Context: size unknown"}
+    title={known ? `About ${Math.round(usage.percent)}% of the context window used` : "Context window"}
     onclick={() => (open = !open)}
   >
-    <span class="meter" style={`--usage:${percent}%;--meter-color:${color}`} aria-hidden="true"><span></span></span>
+    <span class="meter" style={`--usage:${known ? usage.percent : 0}%;--tone:${tone}`} aria-hidden="true"></span>
   </button>
   {#if open}
-    <div class="meter-popover" role="dialog" aria-label="Context usage">
-      <div class="flex items-center justify-between gap-3">
+    <div class="meter-popover" role="dialog" aria-label="Context window" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+      <div class="flex items-baseline justify-between gap-3">
         <span class="font-semibold text-ink-50">Context window</span>
-        <span class="tabular-nums text-ink-300">{formatTokens(used)} / {contextLabel(limit) || "—"}</span>
+        <span class="tabular-nums text-ink-300">{known ? `~${fmt(usage.used)} / ${contextLabel(usage.limit)}` : "Size unknown"}</span>
       </div>
-      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width]" style={`width:${percent}%`}></div></div>
-      <dl class="mt-3 grid grid-cols-2 gap-x-5 gap-y-1 text-xs">
-        <div><dt class="text-ink-500">Input</dt><dd class="tabular-nums text-ink-200">~{formatTokens(inputTokens)} tokens</dd></div>
-        <div><dt class="text-ink-500">Output</dt><dd class="tabular-nums text-ink-200">~{formatTokens(outputTokens)} tokens</dd></div>
-        <div><dt class="text-ink-500">Cached input</dt><dd class="text-ink-300">Engine not reporting</dd></div>
-        <div><dt class="text-ink-500">Cached output</dt><dd class="text-ink-300">Not applicable</dd></div>
+      {#if known}
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800">
+          <div class="h-full rounded-full transition-[width] duration-300" style={`width:${usage.percent}%;background:${tone}`}></div>
+        </div>
+      {/if}
+      <dl class="mt-3 space-y-1 text-xs">
+        <div class="flex justify-between"><dt class="text-ink-400">Chat so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.input - usage.output)}</dd></div>
+        <div class="flex justify-between"><dt class="text-ink-400">Answers so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.output)}</dd></div>
+        <div class="flex justify-between"><dt class="text-ink-400">Instructions</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.overhead)}</dd></div>
+        <div class="flex justify-between"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
+        {#if known}
+          <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
+        {/if}
       </dl>
-      <p class="mt-2 text-xs leading-5 text-ink-500">Usage is estimated from text length. {streaming ? "The current answer is still growing." : "Older turns are compacted when the window fills."}</p>
+      <p class="mt-3 text-xs leading-5 text-ink-500">
+        Estimated from text length; the model's own count can differ. Cached tokens are not reported by this engine.
+        {streaming ? "The answer is still growing." : known ? `At ${autoCompactAt}%, older messages stop being sent.` : ""}
+      </p>
+      {#if onCompact}
+        <button type="button" onclick={() => { open = false; onCompact?.(); }} class="mt-2 w-full rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-100 transition-colors hover:bg-veil/5">
+          {compacted ? "Compact further" : "Compact now"}
+        </button>
+      {/if}
     </div>
   {/if}
 </div>
 
 <style>
-  .meter-button { display: grid; height: 2rem; width: 2rem; place-items: center; border-radius: 9999px; color: var(--color-ink-300); transition: background-color 150ms ease-out; }
+  .meter-button { display: grid; height: 2rem; width: 2rem; place-items: center; border-radius: 9999px; transition: background-color 150ms ease-out; }
   .meter-button:hover, .meter-button[aria-expanded="true"] { background: color-mix(in oklab, var(--color-veil) 7%, transparent); }
-  .meter { position: relative; display: grid; height: 1.35rem; width: 1.35rem; place-items: center; border-radius: 9999px; background: conic-gradient(var(--meter-color) var(--usage), var(--color-ink-700) 0); }
-  .meter::before { content: ""; position: absolute; inset: 2px; border-radius: 9999px; background: var(--color-ink-950); }
-  .meter span { position: relative; height: 0.25rem; width: 0.25rem; border-radius: 9999px; background: var(--meter-color); }
-  .meter-popover { position: absolute; bottom: calc(100% + 0.5rem); right: 0; z-index: 45; width: 17rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: 0 18px 40px -16px rgb(0 0 0 / .55); }
+  .meter { height: 1.15rem; width: 1.15rem; border-radius: 9999px; background: conic-gradient(var(--tone) var(--usage), var(--color-ink-700) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); transition: background 300ms ease-out; }
+  .meter-popover { position: absolute; bottom: calc(100% + 0.5rem); right: 0; z-index: 45; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55); }
 </style>

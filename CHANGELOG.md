@@ -5,15 +5,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-20
+
+Polish after 0.1.4: a context meter, slash commands, full-chat export and copy, downloads you can pause and resume, and a fix for chats that sometimes would not save. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
+
 ### Added
-- Persistent model capability filters with a Clear control, a context-window meter beside the model selector, estimated input/output token counts, and an auto-compact threshold in Chat settings.
-- Full-conversation Markdown export and clipboard copy actions in the chat menu.
-- Built-in slash commands for clear, compact, model, settings, export, copy, goal, scale, by-the-way, remember, create-skill, web, notes and tools.
-- Model download pause/resume. Paused downloads preserve their `.part` file and resume with HTTP Range; the model screen shows bytes, speed and estimated remaining time.
+- **Context meter.** A ring beside the model menu fills as the chat uses the model's context window. Click it for the chat, the answers, the instructions, the room kept for the next answer, and what is left. **Compact now** stops sending older messages.
+- **Auto-compact** (Chat settings → Context window). When the chat reaches the level you choose (80% by default), or the next answer would not fit, older messages stop being sent to the model. They stay on screen and in the saved chat, behind a line that says so, with **Send them again** to undo.
+- **Slash commands.** Type `/` for `/clear`, `/compact`, `/model`, `/settings`, `/export`, `/copy`, `/goal`, `/scale`, `/by-the-way`, `/remember`, `/create-skill`, `/web`, `/notes` and `/tools`, next to your saved skills (which now also match by tag).
+- **Copy and export the whole chat.** The ⋯ menu copies the conversation or saves it as Markdown or JSON. Copy and Markdown are the same text: answers, the model's thinking (folded), each tool call with its input and result, attachments, and numbered references.
+- **Pause and resume downloads.** Pause keeps what was downloaded; Resume continues where it stopped, also after the app was closed. The model screen shows downloaded and total size, what is left, speed and about how long it will take. Cancel discards the partial download.
+- The model filters (Thinks, Sees images, Uses tools, Free) are remembered, with a count and **Clear**.
 
 ### Changed
-- Local and online routing badges and the online-provider notice use the project's ember orange in both themes.
-- Chat layout now enforces min-height constraints so the window stays fixed while only the conversation area scrolls.
+- **References fold under the answer** as a row of numbers, `[1] [2] [3]`. Click to open the list and click one to open it.
+- The chat header always says where answers come from, **Offline · this computer** or **Online · provider**, in the app's orange. Warnings and the online-providers notice also use orange; yellow was hard to read in the light theme.
+- The chat window stays put; only the conversation scrolls.
+- Download progress for vision models now counts the model and its image projector together, so the size and time left are for the whole download.
+- A starred model appears once in the model menu, under Starred.
+
+### Fixed
+- **"The chat could not be saved: invalid type: floating point".** How long the model thought was saved as a fraction of a millisecond, which the chat file did not accept, so some chats with thinking failed to save. Times are now whole numbers, and older values with fractions load too.
+- A quick Resume after Pause could start a second download into the same file and break it. Only one download per model runs at a time, and Resume waits until Pause has finished.
+- Pause and Cancel now act within a fraction of a second, also while the connection is silent (it could take up to a minute).
+- Pausing a community model and then refreshing showed Download instead of Resume.
 
 ## [0.1.4] - 2026-11-19
 
