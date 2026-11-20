@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod backup;
+pub mod cloud_audit;
 pub mod inference;
 pub mod library;
 pub mod mcp;

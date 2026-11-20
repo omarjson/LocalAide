@@ -9,6 +9,7 @@
   import SettingsGroup from "../components/SettingsGroup.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
   import Tabs from "../components/Tabs.svelte";
+  import { showToast } from "../lib/toast.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
   import type { CatalogStatus, HfFileInfo, HfRepo, HfSort, ModelInfo, ModelPreset } from "../lib/api/bindings";
@@ -149,11 +150,16 @@
     }
   };
 
+  let searchModelId = $state<string | null>(null);
+  void api.libraryStatus().then((s) => (searchModelId = s.embedding_ready ? s.embedding_model : null)).catch(() => {});
   const useForSearch = async (id: string) => {
     searchModelBusy = id;
     actionError = null;
     try {
-      await api.startEmbeddingEngine(id);
+      // Remembered across restarts; the library gets vectors from this model.
+      const status = await api.libraryEmbeddingSelect(id);
+      searchModelId = status.embedding_model;
+      showToast("Search now finds related wording with this model.");
     } catch (e: unknown) {
       actionError = errorMessage(e);
     } finally {
@@ -654,9 +660,13 @@
                       <Button variant="secondary" disabled={loadingModelId !== null} onclick={() => void activateModel(model.id)}>{loadingModelId === model.id ? "Loading…" : "Use this"}</Button>
                     {/if}
                     {#if model.kind === "embedding"}
-                      <Button variant="subtle" disabled={searchModelBusy !== null} onclick={() => void useForSearch(model.id)}>
-                        {searchModelBusy === model.id ? "Starting…" : "Use for Search"}
-                      </Button>
+                      {#if searchModelId === model.id}
+                        <StatusBadge label="Used for Search" tone="ok" dot />
+                      {:else}
+                        <Button variant="subtle" disabled={searchModelBusy !== null} onclick={() => void useForSearch(model.id)}>
+                          {searchModelBusy === model.id ? "Starting…" : "Use for Search"}
+                        </Button>
+                      {/if}
                     {/if}
                   {:else if model.status === "installing"}
                     <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>

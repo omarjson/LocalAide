@@ -119,7 +119,7 @@ pub fn tool_guidance(groups: ToolGroups, mode: ChatMode) -> String {
         uses.push("search the web for recent events, prices, versions or facts you are not sure about, and read a page when a snippet is not enough");
     }
     if groups.notes {
-        uses.push("search the user's notes and documents when the question is about their own information, and save a note when they ask you to remember something");
+        uses.push("search the user's notes and documents first whenever the question is about their own files, notes, documents or earlier work (do not guess or answer from general knowledge), then answer from what you found and name the file you used, and save a note when they ask you to remember something");
     }
     if groups.files {
         uses.push("read and write files in the LocalAide workspace folder when the user asks");

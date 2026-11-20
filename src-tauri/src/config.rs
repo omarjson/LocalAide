@@ -63,6 +63,13 @@ pub struct AppConfig {
     /// provider. None = the provider's own default model.
     #[serde(default)]
     pub active_cloud_model: Option<String>,
+    /// The embedding ("meaning") model library search uses. Started at
+    /// launch when installed. None = keyword search until the user picks one.
+    #[serde(default)]
+    pub embedding_model: Option<String>,
+    /// Voice input and read-aloud (Settings → Voice). Off by default.
+    #[serde(default)]
+    pub voice: VoiceConfig,
     /// Starred models in the picker, as "local:<id>" or "<provider id>:<model>".
     #[serde(default)]
     pub favorite_models: Vec<String>,
@@ -228,8 +235,66 @@ impl Default for AppConfig {
             opencode: OpenCodeConfig::default(),
             developer: DeveloperConfig::default(),
             active_cloud_model: None,
+            embedding_model: None,
+            voice: VoiceConfig::default(),
             favorite_models: Vec::new(),
             mcp_servers: Vec::new(),
+        }
+    }
+}
+
+/// Settings → Voice.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VoiceConfig {
+    /// The microphone button in chat. Off until the user turns it on.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The transcription model: a local catalog id or "provider:model".
+    #[serde(default = "default_voice_model")]
+    pub model: String,
+    /// Block every network use for voice: only local models run.
+    #[serde(default = "default_true")]
+    pub local_only: bool,
+    /// Tidy the transcript with the local chat model before it is sent.
+    #[serde(default)]
+    pub cleanup: bool,
+    /// Send the message as soon as the recording is transcribed.
+    #[serde(default = "default_true")]
+    pub auto_send: bool,
+    /// Read answers aloud with the operating system's voice.
+    #[serde(default)]
+    pub read_aloud: bool,
+    /// The system voice's name; None = the system default.
+    #[serde(default)]
+    pub voice_name: Option<String>,
+    /// Speaking speed, 0.5 to 2.
+    #[serde(default = "default_rate")]
+    pub rate: f32,
+    /// Keys for online transcription providers, by provider id. Stored in
+    /// this file like the chat provider keys (0600, atomic write).
+    #[serde(default)]
+    pub keys: std::collections::BTreeMap<String, String>,
+}
+
+fn default_voice_model() -> String {
+    "stt-whisper-tiny".into()
+}
+fn default_rate() -> f32 {
+    1.0
+}
+
+impl Default for VoiceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: default_voice_model(),
+            local_only: true,
+            cleanup: false,
+            auto_send: true,
+            read_aloud: false,
+            voice_name: None,
+            rate: 1.0,
+            keys: Default::default(),
         }
     }
 }

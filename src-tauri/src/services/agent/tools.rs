@@ -754,6 +754,16 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
             .ok()
             .flatten()
     };
+    // Never degrade silently: say when the search could only match words.
+    let keyword_note = if vector.is_none() {
+        if state.embedding_engine.is_running() {
+            " (Matched by words only this time: the meaning model did not answer in time.)"
+        } else {
+            " (Matched by words only: no meaning model is running, so related wording may be missed. The user can pick one in Search → Library status.)"
+        }
+    } else {
+        ""
+    };
     let recall = match state.memory.recall(query, vector.as_deref(), Some(900)) {
         Ok(r) => r,
         Err(e) => return failed(format!("Your notes could not be searched: {}", e.message)),
@@ -761,8 +771,9 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     if recall.citations.is_empty() {
         return ToolOutcome {
             ok: true,
-            for_model: "Nothing in the user's notes or documents matches. Say so if it matters."
-                .into(),
+            for_model: format!(
+                "Nothing in the user's notes or documents matches.{keyword_note} Say so if it matters."
+            ),
             summary: "Nothing found".into(),
             for_user: "Nothing matched in your notes and documents.".into(),
             citations: Vec::new(),
@@ -773,9 +784,12 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     for cit in recall.citations {
         let index = *next_citation;
         *next_citation += 1;
+        let name = std::path::Path::new(&cit.source)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| cit.title.clone());
         lines.push(format!(
-            "[{index}] {} ({})\n{}",
-            cit.title,
+            "[{index}] {name} — {}\n{}",
             cit.source,
             cit.snippet.trim()
         ));
@@ -784,8 +798,23 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     let body = lines.join("\n\n");
     ToolOutcome {
         ok: true,
-        for_model: format!("From the user's notes and documents:\n\n{body}\n\nCite them as [n]."),
-        summary: format!("{} matches", citations.len()),
+        for_model: format!(
+            "From the user's notes and documents{keyword_note}:\n\n{body}\n\nAnswer from these, name the file you used, and cite it as [n]."
+        ),
+        summary: format!(
+            "{} {}{}",
+            citations.len(),
+            if citations.len() == 1 {
+                "match"
+            } else {
+                "matches"
+            },
+            if vector.is_none() {
+                " · words only"
+            } else {
+                ""
+            }
+        ),
         for_user: body,
         citations,
     }

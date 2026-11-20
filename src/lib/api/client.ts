@@ -88,6 +88,13 @@ import type {
   McpServer,
   McpServerSaveRequest,
   McpTool,
+  LibraryStatus,
+  FolderPreset,
+  IndexProgress,
+  IndexReport,
+  SelfTestStep,
+  SelfTestReport,
+  CloudCall,
 } from "./bindings";
 
 export class ApiClient {
@@ -293,6 +300,53 @@ export class ApiClient {
 
   async getIndexerStats(): Promise<IndexerStatsResponse> {
     return invoke<IndexerStatsResponse>("indexer_stats");
+  }
+
+  // Library status, folder presets and indexing with progress
+
+  async libraryStatus(): Promise<LibraryStatus> {
+    return invoke<LibraryStatus>("library_status");
+  }
+
+  async libraryFolderPresets(): Promise<FolderPreset[]> {
+    return invoke<FolderPreset[]>("library_folder_presets");
+  }
+
+  async libraryIndex(folder: string, onProgress: (p: IndexProgress) => void): Promise<IndexReport> {
+    const channel = new Channel<IndexProgress>();
+    channel.onmessage = onProgress;
+    return invoke<IndexReport>("library_index_start", { folder, channel });
+  }
+
+  async libraryIndexCancel(): Promise<boolean> {
+    return invoke<boolean>("library_index_cancel");
+  }
+
+  async libraryFolderRemove(path: string): Promise<number> {
+    return invoke<number>("library_folder_remove", { path });
+  }
+
+  /** Choose the meaning model for search; it starts and re-embeds the library. */
+  async libraryEmbeddingSelect(modelId: string): Promise<LibraryStatus> {
+    return invoke<LibraryStatus>("library_embedding_select", { modelId });
+  }
+
+  // Check my setup
+
+  async selfTest(onStep: (s: SelfTestStep) => void): Promise<SelfTestReport> {
+    const channel = new Channel<SelfTestStep>();
+    channel.onmessage = onStep;
+    return invoke<SelfTestReport>("selftest_run", { channel });
+  }
+
+  // What left this computer
+
+  async cloudAuditList(limit = 200): Promise<CloudCall[]> {
+    return invoke<CloudCall[]>("cloud_audit_list", { limit });
+  }
+
+  async cloudAuditClear(): Promise<number> {
+    return invoke<number>("cloud_audit_clear");
   }
 
   async removeIndexedDoc(path: string): Promise<void> {

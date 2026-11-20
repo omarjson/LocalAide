@@ -807,3 +807,94 @@ export interface EngineStatusEvent {
   model_id: string | null;
   message: string | null;
 }
+
+/** Search → Library status. */
+export interface LibraryFolder {
+  path: string;
+  added_at: number;
+  last_scan_at: number;
+  indexed: number;
+  skipped: number;
+  limited: boolean;
+  documents: number;
+}
+
+export interface EmbeddingChoice {
+  id: string;
+  name: string;
+  installed: boolean;
+  size_bytes: number;
+}
+
+export interface LibraryStatus {
+  folders: LibraryFolder[];
+  documents: number;
+  total_bytes: number;
+  last_scan_at: number | null;
+  search_mode: "semantic" | "keyword";
+  reason: string | null;
+  embedding_model: string | null;
+  embedding_ready: boolean;
+  embedded_chunks: number;
+  total_chunks: number;
+  choices: EmbeddingChoice[];
+  storage_path: string;
+}
+
+export interface FolderPreset {
+  id: string;
+  label: string;
+  path: string | null;
+  exists: boolean;
+  added: boolean;
+}
+
+export interface IndexProgress {
+  folder: string;
+  seen: number;
+  indexed: number;
+  skipped: number;
+  current: string;
+}
+
+export interface IndexReport {
+  folder: string;
+  indexed: number;
+  skipped: number;
+  limited: boolean;
+  cancelled: boolean;
+  ms: number;
+  reasons: [string, number][];
+  skipped_files: { path: string; reason: string }[];
+}
+
+/** Settings → General → Check my setup. */
+export interface SelfTestStep {
+  step: "model" | "load" | "reply";
+  label: string;
+  status: "running" | "pass" | "fail" | "skip";
+  ms: number;
+  detail: string;
+  percent: number | null;
+}
+
+export interface SelfTestReport {
+  passed: boolean;
+  model_id: string;
+  steps: SelfTestStep[];
+  ms: number;
+}
+
+/** One call that left this computer. */
+export interface CloudCall {
+  id: number;
+  timestamp: number;
+  provider: string;
+  host: string;
+  model: string;
+  kind: string;
+  preview: string;
+  bytes: number;
+  status: string;
+  detail: string | null;
+}

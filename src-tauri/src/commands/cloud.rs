@@ -781,3 +781,21 @@ mod tests {
         assert_ne!(a, b);
     }
 }
+
+/// What left this computer: the newest outbound calls, newest first.
+#[tauri::command]
+pub fn cloud_audit_list(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<crate::services::library::db::CloudCallRow>, AppError> {
+    state
+        .library
+        .db()
+        .list_cloud_calls(limit.unwrap_or(200).clamp(1, 2000))
+}
+
+/// Empty the online log. Returns how many entries were removed.
+#[tauri::command]
+pub fn cloud_audit_clear(state: State<'_, AppState>) -> Result<usize, AppError> {
+    state.library.db().clear_cloud_calls()
+}
