@@ -14,6 +14,8 @@ export const isChatMode = (value: unknown): value is ChatModeId =>
 /** Answer statistics shown with the developer flag "Answer statistics". */
 export interface AnswerStats {
   tokens: number;
+  inputTokens?: number;
+  outputTokens?: number;
   ms: number;
   firstTokenMs: number | null;
 }

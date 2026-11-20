@@ -23,6 +23,13 @@ pub struct ModelInfo {
     pub verified: bool,
     pub active: bool,
     pub download_progress: Option<f32>,
+    /// Bytes already in `.part` files (the model and its companions). More
+    /// than zero on a model that is not installed means it can resume.
+    #[serde(default)]
+    pub partial_bytes: u64,
+    /// The model and its companions together, for progress and size.
+    #[serde(default)]
+    pub total_bytes: u64,
 }
 
 /// Where the active model catalog came from: "built-in" (compiled into the

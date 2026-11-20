@@ -89,7 +89,7 @@ export function textOf(parts: MessagePart[]): string {
 /** The parts as they are saved: no timers, tool output kept short. */
 export function partsForSaving(parts: MessagePart[]): MessagePart[] {
   return parts.map((p) => {
-    if (p.type === "reasoning") return { type: "reasoning", text: p.text, ms: p.ms ?? null };
+    if (p.type === "reasoning") return { type: "reasoning", text: p.text, ms: p.ms == null ? null : Math.max(0, Math.round(p.ms)) };
     if (p.type === "tool") return { ...p, output: p.output.slice(0, 2000), arguments: p.arguments.slice(0, 2000) };
     return { ...p };
   });

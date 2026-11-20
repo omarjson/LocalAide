@@ -38,6 +38,10 @@ export interface ModelInfo {
   verified: boolean;
   active: boolean;
   download_progress?: number | null;
+  /** Bytes already in partial files; > 0 on an uninstalled model means it can resume. */
+  partial_bytes?: number;
+  /** The model and its companion files together. */
+  total_bytes?: number;
 }
 
 /** Where the active model catalog came from (built-in or refreshed). */
@@ -105,7 +109,7 @@ export interface ChatMessage {
   /** Session only: what LocalAide did before answering. */
   steps?: string[];
   /** Session only: answer statistics (developer flag). */
-  stats?: { tokens: number; ms: number; firstTokenMs: number | null } | null;
+  stats?: { tokens: number; inputTokens?: number; outputTokens?: number; ms: number; firstTokenMs: number | null } | null;
   /** The answer in order: thinking, tool calls and text. Saved with the chat. */
   parts?: MessagePart[];
   /** Files attached to a user message, with their text. */

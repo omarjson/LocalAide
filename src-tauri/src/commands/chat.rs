@@ -636,6 +636,48 @@ pub async fn chat_thread_export_save(
     .await
 }
 
+/// Largest export the window may hand over (Markdown of a very long chat).
+const MAX_EXPORT_BYTES: usize = 32 * 1024 * 1024;
+
+/// Asks where to save, then writes text the window already formatted (the
+/// same Markdown "Copy full conversation" uses). The path comes only from
+/// the save window the user answered; returns None when they close it.
+#[tauri::command]
+pub async fn chat_export_text_save(
+    app: tauri::AppHandle,
+    file_name: String,
+    content: String,
+) -> Result<Option<String>, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    if content.len() > MAX_EXPORT_BYTES {
+        return Err(AppError::invalid_input(
+            "This chat is too large to save as one file.",
+        ));
+    }
+    let stem = export_file_stem(file_name.trim_end_matches(".md"));
+    let suggested = format!("{stem}.md");
+    run_blocking(move || {
+        let Some(picked) = app
+            .dialog()
+            .file()
+            .set_title("Save chat")
+            .set_file_name(&suggested)
+            .add_filter("Markdown", &["md"])
+            .blocking_save_file()
+        else {
+            return Ok(None);
+        };
+        let path = picked
+            .into_path()
+            .map_err(|e| AppError::invalid_input(format!("That location cannot be used: {e}")))?;
+        fs::write(&path, content)
+            .map_err(|e| AppError::storage(format!("The chat could not be saved there: {e}")))?;
+        Ok(Some(path.to_string_lossy().into_owned()))
+    })
+    .await
+}
+
 /// Turns a chat title into a file name that every system accepts.
 fn export_file_stem(title: &str) -> String {
     let cleaned: String = title

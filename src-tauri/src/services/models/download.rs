@@ -141,9 +141,22 @@ impl ModelDownloader {
         let mut last_progress_time = Instant::now();
         let mut bytes_since_last_progress = 0u64;
 
-        while let Some(chunk_result) = stream.next().await {
+        loop {
+            // Wait for the next chunk, but look at the cancel flag every
+            // 200 ms, so Pause and Cancel work while the network is silent.
+            let next = tokio::select! {
+                chunk = stream.next() => chunk,
+                _ = tokio::time::sleep(CANCEL_POLL) => {
+                    if cancel.load(Ordering::SeqCst) {
+                        let _ = file.flush();
+                        return Err(AppError::cancelled());
+                    }
+                    continue;
+                }
+            };
+            let Some(chunk_result) = next else { break };
             if cancel.load(Ordering::SeqCst) {
-                drop(file);
+                let _ = file.flush();
                 return Err(AppError::cancelled());
             }
 
@@ -186,6 +199,9 @@ impl ModelDownloader {
         finish_partial_file(&part_file, dest, expected_sha256).await
     }
 }
+
+/// How often a silent download checks for Pause or Cancel.
+const CANCEL_POLL: Duration = Duration::from_millis(200);
 
 /// Extra space kept free after a download, so the disk never fills mid-write.
 const DISK_MARGIN_BYTES: u64 = 512 * 1024 * 1024;
@@ -251,6 +267,173 @@ mod tests {
         let moved = futures::executor::block_on(finish_partial_file(&part, &dest, ABC_SHA256));
         assert_eq!(moved.unwrap(), dest);
         assert!(dest.exists() && !part.exists());
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+    }
+
+    use super::ModelDownloader;
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    /// The bytes every test serves, and their SHA-256.
+    const BODY: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    fn body_sha() -> String {
+        use sha2::{Digest, Sha256};
+        hex::encode(Sha256::digest(BODY))
+    }
+
+    #[derive(Clone, Copy)]
+    enum Mode {
+        /// Answers Range with 206 and the rest of the file.
+        Range,
+        /// Ignores Range and sends the whole file with 200.
+        IgnoresRange,
+        /// Answers 416 to any Range (the file is already complete).
+        Complete,
+        /// Sends the headers and a few bytes, then goes silent.
+        Stall,
+    }
+
+    /// A loopback HTTP server for one request. Returns its URL and the Range
+    /// header it saw.
+    fn serve(mode: Mode) -> (String, std::sync::mpsc::Receiver<Option<String>>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/model.gguf", listener.local_addr().unwrap());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
+                head.push(byte[0]);
+            }
+            let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+            let range = head
+                .lines()
+                .find_map(|l| l.strip_prefix("range: bytes="))
+                .map(|r| r.trim_end_matches('-').trim().to_string());
+            let _ = tx.send(range.clone());
+            let start: usize = range.as_deref().and_then(|r| r.parse().ok()).unwrap_or(0);
+            let reply = |status: &str, body: &[u8], extra: &str| {
+                let mut r = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n",
+                    body.len()
+                )
+                .into_bytes();
+                r.extend_from_slice(body);
+                r
+            };
+            match mode {
+                Mode::Range if start > 0 => {
+                    let _ = stream.write_all(&reply(
+                        "206 Partial Content",
+                        &BODY[start..],
+                        &format!(
+                            "Content-Range: bytes {start}-{}/{}\r\n",
+                            BODY.len() - 1,
+                            BODY.len()
+                        ),
+                    ));
+                }
+                Mode::Range | Mode::IgnoresRange => {
+                    let _ = stream.write_all(&reply("200 OK", BODY, ""));
+                }
+                Mode::Complete => {
+                    let _ = stream.write_all(&reply("416 Range Not Satisfiable", b"", ""));
+                }
+                Mode::Stall => {
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        BODY.len()
+                    );
+                    let _ = stream.write_all(head.as_bytes());
+                    let _ = stream.write_all(&BODY[..4]);
+                    let _ = stream.flush();
+                    std::thread::sleep(Duration::from_secs(20));
+                }
+            }
+        });
+        (url, rx)
+    }
+
+    async fn fetch(
+        url: &str,
+        dest: &std::path::Path,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<std::path::PathBuf, crate::app::error::AppError> {
+        ModelDownloader::new()
+            .download_atomic(url, dest, BODY.len() as u64, &body_sha(), cancel, |_| {})
+            .await
+    }
+
+    #[tokio::test]
+    async fn a_partial_download_resumes_with_range() {
+        let (part, dest) = temp_pair("range");
+        std::fs::write(&part, &BODY[..10]).unwrap();
+        let (url, seen) = serve(Mode::Range);
+        let out = fetch(&url, &dest, Arc::new(AtomicBool::new(false)))
+            .await
+            .unwrap();
+        assert_eq!(seen.recv().unwrap().as_deref(), Some("10"));
+        assert_eq!(std::fs::read(out).unwrap(), BODY);
+        assert!(!part.exists());
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_server_that_ignores_range_restarts_cleanly() {
+        let (part, dest) = temp_pair("ignore");
+        std::fs::write(&part, b"stale bytes!").unwrap();
+        let (url, _seen) = serve(Mode::IgnoresRange);
+        let out = fetch(&url, &dest, Arc::new(AtomicBool::new(false)))
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read(out).unwrap(),
+            BODY,
+            "the old part is replaced, not appended to"
+        );
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_complete_part_file_is_checked_on_416() {
+        let (part, dest) = temp_pair("complete");
+        std::fs::write(&part, BODY).unwrap();
+        let (url, _seen) = serve(Mode::Complete);
+        let out = fetch(&url, &dest, Arc::new(AtomicBool::new(false)))
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(out).unwrap(), BODY);
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn pause_works_while_the_server_is_silent_and_keeps_the_part() {
+        let (part, dest) = temp_pair("stall");
+        let (url, _seen) = serve(Mode::Stall);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            flag.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+        let err = fetch(&url, &dest, cancel).await.unwrap_err();
+        assert_eq!(err.code, "CANCELLED");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "stopped without waiting for the read timeout"
+        );
+        assert_eq!(
+            std::fs::read(&part).unwrap(),
+            &BODY[..4],
+            "the partial file stays for resume"
+        );
+        assert!(!dest.exists());
         let _ = std::fs::remove_dir_all(dest.parent().unwrap());
     }
 

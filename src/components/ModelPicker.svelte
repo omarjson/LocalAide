@@ -32,11 +32,30 @@
   }: Props = $props();
 
   let query = $state("");
-  let filters = $state<{ reasoning: boolean; vision: boolean; tools: boolean; free: boolean }>({
-    reasoning: false,
-    vision: false,
-    tools: false,
-    free: false,
+  const savedFilters = (() => {
+    try {
+      const value = JSON.parse(localStorage.getItem("localaide-model-filters") ?? "{}") as Record<string, unknown>;
+      return {
+        reasoning: value.reasoning === true,
+        vision: value.vision === true,
+        tools: value.tools === true,
+        free: value.free === true,
+      };
+    } catch {
+      return { reasoning: false, vision: false, tools: false, free: false };
+    }
+  })();
+  let filters = $state<{ reasoning: boolean; vision: boolean; tools: boolean; free: boolean }>(savedFilters);
+  const activeFilterCount = $derived(Object.values(filters).filter(Boolean).length);
+  const clearFilters = () => {
+    filters = { reasoning: false, vision: false, tools: false, free: false };
+  };
+  $effect(() => {
+    try {
+      localStorage.setItem("localaide-model-filters", JSON.stringify(filters));
+    } catch {
+      // Storage is optional; filters still work for this session.
+    }
   });
   let cursor = $state(0);
   let searchEl = $state<HTMLInputElement>();
@@ -55,19 +74,21 @@
     return true;
   };
 
-  type Section = { id: string; label: string; providerId: string | null; needsRefresh: boolean; items: ModelChoice[] };
+  type Section = { id: string; label: string; providerId: string | null; needsRefresh: boolean; starred?: number; items: ModelChoice[] };
   const sections = $derived.by<Section[]>(() => {
     if (!choices) return [];
     const list = choices.models.filter(matches);
     const out: Section[] = [];
     const starred = list.filter((m) => m.favorite);
     if (starred.length) out.push({ id: "starred", label: "Starred", providerId: null, needsRefresh: false, items: starred });
-    const local = list.filter((m) => m.provider_id === null);
+    // A starred model shows once, under Starred, not again in its group.
+    const local = list.filter((m) => m.provider_id === null && !m.favorite);
     if (local.length) out.push({ id: "local", label: "On this computer", providerId: null, needsRefresh: false, items: local });
     for (const g of choices.groups.filter((g) => g.enabled)) {
-      const items = list.filter((m) => m.provider_id === g.provider_id);
+      const items = list.filter((m) => m.provider_id === g.provider_id && !m.favorite);
       if (items.length || !query.trim()) {
-        out.push({ id: g.provider_id, label: g.label, providerId: g.provider_id, needsRefresh: g.needs_refresh, items });
+        const starredHere = list.filter((m) => m.provider_id === g.provider_id && m.favorite).length;
+        out.push({ id: g.provider_id, label: g.label, providerId: g.provider_id, needsRefresh: g.needs_refresh, starred: starredHere, items });
       }
     }
     return out;
@@ -84,7 +105,8 @@
   });
   // Keep the cursor in range as the list filters.
   $effect(() => {
-    if (cursor >= flat.length) cursor = Math.max(0, flat.length - 1);
+    if (flat.length === 0) cursor = 0;
+    else if (cursor >= flat.length) cursor = flat.length - 1;
   });
 
   const scrollCursorIntoView = () => {
@@ -148,7 +170,7 @@
     {#if busy}
       <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
     {:else if active && !active.local}
-      <Icon name="cloud" class="h-4 w-4 text-amber-300" />
+      <Icon name="cloud" class="h-4 w-4 text-ember-300" />
     {:else}
       <span class={`h-2 w-2 shrink-0 rounded-full ${active && choices?.local_loaded ? "bg-emerald-400" : "bg-ink-600"}`} aria-hidden="true"></span>
     {/if}
@@ -181,7 +203,8 @@
             class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500"
           />
         </span>
-        <div class="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show only models that">
+        <div class="mt-2 flex items-center gap-1.5" role="group" aria-label="Show only models that">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
           {#each filterButtons as f (f.id)}
             <button
               type="button"
@@ -190,6 +213,10 @@
               class={`filter ${filters[f.id] ? "filter-on" : ""}`}
             ><Icon name={f.icon} class="h-3.5 w-3.5" />{f.label}</button>
           {/each}
+          </div>
+          {#if activeFilterCount > 0}
+            <button type="button" onclick={clearFilters} class="ml-auto shrink-0 rounded px-1.5 py-1 text-xs text-ink-400 underline underline-offset-2 hover:text-ink-100">Clear ({activeFilterCount})</button>
+          {/if}
         </div>
       </div>
 
@@ -252,7 +279,7 @@
             </div>
           {:else}
             {#if section.providerId}
-              <p class="px-3 pb-2 text-xs text-ink-500">{section.needsRefresh ? "Press Load models to see what this provider offers." : "No model matches."}</p>
+              <p class="px-3 pb-2 text-xs text-ink-500">{section.needsRefresh ? "Press Load models to see what this provider offers." : section.starred ? "Its starred models are listed above." : "No model matches."}</p>
             {/if}
           {/each}
         {/each}

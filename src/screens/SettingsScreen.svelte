@@ -794,7 +794,7 @@
           <p class="mt-1 text-sm text-ink-400">Optional cloud chat with providers you choose. Some are free, and some need no key at all. Turn on as many as you like: their models appear in the chat's model menu, and a message goes online only when you pick one of them.</p>
 
           {#if cloudError}<div class="mt-4"><ErrorBanner message={cloudError} onRetry={() => void loadCloud()} onDismiss={() => cloudError = null} /></div>{/if}
-          <div class="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-200">
+          <div class="mt-6 rounded-lg border border-ember-500/30 bg-ember-500/10 p-4 text-sm leading-6 text-ember-200">
             While chat uses an online model, your messages go to that model's provider. With a model on this computer, nothing leaves it.
           </div>
 

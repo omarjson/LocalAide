@@ -22,6 +22,9 @@
   import ChatInput from "../components/ChatInput.svelte";
   import ModelPicker from "../components/ModelPicker.svelte";
   import EffortPicker from "../components/EffortPicker.svelte";
+  import ContextMeter from "../components/ContextMeter.svelte";
+  import { compactionStart, contextUsage, fits } from "../lib/contextUsage";
+  import { conversationMarkdown, exportFileName } from "../lib/chatExport";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -99,6 +102,7 @@
         skills?: unknown;
         mcpOff?: unknown;
         efforts?: unknown;
+        autoCompactAt?: unknown;
       };
     } catch {
       return {};
@@ -116,11 +120,12 @@
     savedOptions.efforts && typeof savedOptions.efforts === "object" ? (savedOptions.efforts as Record<string, string>) : {},
   );
   const effort = $derived(activeChoice ? efforts[activeChoice.key] ?? "auto" : "auto");
+  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
   $effect(() => {
     try {
       localStorage.setItem(
         OPTIONS_KEY,
-        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts }),
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts, autoCompactAt }),
       );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
@@ -315,6 +320,7 @@
     pendingFiles = [];
     allowedTools = [];
     approvals = {};
+    compactedBefore = 0;
   };
 
   // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
@@ -335,6 +341,7 @@
     activeThreadTitle = t.title;
     allowedTools = [];
     approvals = {};
+    compactedBefore = 0;
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(t.id);
@@ -392,10 +399,32 @@
     }
   };
 
-  const exportCurrentThread = async (format: "markdown" | "json") => {
-    if (!activeThreadId) return;
+  const chatMarkdown = () =>
+    conversationMarkdown($state.snapshot(messages), {
+      title: activeThreadTitle === "New Conversation" ? "Chat" : activeThreadTitle,
+      systemPrompt,
+    });
+
+  const copyCurrentThread = async () => {
+    if (messages.length === 0) return;
     try {
-      const savedTo = await api.saveChatExport({ thread_id: activeThreadId, format });
+      await navigator.clipboard.writeText(chatMarkdown());
+      showToast("Conversation copied.");
+    } catch {
+      chatError = "The conversation could not be copied. Check clipboard permission and try again.";
+    }
+  };
+
+  const exportCurrentThread = async (format: "markdown" | "json") => {
+    if (!activeThreadId || messages.length === 0) return;
+    try {
+      // Markdown is built here, the same text "Copy full conversation" gives.
+      // JSON is the saved file, so save first to include the newest answer.
+      await persistCurrentThread();
+      const savedTo =
+        format === "markdown"
+          ? await api.saveChatMarkdown(exportFileName(activeThreadTitle, "md"), chatMarkdown())
+          : await api.saveChatExport({ thread_id: activeThreadId, format });
       if (savedTo) showToast(`Chat saved to ${savedTo}`);
     } catch (e: unknown) {
       sendFailed = false;
@@ -403,7 +432,84 @@
     }
   };
 
-  // The user's local date and time, so the model knows what "today" is.
+  // Compaction never deletes messages. It moves this cut point: messages
+  // before it stay on screen and in the saved chat, but are not sent to the
+  // model. It resets with each chat.
+  let compactedBefore = $state(0);
+  const historyFrom = $derived(Math.min(compactedBefore, messages.length));
+  const answerReserve = $derived(maxTokens + (activeChoice?.reasoning && effort !== "off" ? 4096 : 0));
+  const usage = $derived(
+    contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve }),
+  );
+
+  /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
+  const compactConversation = (threshold = autoCompactAt, draft = "") => {
+    const limit = activeChoice?.context;
+    if (!limit) {
+      // No known window: keep the last four messages.
+      const next = Math.max(historyFrom, messages.length - 4);
+      if (next <= historyFrom) return false;
+      compactedBefore = next;
+      return true;
+    }
+    const next = compactionStart(messages, limit, threshold, { from: historyFrom, draft, systemPrompt, reserve: answerReserve });
+    if (next <= historyFrom) return false;
+    compactedBefore = next;
+    return true;
+  };
+
+  const handleSlashCommand = (command: string) => {
+    switch (command) {
+      case "clear":
+        newChat();
+        break;
+      case "compact":
+        // A manual compact aims for half the window, leaving room to talk.
+        if (compactConversation(Math.min(50, autoCompactAt))) {
+          showToast("Older messages stay on screen but are no longer sent to the model.");
+        } else {
+          showToast("This conversation already fits.");
+        }
+        break;
+      case "model":
+        pickerOpen = true;
+        break;
+      case "settings":
+        showSettingsPanel = true;
+        break;
+      case "export":
+        void exportCurrentThread("markdown");
+        break;
+      case "copy":
+        void copyCurrentThread();
+        break;
+      case "by-the-way":
+        input = "By the way: ";
+        break;
+      case "goal":
+        input = "My goal is: ";
+        break;
+      case "scale":
+        input = "Answer at the right level of detail. Keep the response concise unless the task needs depth.\n\n";
+        break;
+      case "remember":
+        input = "Remember this: ";
+        useRecall = true;
+        break;
+      case "create-skill":
+        input = "Create a reusable skill from this instruction: ";
+        useSkills = true;
+        break;
+      case "web":
+        useWeb = true;
+        showToast("Web tools enabled for the next message.");
+        break;
+      case "notes":
+        useRecall = true;
+        showToast("Notes and document recall enabled.");
+        break;
+    }
+  };
   const nowLabel = () => {
     const d = new Date();
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -415,11 +521,15 @@
     if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
+    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, { from: historyFrom, draft: userMsg, systemPrompt, reserve: answerReserve }), autoCompactAt)) {
+      if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
+    }
 
     // Earlier turns only. The new message is sent separately as `message`.
     // Failed answers are left out, so the model does not repeat them.
     const history = $state
       .snapshot(messages)
+      .slice(historyFrom)
       .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
       .map((m) => ({
         role: m.role,
@@ -521,6 +631,8 @@
             settleParts(parts(), now);
             answer().stats = {
               tokens: event.payload.total_tokens,
+              inputTokens: contextUsage(messages.slice(0, assistantIdx), null, { from: historyFrom, systemPrompt }).used,
+              outputTokens: event.payload.total_tokens,
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
             };
@@ -881,7 +993,7 @@
   });
 </script>
 
-<div class="chat-root relative flex h-full flex-col">
+<div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
   <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
     <button
@@ -899,8 +1011,12 @@
 
     <div class="ml-auto flex items-center gap-1.5">
       {#if onlineChoice}
-        <span class="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex" title={`Messages go to ${onlineChoice.provider_label}.`}>
-          <Icon name="cloud" class="h-3.5 w-3.5" />Online · {onlineChoice.provider_label}
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/35 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineChoice.provider_label}.`}>
+          <Icon name="cloud" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">Online · {onlineChoice.provider_label}</span>
+        </span>
+      {:else}
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/5 px-2.5 py-1 text-xs font-medium text-ember-200" title="Messages stay on this computer.">
+          <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
         </span>
       {/if}
 
@@ -909,7 +1025,9 @@
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
         {#if showMoreActions}
           <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Save chat as a file</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Export conversation as Markdown</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void copyCurrentThread(); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("json"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="menu-item"><Icon name="file" class="h-4 w-4" />Summarize last answer</button>
           </div>
         {/if}
@@ -1006,9 +1124,17 @@
           </section>
         {/if}
 
+        <section>
+          <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="layers" class="h-3.5 w-3.5" />Context window</h3>
+          <label class="block text-sm text-ink-300">
+            <span class="flex justify-between"><span>Auto-compact at</span><span class="font-mono text-ink-100">{autoCompactAt}%</span></span>
+            <input type="range" min="50" max="95" step="5" bind:value={autoCompactAt} class="mt-1 w-full accent-ember-500" aria-label="Auto-compact threshold" />
+          </label>
+          <p class="mt-2 text-xs leading-5 text-ink-500">Older turns are shortened before a new answer when the context meter reaches this level. Use the circle beside the model selector to see estimated input and output usage.</p>
+        </section>
+
         {#if flag("system_prompt_editor")}
           <section>
-            <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />System prompt</h3>
             <textarea bind:value={systemPrompt} rows={6} onblur={savePrefs} aria-label="System prompt" class="w-full resize-y rounded-lg border border-ink-700 bg-ink-900 p-3 font-mono text-[13px] leading-6 text-ink-100"></textarea>
             {#if currentModeInfo?.instruction}
               <p class="mb-1 mt-3 text-xs font-semibold text-ink-400">{currentModeInfo.label} mode adds:</p>
@@ -1026,7 +1152,7 @@
        a live region, so tokens are not read out one by one. -->
   <p class="sr-only" aria-live="polite">{liveStatus}</p>
 
-  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative flex-1 overflow-y-auto">
+  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative min-h-0 flex-1 overflow-y-auto">
     {#if messages.length === 0}
       <div class="ember-glow mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center gap-8 px-5 py-10 text-center">
         <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
@@ -1085,6 +1211,14 @@
     {:else}
       <div class={`mx-auto w-full max-w-3xl px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
         {#each messages as msg, idx (idx)}
+          {#if idx === historyFrom && historyFrom > 0}
+            <div class="flex items-center gap-3 text-xs text-ink-500" role="separator">
+              <span class="h-px flex-1 bg-ink-800"></span>
+              <span class="flex items-center gap-1.5"><Icon name="layers" class="h-3.5 w-3.5" />Earlier messages are not sent to the model</span>
+              <button type="button" class="rounded px-1.5 py-0.5 text-ember-300 underline underline-offset-2 hover:text-ember-200" onclick={() => (compactedBefore = 0)}>Send them again</button>
+              <span class="h-px flex-1 bg-ink-800"></span>
+            </div>
+          {/if}
           <MessageBubble
             role={msg.role}
             content={msg.content}
@@ -1141,6 +1275,7 @@
         onRemoveImage={removeImage}
         skills={moduleOn("skills") ? skills : []}
         onPickSkill={(body) => { input = body; }}
+        onSlashCommand={handleSlashCommand}
         {mode}
         modes={chatModes()}
         onModeChange={changeMode}
@@ -1165,6 +1300,7 @@
         onManageTools={() => requestSettings("tools")}
       >
         {#snippet trailing()}
+          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} onCompact={() => handleSlashCommand("compact")} />
           {#if activeChoice && activeChoice.efforts.length > 0}
             <EffortPicker efforts={activeChoice.efforts} value={effort} onChange={setEffort} />
           {/if}

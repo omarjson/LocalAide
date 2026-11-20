@@ -25,8 +25,12 @@
     ramGb: number;
     quant: string;
     license: string;
-    status: "installed" | "available" | "installing";
+    /** "pausing": Pause was pressed and the download is still stopping. */
+    status: "installed" | "available" | "installing" | "pausing" | "paused";
     progress?: number;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    speedBps?: number;
     active?: boolean;
     kind?: string;
     vision?: boolean;
@@ -35,6 +39,8 @@
   };
 
   let models = $state<Model[]>([]);
+  // Downloads this screen started and that have not ended yet.
+  const downloadingIds = new Set<string>();
   let loading = $state(true);
   let query = $state("");
   let kindFilter = $state("all");
@@ -72,6 +78,16 @@
   let openModelMenu = $state<string | null>(null);
   let pendingRemoveId = $state<string | null>(null);
 
+  /** "1.2 GB left · about 3 min", from a smoothed speed. */
+  const formatEta = (downloaded: number, total: number, speed: number) => {
+    const left = Math.max(0, total - downloaded);
+    if (total <= 0) return "";
+    const size = `${formatBytes(left)} left`;
+    if (!speed || left === 0) return size;
+    const seconds = Math.ceil(left / speed);
+    const time = seconds < 60 ? `${seconds} s` : seconds < 3600 ? `${Math.round(seconds / 60)} min` : `${Math.floor(seconds / 3600)} h ${Math.round((seconds % 3600) / 60)} min`;
+    return `${size} · about ${time}`;
+  };
   const kindTabs = [
     { value: "all", label: "All" },
     { value: "chat", label: "Chat" },
@@ -89,7 +105,17 @@
         size: m.size_bytes ? `${(m.size_bytes / 1024 / 1024).toFixed(0)} MB` : "Unknown",
         ram: `${m.ram_estimate_gb} GB`,
         ramGb: m.ram_estimate_gb,
-        status: m.installed ? "installed" : "available",
+        // A partial file left from a pause (or a closed app) can resume.
+        status: m.installed
+          ? "installed"
+          : downloadingIds.has(m.id)
+            ? "installing"
+            : (m.partial_bytes ?? 0) > 0
+              ? "paused"
+              : "available",
+        downloadedBytes: m.installed ? undefined : m.partial_bytes,
+        totalBytes: m.total_bytes,
+        progress: !m.installed && m.total_bytes ? Math.round(((m.partial_bytes ?? 0) / m.total_bytes) * 100) : undefined,
         quant: m.quant,
         license: m.license,
         active: m.active ?? false,
@@ -206,6 +232,26 @@
     }
   };
 
+  const applyProgress = (id: string, event: { percent: number; downloaded_bytes: number; total_bytes: number; speed_bps: number; status: string }) => {
+    models = models.map((model) => model.id === id
+      ? {
+          ...model,
+          status:
+            event.status === "paused"
+              ? "paused"
+              : event.status === "complete"
+                ? "installed"
+                : model.status === "pausing"
+                  ? "pausing"
+                  : "installing",
+          progress: Math.round(event.percent),
+          downloadedBytes: event.downloaded_bytes || model.downloadedBytes,
+          totalBytes: event.total_bytes || model.totalBytes,
+          // Smooth the 200 ms samples, so the time left does not jump.
+          speedBps: event.speed_bps > 0 ? (model.speedBps ? model.speedBps * 0.8 + event.speed_bps * 0.2 : event.speed_bps) : model.speedBps,
+        }
+      : model);
+  };
   const hfAddAndDownload = async (repo: string, file: HfFileInfo) => {
     hfAdding = file.path;
     actionError = null;
@@ -218,35 +264,49 @@
       models = models.map((model) => model.id === res.id
         ? { ...model, status: "installing", progress: 0 }
         : model);
-      await api.downloadModel(res.id, (event) => {
-        models = models.map((model) => model.id === res.id
-          ? { ...model, status: "installing", progress: Math.round(event.percent) }
-          : model);
-      });
-      await refresh();
+      await runDownload(res.id);
     } catch (e: unknown) {
-      actionError = errorMessage(e);
+      if (!/cancel/i.test(errorMessage(e))) actionError = errorMessage(e);
       await refresh();
     } finally {
       hfAdding = null;
     }
   };
 
+  const pauseInstall = async (id: string) => {
+    try {
+      const stopping = await api.pauseModelDownload(id);
+      // Stay on "Pausing…" until the download really ends; resuming before
+      // that would race the old download for the same partial file.
+      models = models.map((model) => model.id === id ? { ...model, status: stopping ? "pausing" : "paused", speedBps: 0 } : model);
+    } catch (e: unknown) {
+      actionError = errorMessage(e);
+    }
+  };
+
+  /** Run one download to its end: finished, paused, or failed. */
+  const runDownload = async (id: string) => {
+    downloadingIds.add(id);
+    try {
+      await api.downloadModel(id, (event) => applyProgress(id, event));
+    } finally {
+      downloadingIds.delete(id);
+    }
+    // A pause ends the call normally; keep the row on Resume.
+    const row = models.find((model) => model.id === id);
+    if (row?.status === "pausing") models = models.map((m) => m.id === id ? { ...m, status: "paused" } : m);
+    await refresh();
+  };
+
   const startInstall = async (id: string) => {
     actionError = null;
-    models = models.map((model) => model.id === id ? { ...model, status: "installing", progress: 0 } : model);
+    models = models.map((model) => model.id === id ? { ...model, status: "installing" } : model);
     try {
-      await api.downloadModel(id, (event) => {
-        models = models.map((model) => model.id === id
-          ? { ...model, status: "installing", progress: Math.round(event.percent) }
-          : model);
-      });
-      await refresh();
+      await runDownload(id);
     } catch (e: unknown) {
-      models = models.map((model) => model.id === id
-        ? { ...model, status: "available", progress: undefined }
-        : model);
-      actionError = errorMessage(e);
+      // Cancel is the user's own choice, not an error to show.
+      if (!/cancel/i.test(errorMessage(e))) actionError = errorMessage(e);
+      await refresh();
     }
   };
 
@@ -256,7 +316,9 @@
     } catch (e: unknown) {
       actionError = errorMessage(e);
     }
-    models = models.map((model) => model.id === id ? { ...model, status: "available", progress: undefined } : model);
+    // Cancel discards the partial file; the row goes back to Download.
+    models = models.map((model) => model.id === id ? { ...model, status: "available", progress: undefined, downloadedBytes: undefined, speedBps: 0 } : model);
+    if (!downloadingIds.has(id)) await refresh();
   };
 
   const installPreset = async (id: string) => {
@@ -484,10 +546,11 @@
           <div class="min-w-0 flex-1">
             <div class="font-semibold text-ink-50">{model.name}</div>
             <div class="text-sm text-ink-400">{modelDescription(model)}</div>
-            {#if model.status === "installing"}
-              <div class="mt-2 max-w-xs">
-                <div class="mb-1 flex justify-between text-sm text-ink-400"><span>Downloading…</span><span>{model.progress ?? 0}%</span></div>
+            {#if model.status === "installing" || model.status === "pausing" || model.status === "paused"}
+              <div class="mt-2 max-w-sm">
+                <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : model.status === "pausing" ? "Pausing…" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
                 <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-all" style={`width:${model.progress ?? 0}%`}></div></div>
+                <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.status === "installing" && model.speedBps ? `${formatBytes(model.speedBps)}/s` : model.status === "installing" ? "Starting…" : "Resume continues where it stopped"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.status === "installing" ? (model.speedBps ?? 0) : 0)}</span></div>
               </div>
             {/if}
           </div>
@@ -498,6 +561,12 @@
               <StatusBadge label="Fits" tone="ok" />
             {/if}
             {#if model.status === "installing"}
+              <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>
+              <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
+            {:else if model.status === "pausing"}
+              <Button variant="secondary" disabled>Pausing…</Button>
+            {:else if model.status === "paused"}
+              <Button variant="primary" onclick={() => void startInstall(model.id)}>Resume</Button>
               <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
             {:else if model.status === "installed"}
               <Button variant="secondary" disabled={loadingModelId !== null} onclick={() => void activateModel(model.id)}>{loadingModelId === model.id ? "Loading…" : "Use this"}</Button>
@@ -562,10 +631,11 @@
                     <span>Needs {model.ram}</span>
                     <span>{model.quant}</span>
                   </div>
-                  {#if model.status === "installing"}
-                    <div class="mt-2 max-w-xs">
-                      <div class="mb-1 flex justify-between text-sm text-ink-400"><span>Downloading…</span><span>{model.progress ?? 0}%</span></div>
+                  {#if model.status === "installing" || model.status === "pausing" || model.status === "paused"}
+                    <div class="mt-2 max-w-sm">
+                      <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : model.status === "pausing" ? "Pausing…" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
                       <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-all" style={`width:${model.progress ?? 0}%`}></div></div>
+                      <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.status === "installing" && model.speedBps ? `${formatBytes(model.speedBps)}/s` : model.status === "installing" ? "Starting…" : "Resume continues where it stopped"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.status === "installing" ? (model.speedBps ?? 0) : 0)}</span></div>
                     </div>
                   {/if}
                 </div>
@@ -588,6 +658,12 @@
                       </Button>
                     {/if}
                   {:else if model.status === "installing"}
+                    <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>
+                    <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
+                  {:else if model.status === "pausing"}
+              <Button variant="secondary" disabled>Pausing…</Button>
+            {:else if model.status === "paused"}
+                    <Button variant="primary" onclick={() => void startInstall(model.id)}>Resume</Button>
                     <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
                   {:else}
                     <Button variant="secondary" onclick={() => void startInstall(model.id)}>

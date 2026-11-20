@@ -45,6 +45,12 @@ pub fn model_list(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, AppError
                 verified: installed,
                 active: is_active,
                 download_progress: None,
+                partial_bytes: if installed {
+                    0
+                } else {
+                    state.model_service.download_state(&e.id).0
+                },
+                total_bytes: state.model_service.download_state(&e.id).1,
             }
         })
         .collect();
@@ -190,10 +196,24 @@ fn model_verify_work(state: AppState, id: String) -> Result<ModelVerifyResult, A
     }
 }
 
+/// Pause a download. Returns false when nothing was downloading. The
+/// download ends a moment later (the `model_download` call then returns with
+/// a "paused" event); the `.part` files stay, and the next download resumes.
+#[tauri::command]
+pub fn model_download_pause(state: State<'_, AppState>, id: String) -> Result<bool, AppError> {
+    Ok(state.jobs.pause_kind(&format!("download_{id}")) > 0)
+}
+
 #[tauri::command]
 pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     // Job ids add a random part to "download_<id>", so cancel by kind.
-    state.jobs.cancel_kind(&format!("download_{id}"));
+    let stopped = state.jobs.cancel_kind(&format!("download_{id}"));
+    // Cancel discards what was downloaded. A running download removes its
+    // partial files when it ends; a paused one has nothing running, so they
+    // go now.
+    if stopped == 0 && !state.model_service.is_downloading(&id) {
+        state.model_service.remove_partials(&id);
+    }
     Ok(())
 }
 
@@ -253,6 +273,25 @@ pub async fn model_download(
         }
         Err(e) => {
             let err_msg = e.to_string();
+            if state.jobs.is_paused(&job_id) {
+                let (have, total) = state.model_service.download_state(&id);
+                let _ = channel.send(DownloadProgressEvent {
+                    model_id: id,
+                    downloaded_bytes: have,
+                    total_bytes: total,
+                    percent: if total > 0 {
+                        (have as f64 / total as f64 * 100.0) as f32
+                    } else {
+                        0.0
+                    },
+                    speed_bps: 0.0,
+                    status: "paused".to_string(),
+                });
+                return Ok(());
+            }
+            if e.code == "CANCELLED" && state.jobs.is_cancelled(&job_id) {
+                state.model_service.remove_partials(&id);
+            }
             state.jobs.fail_job(&job_id, &err_msg);
             let _ = channel.send(DownloadProgressEvent {
                 model_id: id,

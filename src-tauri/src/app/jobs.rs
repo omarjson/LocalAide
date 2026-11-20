@@ -11,8 +11,8 @@ pub enum JobState {
     Succeeded,
     Failed,
     Cancelled,
+    Paused,
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     pub id: String,
@@ -38,7 +38,7 @@ impl JobState {
     pub fn is_final(&self) -> bool {
         matches!(
             self,
-            JobState::Succeeded | JobState::Failed | JobState::Cancelled
+            JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Paused
         )
     }
 }
@@ -168,6 +168,30 @@ impl JobRegistry {
         cancelled
     }
 
+    /// Pauses every unfinished job made with this kind. The active request is
+    /// cancelled, but the `.part` file remains and a later download resumes
+    /// it with HTTP Range.
+    pub fn pause_kind(&self, kind: &str) -> usize {
+        let mut lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        let now = now_secs();
+        let mut paused = 0;
+        for entry in lock.values_mut() {
+            if entry.info.kind == kind && !entry.info.state.is_final() {
+                entry.cancel_flag.store(true, Ordering::SeqCst);
+                if finish(entry, JobState::Paused, now) {
+                    paused += 1;
+                }
+            }
+        }
+        paused
+    }
+
+    pub fn is_paused(&self, id: &str) -> bool {
+        let lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        lock.get(id)
+            .is_some_and(|e| e.info.state == JobState::Paused)
+    }
+
     pub fn is_cancelled(&self, id: &str) -> bool {
         let lock = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
         lock.get(id)
@@ -245,5 +269,17 @@ mod tests {
         let ids: std::collections::HashSet<String> =
             (0..1000).map(|_| registry.create_job("chat").0).collect();
         assert_eq!(ids.len(), 1000);
+    }
+
+    #[test]
+    fn pause_kind_preserves_the_partial_download_state() {
+        let registry = JobRegistry::new();
+        let (id, flag) = registry.create_job("download_model-a");
+        assert_eq!(registry.pause_kind("download_model-a"), 1);
+        assert!(flag.load(Ordering::SeqCst));
+        assert_eq!(registry.get_job(&id).unwrap().state, JobState::Paused);
+        assert!(registry.is_paused(&id));
+        registry.complete_job(&id);
+        assert_eq!(registry.get_job(&id).unwrap().state, JobState::Paused);
     }
 }
