@@ -66,6 +66,7 @@
   let editEl = $state<HTMLTextAreaElement>();
   let activeCitation = $state<Citation | null>(null);
   let lightbox = $state<string | null>(null);
+  let referencesOpen = $state(false);
   let raw = $state(false);
 
   $effect(() => {
@@ -227,25 +228,34 @@
       {/if}
 
       {#if citations.length > 0}
-        <div class="mt-4">
-          <div class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500">Sources</div>
-          <div class="grid gap-2 sm:grid-cols-2">
-            {#each citations as cit (cit.index)}
-              <a
-                href={isWeb(cit.source) ? cit.source : "#"}
-                rel="noreferrer"
-                onclick={(e) => { e.preventDefault(); openCitation(e, cit); }}
-                class="lift flex min-w-0 items-start gap-2.5 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 hover:border-edge"
-                in:fade={{ duration: dur(motion.base) }}
-              >
-                <span class="mt-0.5 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-ember-500/15 px-1 text-xs font-semibold text-ember-300">{cit.index}</span>
-                <span class="min-w-0">
-                  <span class="block truncate text-sm font-medium text-ink-100">{cit.title}</span>
-                  <span class="flex items-center gap-1 truncate text-xs text-ink-500"><Icon name={isWeb(cit.source) ? "globe" : "file"} class="h-3 w-3 shrink-0" />{host(cit.source)}</span>
-                </span>
-              </a>
-            {/each}
-          </div>
+        <div class="mt-4 rounded-lg border border-ink-800 bg-ink-950/40">
+          <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-300 hover:bg-veil/5" aria-expanded={referencesOpen} onclick={() => (referencesOpen = !referencesOpen)}>
+            <Icon name="layers" class="h-4 w-4 text-ember-300" />
+            <span class="font-medium text-ink-200">References</span>
+            <span class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+              {#each citations as cit (cit.index)}<span class="reference-chip">[{cit.index}]</span>{/each}
+            </span>
+            <span class="shrink-0 text-xs text-ink-500">{citations.length}</span>
+            <Icon name="chevron-down" class={`h-4 w-4 shrink-0 text-ink-500 transition-transform duration-200 ${referencesOpen ? "rotate-180" : ""}`} />
+          </button>
+          {#if referencesOpen}
+            <div class="grid gap-2 border-t border-ink-800 p-2 sm:grid-cols-2" transition:fade={{ duration: dur(motion.fast) }}>
+              {#each citations as cit (cit.index)}
+                <a
+                  href={isWeb(cit.source) ? cit.source : "#"}
+                  rel="noreferrer"
+                  onclick={(e) => { e.preventDefault(); openCitation(e, cit); }}
+                  class="lift flex min-w-0 items-start gap-2.5 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 hover:border-edge"
+                >
+                  <span class="mt-0.5 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-ember-500/15 px-1 text-xs font-semibold text-ember-300">[{cit.index}]</span>
+                  <span class="min-w-0">
+                    <span class="block truncate text-sm font-medium text-ink-100">{cit.title}</span>
+                    <span class="flex items-center gap-1 truncate text-xs text-ink-500"><Icon name={isWeb(cit.source) ? "globe" : "file"} class="h-3 w-3 shrink-0" />{host(cit.source)}</span>
+                  </span>
+                </a>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -326,6 +336,17 @@
 {/if}
 
 <style>
+  .reference-chip {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    border-radius: 0.25rem;
+    background: color-mix(in oklab, var(--color-ember-500) 15%, transparent);
+    padding: 0.1rem 0.3rem;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.75rem;
+    color: var(--color-ember-200);
+  }
   .msg-action {
     display: grid;
     height: 1.875rem;
