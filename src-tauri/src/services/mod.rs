@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod backup;
 pub mod cloud_audit;
+pub mod externals;
 pub mod inference;
 pub mod library;
 pub mod mcp;
@@ -9,4 +10,5 @@ pub mod models;
 pub mod opencode;
 pub mod skills;
 pub mod tools;
+pub mod voice;
 pub mod websearch;

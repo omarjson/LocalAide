@@ -19,6 +19,7 @@ pub mod skills;
 pub mod system;
 pub mod tools;
 pub mod updates;
+pub mod voice;
 pub mod web;
 
 pub use attach::*;
@@ -42,4 +43,5 @@ pub use skills::*;
 pub use system::*;
 pub use tools::*;
 pub use updates::*;
+pub use voice::*;
 pub use web::*;
