@@ -684,17 +684,17 @@ impl CatalogManifest {
             entry(
                 "stt-moonshine-base-ar", "Moonshine base Arabic", "61M", "stt", "Moonshine Community License",
                 31_326_824, 0.5,
-                "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/encoder_model.ort",
+                "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/encoder_model.ort",
                 "68e50ebe0317ce909f098044a5dda2a76e6b86dc882829a317771fbafc5826ae",
                 "quantized", "Arabic speech to text, fast on a CPU. Free for personal and small-business use; read the license for commercial use.", vec![
                     companion(
-                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/decoder_model_merged.ort",
+                        "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/decoder_model_merged.ort",
                         "8f272cb50818e28ad86bbffc21e1450a4d57155e95f099ca6a236f38f4d9eafb",
                         109_424_552,
                         "stt-moonshine-base-ar.merged-decoder.ort",
                     ),
                     companion(
-                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/tokens.txt",
+                        "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/tokens.txt",
                         "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049",
                         549_350,
                         "stt-moonshine-base-ar.tokens.txt",

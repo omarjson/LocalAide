@@ -177,7 +177,7 @@ pub async fn library_index_start(
             .into_iter()
             .map(|(r, n)| (r.to_string(), n))
             .collect();
-        reasons.sort_by(|a, b| b.1.cmp(&a.1));
+        reasons.sort_by_key(|a| std::cmp::Reverse(a.1));
         // New text gets meaning vectors in the background when the
         // embedding model runs, so semantic search covers it.
         if state.embedding_engine.is_running() {
