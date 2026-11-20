@@ -495,6 +495,18 @@ export interface CloudProviderDto {
   enabled: boolean;
   /** Models saved from the last "Load models". */
   model_count: number;
+  /** A few of those models, for the card. */
+  sample_models: string[];
+  /** The last time LocalAide reached the provider. */
+  check: ProviderCheck | null;
+}
+
+export interface ProviderCheck {
+  ok: boolean;
+  /** Seconds since 1970. */
+  at: number;
+  model_count: number;
+  error: string | null;
 }
 
 /** Settings → Conversation memory. */

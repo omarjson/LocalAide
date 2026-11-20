@@ -300,6 +300,7 @@ pub fn run() {
             commands::cloud_provider_set_enabled,
             commands::cloud_online_set,
             commands::cloud_audit_list,
+            commands::cloud_provider_test,
             commands::cloud_audit_clear,
             commands::cloud_models_refresh,
             commands::mcp_servers_list,

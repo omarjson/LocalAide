@@ -213,6 +213,21 @@ pub struct CloudProvider {
     /// picker can show it without asking the provider again.
     #[serde(default)]
     pub models: Vec<crate::services::inference::provider_models::ProviderModel>,
+    /// The last connection check (Test connection or Load models).
+    #[serde(default)]
+    pub check: Option<ProviderCheck>,
+}
+
+/// The result of the last time LocalAide reached a provider.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProviderCheck {
+    pub ok: bool,
+    /// Seconds since 1970.
+    pub at: u64,
+    pub model_count: usize,
+    /// Plain-words reason when it failed.
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -397,6 +412,7 @@ mod tests {
             api_key: "sk-test".into(),
             enabled: true,
             models: Vec::new(),
+            check: None,
         });
         cfg.active_cloud_provider = Some("p1".into());
         let json = serde_json::to_string(&cfg).unwrap();

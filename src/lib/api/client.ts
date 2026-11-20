@@ -534,6 +534,11 @@ export class ApiClient {
     return invoke<OpenCodeHandoff>("opencode_send", { task, title: title ?? null });
   }
 
+  /** Test connection: ask a saved provider for its models with its saved key. */
+  async testCloudProvider(providerId: string): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_provider_test", { providerId });
+  }
+
   async cloudProviderPresets(): Promise<CloudProviderPreset[]> {
     return invoke<CloudProviderPreset[]>("cloud_provider_presets");
   }

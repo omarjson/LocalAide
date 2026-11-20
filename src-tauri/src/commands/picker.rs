@@ -350,6 +350,7 @@ mod tests {
             api_key: String::new(),
             enabled: true,
             models: vec![],
+            check: None,
         };
         let list = provider_models(&p, Some("chosen-m"));
         let ids: Vec<&str> = list.iter().map(|m| m.id.as_str()).collect();

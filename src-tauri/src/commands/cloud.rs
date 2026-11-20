@@ -363,6 +363,13 @@ fn provider_dto(p: &CloudProvider, active_id: Option<&str>) -> CloudProviderDto 
         is_active: active_id == Some(p.id.as_str()),
         enabled: p.enabled,
         model_count: p.models.len(),
+        sample_models: p
+            .models
+            .iter()
+            .take(6)
+            .map(|m| m.name.clone().unwrap_or_else(|| m.id.clone()))
+            .collect(),
+        check: p.check.clone(),
     }
 }
 
@@ -453,6 +460,12 @@ fn store_models(
         .find(|p| p.id == provider_id && same_origin(&p.base_url, base_url))
     {
         p.models = models.to_vec();
+        p.check = Some(crate::config::ProviderCheck {
+            ok: true,
+            at: now_secs(),
+            model_count: models.len(),
+            error: None,
+        });
         save_config(state, &cfg)?;
     }
     Ok(())
@@ -597,6 +610,7 @@ pub fn cloud_provider_save(
                 api_key: key.unwrap_or_default().to_string(),
                 enabled: true,
                 models: Vec::new(),
+                check: None,
             });
             id
         }
@@ -798,4 +812,55 @@ pub fn cloud_audit_list(
 #[tauri::command]
 pub fn cloud_audit_clear(state: State<'_, AppState>) -> Result<usize, AppError> {
     state.library.db().clear_cloud_calls()
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Test connection: ask the provider for its models with the saved key.
+/// The result is saved, so the card shows Connected or the reason it failed.
+/// Only the key goes out; no chat content.
+#[tauri::command]
+pub async fn cloud_provider_test(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> Result<CloudConfigStatus, AppError> {
+    let cfg = load_config(&state)?;
+    let provider = cfg
+        .cloud_providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .cloned()
+        .ok_or_else(|| AppError::invalid_input("That provider no longer exists."))?;
+    let result = list_models(&provider.base_url, &provider.api_key).await;
+    let mut cfg = load_config(&state)?;
+    if let Some(p) = cfg.cloud_providers.iter_mut().find(|p| p.id == provider_id) {
+        match &result {
+            Ok(models) => {
+                if same_origin(&p.base_url, &provider.base_url) {
+                    p.models = models.clone();
+                }
+                p.check = Some(crate::config::ProviderCheck {
+                    ok: true,
+                    at: now_secs(),
+                    model_count: models.len(),
+                    error: None,
+                });
+            }
+            Err(e) => {
+                p.check = Some(crate::config::ProviderCheck {
+                    ok: false,
+                    at: now_secs(),
+                    model_count: 0,
+                    error: Some(e.message.clone()),
+                });
+            }
+        }
+    }
+    save_config(&state, &cfg)?;
+    Ok(status_of(&cfg))
 }
