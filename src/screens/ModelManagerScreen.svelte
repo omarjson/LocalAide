@@ -15,7 +15,7 @@
   import { fly, slide } from "svelte/transition";
   import { dur, stagger } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
-  import { formatBytes } from "../lib/format";
+  import { formatBytes, formatGb } from "../lib/format";
 
   type Model = {
     id: string;
@@ -102,7 +102,8 @@
       models = list.map((m: ModelInfo) => ({
         id: m.id,
         name: m.name,
-        size: m.size_bytes ? `${(m.size_bytes / 1024 / 1024).toFixed(0)} MB` : "Unknown",
+        // One unit (GB) beside the memory estimate; the total includes companion files.
+        size: (m.total_bytes || m.size_bytes) ? formatGb(m.total_bytes || m.size_bytes) : "Unknown",
         ram: `${m.ram_estimate_gb} GB`,
         ramGb: m.ram_estimate_gb,
         // A partial file left from a pause (or a closed app) can resume.

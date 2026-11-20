@@ -10,6 +10,8 @@
   import SettingsGroup from "../components/SettingsGroup.svelte";
   import SettingsRow from "../components/SettingsRow.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
+  import Slider from "../components/Slider.svelte";
+  import Switch from "../components/Switch.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
@@ -28,6 +30,7 @@
     BackupEntry,
     CloudConfigStatus,
     CloudProviderPreset,
+    ContextInfo,
     ProviderModel,
     SystemHealthResponse,
     ToolAuditEntry,
@@ -168,6 +171,8 @@
   // Percent of memory, after the system reserve, that models may use.
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
+  let contextInfo = $state<ContextInfo | null>(null);
+  let reloadingModel = $state(false);
   let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let settingsNotice = $state<string | null>(null);
 
@@ -444,25 +449,14 @@
     }
   };
 
-  const toggleCloud = async () => {
+  // The master switch. Off sends chat back to this computer and hides every
+  // provider from the model menu; the providers and keys stay saved.
+  const setOnline = async (enabled: boolean) => {
     if (!cloud) return;
     cloudBusy = true;
     cloudError = null;
     try {
-      cloud = await api.setCloudMode({ enabled: !cloud.cloud_enabled });
-    } catch (e: unknown) {
-      cloudError = errorMessage(e);
-    } finally {
-      cloudBusy = false;
-    }
-  };
-
-  const activateProvider = async (id: string) => {
-    if (!cloud) return;
-    cloudBusy = true;
-    cloudError = null;
-    try {
-      cloud = await api.setCloudMode({ enabled: cloud.cloud_enabled, provider_id: id });
+      cloud = await api.setOnlineAllowed(enabled);
     } catch (e: unknown) {
       cloudError = errorMessage(e);
     } finally {
@@ -657,6 +651,35 @@
   };
 
   const contextWords = () => Math.round(contextTokens / 1.365).toLocaleString();
+  const tokensLabel = (n: number) => n >= 1024 ? `${Math.round(n / 1024).toLocaleString()}K` : `${n}`;
+  // The loaded model keeps the size it started with until it loads again.
+  const contextNeedsReload = $derived(
+    !!contextInfo?.active_id && contextInfo.loaded !== null && contextInfo.loaded !== contextTokens,
+  );
+  const contextDescription = $derived.by(() => {
+    if (!contextInfo) return "How much of a chat the AI keeps in mind. Longer uses more memory.";
+    const limit = contextInfo.model_name
+      ? `${contextInfo.model_name} can hold up to ${tokensLabel(contextInfo.max)} tokens.`
+      : `Up to ${tokensLabel(contextInfo.max)} tokens.`;
+    return `How much of a chat the AI keeps in mind. ${limit} Longer uses more memory.`;
+  });
+
+  const reloadForContext = async () => {
+    const id = contextInfo?.active_id;
+    if (!id) return;
+    reloadingModel = true;
+    settingsNotice = null;
+    try {
+      if (contextSaveTimer) clearTimeout(contextSaveTimer);
+      await api.setContext(contextTokens);
+      await api.loadInferenceModel(id);
+      contextInfo = await api.getContextInfo();
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      reloadingModel = false;
+    }
+  };
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
@@ -668,7 +691,8 @@
       failed.push(`memory for models (${errorMessage(e)})`);
     }
     try {
-      contextTokens = await api.getContext();
+      contextInfo = await api.getContextInfo();
+      contextTokens = Math.min(contextInfo.value, contextInfo.max);
     } catch (e: unknown) {
       failed.push(`conversation memory (${errorMessage(e)})`);
     }
@@ -747,46 +771,42 @@
           <SettingsGroup>
             <SettingsRow icon="models" title="Memory for models" description="How much of this computer's memory the AI may use. More lets you run bigger models.">
               {#snippet control()}
-                <input type="range" min="20" max="90" bind:value={ramBudget} oninput={scheduleSave} class="w-44 accent-ember-600" aria-label="Memory for models" />
+                <Slider min={20} max={90} bind:value={ramBudget} oninput={scheduleSave} class="w-44" label="Memory for models" />
                 <span class="min-w-20 text-right text-sm tabular-nums text-ink-200">{modelMemory()}</span>
               {/snippet}
             </SettingsRow>
-            <SettingsRow icon="chat" title="Conversation memory" description="How much of a chat the AI keeps in mind. Longer uses more memory." class="border-t border-ink-800">
+            <SettingsRow icon="chat" title="Conversation memory" description={contextDescription} class="border-t border-ink-800">
               {#snippet control()}
-                <input type="range" min="512" max="131072" step="512" bind:value={contextTokens} oninput={scheduleContextSave} class="w-44 accent-ember-600" aria-label="Conversation memory" />
-                <span class="min-w-28 text-right text-sm tabular-nums text-ink-200">About {contextWords()} words</span>
+                <Slider min={contextInfo?.min ?? 512} max={contextInfo?.max ?? 131072} step={512} bind:value={contextTokens} oninput={scheduleContextSave} class="w-44" label="Conversation memory" />
+                <span class="min-w-32 text-right text-sm tabular-nums text-ink-200"><span class="block">{tokensLabel(contextTokens)} tokens</span><span class="block text-xs text-ink-400">about {contextWords()} words</span></span>
               {/snippet}
             </SettingsRow>
+            {#if contextNeedsReload && contextInfo?.loaded}
+              <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-800 px-4 py-3 text-sm text-ink-300" transition:slide={{ duration: dur(150) }}>
+                <span class="flex items-center gap-2"><Icon name="info" class="h-4 w-4 shrink-0 text-ember-300" />The loaded model still uses {tokensLabel(contextInfo.loaded)} tokens. The new size applies the next time it loads.</span>
+                <Button variant="secondary" disabled={reloadingModel} onclick={() => void reloadForContext()}>{reloadingModel ? "Reloading…" : "Reload model"}</Button>
+              </div>
+            {/if}
           </SettingsGroup>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Where chats run</h3>
           <SettingsGroup>
-            <SettingsRow icon="computer" title="On this computer only" description={cloud?.cloud_enabled ? "Turn off online chat to keep messages here." : "Nothing you type is sent anywhere."}>
+            <SettingsRow icon="computer" title="On this computer only" description={cloud?.online_allowed ? "Online models are offered in the model menu. A message leaves this computer only when you pick one." : "Nothing you type is sent anywhere."}>
               {#snippet control()}
-                <StatusBadge label={cloud?.cloud_enabled ? "Off" : "On"} tone={cloud?.cloud_enabled ? "idle" : "ok"} dot={!cloud?.cloud_enabled} />
+                <StatusBadge label={cloud?.online_allowed ? "Off" : "On"} tone={cloud?.online_allowed ? "idle" : "ok"} dot={!cloud?.online_allowed} />
               {/snippet}
             </SettingsRow>
-            <SettingsRow icon="cloud" title="Use an online provider" description="Send chats to a service you choose, with your own key. It stays off until you turn it on." class="border-t border-ink-800">
+            <SettingsRow icon="cloud" title="Online providers" description="Offer models from services you choose, with your own key. Off keeps chat on this computer." class="border-t border-ink-800">
               {#snippet control()}
                 {#if !cloud || cloud.providers.length === 0}
                   <Button variant="secondary" onclick={() => { activeTab = "online"; openAddProvider(); }}>Add provider</Button>
                 {:else}
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={cloud.cloud_enabled}
-                    aria-label="Use online provider for chat"
-                    onclick={() => void toggleCloud()}
-                    disabled={cloudBusy}
-                    class={`relative h-5 w-10 rounded-full border transition-colors disabled:opacity-50 ${cloud.cloud_enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
-                  >
-                    <span class={`absolute top-0.5 h-3 w-3 rounded-full transition-transform ${cloud.cloud_enabled ? "translate-x-5 bg-on-ember" : "left-1 bg-ink-300"}`}></span>
-                  </button>
+                  <Switch checked={cloud.online_allowed} label="Online providers" disabled={cloudBusy} onchange={(on) => void setOnline(on)} />
                 {/if}
               {/snippet}
             </SettingsRow>
           </SettingsGroup>
-          <p class="mt-3 text-sm text-ink-400">Online chat is off by default. When it is on, messages go only to the provider you choose.</p>
+          <p class="mt-3 text-sm text-ink-400">Online providers are off until you add one. When they are on, a message goes online only when you pick an online model in the chat.</p>
         </div>
       {:else if activeTab === "online"}
         <div>
@@ -800,19 +820,9 @@
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Your providers</h3>
           <SettingsGroup>
-            <SettingsRow icon="cloud" title="Chat uses an online model" description={cloud?.cloud_enabled ? "On. Switch off to go back to the model on this computer." : "Off. Pick an online model in the chat's model menu, or switch this on for the selected provider."}>
+            <SettingsRow icon="cloud" title="Chat can use online models" description={cloud?.online_allowed ? "On. The providers switched on below appear in the chat's model menu. Pick one of their models there to use it." : "Off. Chat uses the model on this computer, and the providers below are not available."}>
               {#snippet control()}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={cloud?.cloud_enabled ?? false}
-                  aria-label="Use online provider for chat"
-                  onclick={() => void toggleCloud()}
-                  disabled={cloudBusy || !cloud || cloud.providers.length === 0}
-                  class={`relative h-5 w-10 rounded-full border transition-colors disabled:opacity-50 ${cloud?.cloud_enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
-                >
-                  <span class={`absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${cloud?.cloud_enabled ? "translate-x-[18px] bg-on-ember" : "bg-ink-300"}`}></span>
-                </button>
+                <Switch checked={cloud?.online_allowed ?? false} label="Chat can use online models" disabled={cloudBusy || !cloud || cloud.providers.length === 0} onchange={(on) => void setOnline(on)} />
               {/snippet}
             </SettingsRow>
           </SettingsGroup>
@@ -824,32 +834,26 @@
             </div>
           {:else}
             <div class="mt-3 space-y-2">
+              {#if !cloud.online_allowed}
+                <p class="flex items-center gap-2 text-sm text-ink-400"><Icon name="info" class="h-4 w-4 shrink-0" />Not available while online models are switched off. You can still edit or remove them.</p>
+              {/if}
               {#each cloud.providers as provider (provider.id)}
-                <div class={`rounded-lg border p-4 ${provider.is_active ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`}>
+                {@const inUse = cloud.online_allowed && cloud.cloud_enabled && provider.is_active}
+                <div class={`rounded-lg border p-4 transition-colors ${inUse ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`} aria-disabled={!cloud.online_allowed}>
                   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0">
+                    <div class={`min-w-0 transition-opacity ${cloud.online_allowed ? "" : "opacity-50 grayscale"}`}>
                       <div class="flex flex-wrap items-center gap-2">
                         <span class="font-semibold text-ink-50">{provider.label}</span>
-                        {#if provider.is_active}<StatusBadge label="Selected" tone="ok" dot />{/if}
+                        {#if !cloud.online_allowed}<StatusBadge label="Not available" tone="idle" />
+                        {:else if inUse}<StatusBadge label="In use" tone="ok" dot />{/if}
                       </div>
                       <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · {provider.api_key_hint ? `key ${provider.api_key_hint}` : "no key"}{provider.model_count ? ` · ${provider.model_count} models listed` : ""}</div>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
-                      <label class="mr-1 flex items-center gap-2 text-sm text-ink-300" title="Show this provider's models in the chat's model menu">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={provider.enabled}
-                          aria-label={`Show ${provider.label} in the model menu`}
-                          onclick={() => void toggleProviderEnabled(provider.id, !provider.enabled)}
-                          disabled={cloudBusy}
-                          class={`relative h-5 w-10 rounded-full border transition-colors disabled:opacity-50 ${provider.enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
-                        >
-                          <span class={`absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${provider.enabled ? "translate-x-[18px] bg-on-ember" : "bg-ink-300"}`}></span>
-                        </button>
+                      <span class={`mr-1 flex items-center gap-2 text-sm text-ink-300 ${cloud.online_allowed ? "" : "opacity-50"}`} title="Show this provider's models in the chat's model menu">
+                        <Switch checked={cloud.online_allowed && provider.enabled} label={`Show ${provider.label} in the model menu`} disabled={cloudBusy || !cloud.online_allowed} onchange={(on) => void toggleProviderEnabled(provider.id, on)} />
                         <span class="hidden md:inline">In model menu</span>
-                      </label>
-                      {#if !provider.is_active}<Button variant="secondary" disabled={cloudBusy} onclick={() => void activateProvider(provider.id)}>Use this</Button>{/if}
+                      </span>
                       <Button variant="subtle" disabled={cloudBusy} onclick={() => openEditProvider(provider.id)}>Edit</Button>
                       <Button variant="danger" disabled={cloudBusy} onclick={() => deleteProvider(provider.id)}>Remove</Button>
                     </div>
@@ -923,7 +927,7 @@
                           <input type="search" bind:value={modelQuery} aria-label="Filter models" placeholder={`Filter ${providerModels.length} models`} class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500" />
                         </span>
                         {#if providerModels.some((m) => m.free)}
-                          <label class="flex shrink-0 items-center gap-1.5 text-sm text-ink-300"><input type="checkbox" bind:checked={freeOnly} class="accent-ember-600" />Free only</label>
+                          <span class="flex shrink-0 items-center gap-2 text-sm text-ink-300"><Switch checked={freeOnly} label="Free models only" onchange={(on) => (freeOnly = on)} />Free only</span>
                         {/if}
                       </div>
                       <div class="max-h-56 overflow-y-auto p-1" role="listbox" aria-label="Models">
@@ -1047,9 +1051,7 @@
             <SettingsGroup>
               <SettingsRow icon="flask" title="Developer mode" description="Turns on the experimental features below. They may change or disappear in later versions.">
                 {#snippet control()}
-                  <button type="button" role="switch" aria-checked={ds.enabled} aria-label="Developer mode" disabled={devBusy} onclick={() => void setDev({ enabled: !ds.enabled })} class={`relative h-6 w-11 rounded-full border transition-colors disabled:opacity-50 ${ds.enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}>
-                    <span class={`absolute left-1 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${ds.enabled ? "translate-x-5 bg-on-ember" : "bg-ink-300"}`}></span>
-                  </button>
+                  <Switch checked={ds.enabled} label="Developer mode" disabled={devBusy} onchange={(on) => void setDev({ enabled: on })} />
                 {/snippet}
               </SettingsRow>
             </SettingsGroup>
@@ -1057,10 +1059,10 @@
             <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="flask" class="h-4 w-4 text-ember-300" />Experimental features</h3>
             <div class={`space-y-2 transition-opacity ${ds.enabled ? "" : "pointer-events-none opacity-50"}`} aria-disabled={!ds.enabled}>
               {#each ds.flag_list as f (f.id)}
-                <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
-                  <input type="checkbox" checked={ds.flags[f.id]} disabled={!ds.enabled || devBusy} onchange={(e) => void setDev({ flags: { [f.id]: (e.currentTarget as HTMLInputElement).checked } })} class="mt-0.5 h-4 w-4 accent-ember-600" />
+                <div class="flex items-center justify-between gap-4 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
                   <span class="min-w-0"><span class="block text-sm font-semibold text-ink-100">{f.label}</span><span class="block text-sm text-ink-400">{f.description}</span></span>
-                </label>
+                  <Switch checked={!!ds.flags[f.id]} label={f.label} disabled={!ds.enabled || devBusy} onchange={(on) => void setDev({ flags: { [f.id]: on } })} />
+                </div>
               {/each}
             </div>
 
@@ -1068,10 +1070,10 @@
             <p class="mb-2 text-sm text-ink-400">Switch off parts of LocalAide you do not use. They stay off until you switch them on here, even outside developer mode.</p>
             <div class="grid gap-2 sm:grid-cols-2">
               {#each ds.module_list as m (m.id)}
-                <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
-                  <input type="checkbox" checked={ds.modules[m.id]} disabled={devBusy} onchange={(e) => void setDev({ modules: { [m.id]: (e.currentTarget as HTMLInputElement).checked } })} class="mt-0.5 h-4 w-4 accent-ember-600" />
+                <div class="flex items-center justify-between gap-4 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
                   <span class="min-w-0"><span class="block text-sm font-semibold text-ink-100">{m.label}</span><span class="block text-sm text-ink-400">{m.description}</span></span>
-                </label>
+                  <Switch checked={!!ds.modules[m.id]} label={m.label} disabled={devBusy} onchange={(on) => void setDev({ modules: { [m.id]: on } })} />
+                </div>
               {/each}
             </div>
 
@@ -1148,7 +1150,7 @@
           <p class="mt-1 text-sm text-ink-400">Save your notes, chats and settings in an encrypted local file.</p>
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-4">
             <label class="block text-sm text-ink-400" for="backup-folder">Backup folder</label><div class="mt-1 flex gap-2"><input id="backup-folder" bind:value={backupTargetInput} placeholder="Leave empty for the default folder" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /><Button variant="secondary" class="h-10" disabled={backupBusy} onclick={() => void browseBackupFolder()}>Browse…</Button></div>
-            <label class="mt-4 flex items-center gap-3 text-sm text-ink-300"><input type="checkbox" bind:checked={includeKeys} class="accent-ember-600" />Include provider keys in the backup</label>
+            <div class="mt-4 flex items-center gap-3 text-sm text-ink-300"><Switch checked={includeKeys} label="Include provider keys in the backup" onchange={(on) => (includeKeys = on)} />Include provider keys in the backup</div>
             <p class="mt-2 text-sm text-ink-400">Keys stay out unless you choose this option.</p>
             <Button variant="secondary" class="mt-4" disabled={backupBusy} onclick={() => void saveBackupConfig()}>Save backup settings</Button>
           </div>

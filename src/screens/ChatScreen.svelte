@@ -14,6 +14,7 @@
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
+  import Slider from "../components/Slider.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
   import type { ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, ModelChoice, ModelChoices, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
@@ -62,6 +63,8 @@
   // The model picker: local models and the models of every online provider
   // the user switched on. The active one answers.
   let choices = $state<ModelChoices | null>(null);
+  // Experimental "Wide chat column": messages and the chat box fill the window.
+  const chatWidth = $derived(flag("wide_chat") ? "max-w-none" : "max-w-3xl");
   let pickerOpen = $state(false);
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
@@ -1115,11 +1118,11 @@
             <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />Sampling</h3>
             <label class="block text-sm text-ink-300">
               <span class="flex justify-between"><span>Creativity (temperature)</span><span class="font-mono text-ink-100">{temperature.toFixed(1)}{mode === "strict" ? " · capped at 0.3" : ""}</span></span>
-              <input type="range" min="0" max="2" step="0.1" bind:value={temperature} onchange={savePrefs} class="mt-1 w-full accent-ember-500" aria-label="Temperature" />
+              <Slider min={0} max={2} step={0.1} bind:value={temperature} onchange={savePrefs} class="mt-1 w-full" label="Temperature" />
             </label>
             <label class="mt-3 block text-sm text-ink-300">
               <span class="flex justify-between"><span>Longest answer</span><span class="font-mono text-ink-100">{maxTokens} tokens</span></span>
-              <input type="range" min="64" max="8192" step="64" bind:value={maxTokens} onchange={savePrefs} class="mt-1 w-full accent-ember-500" aria-label="Longest answer in tokens" />
+              <Slider min={64} max={8192} step={64} bind:value={maxTokens} onchange={savePrefs} class="mt-1 w-full" label="Longest answer in tokens" />
             </label>
           </section>
         {/if}
@@ -1128,7 +1131,7 @@
           <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="layers" class="h-3.5 w-3.5" />Context window</h3>
           <label class="block text-sm text-ink-300">
             <span class="flex justify-between"><span>Auto-compact at</span><span class="font-mono text-ink-100">{autoCompactAt}%</span></span>
-            <input type="range" min="50" max="95" step="5" bind:value={autoCompactAt} class="mt-1 w-full accent-ember-500" aria-label="Auto-compact threshold" />
+            <Slider min={50} max={95} step={5} bind:value={autoCompactAt} class="mt-1 w-full" label="Auto-compact threshold" />
           </label>
           <p class="mt-2 text-xs leading-5 text-ink-500">Older turns are shortened before a new answer when the context meter reaches this level. Use the circle beside the model selector to see estimated input and output usage.</p>
         </section>
@@ -1154,7 +1157,7 @@
 
   <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative min-h-0 flex-1 overflow-y-auto">
     {#if messages.length === 0}
-      <div class="ember-glow mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center gap-8 px-5 py-10 text-center">
+      <div class={`ember-glow mx-auto flex min-h-full ${chatWidth} flex-col items-center justify-center gap-8 px-5 py-10 text-center`}>
         <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
           <div class="relative mb-3">
             <div class="absolute inset-0 -z-10 scale-[1.8] rounded-full bg-ember-500/20 blur-3xl" aria-hidden="true"></div>
@@ -1209,7 +1212,7 @@
         {/if}
       </div>
     {:else}
-      <div class={`mx-auto w-full max-w-3xl px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
+      <div class={`mx-auto w-full ${chatWidth} px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
         {#each messages as msg, idx (idx)}
           {#if idx === historyFrom && historyFrom > 0}
             <div class="flex items-center gap-3 text-xs text-ink-500" role="separator">
@@ -1256,7 +1259,7 @@
   {/if}
 
   <div class="shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 md:px-6">
-    <div class="mx-auto max-w-3xl">
+    <div class={`mx-auto ${chatWidth}`}>
       {#if chatError}
         <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
       {/if}

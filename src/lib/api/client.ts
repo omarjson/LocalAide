@@ -29,6 +29,7 @@ import type {
   CompactResponse,
   CloudConfigStatus,
   CloudModeRequest,
+  ContextInfo,
   CloudProviderPreset,
   ProviderModel,
   CloudProviderSaveRequest,
@@ -375,6 +376,11 @@ export class ApiClient {
     return invoke<number>("settings_set_context", { tokens: Math.round(tokens) });
   }
 
+  /** The saved conversation memory, the model's own limit, and what is loaded now. */
+  async getContextInfo(): Promise<ContextInfo> {
+    return invoke<ContextInfo>("settings_context_info");
+  }
+
   /** Share of memory models may use, in percent (20 to 90). */
   async getModelMemory(): Promise<number> {
     return invoke<number>("settings_model_memory");
@@ -651,6 +657,11 @@ export class ApiClient {
 
   async setCloudMode(req: CloudModeRequest): Promise<CloudConfigStatus> {
     return invoke<CloudConfigStatus>("cloud_mode_set", { req });
+  }
+
+  /** The master switch for online providers. Off sends chat back to this computer. */
+  async setOnlineAllowed(enabled: boolean): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_online_set", { enabled });
   }
 
   /** Show or hide a provider's models in the chat's model picker. */

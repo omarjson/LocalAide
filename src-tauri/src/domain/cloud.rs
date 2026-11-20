@@ -62,6 +62,8 @@ pub struct ModelChoices {
     pub active_key: Option<String>,
     /// The local engine is running a model.
     pub local_loaded: bool,
+    /// Online providers are switched on in Settings. Off: none are listed.
+    pub online_allowed: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +88,9 @@ pub struct CloudProviderSaveRequest {
 /// which provider is active.
 #[derive(Debug, Clone, Serialize)]
 pub struct CloudConfigStatus {
+    /// Master switch: online providers may be used.
+    pub online_allowed: bool,
+    /// Chat is set to an online model right now.
     pub cloud_enabled: bool,
     pub providers: Vec<CloudProviderDto>,
     pub active_provider_id: Option<String>,
