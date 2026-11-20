@@ -34,6 +34,7 @@
     /** Saved prompt skills; typing / opens the picker. */
     skills?: Skill[];
     onPickSkill?: (body: string) => void;
+    onSlashCommand?: (command: string) => void;
     mode?: ChatModeId;
     modes?: ChatModeInfo[];
     onModeChange?: (mode: ChatModeId) => void;
@@ -75,6 +76,7 @@
     onRemoveAttachment,
     skills = [],
     onPickSkill,
+    onSlashCommand,
     mode = "standard",
     modes = [],
     onModeChange,
@@ -125,14 +127,35 @@
     void tick().then(resize);
   });
 
-  // Slash menu: typing "/word" filters the skill list; Enter or click
-  // inserts the skill body as the message text (the user can edit it).
-  const slashMatch = $derived(input.length > 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null);
+  const slashCommands = [
+    { id: "clear", label: "Start a new chat", description: "Clear this conversation", icon: "plus" as const },
+    { id: "compact", label: "Compact conversation", description: "Trim older turns before the next answer", icon: "layers" as const },
+    { id: "model", label: "Choose a model", description: "Open the model selector", icon: "models" as const },
+    { id: "settings", label: "Chat settings", description: "Open response style and context settings", icon: "sliders" as const },
+    { id: "export", label: "Export Markdown", description: "Save this conversation as a Markdown file", icon: "download" as const },
+    { id: "copy", label: "Copy conversation", description: "Copy the full conversation to the clipboard", icon: "copy" as const },
+    { id: "by-the-way", label: "By the way", description: "Add a side question without losing the main task", icon: "chat" as const },
+    { id: "goal", label: "Set a goal", description: "Turn a vague task into a clear goal", icon: "target" as const },
+    { id: "scale", label: "Scale the answer", description: "Ask for a shorter or more detailed answer", icon: "layers" as const },
+    { id: "remember", label: "Remember this", description: "Save a memory note after confirmation", icon: "memory" as const },
+    { id: "create-skill", label: "Create a skill", description: "Turn a reusable instruction into a saved skill", icon: "skills" as const },
+    { id: "web", label: "Use web", description: "Allow web tools for the next message", icon: "globe" as const },
+    { id: "notes", label: "Use notes", description: "Allow notes and document recall", icon: "memory" as const },
+    { id: "tools", label: "Use tools", description: "Open the tools menu", icon: "wrench" as const },
+  ];
+  const slashMatch = $derived(input.length >= 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null);
+  const commandMatches = $derived(
+    slashMatch === null ? [] : slashCommands.filter((command) => command.id.includes(slashMatch) || command.label.toLowerCase().includes(slashMatch)),
+  );
   const skillMatches = $derived(
     slashMatch === null
       ? []
-      : skills.filter((s) => s.name.toLowerCase().includes(slashMatch) || s.description.toLowerCase().includes(slashMatch)),
+      : skills.filter((s) => s.name.toLowerCase().includes(slashMatch) || s.description.toLowerCase().includes(slashMatch) || s.tags.some((tag) => tag.toLowerCase().includes(slashMatch))),
   );
+  const slashItems = $derived([
+    ...commandMatches.map((command) => ({ kind: "command" as const, value: command })),
+    ...skillMatches.map((skill) => ({ kind: "skill" as const, value: skill })),
+  ]);
 
   const pickSkill = (skill: Skill) => {
     input = skill.body;
@@ -141,21 +164,29 @@
     textareaEl?.focus();
   };
 
+  const pickSlashItem = (item: (typeof slashItems)[number]) => {
+    if (item.kind === "command") onSlashCommand?.(item.value.id);
+    else pickSkill(item.value);
+    input = "";
+    skillCursor = 0;
+    textareaEl?.focus();
+  };
+
   const handleKeydown = (e: KeyboardEvent) => {
-    if (skillMatches.length > 0) {
+    if (slashItems.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        skillCursor = (skillCursor + 1) % skillMatches.length;
+        skillCursor = (skillCursor + 1) % slashItems.length;
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        skillCursor = (skillCursor - 1 + skillMatches.length) % skillMatches.length;
+        skillCursor = (skillCursor - 1 + slashItems.length) % slashItems.length;
         return;
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        pickSkill(skillMatches[skillCursor]);
+        pickSlashItem(slashItems[skillCursor]);
         return;
       }
       if (e.key === "Escape") {
@@ -204,22 +235,38 @@
 </script>
 
 <div class="relative">
-  {#if slashMatch !== null && skillMatches.length > 0}
+  {#if slashMatch !== null && slashItems.length > 0}
     <div
-      class="absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-edge bg-ink-950 shadow-2xl"
+      class="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[min(22rem,60vh)] overflow-y-auto rounded-xl border border-edge bg-ink-950 shadow-2xl"
       role="listbox"
-      aria-label="Skill picker"
+      aria-label="Slash commands and skills"
       in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}
     >
-      <div class="px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Skills</div>
-      {#each skillMatches.slice(0, 6) as skill, i (skill.path)}
+      {#if commandMatches.length > 0}<div class="px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Commands</div>{/if}
+      {#each commandMatches.slice(0, 8) as command, i (command.id)}
         <button
           type="button"
           role="option"
           aria-selected={i === skillCursor}
-          onclick={() => pickSkill(skill)}
+          onclick={() => pickSlashItem({ kind: "command", value: command })}
           onmouseenter={() => (skillCursor = i)}
           class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${i === skillCursor ? "bg-veil/10" : ""}`}
+        >
+          <Icon name={command.icon} class="h-4 w-4 shrink-0 text-ember-300" />
+          <span class="shrink-0 font-mono text-ink-100">/{command.id}</span>
+          <span class="truncate text-ink-400">{command.description}</span>
+        </button>
+      {/each}
+      {#if skillMatches.length > 0}<div class="border-t border-ink-800 px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Skills</div>{/if}
+      {#each skillMatches.slice(0, 6) as skill, i (skill.path)}
+        {@const index = commandMatches.length + i}
+        <button
+          type="button"
+          role="option"
+          aria-selected={index === skillCursor}
+          onclick={() => pickSlashItem({ kind: "skill", value: skill })}
+          onmouseenter={() => (skillCursor = index)}
+          class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${index === skillCursor ? "bg-veil/10" : ""}`}
         >
           <Icon name="skills" class="h-4 w-4 shrink-0 text-ember-400" />
           <span class="shrink-0 font-mono text-ink-100">/{skill.name}</span>

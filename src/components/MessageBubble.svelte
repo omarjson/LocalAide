@@ -256,7 +256,7 @@
           {#if allowRaw}<button type="button" onclick={() => raw = !raw} aria-pressed={raw} class="msg-action" aria-label="Show plain text" title="Plain text"><Icon name="eye" class="h-4 w-4" /></button>{/if}
           {#if onSendToOpenCode}<button type="button" onclick={onSendToOpenCode} class="msg-action" aria-label="Send to OpenCode" title="Continue this in OpenCode"><Icon name="code" class="h-4 w-4" /></button>{/if}
           {#if stats}
-            <span class="ml-1 font-mono text-xs text-ink-500" title="Answer statistics">{stats.tokens} tokens · {(stats.ms / 1000).toFixed(1)} s{speed ? ` · ${speed} tok/s` : ""}{stats.firstTokenMs !== null ? ` · first token ${Math.round(stats.firstTokenMs)} ms` : ""}</span>
+            <span class="ml-1 font-mono text-xs text-ink-500" title="Answer statistics">{stats.inputTokens !== undefined ? `in ${stats.inputTokens} · out ${stats.outputTokens ?? stats.tokens}` : `${stats.tokens} tokens`} · {(stats.ms / 1000).toFixed(1)} s{speed ? ` · ${speed} tok/s` : ""}{stats.firstTokenMs !== null ? ` · first token ${Math.round(stats.firstTokenMs)} ms` : ""}</span>
           {/if}
           {#if copyError}<span role="alert" class="ml-1 text-xs text-rose-300">{copyError}</span>{/if}
         </div>

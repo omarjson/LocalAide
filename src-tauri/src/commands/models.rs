@@ -191,6 +191,12 @@ fn model_verify_work(state: AppState, id: String) -> Result<ModelVerifyResult, A
 }
 
 #[tauri::command]
+pub fn model_download_pause(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    state.jobs.pause_kind(&format!("download_{id}"));
+    Ok(())
+}
+
+#[tauri::command]
 pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     // Job ids add a random part to "download_<id>", so cancel by kind.
     state.jobs.cancel_kind(&format!("download_{id}"));
@@ -253,6 +259,17 @@ pub async fn model_download(
         }
         Err(e) => {
             let err_msg = e.to_string();
+            if state.jobs.is_paused(&job_id) {
+                let _ = channel.send(DownloadProgressEvent {
+                    model_id: id,
+                    downloaded_bytes: 0,
+                    total_bytes: 0,
+                    percent: 0.0,
+                    speed_bps: 0.0,
+                    status: "paused".to_string(),
+                });
+                return Ok(());
+            }
             state.jobs.fail_job(&job_id, &err_msg);
             let _ = channel.send(DownloadProgressEvent {
                 model_id: id,

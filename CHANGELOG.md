@@ -5,6 +5,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+- Persistent model capability filters with a Clear control, a context-window meter beside the model selector, estimated input/output token counts, and an auto-compact threshold in Chat settings.
+- Full-conversation Markdown export and clipboard copy actions in the chat menu.
+- Built-in slash commands for clear, compact, model, settings, export, copy, goal, scale, by-the-way, remember, create-skill, web, notes and tools.
+- Model download pause/resume. Paused downloads preserve their `.part` file and resume with HTTP Range; the model screen shows bytes, speed and estimated remaining time.
+
+### Changed
+- Local and online routing badges and the online-provider notice use the project's ember orange in both themes.
+- Chat layout now enforces min-height constraints so the window stays fixed while only the conversation area scrolls.
+
 ## [0.1.4] - 2026-11-19
 
 Tools the model chooses for itself, thinking you can open and read, one model menu for every provider, file attachments, and MCP servers. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.

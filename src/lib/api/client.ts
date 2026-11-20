@@ -143,6 +143,10 @@ export class ApiClient {
     return invoke<void>("model_download_cancel", { id });
   }
 
+  async pauseModelDownload(id: string): Promise<void> {
+    return invoke<void>("model_download_pause", { id });
+  }
+
   async cancelPresetDownload(id: string): Promise<void> {
     return invoke<void>("model_preset_cancel", { id });
   }

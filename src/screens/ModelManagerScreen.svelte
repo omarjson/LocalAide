@@ -25,8 +25,11 @@
     ramGb: number;
     quant: string;
     license: string;
-    status: "installed" | "available" | "installing";
+    status: "installed" | "available" | "installing" | "paused";
     progress?: number;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    speedBps?: number;
     active?: boolean;
     kind?: string;
     vision?: boolean;
@@ -72,6 +75,13 @@
   let openModelMenu = $state<string | null>(null);
   let pendingRemoveId = $state<string | null>(null);
 
+  const formatEta = (downloaded: number, total: number, speed: number) => {
+    if (!speed || total <= downloaded) return "—";
+    const seconds = Math.ceil((total - downloaded) / speed);
+    if (seconds < 60) return `${seconds}s left`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s left`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m left`;
+  };
   const kindTabs = [
     { value: "all", label: "All" },
     { value: "chat", label: "Chat" },
@@ -206,6 +216,18 @@
     }
   };
 
+  const applyProgress = (id: string, event: { percent: number; downloaded_bytes: number; total_bytes: number; speed_bps: number; status: string }) => {
+    models = models.map((model) => model.id === id
+      ? {
+          ...model,
+          status: event.status === "paused" ? "paused" : event.status === "complete" ? "installed" : "installing",
+          progress: Math.round(event.percent),
+          downloadedBytes: event.downloaded_bytes || model.downloadedBytes,
+          totalBytes: event.total_bytes || model.totalBytes,
+          speedBps: event.speed_bps,
+        }
+      : model);
+  };
   const hfAddAndDownload = async (repo: string, file: HfFileInfo) => {
     hfAdding = file.path;
     actionError = null;
@@ -219,9 +241,7 @@
         ? { ...model, status: "installing", progress: 0 }
         : model);
       await api.downloadModel(res.id, (event) => {
-        models = models.map((model) => model.id === res.id
-          ? { ...model, status: "installing", progress: Math.round(event.percent) }
-          : model);
+        applyProgress(res.id, event);
       });
       await refresh();
     } catch (e: unknown) {
@@ -232,16 +252,23 @@
     }
   };
 
+  const pauseInstall = async (id: string) => {
+    try {
+      await api.pauseModelDownload(id);
+      models = models.map((model) => model.id === id ? { ...model, status: "paused" } : model);
+    } catch (e: unknown) {
+      actionError = errorMessage(e);
+    }
+  };
+
   const startInstall = async (id: string) => {
     actionError = null;
-    models = models.map((model) => model.id === id ? { ...model, status: "installing", progress: 0 } : model);
+    models = models.map((model) => model.id === id ? { ...model, status: "installing" } : model);
     try {
       await api.downloadModel(id, (event) => {
-        models = models.map((model) => model.id === id
-          ? { ...model, status: "installing", progress: Math.round(event.percent) }
-          : model);
+        applyProgress(id, event);
       });
-      await refresh();
+      if (models.find((model) => model.id === id)?.status !== "paused") await refresh();
     } catch (e: unknown) {
       models = models.map((model) => model.id === id
         ? { ...model, status: "available", progress: undefined }
@@ -484,10 +511,11 @@
           <div class="min-w-0 flex-1">
             <div class="font-semibold text-ink-50">{model.name}</div>
             <div class="text-sm text-ink-400">{modelDescription(model)}</div>
-            {#if model.status === "installing"}
-              <div class="mt-2 max-w-xs">
-                <div class="mb-1 flex justify-between text-sm text-ink-400"><span>Downloading…</span><span>{model.progress ?? 0}%</span></div>
+            {#if model.status === "installing" || model.status === "paused"}
+              <div class="mt-2 max-w-sm">
+                <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
                 <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-all" style={`width:${model.progress ?? 0}%`}></div></div>
+                <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.speedBps ? `${formatBytes(model.speedBps)}/s` : "Resumes from the saved partial file"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.speedBps ?? 0)}</span></div>
               </div>
             {/if}
           </div>
@@ -498,6 +526,10 @@
               <StatusBadge label="Fits" tone="ok" />
             {/if}
             {#if model.status === "installing"}
+              <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>
+              <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
+            {:else if model.status === "paused"}
+              <Button variant="primary" onclick={() => void startInstall(model.id)}>Resume</Button>
               <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
             {:else if model.status === "installed"}
               <Button variant="secondary" disabled={loadingModelId !== null} onclick={() => void activateModel(model.id)}>{loadingModelId === model.id ? "Loading…" : "Use this"}</Button>
@@ -562,10 +594,11 @@
                     <span>Needs {model.ram}</span>
                     <span>{model.quant}</span>
                   </div>
-                  {#if model.status === "installing"}
-                    <div class="mt-2 max-w-xs">
-                      <div class="mb-1 flex justify-between text-sm text-ink-400"><span>Downloading…</span><span>{model.progress ?? 0}%</span></div>
+                  {#if model.status === "installing" || model.status === "paused"}
+                    <div class="mt-2 max-w-sm">
+                      <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
                       <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-all" style={`width:${model.progress ?? 0}%`}></div></div>
+                      <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.speedBps ? `${formatBytes(model.speedBps)}/s` : "Resumes from the saved partial file"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.speedBps ?? 0)}</span></div>
                     </div>
                   {/if}
                 </div>
@@ -588,6 +621,10 @@
                       </Button>
                     {/if}
                   {:else if model.status === "installing"}
+                    <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>
+                    <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
+                  {:else if model.status === "paused"}
+                    <Button variant="primary" onclick={() => void startInstall(model.id)}>Resume</Button>
                     <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
                   {:else}
                     <Button variant="secondary" onclick={() => void startInstall(model.id)}>

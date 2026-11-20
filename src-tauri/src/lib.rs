@@ -184,6 +184,7 @@ pub fn run() {
             commands::model_verify,
             commands::model_presets,
             commands::model_download,
+            commands::model_download_pause,
             commands::model_download_cancel,
             commands::model_download_preset,
             commands::model_preset_cancel,

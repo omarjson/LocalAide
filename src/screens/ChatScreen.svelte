@@ -22,6 +22,7 @@
   import ChatInput from "../components/ChatInput.svelte";
   import ModelPicker from "../components/ModelPicker.svelte";
   import EffortPicker from "../components/EffortPicker.svelte";
+  import ContextMeter from "../components/ContextMeter.svelte";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -99,6 +100,7 @@
         skills?: unknown;
         mcpOff?: unknown;
         efforts?: unknown;
+        autoCompactAt?: unknown;
       };
     } catch {
       return {};
@@ -116,11 +118,12 @@
     savedOptions.efforts && typeof savedOptions.efforts === "object" ? (savedOptions.efforts as Record<string, string>) : {},
   );
   const effort = $derived(activeChoice ? efforts[activeChoice.key] ?? "auto" : "auto");
+  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
   $effect(() => {
     try {
       localStorage.setItem(
         OPTIONS_KEY,
-        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts }),
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts, autoCompactAt }),
       );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
@@ -392,9 +395,35 @@
     }
   };
 
-  const exportCurrentThread = async (format: "markdown" | "json") => {
-    if (!activeThreadId) return;
+  const conversationMarkdown = () => {
+    const lines: string[] = [`# ${activeThreadTitle === "New Conversation" ? "Chat" : activeThreadTitle}`, ""];
+    for (const message of $state.snapshot(messages)) {
+      lines.push(`## ${message.role === "user" ? "You" : "LocalAide"}`, "");
+      if (message.attachments?.length) {
+        lines.push(...message.attachments.map((file) => `> Attached: ${file.name}${file.error ? ` (${file.error})` : ""}`), "");
+      }
+      if (message.content.trim()) lines.push(message.content.trim(), "");
+      if (message.citations?.length) {
+        lines.push("Sources:", ...message.citations.map((citation) => `- [${citation.index}] ${citation.title}: ${citation.source}`), "");
+      }
+    }
+    return lines.join("\n").trim() + "\n";
+  };
+
+  const copyCurrentThread = async () => {
+    if (messages.length === 0) return;
     try {
+      await navigator.clipboard.writeText(conversationMarkdown());
+      showToast("Conversation copied.");
+    } catch {
+      chatError = "The conversation could not be copied. Check clipboard permission and try again.";
+    }
+  };
+
+  const exportCurrentThread = async (format: "markdown" | "json") => {
+    if (!activeThreadId || messages.length === 0) return;
+    try {
+      await persistCurrentThread();
       const savedTo = await api.saveChatExport({ thread_id: activeThreadId, format });
       if (savedTo) showToast(`Chat saved to ${savedTo}`);
     } catch (e: unknown) {
@@ -404,6 +433,73 @@
   };
 
   // The user's local date and time, so the model knows what "today" is.
+  const estimateConversationTokens = (items: ChatMessage[]) => items.reduce((sum, message) => sum + Math.ceil(message.content.length / 4), 0);
+
+  const compactConversation = () => {
+    if (messages.length <= 5) return false;
+    messages = [{
+      role: "assistant",
+      content: "[Earlier conversation compacted. Ask if you need details from the omitted turns.]",
+      ts: Date.now(),
+      parts: [{ type: "text", text: "[Earlier conversation compacted. Ask if you need details from the omitted turns.]" }],
+    }, ...messages.slice(-4)];
+    return true;
+  };
+
+  const handleSlashCommand = (command: string) => {
+    switch (command) {
+      case "clear":
+        newChat();
+        break;
+      case "compact":
+        if (compactConversation()) {
+          showToast("Older turns compacted for this chat.");
+        } else {
+          showToast("This conversation is already short.");
+        }
+        break;
+      case "model":
+        pickerOpen = true;
+        break;
+      case "settings":
+        showSettingsPanel = true;
+        break;
+      case "export":
+        void exportCurrentThread("markdown");
+        break;
+      case "copy":
+        void copyCurrentThread();
+        break;
+      case "by-the-way":
+        input = "By the way: ";
+        break;
+      case "goal":
+        input = "My goal is: ";
+        break;
+      case "scale":
+        input = "Answer at the right level of detail. Keep the response concise unless the task needs depth.\n\n";
+        break;
+      case "remember":
+        input = "Remember this: ";
+        useRecall = true;
+        break;
+      case "create-skill":
+        input = "Create a reusable skill from this instruction: ";
+        useSkills = true;
+        break;
+      case "web":
+        useWeb = true;
+        showToast("Web tools enabled for the next message.");
+        break;
+      case "notes":
+        useRecall = true;
+        showToast("Notes and document recall enabled.");
+        break;
+      case "tools":
+        showToast("Use the Tools button beside the message box to choose tools.");
+        break;
+    }
+  };
   const nowLabel = () => {
     const d = new Date();
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -415,6 +511,9 @@
     if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
+    if (activeChoice?.context && estimateConversationTokens(messages) >= activeChoice.context * (autoCompactAt / 100)) {
+      if (compactConversation()) showToast(`Conversation compacted at ${autoCompactAt}% of the context window.`);
+    }
 
     // Earlier turns only. The new message is sent separately as `message`.
     // Failed answers are left out, so the model does not repeat them.
@@ -521,6 +620,8 @@
             settleParts(parts(), now);
             answer().stats = {
               tokens: event.payload.total_tokens,
+              inputTokens: estimateConversationTokens(messages.slice(0, assistantIdx)),
+              outputTokens: event.payload.total_tokens,
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
             };
@@ -881,7 +982,7 @@
   });
 </script>
 
-<div class="chat-root relative flex h-full flex-col">
+<div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
   <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
     <button
@@ -899,8 +1000,12 @@
 
     <div class="ml-auto flex items-center gap-1.5">
       {#if onlineChoice}
-        <span class="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex" title={`Messages go to ${onlineChoice.provider_label}.`}>
-          <Icon name="cloud" class="h-3.5 w-3.5" />Online · {onlineChoice.provider_label}
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/35 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineChoice.provider_label}.`}>
+          <Icon name="cloud" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">Online · {onlineChoice.provider_label}</span>
+        </span>
+      {:else}
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/5 px-2.5 py-1 text-xs font-medium text-ember-200" title="Messages stay on this computer.">
+          <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
         </span>
       {/if}
 
@@ -909,7 +1014,9 @@
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
         {#if showMoreActions}
           <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Save chat as a file</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Export conversation as Markdown</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void copyCurrentThread(); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("json"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="menu-item"><Icon name="file" class="h-4 w-4" />Summarize last answer</button>
           </div>
         {/if}
@@ -1006,9 +1113,17 @@
           </section>
         {/if}
 
+        <section>
+          <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="layers" class="h-3.5 w-3.5" />Context window</h3>
+          <label class="block text-sm text-ink-300">
+            <span class="flex justify-between"><span>Auto-compact at</span><span class="font-mono text-ink-100">{autoCompactAt}%</span></span>
+            <input type="range" min="50" max="95" step="5" bind:value={autoCompactAt} class="mt-1 w-full accent-ember-500" aria-label="Auto-compact threshold" />
+          </label>
+          <p class="mt-2 text-xs leading-5 text-ink-500">Older turns are shortened before a new answer when the context meter reaches this level. Use the circle beside the model selector to see estimated input and output usage.</p>
+        </section>
+
         {#if flag("system_prompt_editor")}
           <section>
-            <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />System prompt</h3>
             <textarea bind:value={systemPrompt} rows={6} onblur={savePrefs} aria-label="System prompt" class="w-full resize-y rounded-lg border border-ink-700 bg-ink-900 p-3 font-mono text-[13px] leading-6 text-ink-100"></textarea>
             {#if currentModeInfo?.instruction}
               <p class="mb-1 mt-3 text-xs font-semibold text-ink-400">{currentModeInfo.label} mode adds:</p>
@@ -1026,7 +1141,7 @@
        a live region, so tokens are not read out one by one. -->
   <p class="sr-only" aria-live="polite">{liveStatus}</p>
 
-  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative flex-1 overflow-y-auto">
+  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative min-h-0 flex-1 overflow-y-auto">
     {#if messages.length === 0}
       <div class="ember-glow mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center gap-8 px-5 py-10 text-center">
         <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
@@ -1141,6 +1256,7 @@
         onRemoveImage={removeImage}
         skills={moduleOn("skills") ? skills : []}
         onPickSkill={(body) => { input = body; }}
+        onSlashCommand={handleSlashCommand}
         {mode}
         modes={chatModes()}
         onModeChange={changeMode}
@@ -1165,6 +1281,7 @@
         onManageTools={() => requestSettings("tools")}
       >
         {#snippet trailing()}
+          <ContextMeter messages={messages} context={activeChoice?.context} {streaming} />
           {#if activeChoice && activeChoice.efforts.length > 0}
             <EffortPicker efforts={activeChoice.efforts} value={effort} onChange={setEffort} />
           {/if}

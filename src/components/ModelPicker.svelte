@@ -32,11 +32,30 @@
   }: Props = $props();
 
   let query = $state("");
-  let filters = $state<{ reasoning: boolean; vision: boolean; tools: boolean; free: boolean }>({
-    reasoning: false,
-    vision: false,
-    tools: false,
-    free: false,
+  const savedFilters = (() => {
+    try {
+      const value = JSON.parse(localStorage.getItem("localaide-model-filters") ?? "{}") as Record<string, unknown>;
+      return {
+        reasoning: value.reasoning === true,
+        vision: value.vision === true,
+        tools: value.tools === true,
+        free: value.free === true,
+      };
+    } catch {
+      return { reasoning: false, vision: false, tools: false, free: false };
+    }
+  })();
+  let filters = $state<{ reasoning: boolean; vision: boolean; tools: boolean; free: boolean }>(savedFilters);
+  const activeFilterCount = $derived(Object.values(filters).filter(Boolean).length);
+  const clearFilters = () => {
+    filters = { reasoning: false, vision: false, tools: false, free: false };
+  };
+  $effect(() => {
+    try {
+      localStorage.setItem("localaide-model-filters", JSON.stringify(filters));
+    } catch {
+      // Storage is optional; filters still work for this session.
+    }
   });
   let cursor = $state(0);
   let searchEl = $state<HTMLInputElement>();
@@ -84,7 +103,8 @@
   });
   // Keep the cursor in range as the list filters.
   $effect(() => {
-    if (cursor >= flat.length) cursor = Math.max(0, flat.length - 1);
+    if (flat.length === 0) cursor = 0;
+    else if (cursor >= flat.length) cursor = flat.length - 1;
   });
 
   const scrollCursorIntoView = () => {
@@ -181,7 +201,8 @@
             class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500"
           />
         </span>
-        <div class="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show only models that">
+        <div class="mt-2 flex items-center gap-1.5" role="group" aria-label="Show only models that">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
           {#each filterButtons as f (f.id)}
             <button
               type="button"
@@ -190,6 +211,10 @@
               class={`filter ${filters[f.id] ? "filter-on" : ""}`}
             ><Icon name={f.icon} class="h-3.5 w-3.5" />{f.label}</button>
           {/each}
+          </div>
+          {#if activeFilterCount > 0}
+            <button type="button" onclick={clearFilters} class="ml-auto shrink-0 rounded px-1.5 py-1 text-xs text-ink-400 underline underline-offset-2 hover:text-ink-100">Clear ({activeFilterCount})</button>
+          {/if}
         </div>
       </div>
 

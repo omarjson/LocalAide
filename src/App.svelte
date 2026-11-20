@@ -322,7 +322,7 @@
     </div>
   </aside>
 
-  <section class={`app-canvas flex-1 min-w-0 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+  <section class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
     <div class="lg:hidden sticky top-0 z-30 shrink-0 bg-ink-950 p-3 border-b border-edge flex items-center gap-3">
       <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-md hover:bg-veil/5 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
       <LogoMark class="w-6 h-6 shrink-0" />
