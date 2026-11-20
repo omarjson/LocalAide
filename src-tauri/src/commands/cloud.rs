@@ -369,6 +369,7 @@ fn provider_dto(p: &CloudProvider, active_id: Option<&str>) -> CloudProviderDto 
 fn status_of(cfg: &crate::config::AppConfig) -> CloudConfigStatus {
     let active = cfg.active_cloud_provider.clone();
     CloudConfigStatus {
+        online_allowed: cfg.online_allowed(),
         cloud_enabled: cfg.cloud_llm_enabled,
         providers: cfg
             .cloud_providers
@@ -479,6 +480,7 @@ pub(crate) fn save_config(
 /// Switch the runtime engine to match the stored config.
 pub(crate) fn apply_engine_mode(state: &AppState, cfg: &crate::config::AppConfig) {
     if cfg.cloud_llm_enabled
+        && cfg.online_allowed()
         && let Some(id) = cfg.active_cloud_provider.as_deref()
         && let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled)
     {
@@ -495,6 +497,7 @@ pub fn cloud_config_get(state: State<'_, AppState>) -> Result<CloudConfigStatus,
     let cfg = load_config(&state)?;
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
+        online_allowed: cfg.online_allowed(),
         cloud_enabled: cfg.cloud_llm_enabled,
         providers: cfg
             .cloud_providers
@@ -612,6 +615,7 @@ pub fn cloud_provider_save(
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
+        online_allowed: cfg.online_allowed(),
         cloud_enabled: cfg.cloud_llm_enabled,
         providers: cfg
             .cloud_providers
@@ -646,6 +650,7 @@ pub fn cloud_provider_delete(
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
+        online_allowed: cfg.online_allowed(),
         cloud_enabled: cfg.cloud_llm_enabled,
         providers: cfg
             .cloud_providers
@@ -670,6 +675,11 @@ pub fn cloud_mode_set(
         cfg.active_cloud_provider = Some(id);
     }
 
+    if req.enabled && !cfg.online_allowed() {
+        return Err(AppError::invalid_input(
+            "Online providers are switched off. Switch them on in Settings → Online providers first.",
+        ));
+    }
     if req.enabled && cfg.active_cloud_provider.is_none() {
         return Err(AppError::invalid_input(
             "Add and choose an online provider before switching cloud mode on.",
@@ -682,6 +692,7 @@ pub fn cloud_mode_set(
 
     let active = cfg.active_cloud_provider.clone();
     Ok(CloudConfigStatus {
+        online_allowed: cfg.online_allowed(),
         cloud_enabled: cfg.cloud_llm_enabled,
         providers: cfg
             .cloud_providers
@@ -690,6 +701,24 @@ pub fn cloud_mode_set(
             .collect(),
         active_provider_id: active,
     })
+}
+
+/// The master switch for online providers. Off sends chat back to this
+/// computer and stops offering any provider; the providers and their keys
+/// stay saved, so switching on again restores them.
+#[tauri::command]
+pub fn cloud_online_set(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<CloudConfigStatus, AppError> {
+    let mut cfg = load_config(&state)?;
+    cfg.online_allowed = Some(enabled);
+    if !enabled {
+        cfg.cloud_llm_enabled = false;
+    }
+    save_config(&state, &cfg)?;
+    apply_engine_mode(&state, &cfg);
+    Ok(status_of(&cfg))
 }
 
 /// A random id for a provider entry, from the operating system's random source.

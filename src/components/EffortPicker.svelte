@@ -36,7 +36,7 @@
     class={`effort-chip ${value !== "auto" && value !== "off" ? "effort-on" : ""}`}
     title="How hard the model thinks"
   >
-    <Icon name="brain" class="h-4 w-4" />
+    <Icon name="brain" class="h-3.5 w-3.5" />
     <span class="hidden sm:inline">{value === "auto" ? "Thinking" : effortLabel(value)}</span>
   </button>
   {#if open}
@@ -70,13 +70,13 @@
 <style>
   .effort-chip {
     display: inline-flex;
-    height: 2rem;
+    height: 1.75rem;
     align-items: center;
     gap: 0.375rem;
     border-radius: 9999px;
     border: 1px solid var(--color-ink-700);
-    padding: 0 0.65rem;
-    font-size: 0.8125rem;
+    padding: 0 0.55rem;
+    font-size: 0.75rem;
     color: var(--color-ink-300);
     transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
   }

@@ -16,6 +16,9 @@ Polish after 0.1.4: a context meter, slash commands, full-chat export and copy, 
 - **Copy and export the whole chat.** The ⋯ menu copies the conversation or saves it as Markdown or JSON. Copy and Markdown are the same text: answers, the model's thinking (folded), each tool call with its input and result, attachments, and numbered references.
 - **Pause and resume downloads.** Pause keeps what was downloaded; Resume continues where it stopped, also after the app was closed. The model screen shows downloaded and total size, what is left, speed and about how long it will take. Cancel discards the partial download.
 - The model filters (Thinks, Sees images, Uses tools, Free) are remembered, with a count and **Clear**.
+- **One switch for online models** (Settings → Online providers, and Settings → General). Off keeps every chat on this computer: providers are greyed out as not available, none appear in the model menu, and an online model cannot be picked or sent to. Your providers and keys stay saved.
+- **Conversation memory follows the model.** The slider goes up to the context window of the model you use (up to about one million tokens), shows tokens and words, and offers **Reload model** when the loaded model still uses the old size.
+- **New experimental features** (Settings → Developer): **Read answers aloud** with your system's voice, **Send with Ctrl+Enter**, and a **Wide chat column**.
 
 ### Changed
 - **References fold under the answer** as a row of numbers, `[1] [2] [3]`. Click to open the list and click one to open it.
@@ -23,12 +26,19 @@ Polish after 0.1.4: a context meter, slash commands, full-chat export and copy, 
 - The chat window stays put; only the conversation scrolls.
 - Download progress for vision models now counts the model and its image projector together, so the size and time left are for the whole download.
 - A starred model appears once in the model menu, under Starred.
+- Every switch in Settings looks and moves the same way, including developer features, modules and MCP servers, which used checkboxes before. Sliders have one style with an orange filled track in both themes.
+- **Use this** is gone from the provider list; pick the model in the chat's model menu instead.
+- Web search lives only in the chat box's **Tools** menu (and `/web`), not as a second button.
+- The buttons in the chat box are smaller, so the box takes less room.
+- Model download sizes use GB, like the memory they need, and include companion files.
 
 ### Fixed
 - **"The chat could not be saved: invalid type: floating point".** How long the model thought was saved as a fraction of a millisecond, which the chat file did not accept, so some chats with thinking failed to save. Times are now whole numbers, and older values with fractions load too.
 - A quick Resume after Pause could start a second download into the same file and break it. Only one download per model runs at a time, and Resume waits until Pause has finished.
 - Pause and Cancel now act within a fraction of a second, also while the connection is silent (it could take up to a minute).
 - Pausing a community model and then refreshing showed Download instead of Resume.
+- The General screen's online switch drew its knob outside the track when on.
+- With more than eight slash commands listed, the arrow keys moved to commands that were not shown.
 
 ## [0.1.4] - 2026-11-19
 

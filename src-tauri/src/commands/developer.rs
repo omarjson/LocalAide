@@ -65,6 +65,24 @@ pub const FLAGS: &[Toggle] = &[
         description: "Tighter spacing in chat and lists, to fit more on screen.",
         default: false,
     },
+    Toggle {
+        id: "read_aloud",
+        label: "Read answers aloud",
+        description: "Add a speaker button under each answer that reads it with your system's voice. Nothing leaves this computer.",
+        default: false,
+    },
+    Toggle {
+        id: "send_ctrl_enter",
+        label: "Send with Ctrl+Enter",
+        description: "Enter starts a new line, and Ctrl+Enter (Cmd+Enter on a Mac) sends the message.",
+        default: false,
+    },
+    Toggle {
+        id: "wide_chat",
+        label: "Wide chat column",
+        description: "Let messages and the chat box use the full width of the window.",
+        default: false,
+    },
 ];
 
 /// Parts of the app that can be switched off. On unless switched off; this
@@ -86,7 +104,7 @@ pub const MODULES: &[Toggle] = &[
     Toggle {
         id: "web_in_chat",
         label: "Web in chat",
-        description: "The Web switch in the chat box, and web research in Autonomous mode.",
+        description: "Web search in the chat's Tools menu and the /web command, and web research in Autonomous mode.",
         default: true,
     },
     Toggle {

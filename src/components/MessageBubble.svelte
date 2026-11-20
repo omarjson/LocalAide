@@ -7,6 +7,9 @@
   import ToolCallCard from "./ToolCallCard.svelte";
   import { openInBrowser } from "../lib/links";
   import { dur, motion } from "../lib/motion";
+  import { flag } from "../lib/dev.svelte";
+  import { speak, speechAvailable, stopSpeaking } from "../lib/speech";
+  import { onDestroy } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import type { ChatAttachment, Citation, MessagePart } from "../lib/api/bindings";
   import type { AnswerStats } from "../lib/chatModes";
@@ -68,6 +71,21 @@
   let lightbox = $state<string | null>(null);
   let referencesOpen = $state(false);
   let raw = $state(false);
+  let speaking = $state(false);
+  // Experimental "Read answers aloud", where the system has a voice.
+  const canSpeak = $derived(flag("read_aloud") && speechAvailable());
+
+  const toggleSpeak = () => {
+    if (speaking) {
+      stopSpeaking();
+      speaking = false;
+      return;
+    }
+    speaking = true;
+    speak(content, () => { speaking = false; });
+  };
+
+  onDestroy(() => { if (speaking) stopSpeaking(); });
 
   $effect(() => {
     if (isEditing) editEl?.focus();
@@ -262,6 +280,7 @@
       {#if !streaming && content}
         <div class={`mt-2 flex flex-wrap items-center gap-0.5 text-ink-500 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 ${isLast ? "opacity-100" : "opacity-0"}`}>
           <button type="button" onclick={copyMessage} class="msg-action" aria-label="Copy answer" title="Copy"><Icon name={copied ? "check" : "copy"} class="h-4 w-4" /></button>
+          {#if canSpeak && !streaming && content.trim()}<button type="button" onclick={toggleSpeak} aria-pressed={speaking} class="msg-action" aria-label={speaking ? "Stop reading aloud" : "Read aloud"} title={speaking ? "Stop reading" : "Read aloud"}><Icon name={speaking ? "stop" : "volume"} class="h-4 w-4" /></button>{/if}
           {#if onRetry}<button type="button" onclick={onRetry} class="msg-action" aria-label="Answer again" title="Answer again"><Icon name="refresh" class="h-4 w-4" /></button>{/if}
           {#if allowRaw}<button type="button" onclick={() => raw = !raw} aria-pressed={raw} class="msg-action" aria-label="Show plain text" title="Plain text"><Icon name="eye" class="h-4 w-4" /></button>{/if}
           {#if onSendToOpenCode}<button type="button" onclick={onSendToOpenCode} class="msg-action" aria-label="Send to OpenCode" title="Continue this in OpenCode"><Icon name="code" class="h-4 w-4" /></button>{/if}

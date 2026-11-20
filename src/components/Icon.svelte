@@ -61,7 +61,8 @@
     | "star-filled"
     | "x-circle"
     | "window"
-    | "terminal";
+    | "terminal"
+    | "volume";
 
   interface Props {
     name: IconName;
@@ -247,5 +248,8 @@
   {:else if name === "terminal"}
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="m7 9 3 3-3 3M12 15h5" />
+  {:else if name === "volume"}
+    <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
   {/if}
 </svg>

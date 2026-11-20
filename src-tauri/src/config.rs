@@ -13,6 +13,12 @@ pub struct AppConfig {
     /// Opt-in OpenAI-compatible providers. Empty unless the user adds one.
     #[serde(default)]
     pub cloud_providers: Vec<CloudProvider>,
+    /// Master switch for online providers (Settings → Online providers).
+    /// Off: no provider is offered or contacted for chat. None (older
+    /// configs) = on when the user has added a provider, since adding one
+    /// was the explicit opt-in before this switch existed.
+    #[serde(default)]
+    pub online_allowed: Option<bool>,
     /// Provider used when `cloud_llm_enabled` is true. None = local engine.
     #[serde(default)]
     pub active_cloud_provider: Option<String>,
@@ -112,6 +118,12 @@ pub const MIN_MODEL_MEMORY_PERCENT: u8 = 20;
 pub const MAX_MODEL_MEMORY_PERCENT: u8 = 90;
 
 impl AppConfig {
+    /// Whether online providers may be used at all.
+    pub fn online_allowed(&self) -> bool {
+        self.online_allowed
+            .unwrap_or(!self.cloud_providers.is_empty())
+    }
+
     /// The memory share for models, kept inside the allowed range.
     pub fn memory_percent_for_models(&self) -> u8 {
         self.model_memory_percent
@@ -202,6 +214,7 @@ impl Default for AppConfig {
             selected_models: vec![],
             cloud_llm_enabled: false,
             cloud_providers: vec![],
+            online_allowed: None,
             active_cloud_provider: None,
             context_tokens: default_context_tokens(),
             chat_system_prompt: None,

@@ -197,6 +197,11 @@ fn resolve_target(
     if let Some(req) = requested
         && let Some(pid) = req.provider_id.as_deref()
     {
+        if !cfg.online_allowed() {
+            return Err(AppError::invalid_input(
+                "Online providers are switched off in Settings, so this message was not sent. Pick a model on this computer, or switch them on.",
+            ));
+        }
         let provider = cfg
             .cloud_providers
             .iter()
@@ -211,7 +216,7 @@ fn resolve_target(
         return Ok((ChatTarget::Remote(target), req.clone(), label));
     }
     match state.inference_engine.current_target() {
-        ChatTarget::Remote(t) if requested.is_none() => {
+        ChatTarget::Remote(t) if requested.is_none() && cfg.online_allowed() => {
             let provider_id = cfg.active_cloud_provider.clone();
             let label = format!("{} · {}", t.model, t.label);
             let req = ChatTargetRequest {

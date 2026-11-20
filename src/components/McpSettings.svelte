@@ -7,6 +7,7 @@
   import Icon, { type IconName } from "./Icon.svelte";
   import SettingsGroup from "./SettingsGroup.svelte";
   import StatusBadge from "./StatusBadge.svelte";
+  import Switch from "./Switch.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
@@ -257,10 +258,10 @@
         {/each}
         <p class="mt-2 text-xs text-ink-500">Values stay in the config file on this computer and are left out of backups unless you include keys.</p>
       </div>
-      <label class="mt-4 flex items-center gap-2 text-sm text-ink-300">
-        <input type="checkbox" bind:checked={formAuto} class="h-4 w-4 accent-ember-500" />
+      <div class="mt-4 flex items-center gap-3 text-sm text-ink-300">
+        <Switch checked={formAuto} label="Run this server's tools without asking each time" onchange={(on) => (formAuto = on)} />
         Run this server's tools without asking each time
-      </label>
+      </div>
       {#if formError}<div class="mt-3"><ErrorBanner message={formError} onDismiss={() => (formError = null)} /></div>{/if}
       <div class="mt-4 flex justify-end gap-2">
         <Button variant="subtle" onclick={() => (showForm = false)}>Cancel</Button>
@@ -288,15 +289,7 @@
               </div>
             </div>
             <div class="flex shrink-0 flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={server.enabled}
-                aria-label={`Use ${server.name} in chat`}
-                title="Use in chat"
-                onclick={() => void toggle(server, { enabled: !server.enabled })}
-                class={`relative mr-1 h-5 w-10 rounded-full border transition-colors ${server.enabled ? "border-ember-600 bg-ember-600" : "border-edge bg-ink-800"}`}
-              ><span class={`absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-[transform,background-color] duration-200 ease-out ${server.enabled ? "translate-x-[18px] bg-on-ember" : "bg-ink-300"}`}></span></button>
+              <Switch checked={server.enabled} label={`Use ${server.name} in chat`} title="Use in chat" class="mr-1" onchange={(on) => void toggle(server, { enabled: on })} />
               <Button variant="secondary" disabled={testing === server.id} onclick={() => void test(server)}>{testing === server.id ? "Testing…" : "Test"}</Button>
               <Button variant="subtle" onclick={() => openEdit(server)}>Edit</Button>
               <Button variant="danger" onclick={() => (pendingDelete = server)}>Remove</Button>

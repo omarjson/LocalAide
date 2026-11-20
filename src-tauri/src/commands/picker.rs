@@ -134,8 +134,8 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
     let loaded_path = local_ep.as_ref().map(|ep| ep.model_path.clone());
     let active_local = state.model_manager.active_model_id();
 
-    let cloud_active = cfg
-        .cloud_llm_enabled
+    let online = cfg.online_allowed();
+    let cloud_active = (cfg.cloud_llm_enabled && online)
         .then_some(cfg.active_cloud_provider.as_deref())
         .flatten()
         .and_then(|id| cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled));
@@ -190,7 +190,7 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
             local_router,
             needs_refresh: p.models.is_empty(),
         });
-        if !p.enabled {
+        if !p.enabled || !online {
             continue;
         }
         let chosen = (cfg.active_cloud_provider.as_deref() == Some(p.id.as_str()))
@@ -224,6 +224,7 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         groups,
         active_key,
         local_loaded: local_ep.is_some(),
+        online_allowed: online,
     }
 }
 
@@ -268,6 +269,11 @@ pub async fn chat_target_set(
         }
         Some(pid) => {
             let mut cfg = load_config(&state)?;
+            if !cfg.online_allowed() {
+                return Err(AppError::invalid_input(
+                    "Online providers are switched off. Switch them on in Settings → Online providers.",
+                ));
+            }
             let Some(provider) = cfg.cloud_providers.iter_mut().find(|p| p.id == pid) else {
                 return Err(AppError::invalid_input("That provider no longer exists."));
             };

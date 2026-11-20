@@ -91,7 +91,7 @@ pub fn run() {
     if let Ok(store) = app_state.config_store.lock()
         && let Ok(cfg) = store.load()
     {
-        if cfg.cloud_llm_enabled {
+        if cfg.cloud_llm_enabled && cfg.online_allowed() {
             let active = cfg
                 .active_cloud_provider
                 .as_deref()
@@ -228,6 +228,7 @@ pub fn run() {
             commands::config_load,
             commands::settings_context,
             commands::settings_set_context,
+            commands::settings_context_info,
             commands::settings_theme,
             commands::settings_set_theme,
             commands::settings_model_memory,
@@ -287,6 +288,7 @@ pub fn run() {
             commands::chat_attach_pick,
             commands::chat_attach_dropped,
             commands::cloud_provider_set_enabled,
+            commands::cloud_online_set,
             commands::cloud_models_refresh,
             commands::mcp_servers_list,
             commands::mcp_presets,

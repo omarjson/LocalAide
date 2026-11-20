@@ -320,3 +320,66 @@ select option {
 :root[data-density="compact"] .space-y-3 > :not(:last-child) {
   margin-bottom: 0.5rem;
 }
+
+/* One slider look for the whole app, in both themes. The filled part of the
+ * track follows --fill (set by Slider.svelte); without it the track is plain. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+  --track: var(--color-ink-700);
+  --fill-color: var(--color-ember-600);
+}
+input[type="range"]:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--fill-color) 0 var(--fill, 0%), var(--track) var(--fill, 0%) 100%);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--track);
+}
+input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--fill-color);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: var(--color-ember-600);
+  border: 2px solid var(--color-ink-900);
+  box-shadow: 0 0 0 1px var(--color-ember-600);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--color-ember-600);
+  border: 2px solid var(--color-ink-900);
+  box-shadow: 0 0 0 1px var(--color-ember-600);
+}
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+input[type="range"]:focus-visible {
+  outline: none;
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--color-ember-600), 0 0 0 5px color-mix(in oklab, var(--color-ember-500) 30%, transparent);
+}
+input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 1px var(--color-ember-600), 0 0 0 5px color-mix(in oklab, var(--color-ember-500) 30%, transparent);
+}

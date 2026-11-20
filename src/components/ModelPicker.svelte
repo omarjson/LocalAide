@@ -4,6 +4,8 @@
   import Icon from "./Icon.svelte";
   import { dur, motion } from "../lib/motion";
   import { contextLabel } from "../lib/chatParts";
+  import { formatGb } from "../lib/format";
+  import { NO_FILTERS, parseFilters, pickerSections, type PickerFilters } from "../lib/modelPicker";
   import type { ModelChoice, ModelChoices } from "../lib/api/bindings";
 
   interface Props {
@@ -34,21 +36,15 @@
   let query = $state("");
   const savedFilters = (() => {
     try {
-      const value = JSON.parse(localStorage.getItem("localaide-model-filters") ?? "{}") as Record<string, unknown>;
-      return {
-        reasoning: value.reasoning === true,
-        vision: value.vision === true,
-        tools: value.tools === true,
-        free: value.free === true,
-      };
+      return parseFilters(localStorage.getItem("localaide-model-filters"));
     } catch {
-      return { reasoning: false, vision: false, tools: false, free: false };
+      return { ...NO_FILTERS };
     }
   })();
-  let filters = $state<{ reasoning: boolean; vision: boolean; tools: boolean; free: boolean }>(savedFilters);
+  let filters = $state<PickerFilters>(savedFilters);
   const activeFilterCount = $derived(Object.values(filters).filter(Boolean).length);
   const clearFilters = () => {
-    filters = { reasoning: false, vision: false, tools: false, free: false };
+    filters = { ...NO_FILTERS };
   };
   $effect(() => {
     try {
@@ -64,35 +60,7 @@
 
   const active = $derived(choices?.models.find((m) => m.active) ?? null);
 
-  const matches = (m: ModelChoice) => {
-    const q = query.trim().toLowerCase();
-    if (q && !`${m.name} ${m.model} ${m.provider_label}`.toLowerCase().includes(q)) return false;
-    if (filters.reasoning && !m.reasoning) return false;
-    if (filters.vision && !m.vision) return false;
-    if (filters.tools && !m.tools) return false;
-    if (filters.free && !m.free) return false;
-    return true;
-  };
-
-  type Section = { id: string; label: string; providerId: string | null; needsRefresh: boolean; starred?: number; items: ModelChoice[] };
-  const sections = $derived.by<Section[]>(() => {
-    if (!choices) return [];
-    const list = choices.models.filter(matches);
-    const out: Section[] = [];
-    const starred = list.filter((m) => m.favorite);
-    if (starred.length) out.push({ id: "starred", label: "Starred", providerId: null, needsRefresh: false, items: starred });
-    // A starred model shows once, under Starred, not again in its group.
-    const local = list.filter((m) => m.provider_id === null && !m.favorite);
-    if (local.length) out.push({ id: "local", label: "On this computer", providerId: null, needsRefresh: false, items: local });
-    for (const g of choices.groups.filter((g) => g.enabled)) {
-      const items = list.filter((m) => m.provider_id === g.provider_id && !m.favorite);
-      if (items.length || !query.trim()) {
-        const starredHere = list.filter((m) => m.provider_id === g.provider_id && m.favorite).length;
-        out.push({ id: g.provider_id, label: g.label, providerId: g.provider_id, needsRefresh: g.needs_refresh, starred: starredHere, items });
-      }
-    }
-    return out;
-  });
+  const sections = $derived(pickerSections(choices, query, filters));
   const flat = $derived(sections.flatMap((s) => s.items.map((m) => ({ section: s.id, m }))));
 
   $effect(() => {
@@ -145,7 +113,7 @@
     if (open && e.target instanceof Node && rootEl && !rootEl.contains(e.target)) open = false;
   };
 
-  const sizeLabel = (bytes: number | null) => (bytes ? `${(bytes / 1e9).toFixed(bytes > 1e10 ? 0 : 1)} GB` : "");
+  const sizeLabel = (bytes: number | null) => (bytes ? formatGb(bytes) : "");
   const filterButtons: { id: keyof typeof filters; label: string; icon: "brain" | "eye" | "wrench" | "heart" }[] = [
     { id: "reasoning", label: "Thinks", icon: "brain" },
     { id: "vision", label: "Sees images", icon: "eye" },
@@ -168,14 +136,14 @@
     title="Choose the model (Ctrl+Shift+M)"
   >
     {#if busy}
-      <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
+      <span class="h-3 w-3 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
     {:else if active && !active.local}
-      <Icon name="cloud" class="h-4 w-4 text-ember-300" />
+      <Icon name="cloud" class="h-3.5 w-3.5 text-ember-300" />
     {:else}
       <span class={`h-2 w-2 shrink-0 rounded-full ${active && choices?.local_loaded ? "bg-emerald-400" : "bg-ink-600"}`} aria-hidden="true"></span>
     {/if}
     <span class="max-w-[11rem] truncate">{busy ? "Loading…" : active ? active.name : noModels ? "Add a model" : "Choose a model"}</span>
-    <Icon name="chevron-down" class={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+    <Icon name="chevron-down" class={`h-3 w-3 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
   </button>
 
   {#if open && choices}
@@ -293,7 +261,7 @@
           <button type="button" onclick={() => { open = false; onGetModels?.(); }} class="foot"><Icon name="download" class="h-3.5 w-3.5" />Get local models</button>
         {/if}
         {#if onManageProviders}
-          <button type="button" onclick={() => { open = false; onManageProviders?.(); }} class="foot"><Icon name="cloud" class="h-3.5 w-3.5" />Online providers</button>
+          <button type="button" onclick={() => { open = false; onManageProviders?.(); }} class="foot" title={choices.online_allowed ? "Manage online providers" : "Online models are switched off in Settings"}><Icon name="cloud" class="h-3.5 w-3.5" />{choices.online_allowed ? "Online providers" : "Online models are off"}</button>
         {/if}
         <span class="ml-auto hidden whitespace-nowrap pr-2 text-xs text-ink-500 md:inline">Arrow keys and Enter</span>
       </div>
@@ -304,13 +272,13 @@
 <style>
   .model-chip {
     display: inline-flex;
-    height: 2rem;
+    height: 1.75rem;
     align-items: center;
     gap: 0.45rem;
     border-radius: 9999px;
     border: 1px solid var(--color-ink-700);
-    padding: 0 0.65rem;
-    font-size: 0.8125rem;
+    padding: 0 0.55rem;
+    font-size: 0.75rem;
     color: var(--color-ink-200);
     transition: border-color 150ms ease-out, color 150ms ease-out;
   }

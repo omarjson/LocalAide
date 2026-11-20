@@ -27,8 +27,14 @@ pub fn settings_context(state: State<'_, AppState>) -> Result<u32, AppError> {
     Ok(store.load().map_err(AppError::internal)?.context_tokens)
 }
 
-/// Set the engine context window. Values outside 512..=131072 are clamped;
-/// the effective size is still capped per model by the catalog hint.
+/// Smallest and largest conversation memory the setting accepts, in tokens.
+pub const MIN_CONTEXT_TOKENS: u32 = 512;
+pub const MAX_CONTEXT_TOKENS: u32 = 1_048_576;
+/// Slider maximum when no installed model says how much it can hold.
+const FALLBACK_CONTEXT_MAX: u32 = 131_072;
+
+/// Set the engine context window. Values outside 512..=1,048,576 are
+/// clamped; the effective size is still capped per model by the catalog hint.
 #[tauri::command]
 pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u32, AppError> {
     let store = state
@@ -36,9 +42,89 @@ pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u
         .lock()
         .map_err(|e| AppError::internal(e.to_string()))?;
     let mut cfg = store.load().map_err(AppError::internal)?;
-    cfg.context_tokens = tokens.clamp(512, 131_072);
+    cfg.context_tokens = tokens.clamp(MIN_CONTEXT_TOKENS, MAX_CONTEXT_TOKENS);
     store.save(&cfg).map_err(AppError::internal)?;
     Ok(cfg.context_tokens)
+}
+
+/// What Settings → Conversation memory needs: the saved value, how far the
+/// slider may go (the model's own context window), and what is loaded now.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ContextInfo {
+    /// The saved setting, in tokens.
+    pub value: u32,
+    pub min: u32,
+    /// Slider maximum: the active model's native window, else the largest
+    /// native window among installed chat models, else 131,072.
+    pub max: u32,
+    /// The model the maximum comes from.
+    pub model_id: Option<String>,
+    pub model_name: Option<String>,
+    /// The size the local engine is running with right now, if a model is loaded.
+    pub loaded: Option<u32>,
+    /// The model loaded in the local engine, which "Reload model" restarts.
+    pub active_id: Option<String>,
+}
+
+#[tauri::command]
+pub fn settings_context_info(state: State<'_, AppState>) -> Result<ContextInfo, AppError> {
+    let value = {
+        let store = state
+            .config_store
+            .lock()
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        store.load().map_err(AppError::internal)?.context_tokens
+    };
+    let models = &state.model_service;
+    let active_id = state.model_manager.active_model_id();
+    let active = active_id
+        .clone()
+        .and_then(|id| models.get_model_entry(&id))
+        .filter(|e| e.context_tokens.is_some());
+    let source = active.or_else(|| {
+        models
+            .all_entries()
+            .into_iter()
+            .filter(|e| models.is_chat_model(&e.id) && models.is_installed(&e.id))
+            .filter(|e| e.context_tokens.is_some())
+            .max_by_key(|e| e.context_tokens)
+    });
+    let max = source
+        .as_ref()
+        .and_then(|e| e.context_tokens)
+        .unwrap_or(FALLBACK_CONTEXT_MAX);
+    let loaded = state
+        .inference_engine
+        .local()
+        .endpoint()
+        .map(|ep| ep.context_size.max(0) as u32);
+    Ok(ContextInfo {
+        value,
+        min: MIN_CONTEXT_TOKENS,
+        max: context_slider_max(max),
+        model_id: source.as_ref().map(|e| e.id.clone()),
+        model_name: source.map(|e| e.name),
+        active_id: active_id.filter(|_| loaded.is_some()),
+        loaded,
+    })
+}
+
+/// Keep the slider maximum inside the accepted range.
+fn context_slider_max(native: u32) -> u32 {
+    native.clamp(MIN_CONTEXT_TOKENS * 4, MAX_CONTEXT_TOKENS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slider_max_follows_the_model_inside_the_range() {
+        assert_eq!(context_slider_max(32_768), 32_768);
+        assert_eq!(context_slider_max(262_144), 262_144);
+        assert_eq!(context_slider_max(10_000_000), MAX_CONTEXT_TOKENS);
+        assert_eq!(context_slider_max(100), MIN_CONTEXT_TOKENS * 4);
+    }
 }
 
 /// Share of memory models may use, in percent (Settings → Memory for models).

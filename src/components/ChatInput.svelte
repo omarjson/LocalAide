@@ -5,6 +5,8 @@
   import { MODE_ICONS } from "../lib/chatModes";
   import { popover } from "../lib/actions/popover";
   import { dur, motion } from "../lib/motion";
+  import { flag } from "../lib/dev.svelte";
+  import { slashItems, type SlashItem } from "../lib/slash";
   import type { ChatAttachment, ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
 
   /** An MCP server as the tools menu shows it. */
@@ -104,6 +106,8 @@
   let modeMenuOpen = $state(false);
   let attachMenuOpen = $state(false);
   let toolsMenuOpen = $state(false);
+  // Experimental: Ctrl+Enter (Cmd+Enter on a Mac) sends, Enter adds a line.
+  const ctrlEnterSends = $derived(flag("send_ctrl_enter"));
   onMount(() => textareaEl?.focus());
 
   const currentMode = $derived(modes.find((m) => m.id === mode));
@@ -127,35 +131,7 @@
     void tick().then(resize);
   });
 
-  const slashCommands = [
-    { id: "clear", label: "Start a new chat", description: "Clear this conversation", icon: "plus" as const },
-    { id: "compact", label: "Compact conversation", description: "Stop sending older messages; they stay on screen", icon: "layers" as const },
-    { id: "model", label: "Choose a model", description: "Open the model selector", icon: "models" as const },
-    { id: "settings", label: "Chat settings", description: "Open response style and context settings", icon: "sliders" as const },
-    { id: "export", label: "Export Markdown", description: "Save this conversation as a Markdown file", icon: "download" as const },
-    { id: "copy", label: "Copy conversation", description: "Copy the full conversation to the clipboard", icon: "copy" as const },
-    { id: "by-the-way", label: "By the way", description: "Add a side question without losing the main task", icon: "chat" as const },
-    { id: "goal", label: "Set a goal", description: "Turn a vague task into a clear goal", icon: "target" as const },
-    { id: "scale", label: "Scale the answer", description: "Ask for a shorter or more detailed answer", icon: "layers" as const },
-    { id: "remember", label: "Remember this", description: "Save a memory note after confirmation", icon: "memory" as const },
-    { id: "create-skill", label: "Create a skill", description: "Turn a reusable instruction into a saved skill", icon: "skills" as const },
-    { id: "web", label: "Use web", description: "Let the model search the web in this chat", icon: "globe" as const },
-    { id: "notes", label: "Use notes", description: "Allow notes and document recall", icon: "memory" as const },
-    { id: "tools", label: "Use tools", description: "Open the tools menu", icon: "wrench" as const },
-  ];
-  const slashMatch = $derived(input.length >= 1 && input.startsWith("/") ? input.slice(1).toLowerCase() : null);
-  const commandMatches = $derived(
-    slashMatch === null ? [] : slashCommands.filter((command) => command.id.includes(slashMatch) || command.label.toLowerCase().includes(slashMatch)),
-  );
-  const skillMatches = $derived(
-    slashMatch === null
-      ? []
-      : skills.filter((s) => s.name.toLowerCase().includes(slashMatch) || s.description.toLowerCase().includes(slashMatch) || s.tags.some((tag) => tag.toLowerCase().includes(slashMatch))),
-  );
-  const slashItems = $derived([
-    ...commandMatches.map((command) => ({ kind: "command" as const, value: command })),
-    ...skillMatches.map((skill) => ({ kind: "skill" as const, value: skill })),
-  ]);
+  const slashList = $derived(slashItems(input, skills));
 
   const pickSkill = (skill: Skill) => {
     input = skill.body;
@@ -166,7 +142,7 @@
 
   // Clear the "/word" first, so a command that writes a prompt prefix (or a
   // skill's body) is what stays in the box.
-  const pickSlashItem = (item: (typeof slashItems)[number]) => {
+  const pickSlashItem = (item: SlashItem) => {
     input = "";
     skillCursor = 0;
     if (item.kind === "command" && item.value.id === "tools") {
@@ -180,24 +156,24 @@
 
   // A narrower match list must not leave the cursor past its end.
   $effect(() => {
-    if (skillCursor >= slashItems.length) skillCursor = 0;
+    if (skillCursor >= slashList.length) skillCursor = 0;
   });
 
   const handleKeydown = (e: KeyboardEvent) => {
-    if (slashItems.length > 0) {
+    if (slashList.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        skillCursor = (skillCursor + 1) % slashItems.length;
+        skillCursor = (skillCursor + 1) % slashList.length;
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        skillCursor = (skillCursor - 1 + slashItems.length) % slashItems.length;
+        skillCursor = (skillCursor - 1 + slashList.length) % slashList.length;
         return;
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        pickSlashItem(slashItems[skillCursor]);
+        pickSlashItem(slashList[skillCursor]);
         return;
       }
       if (e.key === "Escape") {
@@ -207,7 +183,11 @@
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // With "Send with Ctrl+Enter" on, plain Enter adds a new line instead.
+    const sendKey = ctrlEnterSends
+      ? e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+      : e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (sendKey) {
       e.preventDefault();
       // Enter that confirms an IME composition (Chinese, Japanese, Korean)
       // must not send the message.
@@ -246,42 +226,33 @@
 </script>
 
 <div class="relative">
-  {#if slashMatch !== null && slashItems.length > 0}
+  {#if slashList.length > 0}
     <div
       class="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[min(22rem,60vh)] overflow-y-auto rounded-xl border border-edge bg-ink-950 shadow-2xl"
       role="listbox"
       aria-label="Slash commands and skills"
       in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}
     >
-      {#if commandMatches.length > 0}<div class="px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Commands</div>{/if}
-      {#each commandMatches.slice(0, 8) as command, i (command.id)}
+      {#each slashList as item, i (`${item.kind}:${item.kind === "command" ? item.value.id : item.value.path}`)}
+        {#if i === 0 && item.kind === "command"}<div class="px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Commands</div>{/if}
+        {#if item.kind === "skill" && (i === 0 || slashList[i - 1].kind === "command")}<div class={`px-3 pb-1 pt-2 text-xs font-semibold text-ink-500 ${i > 0 ? "border-t border-ink-800" : ""}`}>Skills</div>{/if}
         <button
           type="button"
           role="option"
           aria-selected={i === skillCursor}
-          onclick={() => pickSlashItem({ kind: "command", value: command })}
+          onclick={() => pickSlashItem(item)}
           onmouseenter={() => (skillCursor = i)}
           class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${i === skillCursor ? "bg-veil/10" : ""}`}
         >
-          <Icon name={command.icon} class="h-4 w-4 shrink-0 text-ember-300" />
-          <span class="shrink-0 font-mono text-ink-100">/{command.id}</span>
-          <span class="truncate text-ink-400">{command.description}</span>
-        </button>
-      {/each}
-      {#if skillMatches.length > 0}<div class="border-t border-ink-800 px-3 pb-1 pt-2 text-xs font-semibold text-ink-500">Skills</div>{/if}
-      {#each skillMatches.slice(0, 6) as skill, i (skill.path)}
-        {@const index = commandMatches.length + i}
-        <button
-          type="button"
-          role="option"
-          aria-selected={index === skillCursor}
-          onclick={() => pickSlashItem({ kind: "skill", value: skill })}
-          onmouseenter={() => (skillCursor = index)}
-          class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${index === skillCursor ? "bg-veil/10" : ""}`}
-        >
-          <Icon name="skills" class="h-4 w-4 shrink-0 text-ember-400" />
-          <span class="shrink-0 font-mono text-ink-100">/{skill.name}</span>
-          <span class="truncate text-ink-400">{skill.description || skill.body.slice(0, 80)}</span>
+          {#if item.kind === "command"}
+            <Icon name={item.value.icon} class="h-4 w-4 shrink-0 text-ember-300" />
+            <span class="shrink-0 font-mono text-ink-100">/{item.value.id}</span>
+            <span class="truncate text-ink-400">{item.value.description}</span>
+          {:else}
+            <Icon name="skills" class="h-4 w-4 shrink-0 text-ember-400" />
+            <span class="shrink-0 font-mono text-ink-100">/{item.value.name}</span>
+            <span class="truncate text-ink-400">{item.value.description || item.value.body.slice(0, 80)}</span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -382,7 +353,7 @@
       />
 
       <div class="relative" use:popover={{ open: attachMenuOpen, onClose: () => (attachMenuOpen = false) }}>
-        <button type="button" aria-haspopup="menu" aria-expanded={attachMenuOpen} onclick={() => (attachMenuOpen = !attachMenuOpen)} disabled={streaming} aria-label="Attach" title="Attach files or images" class="composer-tool"><Icon name="plus" class="h-[18px] w-[18px]" /></button>
+        <button type="button" aria-haspopup="menu" aria-expanded={attachMenuOpen} onclick={() => (attachMenuOpen = !attachMenuOpen)} disabled={streaming} aria-label="Attach" title="Attach files or images" class="composer-tool"><Icon name="plus" class="h-4 w-4" /></button>
         {#if attachMenuOpen}
           <div role="menu" aria-label="Attach" class="menu bottom-full left-0 mb-2 w-72" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
             <button type="button" role="menuitem" data-popover-item onclick={() => { attachMenuOpen = false; onAttachFiles?.(); }} class="menu-row">
@@ -400,7 +371,7 @@
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
-          <Icon name="wrench" class="h-4 w-4" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs tabular-nums text-ink-200">{toolsOn}</span>{/if}
+          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-[11px] leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
         </button>
         {#if toolsMenuOpen}
           <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
@@ -433,15 +404,6 @@
         {/if}
       </div>
 
-      {#if webAvailable}
-        <button
-          type="button"
-          aria-pressed={useWeb}
-          onclick={onToggleWeb}
-          title={useWeb ? "The model may search the web when it needs to" : "Let the model search the web when it needs to"}
-          class={`composer-chip ${useWeb ? "composer-chip-on" : ""}`}
-        ><Icon name="globe" class="h-4 w-4" /><span class="hidden sm:inline">Web</span></button>
-      {/if}
 
       {#if modes.length > 0}
         <div class="relative" use:popover={{ open: modeMenuOpen, onClose: () => (modeMenuOpen = false) }}>
@@ -453,9 +415,9 @@
             class={`composer-chip ${mode !== "standard" ? "composer-chip-on" : ""}`}
             title={currentMode?.description}
           >
-            <Icon name={MODE_ICONS[mode]} class="h-4 w-4" />
+            <Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />
             <span class="hidden md:inline">{currentMode?.label ?? "Standard"}</span>
-            <Icon name="chevron-down" class={`h-3.5 w-3.5 transition-transform duration-200 ${modeMenuOpen ? "rotate-180" : ""}`} />
+            <Icon name="chevron-down" class={`h-3 w-3 transition-transform duration-200 ${modeMenuOpen ? "rotate-180" : ""}`} />
           </button>
           {#if modeMenuOpen}
             <div role="menu" aria-label="Chat mode" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
@@ -491,17 +453,17 @@
           onclick={onCancel}
           aria-label="Stop the answer"
           title="Stop (Esc)"
-          class="ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950 transition-transform hover:scale-105 active:scale-95"
-        ><Icon name="stop" class="h-4 w-4" /></button>
+          class="ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950 transition-transform hover:scale-105 active:scale-95"
+        ><Icon name="stop" class="h-3.5 w-3.5" /></button>
       {:else}
         <button
           type="button"
           onclick={onSend}
           disabled={!canSend}
           aria-label="Send"
-          title="Send (Enter)"
-          class={`ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-md shadow-ember-900/40 hover:scale-105 hover:bg-ember-400" : "bg-ink-800 text-ink-500"}`}
-        ><Icon name="arrow-up" class="h-[18px] w-[18px]" /></button>
+          title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}
+          class={`ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-md shadow-ember-900/40 hover:scale-105 hover:bg-ember-400" : "bg-ink-800 text-ink-500"}`}
+        ><Icon name="arrow-up" class="h-4 w-4" /></button>
       {/if}
     </div>
   </div>
@@ -510,8 +472,8 @@
 <style>
   .composer-tool {
     display: grid;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2rem;
+    width: 2rem;
     place-items: center;
     border-radius: 0.6rem;
     color: var(--color-ink-400);
@@ -527,13 +489,13 @@
   }
   .composer-chip {
     display: inline-flex;
-    height: 2rem;
+    height: 1.75rem;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.3rem;
     border-radius: 9999px;
     border: 1px solid var(--color-ink-700);
-    padding: 0 0.7rem;
-    font-size: 0.8125rem;
+    padding: 0 0.6rem;
+    font-size: 0.75rem;
     color: var(--color-ink-300);
     transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
   }

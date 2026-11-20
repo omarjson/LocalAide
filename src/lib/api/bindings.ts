@@ -190,6 +190,8 @@ export interface ModelChoices {
   groups: ModelGroup[];
   active_key: string | null;
   local_loaded: boolean;
+  /** Online providers are switched on in Settings. Off: none are listed. */
+  online_allowed: boolean;
 }
 
 /** Settings → Tools and MCP. */
@@ -478,7 +480,25 @@ export interface CloudProviderDto {
   model_count: number;
 }
 
+/** Settings → Conversation memory. */
+export interface ContextInfo {
+  /** The saved setting, in tokens. */
+  value: number;
+  min: number;
+  /** The model's own context window (slider maximum). */
+  max: number;
+  model_id: string | null;
+  model_name: string | null;
+  /** What the local engine runs with now, if a model is loaded. */
+  loaded: number | null;
+  /** The loaded local model, which "Reload model" restarts. */
+  active_id: string | null;
+}
+
 export interface CloudConfigStatus {
+  /** Master switch: online providers may be used at all. */
+  online_allowed: boolean;
+  /** Chat is set to an online model right now. */
   cloud_enabled: boolean;
   providers: CloudProviderDto[];
   active_provider_id: string | null;
