@@ -65,6 +65,7 @@ pub fn run() {
     );
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
+    crate::services::cloud_audit::install(library.db());
 
     // User-saved prompt skills (markdown files) plus the honest local usage
     // counters behind the "save this as a skill?" suggestions.
@@ -137,6 +138,7 @@ pub fn run() {
 
     // Handles for the background load and the exit handler. AppState holds only
     // shared handles, so cloning it is cheap.
+    crate::commands::library_status::start_embedding_at_launch(app_state.clone());
     let startup_state = app_state.clone();
     let shutdown_state = app_state.clone();
     let engine_loading = app_state.engine_loading.clone();
@@ -229,6 +231,28 @@ pub fn run() {
             commands::settings_context,
             commands::settings_set_context,
             commands::settings_context_info,
+            commands::selftest_run,
+            commands::library_folder_presets,
+            commands::library_index_start,
+            commands::library_index_cancel,
+            commands::library_folders,
+            commands::library_folder_remove,
+            commands::library_status,
+            commands::library_embedding_select,
+            commands::voice_settings_get,
+            commands::voice_settings_set,
+            commands::voice_key_set,
+            commands::voice_models,
+            commands::voice_engine_fetch,
+            commands::voice_transcribe,
+            commands::voice_live_start,
+            commands::voice_live_push,
+            commands::voice_live_stop,
+            commands::voice_cleanup,
+            commands::share_status,
+            commands::share_start,
+            commands::share_stop,
+            commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,
             commands::settings_model_memory,
@@ -289,6 +313,9 @@ pub fn run() {
             commands::chat_attach_dropped,
             commands::cloud_provider_set_enabled,
             commands::cloud_online_set,
+            commands::cloud_audit_list,
+            commands::cloud_provider_test,
+            commands::cloud_audit_clear,
             commands::cloud_models_refresh,
             commands::mcp_servers_list,
             commands::mcp_presets,
@@ -347,6 +374,7 @@ pub fn run() {
                 shutdown_state.embedding_engine.stop();
                 shutdown_state.rerank_engine.stop();
                 shutdown_state.mcp.disconnect_all();
+                crate::services::share::stop(&shutdown_state);
                 // Fold the database log into the file, so the next start is quick.
                 if let Err(e) = shutdown_state.library.checkpoint() {
                     log::warn!("Database checkpoint at exit failed: {e}");

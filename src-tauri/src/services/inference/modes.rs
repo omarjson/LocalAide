@@ -107,6 +107,7 @@ pub struct ToolGroups {
     pub notes: bool,
     pub files: bool,
     pub skills: bool,
+    pub shell: bool,
     pub mcp: bool,
 }
 
@@ -118,13 +119,16 @@ pub fn tool_guidance(groups: ToolGroups, mode: ChatMode) -> String {
         uses.push("search the web for recent events, prices, versions or facts you are not sure about, and read a page when a snippet is not enough");
     }
     if groups.notes {
-        uses.push("search the user's notes and documents when the question is about their own information, and save a note when they ask you to remember something");
+        uses.push("search the user's notes and documents first whenever the question is about their own files, notes, documents or earlier work (do not guess or answer from general knowledge), then answer from what you found and name the file you used, and save a note when they ask you to remember something");
     }
     if groups.files {
         uses.push("read and write files in the LocalAide workspace folder when the user asks");
     }
     if groups.skills {
         uses.push("look at the user's saved skills when a task may match one");
+    }
+    if groups.shell {
+        uses.push("run terminal commands in the workspace when the user asks you to run, build or check something, and read the output before you answer");
     }
     if groups.mcp {
         uses.push("use the tools from the user's MCP servers for what they describe");

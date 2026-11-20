@@ -57,6 +57,14 @@ pub enum ChatStreamEvent {
         summary: String,
         output: String,
     },
+    /// The model asked the user a question with options (`ask_user`). The
+    /// answer ends here; the user's choice is the next message.
+    Question {
+        id: String,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

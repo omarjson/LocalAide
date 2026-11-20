@@ -674,20 +674,54 @@ pub fn stream_once(
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<StreamOutcome, StreamError> {
     let start = Instant::now();
+    // Online providers: log what goes out (Settings → What left this computer).
+    let audit = if crate::services::cloud_audit::is_local(&endpoint.url) {
+        None
+    } else {
+        let what = if body
+            .get("tools")
+            .is_some_and(|t| t.as_array().is_some_and(|a| !a.is_empty()))
+        {
+            "chat (with tools)"
+        } else {
+            "chat"
+        };
+        Some(crate::services::cloud_audit::start(
+            &endpoint.label,
+            &endpoint.url,
+            &endpoint.model,
+            what,
+            &crate::services::cloud_audit::last_user_text(body),
+            body.to_string().len(),
+            endpoint.bearer.as_deref(),
+        ))
+    };
     let mut request = client.post(&endpoint.url).json(body);
     if let Some(key) = endpoint.bearer.as_deref().filter(|k| !k.trim().is_empty()) {
         request = request.bearer_auth(key);
     }
-    let response = request.send().map_err(|e| {
-        StreamError::Other(AppError::internal(format!(
-            "Could not reach {}: {e}. Check the address and your connection.",
-            endpoint.label
-        )))
-    })?;
+    let response = match request.send() {
+        Ok(r) => r,
+        Err(e) => {
+            if let Some(a) = audit {
+                a.finish(false, "could not connect");
+            }
+            return Err(StreamError::Other(AppError::internal(format!(
+                "Could not reach {}: {e}. Check the address and your connection.",
+                endpoint.label
+            ))));
+        }
+    };
     if !response.status().is_success() {
         let status = response.status().as_u16();
+        if let Some(a) = audit {
+            a.finish(false, &format!("HTTP {status}"));
+        }
         let body = response.text().unwrap_or_default();
         return Err(StreamError::Http { status, body });
+    }
+    if let Some(a) = audit {
+        a.finish(true, &format!("HTTP {}", response.status().as_u16()));
     }
 
     // A helper thread reads the stream, so this loop can check the cancel

@@ -8,6 +8,8 @@
   import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
   import { requestSettings, screenRequest } from "./lib/nav.svelte";
   import { loadDev, moduleOn } from "./lib/dev.svelte";
+  import { loadVoice } from "./lib/voice.svelte";
+  import { refreshShare, share } from "./lib/share.svelte";
   import MarkdownDoc from "./components/MarkdownDoc.svelte";
   import Modal from "./components/Modal.svelte";
   import type { IconName } from "./components/Icon.svelte";
@@ -209,6 +211,8 @@
         console.error("Theme could not load", e);
       }
       await loadDev();
+      void loadVoice();
+      void refreshShare();
       await decideStartScreen();
       await refreshProbe();
     })();
@@ -372,6 +376,11 @@
       <span>Computer memory: {formatBytes(ramUsable)} free of {formatBytes(ramTotal)}</span>
       <span>Models can use up to {formatBytes(budget)}</span>
     {/if}
+    {#if share.status?.on}
+      <button type="button" onclick={() => { if (navigate("settings")) requestSettings("share"); }} class="sharing-on" title={`Anyone with a link can reach this assistant: ${share.status.url ?? ""}`}>
+        <span class="sharing-dot" aria-hidden="true"></span>Sharing is on · {share.status.requests} {share.status.requests === 1 ? "request" : "requests"}
+      </button>
+    {/if}
     <span class="ml-auto hidden sm:inline">Press ? for keyboard shortcuts</span>
   </footer>
 
@@ -466,3 +475,24 @@
     </Modal>
   {/if}
 </main>
+
+<style>
+  .sharing-on {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    border-radius: 9999px;
+    padding: 0 9px;
+    font-weight: 600;
+    background: color-mix(in oklab, var(--color-ember-500) 16%, transparent);
+    color: var(--color-ember-200);
+  }
+  .sharing-dot {
+    height: 7px;
+    width: 7px;
+    border-radius: 9999px;
+    background: var(--color-ember-500);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 25%, transparent);
+  }
+</style>

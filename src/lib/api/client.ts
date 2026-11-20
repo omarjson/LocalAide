@@ -88,6 +88,22 @@ import type {
   McpServer,
   McpServerSaveRequest,
   McpTool,
+  LibraryStatus,
+  FolderPreset,
+  IndexProgress,
+  IndexReport,
+  SelfTestStep,
+  SelfTestReport,
+  CloudCall,
+  VoiceSettings,
+  VoiceUpdate,
+  VoiceModels,
+  ProgramStatus,
+  Transcript,
+  LiveEvent,
+  VoiceCleanup,
+  ShareStatus,
+  ShareStarted,
 } from "./bindings";
 
 export class ApiClient {
@@ -295,6 +311,121 @@ export class ApiClient {
     return invoke<IndexerStatsResponse>("indexer_stats");
   }
 
+  // Library status, folder presets and indexing with progress
+
+  async libraryStatus(): Promise<LibraryStatus> {
+    return invoke<LibraryStatus>("library_status");
+  }
+
+  async libraryFolderPresets(): Promise<FolderPreset[]> {
+    return invoke<FolderPreset[]>("library_folder_presets");
+  }
+
+  async libraryIndex(folder: string, onProgress: (p: IndexProgress) => void): Promise<IndexReport> {
+    const channel = new Channel<IndexProgress>();
+    channel.onmessage = onProgress;
+    return invoke<IndexReport>("library_index_start", { folder, channel });
+  }
+
+  async libraryIndexCancel(): Promise<boolean> {
+    return invoke<boolean>("library_index_cancel");
+  }
+
+  async libraryFolderRemove(path: string): Promise<number> {
+    return invoke<number>("library_folder_remove", { path });
+  }
+
+  /** Choose the meaning model for search; it starts and re-embeds the library. */
+  async libraryEmbeddingSelect(modelId: string): Promise<LibraryStatus> {
+    return invoke<LibraryStatus>("library_embedding_select", { modelId });
+  }
+
+  // Voice
+
+  async voiceSettings(): Promise<VoiceSettings> {
+    return invoke<VoiceSettings>("voice_settings_get");
+  }
+
+  async setVoiceSettings(update: VoiceUpdate): Promise<VoiceSettings> {
+    return invoke<VoiceSettings>("voice_settings_set", { update });
+  }
+
+  /** Save the key for an online voice provider; an empty key removes it. */
+  async setVoiceKey(provider: string, key: string): Promise<VoiceSettings> {
+    return invoke<VoiceSettings>("voice_key_set", { provider, key });
+  }
+
+  async voiceModels(): Promise<VoiceModels> {
+    return invoke<VoiceModels>("voice_models");
+  }
+
+  async fetchVoiceEngine(onProgress: (e: DownloadProgressEvent) => void): Promise<ProgramStatus> {
+    const channel = new Channel<DownloadProgressEvent>();
+    channel.onmessage = onProgress;
+    return invoke<ProgramStatus>("voice_engine_fetch", { channel });
+  }
+
+  /** A finished recording as base64 WAV (16 kHz mono 16-bit). */
+  async transcribe(audioBase64: string): Promise<Transcript> {
+    return invoke<Transcript>("voice_transcribe", { audio: audioBase64 });
+  }
+
+  async voiceLiveStart(onEvent: (e: LiveEvent) => void): Promise<string> {
+    const channel = new Channel<LiveEvent>();
+    channel.onmessage = onEvent;
+    return invoke<string>("voice_live_start", { channel });
+  }
+
+  async voiceLivePush(session: string, pcmBase64: string): Promise<boolean> {
+    return invoke<boolean>("voice_live_push", { session, pcm: pcmBase64 });
+  }
+
+  async voiceLiveStop(session: string): Promise<boolean> {
+    return invoke<boolean>("voice_live_stop", { session });
+  }
+
+  async voiceCleanup(text: string): Promise<VoiceCleanup> {
+    return invoke<VoiceCleanup>("voice_cleanup", { text });
+  }
+
+  // Share my assistant
+
+  async shareStatus(): Promise<ShareStatus> {
+    return invoke<ShareStatus>("share_status");
+  }
+
+  async shareStart(tunnel = true): Promise<ShareStarted> {
+    return invoke<ShareStarted>("share_start", { tunnel });
+  }
+
+  async shareStop(): Promise<ShareStatus> {
+    return invoke<ShareStatus>("share_stop");
+  }
+
+  async fetchCloudflared(onProgress: (e: DownloadProgressEvent) => void): Promise<ProgramStatus> {
+    const channel = new Channel<DownloadProgressEvent>();
+    channel.onmessage = onProgress;
+    return invoke<ProgramStatus>("share_cloudflared_fetch", { channel });
+  }
+
+  // Check my setup
+
+  async selfTest(onStep: (s: SelfTestStep) => void): Promise<SelfTestReport> {
+    const channel = new Channel<SelfTestStep>();
+    channel.onmessage = onStep;
+    return invoke<SelfTestReport>("selftest_run", { channel });
+  }
+
+  // What left this computer
+
+  async cloudAuditList(limit = 200): Promise<CloudCall[]> {
+    return invoke<CloudCall[]>("cloud_audit_list", { limit });
+  }
+
+  async cloudAuditClear(): Promise<number> {
+    return invoke<number>("cloud_audit_clear");
+  }
+
   async removeIndexedDoc(path: string): Promise<void> {
     return invoke<void>("index_remove", { path });
   }
@@ -478,6 +609,11 @@ export class ApiClient {
 
   async opencodeSend(task: string, title?: string): Promise<OpenCodeHandoff> {
     return invoke<OpenCodeHandoff>("opencode_send", { task, title: title ?? null });
+  }
+
+  /** Test connection: ask a saved provider for its models with its saved key. */
+  async testCloudProvider(providerId: string): Promise<CloudConfigStatus> {
+    return invoke<CloudConfigStatus>("cloud_provider_test", { providerId });
   }
 
   async cloudProviderPresets(): Promise<CloudProviderPreset[]> {

@@ -7,6 +7,8 @@
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { slashItems, type SlashItem } from "../lib/slash";
+  import VoiceButton from "./VoiceButton.svelte";
+  import { voice } from "../lib/voice.svelte";
   import type { ChatAttachment, ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
 
   /** An MCP server as the tools menu shows it. */
@@ -51,6 +53,9 @@
     useSkills?: boolean;
     skillsAvailable?: boolean;
     onToggleSkills?: () => void;
+    useShell?: boolean;
+    shellAvailable?: boolean;
+    onToggleShell?: () => void;
     mcpServers?: ToolServer[];
     mcpAvailable?: boolean;
     onToggleMcp?: (id: string) => void;
@@ -93,6 +98,9 @@
     useSkills = true,
     skillsAvailable = true,
     onToggleSkills,
+    useShell = true,
+    shellAvailable = false,
+    onToggleShell,
     mcpServers = [],
     mcpAvailable = true,
     onToggleMcp,
@@ -218,6 +226,7 @@
     if (recallAvailable) rows.push({ id: "notes", label: "Notes and documents", hint: "Search your notes and library, save notes", icon: "memory", on: useRecall, toggle: onToggleRecall });
     rows.push({ id: "files", label: "Workspace files", hint: "Read files; writing asks you first", icon: "folder", on: useFiles, toggle: onToggleFiles });
     if (skillsAvailable) rows.push({ id: "skills", label: "Skills", hint: "Use your saved skills", icon: "skills", on: useSkills, toggle: onToggleSkills });
+    if (shellAvailable) rows.push({ id: "shell", label: "Terminal", hint: "Run commands in the workspace; changes ask first", icon: "terminal", on: useShell, toggle: onToggleShell });
     return rows;
   });
   const toolsOn = $derived(toolRows.filter((r) => r.on).length + (mcpAvailable ? mcpServers.filter((s) => s.on).length : 0));
@@ -368,6 +377,17 @@
           </div>
         {/if}
       </div>
+
+      {#if voice.settings?.enabled}
+        <VoiceButton
+          disabled={streaming}
+          onText={(text) => {
+            input = input.trim() ? `${input.trimEnd()} ${text}` : text;
+            if (voice.settings?.auto_send) void tick().then(() => onSend());
+            else void tick().then(() => textareaEl?.focus());
+          }}
+        />
+      {/if}
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">

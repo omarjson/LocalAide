@@ -5,7 +5,8 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import { appendReasoning, appendText, finishTool, partsForSaving, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
+  import { addQuestion, appendReasoning, appendText, finishTool, partsForSaving, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
+  import ApprovalModeMenu from "../components/ApprovalModeMenu.svelte";
   import { dur, motion, stagger } from "../lib/motion";
   import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
@@ -16,7 +17,7 @@
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Slider from "../components/Slider.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, ModelChoice, ModelChoices, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ApprovalMode, ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, ModelChoice, ModelChoices, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
@@ -103,6 +104,8 @@
         recall?: unknown;
         files?: unknown;
         skills?: unknown;
+        shell?: unknown;
+        approvals?: unknown;
         mcpOff?: unknown;
         efforts?: unknown;
         autoCompactAt?: unknown;
@@ -116,6 +119,16 @@
   let useRecall = $state(savedOptions.recall !== false);
   let useFiles = $state(savedOptions.files !== false);
   let useSkills = $state(savedOptions.skills !== false);
+  let useShell = $state(savedOptions.shell !== false);
+  // The approval switch in the header: "auto" is remembered for every chat,
+  // "Allow for this chat" lasts until the chat changes.
+  let approveAuto = $state(savedOptions.approvals === "auto");
+  let approveChat = $state(false);
+  const approvalMode = $derived<ApprovalMode>(approveAuto ? "auto" : approveChat ? "chat" : "ask");
+  const setApprovalMode = (next: ApprovalMode) => {
+    approveAuto = next === "auto";
+    approveChat = next === "chat";
+  };
   // MCP servers switched off in chat (they stay on in Settings).
   let mcpOff = $state<string[]>(Array.isArray(savedOptions.mcpOff) ? savedOptions.mcpOff.filter((v): v is string => typeof v === "string") : []);
   // The thinking effort chosen for each model, by picker key.
@@ -128,7 +141,7 @@
     try {
       localStorage.setItem(
         OPTIONS_KEY,
-        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, mcpOff, efforts, autoCompactAt }),
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, shell: useShell, approvals: approveAuto ? "auto" : "ask", mcpOff, efforts, autoCompactAt }),
       );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
@@ -136,6 +149,7 @@
   });
   const webAvailable = $derived(moduleOn("web_in_chat"));
   const recallAvailable = $derived(moduleOn("memory"));
+  const shellAvailable = $derived(moduleOn("terminal"));
   const changeMode = (next: ChatModeId) => {
     mode = next;
     // Autonomous researches on its own, so it turns the web on (the user
@@ -322,6 +336,7 @@
     messages = [];
     pendingFiles = [];
     allowedTools = [];
+    approveChat = false;
     approvals = {};
     compactedBefore = 0;
   };
@@ -343,6 +358,7 @@
     activeThreadId = t.id;
     activeThreadTitle = t.title;
     allowedTools = [];
+    approveChat = false;
     approvals = {};
     compactedBefore = 0;
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
@@ -519,6 +535,19 @@
     return `${d.toLocaleString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}${zone ? ` (${zone})` : ""}`;
   };
 
+  // A tapped answer is sent as the user's reply.
+  const answerQuestion = (text: string, questionId: string | null) => {
+    if (streaming || !text.trim()) return;
+    const last = messages.at(-1);
+    const part = questionId ? last?.parts?.find((p) => p.type === "question" && p.id === questionId) : undefined;
+    if (part && part.type === "question") part.answer = text;
+    input = text;
+    void send();
+  };
+  const focusComposer = () => {
+    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+  };
+
   const send = async () => {
     const files = $state.snapshot(pendingFiles).filter((f) => !f.error);
     if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
@@ -597,6 +626,8 @@
           use_skills: moduleOn("skills") && useSkills,
           mcp_servers: mcpList.filter((m) => !mcpOff.includes(m.id)).map((m) => m.id),
           allowed_tools: [...allowedTools],
+          use_shell: shellAvailable && useShell,
+          approval_mode: approvalMode,
           target: activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined,
           effort,
           attachments: files,
@@ -617,6 +648,9 @@
             setToolStatus(parts(), event.payload.id, "waiting");
             approvals[event.payload.id] = { approval_id: event.payload.approval_id, preview: event.payload.preview };
             liveStatus = `LocalAide asks before it can ${event.payload.title.toLowerCase()}.`;
+          } else if (event.type === "question") {
+            addQuestion(parts(), event.payload, now);
+            liveStatus = `LocalAide asks: ${event.payload.question}`;
           } else if (event.type === "tool_result") {
             finishTool(parts(), event.payload);
             delete approvals[event.payload.id];
@@ -1023,6 +1057,7 @@
         </span>
       {/if}
 
+      <ApprovalModeMenu mode={approvalMode} onChange={setApprovalMode} />
       <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
       <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
@@ -1235,6 +1270,8 @@
             model={msg.model}
             approvals={idx === messages.length - 1 ? approvals : {}}
             onDecide={(toolId, decision) => void decideTool(toolId, decision)}
+            onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
+            onOther={focusComposer}
             stats={flag("answer_stats") ? msg.stats ?? null : null}
             allowRaw={flag("raw_messages")}
             isLast={idx === messages.length - 1}
@@ -1294,6 +1331,9 @@
         onRemoveAttachment={(i) => pendingFiles.splice(i, 1)}
         {useFiles}
         onToggleFiles={() => useFiles = !useFiles}
+        {useShell}
+        {shellAvailable}
+        onToggleShell={() => useShell = !useShell}
         {useSkills}
         skillsAvailable={moduleOn("skills")}
         onToggleSkills={() => useSkills = !useSkills}

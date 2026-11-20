@@ -34,6 +34,9 @@ function partLines(part: MessagePart, withThinking: boolean): string[] {
     const secs = part.ms ? ` (${Math.max(1, Math.round(part.ms / 1000))} s)` : "";
     return [`<details><summary>Thinking${secs}</summary>`, "", quote(part.text), "", "</details>", ""];
   }
+  if (part.type === "question") {
+    return [`**Question:** ${part.question}`, "", ...part.options.map((o, i) => `${i + 1}. ${o}`), ...(part.answer ? ["", `**Answer:** ${part.answer}`] : []), ""];
+  }
   const status = TOOL_STATUS[part.status] ?? part.status;
   const head = `**Tool: ${part.title}**${part.detail ? ` · ${part.detail}` : ""} · ${status}${part.summary ? ` · ${part.summary}` : ""}`;
   const out: string[] = [head, ""];

@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 pub const MAX_MANIFEST_BYTES: usize = 512 * 1024;
 pub const MAX_MODELS: usize = 200;
 pub const MAX_COMPANIONS_PER_MODEL: usize = 8;
-const KNOWN_KINDS: [&str; 4] = ["chat", "code", "embedding", "reranker"];
+const KNOWN_KINDS: [&str; 5] = ["chat", "code", "embedding", "reranker", "stt"];
 
 fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
@@ -30,10 +30,24 @@ pub fn is_safe_model_id(id: &str) -> bool {
 /// A file name that stays directly inside the models folder: a plain `.gguf`
 /// name with no separators, no `..` and no colon (drive prefix or stream).
 fn is_plain_gguf_name(name: &str) -> bool {
+    is_plain_file_name(name, &[".gguf"])
+}
+
+/// A plain file name (no folders) with one of the allowed endings. Speech
+/// models are ONNX files with a token list.
+fn is_plain_file_name(name: &str, endings: &[&str]) -> bool {
     !name.is_empty()
-        && name.ends_with(".gguf")
+        && endings.iter().any(|e| name.ends_with(e))
         && !name.contains(['/', '\\', ':'])
         && !name.contains("..")
+}
+
+fn file_name_ok(kind: &str, name: &str) -> bool {
+    if kind == "stt" {
+        is_plain_file_name(name, &[".onnx", ".ort", ".txt"])
+    } else {
+        is_plain_gguf_name(name)
+    }
 }
 
 /// Catalog download URLs come from the model list, never from the user, and
@@ -557,12 +571,191 @@ impl CatalogManifest {
                 "22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48",
                 "Q8_0", "Re-ranks search results for better top answers.", vec![],
             ),
+            // Speech to text (Settings → Voice), run by the local sherpa-onnx
+            // engine. Smallest first; Whisper tiny is the default.
+            entry(
+                "stt-whisper-tiny", "Whisper tiny", "39M", "stt", "MIT",
+                12_937_772, 0.3,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-encoder.int8.onnx",
+                "d24fb083ae3b1041fc24e97971d60e280c9342201fbb67b0ab428a8b4a51a434",
+                "int8", "Speech to text in about 100 languages, Arabic included. Fast on any computer. The default for voice.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-decoder.int8.onnx",
+                        "d2fece8dd42771f1df975c6c0445770d0c292bf7547c2cae04a6c0cc57540925",
+                        89_855_401,
+                        "stt-whisper-tiny.decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-tokens.txt",
+                        "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126",
+                        816_730,
+                        "stt-whisper-tiny.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-whisper-tiny.encoder.onnx"),
+            entry(
+                "stt-moonshine-tiny", "Moonshine tiny", "27M", "stt", "MIT",
+                18_249_187, 0.3,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/encode.int8.onnx",
+                "8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb",
+                "int8", "English speech to text. The fastest on a CPU.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/preprocess.onnx",
+                        "f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e",
+                        6_800_738,
+                        "stt-moonshine-tiny.preprocess.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/uncached_decode.int8.onnx",
+                        "216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41",
+                        53_216_096,
+                        "stt-moonshine-tiny.uncached-decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/cached_decode.int8.onnx",
+                        "2aff28bba6a03d8dcf5c9feac45462629bae37317442299f28115ad09da773f6",
+                        45_264_830,
+                        "stt-moonshine-tiny.cached-decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/tokens.txt",
+                        "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea",
+                        436_688,
+                        "stt-moonshine-tiny.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-moonshine-tiny.encoder.onnx"),
+            entry(
+                "stt-whisper-base", "Whisper base", "74M", "stt", "MIT",
+                29_120_534, 0.4,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-encoder.int8.onnx",
+                "0b8fb1304b6109976038efff5ace81720e00386f3ff6b54ee8c75291ca0a1e11",
+                "int8", "Speech to text in about 100 languages, Arabic included. More accurate than tiny.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-decoder.int8.onnx",
+                        "9759d217388a01b3a4c7c15533201067b48ae819c4daafc8624e64b9409dc02d",
+                        130_672_026,
+                        "stt-whisper-base.decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-tokens.txt",
+                        "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126",
+                        816_730,
+                        "stt-whisper-base.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-whisper-base.encoder.onnx"),
+            entry(
+                "stt-moonshine-base", "Moonshine base", "61M", "stt", "MIT",
+                50_311_494, 0.5,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/main/encode.int8.onnx",
+                "7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2",
+                "int8", "English speech to text. Very fast on a CPU, more accurate than Moonshine tiny.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/main/preprocess.onnx",
+                        "ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2",
+                        14_077_290,
+                        "stt-moonshine-base.preprocess.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/main/uncached_decode.int8.onnx",
+                        "c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987",
+                        122_120_451,
+                        "stt-moonshine-base.uncached-decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/main/cached_decode.int8.onnx",
+                        "2db74e51cedf64a8b1be3c8192e0bb5e4923af0e90bd9e87f8e8771873f8ea03",
+                        99_983_837,
+                        "stt-moonshine-base.cached-decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/main/tokens.txt",
+                        "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea",
+                        436_688,
+                        "stt-moonshine-base.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-moonshine-base.encoder.onnx"),
+            entry(
+                "stt-moonshine-base-ar", "Moonshine base Arabic", "61M", "stt", "Moonshine Community License",
+                31_326_824, 0.5,
+                "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/encoder_model.ort",
+                "68e50ebe0317ce909f098044a5dda2a76e6b86dc882829a317771fbafc5826ae",
+                "quantized", "Arabic speech to text, fast on a CPU. Free for personal and small-business use; read the license for commercial use.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/decoder_model_merged.ort",
+                        "8f272cb50818e28ad86bbffc21e1450a4d57155e95f099ca6a236f38f4d9eafb",
+                        109_424_552,
+                        "stt-moonshine-base-ar.merged-decoder.ort",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj2/sherpa-onnx-moonshine-base-ar-quantized-2026-02-27/resolve/main/tokens.txt",
+                        "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049",
+                        549_350,
+                        "stt-moonshine-base-ar.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-moonshine-base-ar.encoder.ort"),
+            entry(
+                "stt-whisper-small", "Whisper small", "244M", "stt", "MIT",
+                112_442_483, 1.0,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.int8.onnx",
+                "4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9",
+                "int8", "Speech to text in about 100 languages, Arabic included. The most accurate Whisper here; slower.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.int8.onnx",
+                        "acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee",
+                        262_226_114,
+                        "stt-whisper-small.decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt",
+                        "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126",
+                        816_730,
+                        "stt-whisper-small.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-whisper-small.encoder.onnx"),
+            entry(
+                "stt-parakeet-tdt-0.6b-v2", "Parakeet TDT 0.6B v2", "600M", "stt", "CC-BY-4.0",
+                652_282_309, 1.2,
+                "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/encoder.int8.onnx",
+                "92a10bd9c23936ea0566c29f963bc57c2a5df4261b6a8921c39abea66557ca8b",
+                "int8", "NVIDIA English speech to text with punctuation. Very fast on a CPU for its accuracy.", vec![
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/decoder.int8.onnx",
+                        "4d097bae3bac5c96018d5293ba39f1b657296102b142affda40378f38b020f41",
+                        7_257_753,
+                        "stt-parakeet-tdt-0.6b-v2.decoder.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/joiner.int8.onnx",
+                        "77a29f3e5ac7d37074e0af465391b80f314015d5b97f0f90c6c7767f1d56f428",
+                        1_739_080,
+                        "stt-parakeet-tdt-0.6b-v2.joiner.onnx",
+                    ),
+                    companion(
+                        "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/tokens.txt",
+                        "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d",
+                        9_384,
+                        "stt-parakeet-tdt-0.6b-v2.tokens.txt",
+                    ),
+                ],
+            )
+            .with_dest("stt-parakeet-tdt-0.6b-v2.encoder.onnx"),
         ];
 
         let signature = Self::compute_signature(&models);
         Self {
-            version: 8,
-            updated_at: 1795027200,
+            version: 9,
+            updated_at: 1795651200,
             signature,
             models,
         }
@@ -667,9 +860,9 @@ impl CatalogEntry {
             .dest
             .clone()
             .unwrap_or_else(|| format!("{}.gguf", self.id));
-        if !is_plain_gguf_name(&primary_name) {
+        if !file_name_ok(&self.kind, &primary_name) {
             return Err(AppError::invalid_input(format!(
-                "Catalog model '{}' has an unsafe dest '{}': it must be a plain .gguf file name",
+                "Catalog model '{}' has an unsafe dest '{}': it must be a plain model file name",
                 self.id, primary_name
             )));
         }
@@ -697,7 +890,7 @@ impl CatalogEntry {
                     self.id
                 )));
             }
-            if !is_plain_gguf_name(&c.dest)
+            if !file_name_ok(&self.kind, &c.dest)
                 || c.dest == primary_name
                 || !seen_dests.insert(c.dest.as_str())
             {

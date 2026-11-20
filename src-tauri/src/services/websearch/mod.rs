@@ -265,7 +265,28 @@ impl WebSearchEngine {
         limit: u32,
         keys: &WebSearchKeys,
     ) -> Result<Vec<WebHit>, AppError> {
-        let mut hits = self.search_unfiltered(provider, query, limit, keys)?;
+        let base = match provider {
+            "duckduckgo" => self.bases.ddg.clone(),
+            "wikipedia" => self.bases.wikipedia.clone(),
+            "exa" => self.bases.exa.clone(),
+            "firecrawl" => keys.firecrawl_base(&self.bases.firecrawl).to_string(),
+            _ => String::new(),
+        };
+        let audit = crate::services::cloud_audit::start(
+            provider,
+            &base,
+            "",
+            "web search",
+            query,
+            query.len(),
+            None,
+        );
+        let found = self.search_unfiltered(provider, query, limit, keys);
+        match &found {
+            Ok(h) => audit.finish(true, &format!("{} results", h.len())),
+            Err(e) => audit.finish(false, &e.message),
+        }
+        let mut hits = found?;
         hits.retain(|hit| validate_crawl_url(&hit.url).is_ok());
         for hit in &mut hits {
             hit.source = provider.to_string();
@@ -354,6 +375,34 @@ impl WebSearchEngine {
         // Send the parsed form, so what was checked is exactly what is sent.
         let checked = validate_crawl_url(url)?;
         let url = checked.as_str();
+        // "auto" picks a reader and comes back here; the reader call is logged.
+        let audit = (provider != "auto").then(|| {
+            crate::services::cloud_audit::start(
+                provider,
+                url,
+                "",
+                "page read",
+                url,
+                url.len(),
+                None,
+            )
+        });
+        let result = self.read_page_with(url, provider, keys);
+        if let Some(a) = audit {
+            match &result {
+                Ok(_) => a.finish(true, "read"),
+                Err(e) => a.finish(false, &e.message),
+            }
+        }
+        result
+    }
+
+    fn read_page_with(
+        &self,
+        url: &str,
+        provider: &str,
+        keys: &WebSearchKeys,
+    ) -> Result<WebPage, AppError> {
         match provider {
             "auto" => {
                 if keys.prefers_firecrawl() {

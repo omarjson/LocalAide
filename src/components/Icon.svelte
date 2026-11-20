@@ -62,7 +62,9 @@
     | "x-circle"
     | "window"
     | "terminal"
-    | "volume";
+    | "volume"
+    | "mic"
+    | "link";
 
   interface Props {
     name: IconName;
@@ -248,6 +250,12 @@
   {:else if name === "terminal"}
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="m7 9 3 3-3 3M12 15h5" />
+  {:else if name === "mic"}
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  {:else if name === "link"}
+    <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+    <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
   {:else if name === "volume"}
     <path d="M11 5 6 9H3v6h3l5 4V5Z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />

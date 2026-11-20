@@ -255,6 +255,58 @@ pub async fn chat_stream(
     req: ChatStreamRequest,
     channel: tauri::ipc::Channel<ChatStreamEvent>,
 ) -> Result<String, AppError> {
+    let (run, model_label, job_id, cancel_flag) = prepare_run(&state, req, "chat")?;
+    let owned: AppState = (*state).clone();
+    let jobs = state.jobs.clone();
+    let jid = job_id.clone();
+    let _ = channel.send(ChatStreamEvent::Status {
+        label: format!("Answering with {model_label}"),
+    });
+
+    std::thread::spawn(move || {
+        let result = crate::services::agent::run(&owned, run, &cancel_flag, &channel);
+        match result {
+            Ok(done) => {
+                jobs.complete_job(&jid);
+                let _ = channel.send(ChatStreamEvent::Done {
+                    finish_reason: if done.cancelled {
+                        "cancelled".to_string()
+                    } else {
+                        done.finish_reason
+                    },
+                    total_tokens: done.tokens,
+                });
+            }
+            Err(e) => {
+                jobs.fail_job(&jid, &e.message);
+                let _ = channel.send(ChatStreamEvent::Error { error: e.message });
+            }
+        }
+    });
+
+    Ok(job_id)
+}
+
+/// Everything an answer needs, from a chat request: the model, the tools,
+/// the system prompt and the history. `source` is "chat" in the app and
+/// "share" for a shared link, which always asks before tools change
+/// anything.
+pub(crate) fn prepare_run(
+    state: &AppState,
+    mut req: ChatStreamRequest,
+    source: &'static str,
+) -> Result<
+    (
+        AgentRun,
+        String,
+        String,
+        std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ),
+    AppError,
+> {
+    if source == "share" {
+        req.approval_mode = None;
+    }
     validate_images(&req.images)?;
     let cfg = {
         let store = state
@@ -263,8 +315,8 @@ pub async fn chat_stream(
             .map_err(|e| AppError::internal(e.to_string()))?;
         store.load().map_err(AppError::internal)?
     };
-    let (target, target_req, model_label) = resolve_target(&state, &cfg, req.target.as_ref())?;
-    let caps = crate::commands::picker::caps_for_target(&state, &cfg, &target_req);
+    let (target, target_req, model_label) = resolve_target(state, &cfg, req.target.as_ref())?;
+    let caps = crate::commands::picker::caps_for_target(state, &cfg, &target_req);
 
     let mode = ChatMode::parse(req.mode.as_deref());
     let temperature = mode.temperature(req.temperature.unwrap_or(0.7));
@@ -292,6 +344,9 @@ pub async fn chat_stream(
         notes: req.use_recall.unwrap_or(true) && module_on("memory"),
         files: req.use_files.unwrap_or(true),
         skills: req.use_skills.unwrap_or(true) && module_on("skills"),
+        shell: req.use_shell.unwrap_or(true) && module_on("terminal"),
+        // Autonomous mode works on without asking follow-up questions.
+        ask: mode != ChatMode::Autonomous,
         mcp,
     };
 
@@ -318,6 +373,7 @@ pub async fn chat_stream(
             notes: perms.notes,
             files: perms.files,
             skills: perms.skills,
+            shell: perms.shell,
             mcp: !perms.mcp.is_empty(),
         },
         mode,
@@ -378,39 +434,13 @@ pub async fn chat_stream(
         max_rounds: mode.max_rounds(),
         context_tokens,
         auto_approve: req.allowed_tools.iter().cloned().collect(),
+        approval_mode: crate::services::agent::ApprovalMode::parse(req.approval_mode.as_deref()),
+        source,
         first_citation: 1,
         user_message: req.message.clone(),
         read_top_page: mode.gathers_web(),
     };
-    let owned: AppState = (*state).clone();
-    let jobs = state.jobs.clone();
-    let jid = job_id.clone();
-    let _ = channel.send(ChatStreamEvent::Status {
-        label: format!("Answering with {model_label}"),
-    });
-
-    std::thread::spawn(move || {
-        let result = crate::services::agent::run(&owned, run, &cancel_flag, &channel);
-        match result {
-            Ok(done) => {
-                jobs.complete_job(&jid);
-                let _ = channel.send(ChatStreamEvent::Done {
-                    finish_reason: if done.cancelled {
-                        "cancelled".to_string()
-                    } else {
-                        done.finish_reason
-                    },
-                    total_tokens: done.tokens,
-                });
-            }
-            Err(e) => {
-                jobs.fail_job(&jid, &e.message);
-                let _ = channel.send(ChatStreamEvent::Error { error: e.message });
-            }
-        }
-    });
-
-    Ok(job_id)
+    Ok((run, model_label, job_id, cancel_flag))
 }
 
 /// The user's answer to a tool approval question.
@@ -493,7 +523,7 @@ pub async fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
     run_blocking(chat_thread_list_work).await
 }
 
-fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
+pub(crate) fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
     let dir = conversations_dir();
     if !dir.exists() {
         return Ok(vec![]);
@@ -531,7 +561,7 @@ pub async fn chat_thread_save(
     run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages)).await
 }
 
-fn chat_thread_save_work(
+pub(crate) fn chat_thread_save_work(
     thread_id: String,
     title: String,
     system_prompt: Option<String>,
@@ -578,7 +608,7 @@ pub async fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, App
     run_blocking(move || chat_thread_load_work(thread_id)).await
 }
 
-fn chat_thread_load_work(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
+pub(crate) fn chat_thread_load_work(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if !path.exists() {
@@ -594,7 +624,7 @@ pub async fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
     run_blocking(move || chat_thread_delete_work(thread_id)).await
 }
 
-fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
+pub(crate) fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if path.exists() {
