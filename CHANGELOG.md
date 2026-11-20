@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-21
+
+The assistant can now run commands, search your own folders by meaning, ask you questions with buttons, listen to you, and be shared through a link. Settings shows every call that left your computer. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
+
+### Added
+- **Terminal commands.** The assistant can run commands in its workspace folder. Read-only commands (ls, cat, git status and similar) run at once; commands that write, delete or install ask first; destructive ones (recursive deletes, disk formatting, piping a download into a shell, administrator rights) never run, and the assistant is told why. Each run has a time limit and an output limit (long output is saved to a file in the workspace), shows in the chat like a terminal, and is in the Activity log. Switch it off in the Tools menu.
+- **Approvals switch in the chat header:** Ask every time, Allow for this chat, or Auto-approve all. Blocked commands never run in any mode, and every run is still logged.
+- **Questions with buttons.** When the assistant asks you to choose, the options appear as buttons (also Yes / No, several choices, and Other). Keys 1 to 9 pick an option while the chat box is empty. Tool confirmations use the same buttons, for example Run / Allow for this chat / Don't run.
+- **Library status** at the top of Search: folders, files, last scan, and whether search works by meaning or by exact words only. Folder presets for Documents, Desktop and Downloads, live progress while a folder is added, and a report of what was skipped and why. Without a meaning (embedding) model the status says so and offers the download; the chosen model is remembered and starts with the app. Questions about your own files search the library first and name the file.
+- **Check my setup** (Settings → General): downloads the Tiny model if needed, loads it and gets one reply, with pass or fail and time for each step.
+- **Voice** (Settings → Voice, off by default): hold the microphone button in the chat box to talk. Seven local models run on this computer through the sherpa-onnx engine (Whisper tiny, base and small, Moonshine tiny and base, Moonshine base Arabic, Parakeet TDT 0.6B v2), downloaded once with checked checksums. Online models with your own key, marked Live or Batch: Gemini 3.5 Transcribe Live and Transcribe, Deepgram Nova-3, Groq Whisper large-v3-turbo, OpenAI GPT-Transcribe, GPT-4o Transcribe and Whisper, and Soniox v6. **Local only** blocks every network use for voice. **Tidy the text** removes filler words with the local model. Read aloud is now a setting there, with voice and speed.
+- **Share my assistant** (Settings → Share): a Cloudflare quick tunnel to a small local server, with a Viewer link (read conversations) and a Remote user link (chat, answer its own approvals, run Check my setup). Each link has its own token, made on this computer and shown once. Requests from a link always ask before tools change anything, and "Sharing is on" shows at the bottom of the window while it runs. cloudflared is downloaded on request, with a checked checksum.
+- **What left this computer** (Settings → Online providers): every call to an online service (chat, voice, web search, page reads, model lists, downloads), with time, provider, model, kind and a short preview. Keys are removed before anything is saved.
+
+### Changed
+- **Online providers** in Settings: one card per provider with its status (Connected, Not checked, Needs a key, Not reachable), where messages go, the models it offers and a **Test connection** button. Adding or editing a provider is one form: name, address, key, Load models, then pick a model or type it when the list is empty.
+- Search results from your library name the file and say when the search matched words only.
+
 ## [0.1.5] - 2026-11-20
 
 Polish after 0.1.4: a context meter, slash commands, full-chat export and copy, downloads you can pause and resume, and a fix for chats that sometimes would not save. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.

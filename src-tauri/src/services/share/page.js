@@ -25,6 +25,20 @@
     return el;
   };
 
+  // Small line icons, drawn as SVG so no font is needed.
+  const icon = (d) => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("class", "ico");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+    return svg;
+  };
+  const ICON_UP = "M12 19V5M6 11l6-6 6 6";
+  const ICON_MENU = "M4 7h16M4 12h16M4 17h16";
+
   const api = async (path, opts = {}) => {
     const res = await fetch(path, { ...opts, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) } });
     if (!res.ok) {
@@ -55,7 +69,7 @@
 
   const center = (title, text) => {
     root.className = "center";
-    root.replaceChildren(h("div", { class: "card" }, h("div", { class: "brand-mark", style: "margin:0 auto" }, "L"), h("h2", { text: title }), h("p", { text: text })));
+    root.replaceChildren(h("div", { class: "card" }, h("div", { class: "brand-mark centered" }, "L"), h("h2", { text: title }), h("p", { text: text })));
   };
 
   // Plain text into paragraphs, code blocks and inline code.
@@ -132,7 +146,7 @@
   };
 
   const renderAnswer = (msg, live) => {
-    const box = h("div", { class: "msg-ai" });
+    const box = h("div", { class: "msg-ai", dir: "auto" });
     const parts = msg.parts && msg.parts.length ? msg.parts : [{ type: "text", text: msg.content }];
     for (const p of parts) {
       if (p.type === "text") box.append(...rich(p.text));
@@ -151,7 +165,7 @@
     if (msgs.length === 0) {
       els.col.append(h("div", { class: "empty", text: me.role === "remote" ? "Ask anything. Commands and changes ask for your OK first." : "Pick a conversation on the left to read it." }));
     }
-    for (const m of msgs) els.col.append(m.role === "user" ? h("div", { class: "msg-user", text: m.content }) : renderAnswer(m));
+    for (const m of msgs) els.col.append(m.role === "user" ? h("div", { class: "msg-user", dir: "auto", text: m.content }) : renderAnswer(m));
     els.log.scrollTop = els.log.scrollHeight;
     for (const b of els.threads.children) b.setAttribute("aria-current", String(current && b.dataset.id === current.id));
   };
@@ -178,8 +192,9 @@
     if (!current || me.role !== "remote") return;
     try {
       await api(`/api/threads/${encodeURIComponent(current.id)}`, { method: "POST", body: JSON.stringify({ title: current.title, messages: current.messages }) });
+      // Refresh the list only; the answer on screen keeps its live buttons.
       await loadThreads();
-      renderThread();
+      for (const b of els.threads.children) b.setAttribute("aria-current", String(b.dataset.id === current.id));
     } catch { /* the answer still shows */ }
   };
 
@@ -280,11 +295,11 @@
     els.col = h("div", { class: "col" });
     els.log.append(els.col);
     const main = h("main", {},
-      h("header", {}, h("button", { class: "btn btn-quiet menu-btn", type: "button", "aria-label": "Conversations", onclick: () => els.side.classList.toggle("open"), text: "☰" }), els.title, h("span", { class: "pill", text: model.online ? "Online model" : model.name ? `${model.name} · on the owner's computer` : "On the owner's computer" })),
+      h("header", {}, h("button", { class: "btn btn-quiet menu-btn", type: "button", "aria-label": "Conversations", onclick: () => els.side.classList.toggle("open") }, icon(ICON_MENU)), els.title, h("span", { class: "pill", text: model.online ? "Online model" : model.name ? `${model.name} · on the owner's computer` : "On the owner's computer" })),
       els.log);
     if (remote) {
-      els.input = h("textarea", { rows: "1", placeholder: "Ask anything", "aria-label": "Message", oninput: () => { els.input.style.height = "auto"; els.input.style.height = `${Math.min(els.input.scrollHeight, 200)}px`; }, onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } if (e.key === "Escape" && busy && jobId) api("/api/cancel", { method: "POST", body: JSON.stringify({ job_id: jobId }) }).catch(() => {}); } });
-      els.send = h("button", { class: "send", type: "button", "aria-label": "Send", onclick: () => send(), text: "↑" });
+      els.input = h("textarea", { rows: "1", placeholder: "Ask anything", "aria-label": "Message", dir: "auto", oninput: () => { els.input.style.height = "auto"; els.input.style.height = `${Math.min(els.input.scrollHeight, 200)}px`; }, onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } if (e.key === "Escape" && busy && jobId) api("/api/cancel", { method: "POST", body: JSON.stringify({ job_id: jobId }) }).catch(() => {}); } });
+      els.send = h("button", { class: "send", type: "button", "aria-label": "Send", onclick: () => send() }, icon(ICON_UP));
       main.append(h("div", { class: "composer" }, h("div", { class: "box" }, els.input, els.send), h("div", { class: "note", text: "Messages are answered on the owner's computer. Press Esc to stop an answer." })));
     }
     root.replaceChildren(els.side, main);

@@ -17,6 +17,8 @@
       --ink: #1b1b1f; --ink-2: #2e3036; --ink-3: #5b5f66; --ink-4: #6b6f76; --ember: #b54a00; --ember-2: #9a3f00; --on-ember: #fff; --ok: #047857; --bad: #be123c; color-scheme: light; }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   html, body { height: 100%; margin: 0; }
   body { background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
   button, input, textarea { font: inherit; color: inherit; }
@@ -26,6 +28,7 @@
   aside { border-right: 1px solid var(--line-2); display: flex; flex-direction: column; min-height: 0; }
   .brand { display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px; }
   .brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--ember); display: grid; place-items: center; color: var(--on-ember); font-weight: 700; font-size: 13px; }
+  .brand-mark.centered { margin: 0 auto; }
   .brand b { font-size: 15px; }
   .role { margin: 0 16px 12px; padding: 8px 10px; border-radius: 10px; background: var(--inset); font-size: 13px; color: var(--ink-3); }
   .role strong { color: var(--ink); font-weight: 600; }
@@ -69,7 +72,9 @@
   .opt.on { border-color: var(--ember); }
   .composer { flex-shrink: 0; padding: 8px 20px 18px; }
   .box { max-width: 760px; margin: 0 auto; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px; }
-  .box textarea { flex: 1; resize: none; border: 0; background: transparent; outline: none; min-height: 24px; max-height: 200px; padding: 6px 0; line-height: 1.5; }
+  .box:focus-within { border-color: var(--ember); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ember) 25%, transparent); }
+  .box textarea:focus-visible { outline: none; }
+  .box textarea { flex: 1; resize: none; border: 0; background: transparent; min-height: 24px; max-height: 200px; padding: 6px 0; line-height: 1.5; }
   .send { width: 36px; height: 36px; border-radius: 999px; border: 0; background: var(--ember); color: var(--on-ember); display: grid; place-items: center; flex-shrink: 0; }
   .send:disabled { background: var(--line); color: var(--ink-4); cursor: default; }
   .note { max-width: 760px; margin: 8px auto 0; font-size: 12px; color: var(--ink-4); text-align: center; }
@@ -95,7 +100,7 @@
 </style>
 </head>
 <body>
-<div id="root" class="center"><div class="card"><div class="brand-mark" style="margin:0 auto">L</div><h2>Opening the shared assistant…</h2></div></div>
+<div id="root" class="center"><div class="card"><div class="brand-mark centered">L</div><h2>Opening the shared assistant…</h2></div></div>
 <script src="/app.js"></script>
 </body>
 </html>

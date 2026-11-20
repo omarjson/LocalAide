@@ -167,14 +167,14 @@
         <span>Meaning model: <b class="font-medium text-ink-200">{status.choices.find((c) => c.id === status?.embedding_model)?.name ?? status.embedding_model}</b></span>
         {#if status.embedded_chunks < status.total_chunks}
           <span class="flex items-center gap-2">
-            <span class="h-1.5 w-28 overflow-hidden rounded-full bg-ink-800"><span class="block h-full bg-ember-500 transition-[width] duration-500" style={`width:${embedPct}%`}></span></span>
+            <span class="h-1.5 w-28 overflow-hidden rounded-full bg-ink-800"><span class="block h-full bg-ember-500 transition-[width] duration-200" style={`width:${embedPct}%`}></span></span>
             Reading for meaning · {embedPct}%
           </span>
         {/if}
         {#if status.choices.length > 1}
           <label class="ml-auto flex items-center gap-2">
             <span class="text-ink-500">Change</span>
-            <select class="h-8 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100" value={status.embedding_model ?? ""} disabled={!!busyModel} onchange={(e) => void useModel((e.currentTarget as HTMLSelectElement).value)}>
+            <select aria-label="Meaning model" class="h-8 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100" value={status.embedding_model ?? ""} disabled={!!busyModel} onchange={(e) => void useModel((e.currentTarget as HTMLSelectElement).value)}>
               {#each status.choices as c (c.id)}<option value={c.id}>{c.name}{c.installed ? "" : ` (download ${formatGb(c.size_bytes)})`}</option>{/each}
             </select>
           </label>
@@ -338,6 +338,13 @@
   @keyframes sweep {
     from { transform: translateX(-100%); }
     to { transform: translateX(290%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span {
+      animation: none;
+      width: 100%;
+      opacity: 0.6;
+    }
   }
   :global([data-motion="off"]) .bar span {
     animation: none;

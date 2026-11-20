@@ -37,7 +37,7 @@
     <Icon name="chevron-down" class={`h-3 w-3 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
   </button>
   {#if open}
-    <div role="menu" aria-label="Approvals" class="absolute right-0 top-10 z-30 w-80 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
+    <div role="menu" aria-label="Approvals" class="absolute right-0 top-10 z-30 w-80 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-lg" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
       <div class="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-ink-500">Before a tool changes something</div>
       {#each MODES as m (m.id)}
         <button

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatBytes } from "../lib/format";
   import LibraryStatus from "../components/LibraryStatus.svelte";
   import { onMount } from "svelte";
   import Button from "../components/Button.svelte";
@@ -464,7 +465,7 @@
   <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-400">
     <span>{stats?.doc_count ?? results.length} {stats?.doc_count === 1 ? "document" : "documents"}</span>
     {#if stats}
-      <span>{(stats.total_bytes / 1024).toFixed(1)} KB stored</span>
+      <span>{formatBytes(stats.total_bytes)} stored</span>
     {/if}
     {#if watching}
       <StatusBadge label="Watching for new files" tone="ok" dot />

@@ -165,7 +165,7 @@
             </p>
             <p class="mt-0.5 text-[13px] leading-5 text-ink-400">{m.description}</p>
             {#if downloading[m.id] !== undefined}
-              <div class="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-300" style={`width:${downloading[m.id]}%`}></div></div>
+              <div class="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${downloading[m.id]}%`}></div></div>
             {/if}
           </div>
           {#if m.installed}
@@ -244,7 +244,7 @@
       {#if s.read_aloud && speechAvailable()}
         <SettingsRow icon="volume" title="Voice" description="The system voices on this computer." class="border-t border-ink-800">
           {#snippet control()}
-            <select class="h-9 max-w-56 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100" value={s.voice_name ?? ""} onchange={(e) => void set({ voice_name: (e.currentTarget as HTMLSelectElement).value })} aria-label="Voice">
+            <select id="voice-name" class="h-9 max-w-56 rounded-md border border-ink-700 bg-ink-950 px-2 text-sm text-ink-100" value={s.voice_name ?? ""} onchange={(e) => void set({ voice_name: (e.currentTarget as HTMLSelectElement).value })} aria-label="Voice">
               <option value="">System default</option>
               {#each voices as v (v.name)}<option value={v.name}>{v.name} ({v.lang})</option>{/each}
             </select>

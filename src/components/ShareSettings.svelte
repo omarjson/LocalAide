@@ -188,6 +188,11 @@
   @keyframes pulse {
     to { box-shadow: 0 0 0 8px transparent; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    .pulse {
+      animation: none;
+    }
+  }
   :global([data-motion="off"]) .pulse {
     animation: none;
   }

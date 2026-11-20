@@ -68,7 +68,7 @@
             </div>
             <p class={`mt-0.5 text-[13px] leading-5 ${s?.status === "fail" ? "text-rose-300" : "text-ink-400"}`}>{s?.detail || item.hint}</p>
             {#if s?.status === "running" && s.percent !== null}
-              <div class="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-300" style={`width:${Math.round(s.percent)}%`}></div></div>
+              <div class="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.round(s.percent)}%`}></div></div>
               <span class="mt-1 block text-xs tabular-nums text-ink-500">{Math.round(s.percent)}%</span>
             {/if}
           </div>

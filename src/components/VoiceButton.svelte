@@ -189,7 +189,7 @@
         <div class="flex items-center gap-3">
           <span class={`dot ${phase === "recording" ? "dot-on" : ""}`} aria-hidden="true"></span>
           <div class="wave" aria-hidden="true">
-            {#each levels as l, i (i)}<span style={`height:${Math.max(8, Math.round(l * 100))}%`}></span>{/each}
+            {#each levels as l, i (i)}<span style={`transform:scaleY(${Math.max(0.08, Math.min(1, l)).toFixed(2)})`}></span>{/each}
           </div>
           <span class="w-12 text-right font-mono text-xs tabular-nums text-ink-300">{elapsed.toFixed(1)} s</span>
         </div>
@@ -242,7 +242,6 @@
     border: 1px solid var(--color-edge);
     background: var(--color-ink-950);
     padding: 0.7rem 0.8rem;
-    box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55);
   }
   .wave {
     display: flex;
@@ -253,11 +252,12 @@
   }
   .wave span {
     flex: 1;
-    min-height: 2px;
+    height: 100%;
     border-radius: 9999px;
     background: var(--color-ember-500);
     opacity: 0.85;
-    transition: height 60ms linear;
+    transform-origin: center;
+    transition: transform 60ms linear;
   }
   .dot {
     height: 8px;
@@ -272,6 +272,11 @@
   }
   @keyframes blink {
     to { visibility: hidden; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot-on {
+      animation: none;
+    }
   }
   :global([data-motion="off"]) .dot-on {
     animation: none;

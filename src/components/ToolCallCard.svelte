@@ -131,7 +131,7 @@
   {#if open && shell}
     <div class="border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
       <div class="term">
-        <div class="term-cmd"><span class="text-ember-300">$</span> {detail}{#if shell.cwd}<span class="text-ink-500">  · workspace/{shell.cwd}</span>{/if}</div>
+        <div class="term-cmd"><span class="text-ember-300">$</span> {detail}{#if shell.cwd}<span class="ml-2 text-ink-500">in workspace/{shell.cwd}</span>{/if}</div>
         {#if shell.text.trim()}<div class="term-out">{shell.text}</div>{:else}<div class="term-out text-ink-500">(no output)</div>{/if}
       </div>
       <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
@@ -139,6 +139,11 @@
         <span>{shell.ms < 1000 ? `${shell.ms} ms` : `${(shell.ms / 1000).toFixed(1)} s`}</span>
         {#if shell.cut}<span>Output shortened{shell.saved ? `; full text in workspace/${shell.saved}` : ""}</span>{/if}
       </div>
+    </div>
+  {:else if open && isShell && output && status !== "running"}
+    <div class="border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
+      <div class="term"><div class="term-cmd"><span class="text-ember-300">$</span> {detail}</div></div>
+      <p class="mt-2 flex items-start gap-2 text-[13px] leading-5 text-rose-300"><Icon name="shield" class="mt-0.5 h-4 w-4 shrink-0" />{output}</p>
     </div>
   {:else if open && hasDetails}
     <div class="space-y-2 border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
@@ -210,6 +215,13 @@
     color: #d6d8dc;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+  div.term {
+    white-space: normal;
+  }
+  .term-cmd,
+  .term-out {
+    white-space: pre-wrap;
   }
   .term-cmd {
     color: #f3f4f6;
