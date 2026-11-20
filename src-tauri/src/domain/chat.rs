@@ -64,6 +64,18 @@ pub enum MessagePart {
         #[serde(default)]
         output: String,
     },
+    /// A question the model asked with options (`ask_user`).
+    Question {
+        id: String,
+        question: String,
+        #[serde(default)]
+        options: Vec<String>,
+        #[serde(default)]
+        multiple: bool,
+        /// What the user picked.
+        #[serde(default)]
+        answer: Option<String>,
+    },
 }
 
 /// A file attached to a message. Images travel as data URLs and are not
@@ -215,5 +227,16 @@ mod tests {
         let null: ChatMessage =
             serde_json::from_str(r#"{"role":"user","content":"x","ts":null}"#).unwrap();
         assert_eq!(null.ts, None);
+    }
+
+    #[test]
+    fn questions_save_and_load() {
+        let json = r#"{"role":"assistant","content":"","parts":[{"type":"question","id":"c1","question":"Which?","options":["A","B"],"multiple":false,"answer":"A"},
+            {"type":"tool","id":"c2","name":"execute_command","title":"Run a command","group":"shell","status":"done"}]}"#;
+        let m: ChatMessage = serde_json::from_str(json).unwrap();
+        let parts = m.parts.unwrap();
+        assert!(matches!(&parts[0], MessagePart::Question { answer: Some(a), .. } if a == "A"));
+        let back = serde_json::to_string(&parts[0]).unwrap();
+        assert!(back.contains("\"type\":\"question\""));
     }
 }

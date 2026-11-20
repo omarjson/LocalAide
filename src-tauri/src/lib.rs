@@ -249,6 +249,10 @@ pub fn run() {
             commands::voice_live_push,
             commands::voice_live_stop,
             commands::voice_cleanup,
+            commands::share_status,
+            commands::share_start,
+            commands::share_stop,
+            commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,
             commands::settings_model_memory,
@@ -370,6 +374,7 @@ pub fn run() {
                 shutdown_state.embedding_engine.stop();
                 shutdown_state.rerank_engine.stop();
                 shutdown_state.mcp.disconnect_all();
+                crate::services::share::stop(&shutdown_state);
                 // Fold the database log into the file, so the next start is quick.
                 if let Err(e) = shutdown_state.library.checkpoint() {
                     log::warn!("Database checkpoint at exit failed: {e}");
