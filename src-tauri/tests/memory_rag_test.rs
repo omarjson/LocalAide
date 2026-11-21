@@ -34,7 +34,12 @@ impl Drop for TempTestDir {
 fn test_memory_crud_and_disk_sync() {
     let temp_dir = TempTestDir::new("mem_crud");
     let library = Arc::new(LibraryService::open_in_memory().expect("Open library"));
-    let memory = MemoryService::new(library.db(), library.clone(), temp_dir.path().to_path_buf());
+    let memory = MemoryService::new(
+        library.db(),
+        library.clone(),
+        temp_dir.path().to_path_buf(),
+        temp_dir.path().join("note_suggestions"),
+    );
 
     // 1. Create Note
     let note = memory
@@ -91,7 +96,12 @@ fn test_memory_crud_and_disk_sync() {
 fn test_memory_forget_all_cleans_disk_and_sqlite() {
     let temp_dir = TempTestDir::new("forget_all");
     let library = Arc::new(LibraryService::open_in_memory().expect("Open library"));
-    let memory = MemoryService::new(library.db(), library.clone(), temp_dir.path().to_path_buf());
+    let memory = MemoryService::new(
+        library.db(),
+        library.clone(),
+        temp_dir.path().to_path_buf(),
+        temp_dir.path().join("note_suggestions"),
+    );
 
     memory
         .create_note("Secret Note 1", "Super secret contents 1", None)
@@ -133,7 +143,12 @@ fn test_memory_forget_all_cleans_disk_and_sqlite() {
 fn test_rag_relevance_gate_and_citation_generation() {
     let temp_dir = TempTestDir::new("rag_citations");
     let library = Arc::new(LibraryService::open_in_memory().expect("Open library"));
-    let memory = MemoryService::new(library.db(), library.clone(), temp_dir.path().to_path_buf());
+    let memory = MemoryService::new(
+        library.db(),
+        library.clone(),
+        temp_dir.path().to_path_buf(),
+        temp_dir.path().join("note_suggestions"),
+    );
 
     memory
         .create_note(
@@ -176,7 +191,12 @@ fn test_rag_relevance_gate_and_citation_generation() {
 fn test_rag_strictly_respects_token_budget() {
     let temp_dir = TempTestDir::new("rag_budget");
     let library = Arc::new(LibraryService::open_in_memory().expect("Open library"));
-    let memory = MemoryService::new(library.db(), library.clone(), temp_dir.path().to_path_buf());
+    let memory = MemoryService::new(
+        library.db(),
+        library.clone(),
+        temp_dir.path().to_path_buf(),
+        temp_dir.path().join("note_suggestions"),
+    );
 
     // Create a large note with 200 words
     let mut large_text = String::new();

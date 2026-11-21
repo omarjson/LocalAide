@@ -25,6 +25,8 @@
     /** The active model's thinking effort, and the levels it has. */
     effort?: string;
     onEffort?: (effort: string) => void;
+    /** The model this chat actually uses, when it overrides the default. */
+    activeKey?: string | null;
   }
 
   let {
@@ -39,9 +41,11 @@
     onGetModels,
     effort = "auto",
     onEffort,
+    activeKey = null,
   }: Props = $props();
 
-  const active = $derived(choices?.models.find((m) => m.active) ?? null);
+  const isChatActive = (m: ModelChoice) => (activeKey ? m.key === activeKey : m.active);
+  const active = $derived(choices?.models.find(isChatActive) ?? null);
   const providers = $derived(providerList(choices));
   // The provider whose models are listed; starts at the active model's.
   let viewing = $state<string | null>(null);
@@ -99,7 +103,7 @@
       untrack(() => {
         view = "models";
         viewing = null;
-        cursor = Math.max(0, rows.findIndex((m) => m.active));
+        cursor = Math.max(0, rows.findIndex(isChatActive));
       });
       void tick().then(() => searchEl?.focus());
     } else {
@@ -230,9 +234,9 @@
           {/if}
           {#each rows as m, index (m.key)}
             {#if index === list.length && elsewhere.length > 0}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Other providers</div>{/if}
-            <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={m.active} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""} ${m.active ? "row-active" : ""}`}>
+            <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={isChatActive(m)} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""} ${isChatActive(m) ? "row-active" : ""}`}>
               <span class="min-w-0 flex-1">
-                <span class={`block truncate text-sm ${m.active ? "font-semibold text-ink-50" : "text-ink-100"}`} title={m.name}>{m.name}</span>
+                <span class={`block truncate text-sm ${isChatActive(m) ? "font-semibold text-ink-50" : "text-ink-100"}`} title={m.name}>{m.name}</span>
                 {#if index >= list.length || m.size_bytes || m.context}
                   <span class="block truncate text-xs text-ink-500">{index >= list.length ? `${m.provider_label} · ` : ""}{m.size_bytes ? formatGb(m.size_bytes) : ""}{m.size_bytes && m.context ? " · " : ""}{m.context ? `${contextLabel(m.context)} context` : ""}</span>
                 {/if}
@@ -242,7 +246,7 @@
                 {#if m.reasoning}<span class="badge">Thinks</span>{/if}
                 {#if m.free && !m.local}<span class="badge badge-free">Free</span>{/if}
                 <button type="button" onclick={(e) => { e.stopPropagation(); onToggleFavorite(m.key); }} aria-pressed={m.favorite} aria-label={m.favorite ? `Unstar ${m.name}` : `Star ${m.name}`} class={`star ${m.favorite ? "star-on" : ""}`}><Icon name={m.favorite ? "star-filled" : "star"} class="h-3.5 w-3.5" /></button>
-                <span class="grid w-4 place-items-center">{#if m.active}<Icon name="check" class="h-4 w-4 text-ink-100" />{/if}</span>
+                <span class="grid w-4 place-items-center">{#if isChatActive(m)}<Icon name="check" class="h-4 w-4 text-ink-100" />{/if}</span>
               </span>
             </div>
           {/each}

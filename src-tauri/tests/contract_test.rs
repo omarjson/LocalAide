@@ -136,6 +136,7 @@ fn test_chat_stream_event_serialization() {
     let done_evt = ChatStreamEvent::Done {
         finish_reason: "stop".to_string(),
         total_tokens: 42,
+        prompt_tokens: None,
     };
     let json_done = serde_json::to_string(&done_evt).expect("Serialization");
     assert!(json_done.contains(r#""type":"done""#));

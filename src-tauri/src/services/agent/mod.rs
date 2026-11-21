@@ -417,10 +417,10 @@ fn run_inner(
                 _ => {}
             }
         }
-        if ttft_ms.is_none() {
-            if let Some(first) = outcome.first_token_after {
-                ttft_ms = Some(u64::try_from(first.as_millis()).unwrap_or(u64::MAX));
-            }
+        if ttft_ms.is_none()
+            && let Some(first) = outcome.first_token_after
+        {
+            ttft_ms = Some(u64::try_from(first.as_millis()).unwrap_or(u64::MAX));
         }
         if outcome.prompt_tokens.is_some() {
             prompt_tokens = outcome.prompt_tokens;

@@ -111,7 +111,13 @@
   let pickerOpen = $state(false);
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
-  const activeChoice = $derived<ModelChoice | null>(choices?.models.find((m) => m.active) ?? null);
+  const activeChoice = $derived<ModelChoice | null>(
+    (activeThreadId && chatModels[activeThreadId]
+      ? choices?.models.find((m) => m.key === chatModels[activeThreadId])
+      : null) ??
+      choices?.models.find((m) => m.active) ??
+      null,
+  );
   const onlineChoice = $derived(activeChoice && activeChoice.provider_id !== null ? activeChoice : null);
   // Whether a local model is loaded in the engine right now.
   let engineLoaded = $state(false);
@@ -212,6 +218,7 @@
         visuals?: unknown;
         subagents?: unknown;
         buildMode?: unknown;
+        chatModels?: unknown;
       };
     } catch {
       return {};
@@ -253,11 +260,18 @@
     return activeChoice.efforts.includes("medium") ? "medium" : "auto";
   });
   let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
+  // Each chat keeps its own model: switching mid-chat keeps the whole
+  // thread, and a new chat follows the app-wide default again. Crush-style.
+  let chatModels = $state<Record<string, string>>(
+    savedOptions.chatModels && typeof savedOptions.chatModels === "object"
+      ? (savedOptions.chatModels as Record<string, string>)
+      : {},
+  );
   $effect(() => {
     try {
       localStorage.setItem(
         OPTIONS_KEY,
-        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, shell: useShell, approvals: approvalMode, buildMode, mcpOff, efforts, autoCompactAt, learnSkills, suggestNext, visuals, subagents: useSubagents }),
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, shell: useShell, approvals: approvalMode, buildMode, mcpOff, efforts, autoCompactAt, learnSkills, suggestNext, visuals, subagents: useSubagents, chatModels }),
       );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
@@ -1129,11 +1143,13 @@
 
   // Make the chosen model the one that answers. A local model loads first.
   const selectModel = async (choice: ModelChoice) => {
-    if (choice.active) return;
+    if (activeThreadId && chatModels[activeThreadId] === choice.key) return;
     pickerBusy = true;
     try {
       choices = await api.setChatTarget({ provider_id: choice.provider_id, model: choice.model });
       engineLoaded = choices.local_loaded;
+      // The choice belongs to this chat from now on.
+      if (activeThreadId) chatModels = { ...chatModels, [activeThreadId]: choice.key };
     } catch (e: unknown) {
       sendFailed = false;
       chatError = `${choice.name} could not be used: ${errorMessage(e)}`;
@@ -1802,6 +1818,7 @@
             {effort}
             onEffort={setEffort}
             {choices}
+            activeKey={activeChoice?.key ?? null}
             bind:open={pickerOpen}
             busy={pickerBusy || engineLoading}
             onSelect={(m) => void selectModel(m)}
