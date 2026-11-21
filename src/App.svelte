@@ -465,7 +465,9 @@
         <span class="sharing-dot" aria-hidden="true"></span>Sharing is on · {share.status.requests} {share.status.requests === 1 ? "request" : "requests"}
       </button>
     {/if}
-    <span class="ml-auto hidden sm:flex items-center gap-2">Keyboard shortcuts <kbd class="rounded border border-ink-700 bg-veil/5 px-1.5 py-0.5 font-mono text-[11px] text-ink-400">?</kbd></span>
+    <span class="ml-auto hidden sm:flex items-center gap-2">
+      <button type="button" onclick={() => (showHelp = true)} class="flex items-center gap-2 rounded px-1.5 py-0.5 text-ink-500 transition-colors hover:text-ink-200" title="Keyboard shortcuts (?)">Keyboard shortcuts <kbd class="rounded border border-ink-700 bg-veil/5 px-1.5 py-0.5 font-mono text-xs text-ink-400">?</kbd></button>
+    </span>
   </footer>
 
   {#if cmdOpen}
@@ -545,16 +547,20 @@
       <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-md rounded-xl border border-edge bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; e.stopPropagation(); }}>
         <FocusTrap>
         <h3 class="text-lg font-semibold mb-4 text-ink-100">Keyboard shortcuts</h3>
-        <div class="space-y-2.5 text-xs font-mono">
-          <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘K / Ctrl+K</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘N / Ctrl+N</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Focus search</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">/</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘, / Ctrl+,</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, ...)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘1 – ⌘6</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / Dismiss dialog</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Esc</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">Enter</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Choose the model (in Chat)</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">⌘⇧M / Ctrl+Shift+M</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="px-2 py-0.5 rounded bg-ink-900 border border-edge text-ink-200">?</kbd></div>
+        <div class="space-y-2.5 text-sm">
+          <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="kbd">{mod}K</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="kbd">{mod}N</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, … 6: Settings)</span><kbd class="kbd">{mod}1 – {mod}6</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="kbd">{mod},</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Show or hide the sidebar</span><kbd class="kbd">{mod}B</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Search this chat (in Chat)</span><kbd class="kbd">{mod}F</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Choose the model (in Chat)</span><kbd class="kbd">{mod}Shift+M</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Thinking effort (in Chat)</span><kbd class="kbd">{mod}T</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Focus search</span><kbd class="kbd">/</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Interface scale — bigger, smaller, reset</span><span class="flex gap-1"><kbd class="kbd">{mod}+</kbd><kbd class="kbd">{mod}−</kbd><kbd class="kbd">{mod}0</kbd></span></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Send message</span><kbd class="kbd">Enter</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / dismiss a dialog</span><kbd class="kbd">Esc</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="kbd">?</kbd></div>
         </div>
         <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-md bg-veil/5 border border-edge text-sm hover:bg-veil/10">Close</button>
         </FocusTrap>
@@ -570,6 +576,15 @@
 </main>
 
 <style>
+  .kbd {
+    border-radius: 0.25rem;
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink-900);
+    padding: 0.125rem 0.5rem;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.75rem;
+    color: var(--color-ink-200);
+  }
   .sharing-on {
     display: inline-flex;
     align-items: center;

@@ -5,6 +5,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-11-21
+
+The model menu grows up: capability filters come back, the thinking bar becomes a thick ember gauge that breathes at Max, and a saved online provider now offers every model it has, not just one. This pass also clears the small stumbles found in a hard audit of the installed 0.1.9. Your chats, notes, models and settings are kept.
+
+### Added
+- **Capability filters in the model menu.** Thinks, Vision and Free chips narrow the list at once, with a match count and Clear; your filter choice is kept for next time.
+- **The full thinking ladder, per model.** The effort bar now offers minimal → low → medium → high → xhigh → max → ultra, and each model lists only the rungs its family answers to (GPT-OSS keeps low/medium/high, GPT-5 and o-series keep minimal/medium/high, Grok 4 adds xhigh, always-thinking DeepSeek stays fixed, hybrid local models keep Off/On). **Medium is the default** for models that have it.
+- **The effort bar is a real gauge now**: a thick rounded capsule with a springy ember fill, the knob riding inside the cap, and at the top rung it breathes with an ember glow and a sweep of light, so Max feels like Max (still, everything respects the system's reduced-motion setting).
+
+### Fixed
+- **A manually added online provider now lists all of its models.** Saving a provider asks it for its model list and keeps it, so every model it offers is selectable in the chat's model menu — not just the one typed by hand. (Pressing Load still refreshes.)
+- **The chat's delete confirmation opens centred on the window** again instead of as a small card trapped over the sidebar (a transform-side-effect bug).
+- **The keyboard shortcuts dialog** shows Windows keys on Windows (no more ⌘ symbols), lists the shortcuts the app really has (Ctrl+F in-chat search, Ctrl+T effort, Ctrl+B sidebar, Ctrl +/−/0 scale), and the "Keyboard shortcuts ?" chip in the status bar is clickable.
+- **One name per model.** The message tag no longer shows the raw provider slug, and the provider is named once on the empty chat instead of five times on one screen.
+- **Learned starters earn their place**: no bare links, no code fragments, at most two, and the sparkle moved out of the title.
+- **Answer statistics read friendlier**: "716 in · 34 out · 1.6 s · first token 1.4 s" — one unit for time.
+- **The Documents screen shows one human size** per file and a relevance score only when a search has actually run.
+- **Memory's empty state says "No notes yet"** when nothing was searched.
+- **Your own messages carry an ember tint in both themes** (the light theme washed them out) and the empty chat's starter cards follow the chat width you chose.
+
+### Changed
+- The model menu is wider (24 rem) with the active model tinted ember and full names shown on hover.
+
 ## [0.1.9] - 2026-11-21
 
 Reading controls found in the reference apps, redrawn for LocalAide: the chat bends to how you read, Settings answers a search box, and the Memory screen shows its size at a glance. Everything here works without new backend commands, so it is complete on all platforms. Your chats, notes, models and settings are kept.

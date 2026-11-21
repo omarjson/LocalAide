@@ -110,6 +110,52 @@ const localChoice = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// A fake online provider, so the picker's filters and the full effort
+// ladder have something to act on in the browser harness.
+const remoteChoice = (over: Record<string, unknown> = {}) => ({
+  key: "kilo:auto-free",
+  provider_id: "kilo",
+  provider_label: "Kilo Code (free, no key)",
+  model: "auto-free",
+  name: "Auto Free",
+  local: false,
+  reasoning: true,
+  vision: false,
+  tools: true,
+  context: 256000,
+  efforts: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+  free: true,
+  favorite: false,
+  active: false,
+  size_bytes: null,
+  ...over,
+});
+
+type ModelChoicesFixture = {
+  models: Array<Record<string, unknown>>;
+  groups: Array<Record<string, unknown>>;
+  active_key: string;
+  local_loaded: boolean;
+  online_allowed: boolean;
+};
+
+const chatModelsFixture = (): ModelChoicesFixture => ({
+  models: [
+    localChoice(),
+    localChoice({ key: "local:gemma-4-e4b", model: "gemma-4-e4b", name: "Gemma 4 E4B (QAT)", context: 131072, active: false, favorite: false }),
+    localChoice({ key: "local:spark-x2.6-3b-vision", model: "spark-x2.6-3b-vision", name: "Spark-X2.6 3B Vision", vision: true, context: 16384, active: false, favorite: false }),
+    remoteChoice({ key: "kilo:nvidia/nemotron-3.5-super-vl:free", model: "nvidia/nemotron-3.5-super-vl:free", name: "NVIDIA: Nemotron 3.5 Super VL (free)", vision: true, context: 1000000 }),
+    remoteChoice({ key: "kilo:anthropic/claude-opus-5.5", model: "anthropic/claude-opus-5.5", name: "Anthropic: Claude Opus 5.5", vision: true, context: 200000, efforts: ["off", "low", "medium", "high"] }),
+    remoteChoice({ key: "kilo:deepseek/deepseek-v4.1-flash-1017", model: "deepseek/deepseek-v4.1-flash-1017", name: "DeepSeek: DeepSeek V4.1 Flash 1017", vision: true, context: 128000 }),
+  ],
+  groups: [
+    { provider_id: "kilo", label: "Kilo Code (free, no key)", enabled: true, local_router: false, needs_refresh: false },
+  ],
+  active_key: "local:qwen3.5-9b",
+  local_loaded: true,
+  online_allowed: true,
+});
+
 const fixtures: Record<string, Handler> = {
   config_load: () => ({ selected_models: ["qwen3.5-9b"] }),
   settings_theme: () => "dark",
@@ -176,20 +222,20 @@ const fixtures: Record<string, Handler> = {
   inference_unload: () => null,
   engine_info: () => ({ installed: true, build: "b12359", cpu: "x86_64 · AVX2", download_bytes: null, custom: false, path: "C:\\Users\\Omar\\.aiassistant\\engine\\llama-server.exe" }),
 
-  chat_models: () => ({
-    models: [
-      localChoice(),
-      localChoice({ key: "local:gemma-4-e4b", model: "gemma-4-e4b", name: "Gemma 4 E4B (QAT)", context: 131072, active: false, favorite: false }),
-      localChoice({ key: "local:spark-x2.6-3b-vision", model: "spark-x2.6-3b-vision", name: "Spark-X2.6 3B Vision", vision: true, context: 16384, active: false, favorite: false }),
-    ],
-    groups: [{ provider_id: "local", label: "On this computer", enabled: true, local_router: true, needs_refresh: false }],
-    active_key: "local:qwen3.5-9b",
-    local_loaded: true,
-    online_allowed: false,
-  }),
+  chat_models: () => chatModelsFixture(),
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
   chat_prefs_set: () => null,
-  chat_target_set: () => null,
+  chat_target_set: (args) => {
+    // Flip the active model, so the picker's active row and the effort
+    // ladder follow the choice like the real backend does.
+    const req = (args?.req ?? args ?? {}) as Record<string, unknown>;
+    const wanted = String(req.model ?? "");
+    const base = chatModelsFixture();
+    for (const m of base.models) m.active = !wanted || m.model === wanted || m.key === wanted;
+    base.active_key = (base.models.find((m) => m.active === true)?.key as string) ?? base.active_key;
+    if (wanted) base.local_loaded = !wanted.includes("/");
+    return base;
+  },
   chat_favorite_toggle: () => null,
   chat_starters: () => [
     { title: "Review this pull request", prompt: "Review this pull request for bugs and missing tests.", uses: 6 },

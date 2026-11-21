@@ -300,7 +300,7 @@
   {:else if searching}
     <div class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-12 text-center text-sm text-ink-400">Searching notes…</div>
   {:else if filteredNotes.length === 0}
-    <EmptyState icon="memory" title="No notes found" description="Create a note, or try a different search.">
+    <EmptyState icon="memory" title={query.trim() ? "No notes match" : "No notes yet"} description={query.trim() ? "Try different words, or clear the search." : "Create a note and LocalAide can recall it in future chats."}>
       {#snippet action()}<Button variant="primary" onclick={() => showNew = true}>New note</Button>{/snippet}
     </EmptyState>
   {:else}

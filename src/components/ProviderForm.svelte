@@ -118,6 +118,17 @@
         model: model.trim(),
         api_key: key ? key.trim() : undefined,
       });
+      // The saved default model alone makes a picker with one entry. Ask the
+      // provider for its whole list now and keep it, so every model it offers
+      // is selectable in the chat. Failure is fine: the typed model still works.
+      const saved = status.providers.find((p) => p.base_url === url.trim());
+      if (saved) {
+        try {
+          await api.refreshProviderModels(saved.id);
+        } catch (e: unknown) {
+          console.warn("Could not load the provider's model list", e);
+        }
+      }
       onSaved(status);
     } catch (e: unknown) {
       saveError = errorMessage(e);

@@ -8,7 +8,7 @@
   import { dur, motion } from "../lib/motion";
   import { contextLabel, effortLabel } from "../lib/chatParts";
   import { formatGb } from "../lib/format";
-  import { providerKey, providerList, providerModels } from "../lib/modelPicker";
+  import { matchesModel, NO_FILTERS, parseFilters, providerKey, providerList, providerModels, type PickerFilters } from "../lib/modelPicker";
   import type { ModelChoice, ModelChoices } from "../lib/api/bindings";
 
   interface Props {
@@ -52,13 +52,46 @@
   let rootEl = $state<HTMLDivElement>();
   let listEl = $state<HTMLDivElement>();
 
+  // Capability filters (Thinks, Vision, Free), kept across sessions.
+  const FILTERS_KEY = "localaide-picker-filters";
+  let filters = $state<PickerFilters>((() => {
+    try {
+      return parseFilters(localStorage.getItem(FILTERS_KEY));
+    } catch {
+      return { ...NO_FILTERS };
+    }
+  })());
+  const anyFilter = $derived(filters.reasoning || filters.vision || filters.free);
+
+  $effect(() => {
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
+    } catch {
+      /* storage unavailable */
+    }
+  });
+
+  const toggleFilter = (key: keyof PickerFilters) => {
+    filters = { ...filters, [key]: !filters[key] };
+    cursor = 0;
+  };
+
   const shown = $derived(viewing ?? (active ? providerKey(active) : providers[0]?.key ?? "local"));
   const provider = $derived(providers.find((p) => p.key === shown) ?? null);
-  const list = $derived(providerModels(choices, shown, query));
-  const elsewhere = $derived(query.trim() && list.length === 0 ? (choices?.models ?? []).filter((m) => providerKey(m) !== shown && `${m.name} ${m.model}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8) : []);
+  const list = $derived(providerModels(choices, shown, query, filters));
+  const elsewhere = $derived(query.trim() && list.length === 0 ? (choices?.models ?? []).filter((m) => providerKey(m) !== shown && matchesModel(m, query, filters)).slice(0, 8) : []);
   const rows = $derived([...list, ...elsewhere]);
 
-  const levels = $derived(active && active.efforts.length > 0 ? ["auto", ...active.efforts.filter((e) => e !== "auto")] : []);
+  // The model's own ladder, lowest first. A ladder with "medium" uses it as
+  // the default rung (see ChatScreen); the off/on hybrids keep an Auto rung
+  // for the template's own default.
+  const levels = $derived(
+    active && active.efforts.length > 0
+      ? active.efforts.includes("medium")
+        ? active.efforts
+        : ["auto", ...active.efforts.filter((e) => e !== "auto")]
+      : [],
+  );
   const level = $derived(Math.max(0, levels.indexOf(effort)));
 
   $effect(() => {
@@ -177,6 +210,18 @@
           {/if}
         </div>
 
+        <div class="flex items-center gap-1.5 px-3 pb-1" role="group" aria-label="Filter models">
+          <button type="button" aria-pressed={filters.reasoning} onclick={() => toggleFilter("reasoning")} class={`fchip ${filters.reasoning ? "fchip-on" : ""}`}>Thinks</button>
+          <button type="button" aria-pressed={filters.vision} onclick={() => toggleFilter("vision")} class={`fchip ${filters.vision ? "fchip-on" : ""}`}>Vision</button>
+          <button type="button" aria-pressed={filters.free} onclick={() => toggleFilter("free")} class={`fchip ${filters.free ? "fchip-on" : ""}`}>Free</button>
+          {#if anyFilter}
+            <span class="ml-auto flex items-center gap-1.5">
+              <span class="text-xs tabular-nums text-ink-500">{list.length} {list.length === 1 ? "match" : "matches"}</span>
+              <button type="button" class="fchip" onclick={() => { filters = { ...NO_FILTERS }; }}>Clear</button>
+            </span>
+          {/if}
+        </div>
+
         <div id="model-list" role="listbox" aria-label="Models" class="max-h-[min(20rem,45vh)] overflow-y-auto px-1.5 pb-1.5" bind:this={listEl}>
           {#if noModels}
             <p class="px-3 py-5 text-center text-sm text-ink-400">No models yet. Download one to run on this computer, or add an online provider.</p>
@@ -185,9 +230,9 @@
           {/if}
           {#each rows as m, index (m.key)}
             {#if index === list.length && elsewhere.length > 0}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Other providers</div>{/if}
-            <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={m.active} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""}`}>
+            <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={m.active} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""} ${m.active ? "row-active" : ""}`}>
               <span class="min-w-0 flex-1">
-                <span class={`block truncate text-sm ${m.active ? "font-semibold text-ink-50" : "text-ink-100"}`}>{m.name}</span>
+                <span class={`block truncate text-sm ${m.active ? "font-semibold text-ink-50" : "text-ink-100"}`} title={m.name}>{m.name}</span>
                 {#if index >= list.length || m.size_bytes || m.context}
                   <span class="block truncate text-xs text-ink-500">{index >= list.length ? `${m.provider_label} · ` : ""}{m.size_bytes ? formatGb(m.size_bytes) : ""}{m.size_bytes && m.context ? " · " : ""}{m.context ? `${contextLabel(m.context)} context` : ""}</span>
                 {/if}
@@ -207,12 +252,12 @@
           <div class="border-t border-ink-800 px-3 pb-3 pt-2.5">
             <div class="flex items-center gap-2 text-sm">
               <span class="text-ink-400">Effort</span>
-              <span class="font-semibold text-ink-50">{effortLabel(levels[level])}</span>
+              <span class={`font-semibold ${level === levels.length - 1 ? "text-ember-300" : "text-ink-50"}`}>{effortLabel(levels[level])}</span>
               <kbd class="ml-auto rounded bg-ink-800 px-1.5 py-0.5 text-xs text-ink-400">Ctrl+T</kbd>
             </div>
-            <div class="effort mt-2" style={`--fill:${fill}%`}>
+            <div class="effort mt-2" class:effort-max={level === levels.length - 1} style={`--fill:${fill}%`}>
               <input type="range" min="0" max={levels.length - 1} step="1" value={level} aria-label="Thinking effort" aria-valuetext={effortLabel(levels[level])} oninput={(e) => onEffort?.(levels[Number((e.currentTarget as HTMLInputElement).value)])} />
-              <span class="effort-track" aria-hidden="true"><span class="effort-fill"></span>{#each levels as _, i (i)}<span class="effort-dot" style={`left:${levels.length > 1 ? (i / (levels.length - 1)) * 100 : 0}%`}></span>{/each}</span>
+              <span class="effort-track" aria-hidden="true"><span class="effort-fill"></span>{#each levels.slice(1, -1) as _, j (j)}<span class="effort-dot" style={`left:${((j + 1) / (levels.length - 1)) * 100}%`}></span>{/each}</span>
             </div>
           </div>
         {/if}
@@ -245,13 +290,29 @@
     right: 0;
     bottom: calc(100% + 0.5rem);
     z-index: 40;
-    width: min(21rem, calc(100vw - 2rem));
+    width: min(24rem, calc(100vw - 2rem));
     overflow: hidden;
     border-radius: 0.85rem;
     border: 1px solid var(--color-edge);
     background: var(--color-ink-950);
     box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.6);
     transform-origin: bottom right;
+  }
+  .fchip {
+    border-radius: 9999px;
+    border: 1px solid var(--color-ink-700);
+    padding: 0.1rem 0.55rem;
+    font-size: 0.75rem;
+    color: var(--color-ink-400);
+    transition: color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out;
+  }
+  .fchip:hover {
+    color: var(--color-ink-100);
+  }
+  .fchip-on {
+    border-color: color-mix(in oklab, var(--color-ember-500) 55%, transparent);
+    background: color-mix(in oklab, var(--color-ember-500) 14%, transparent);
+    color: var(--color-ember-200);
   }
   .prov-head {
     display: flex;
@@ -324,6 +385,12 @@
   .row-cursor {
     background: color-mix(in oklab, var(--color-veil) 6%, transparent);
   }
+  .row-active {
+    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
+  }
+  .row-active.row-cursor {
+    background: color-mix(in oklab, var(--color-ember-500) 15%, transparent);
+  }
   .star {
     display: grid;
     height: 1.4rem;
@@ -344,9 +411,12 @@
   .star-on {
     color: var(--color-ember-300);
   }
+  /* The effort bar: a thick rounded capsule whose fill springs between
+     rungs, with the knob riding just inside the cap. At the top rung it
+     breathes and shines — you can feel the power. */
   .effort {
     position: relative;
-    height: 1.6rem;
+    height: 2.9rem;
   }
   .effort input {
     position: absolute;
@@ -362,49 +432,91 @@
     left: 0.6rem;
     right: 0.6rem;
     top: 50%;
-    height: 0.9rem;
+    height: 2.3rem;
     transform: translateY(-50%);
     border-radius: 9999px;
     background: var(--color-ink-800);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
   }
   .effort-fill {
     position: absolute;
-    inset: 0 auto 0 -0.6rem;
-    width: calc(var(--fill) + 0.6rem);
-    min-width: 1.2rem;
+    inset: 0 auto 0 0;
+    width: calc(var(--fill) + 1.15rem);
+    min-width: 2.3rem;
+    max-width: 100%;
+    overflow: hidden;
     border-radius: 9999px;
-    background: linear-gradient(90deg, #22c55e, #0ea5e9 140%);
-    transition: width 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    background: linear-gradient(90deg, var(--color-ember-600), var(--color-ember-400));
+    transition: width 340ms cubic-bezier(0.22, 1.35, 0.42, 1);
   }
   .effort-fill::after {
     content: "";
     position: absolute;
-    right: -0.45rem;
+    right: 0.125rem;
     top: 50%;
-    height: 1.25rem;
-    width: 1.25rem;
-    transform: translateY(-50%);
+    height: 1.75rem;
+    width: 1.75rem;
+    transform: translateY(-50%) scale(1);
     border-radius: 9999px;
-    background: #fff;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+    background: var(--color-ink-50);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 0 color-mix(in oklab, var(--color-ember-500) 35%, transparent);
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .effort:hover .effort-fill::after {
+    transform: translateY(-50%) scale(1.06);
+  }
+  .effort:active .effort-fill::after {
+    transform: translateY(-50%) scale(1.12);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 5px color-mix(in oklab, var(--color-ember-500) 30%, transparent);
   }
   .effort-dot {
     position: absolute;
     top: 50%;
-    height: 0.25rem;
-    width: 0.25rem;
+    height: 0.3rem;
+    width: 0.3rem;
     transform: translate(-50%, -50%);
     border-radius: 9999px;
-    background: rgb(255 255 255 / 0.55);
+    background: rgb(255 243 224 / 0.7);
+    box-shadow: 0 0 3px rgb(0 0 0 / 0.35);
     pointer-events: none;
   }
   .effort input:focus-visible ~ .effort-track {
     outline: 2px solid var(--color-ink-50);
     outline-offset: 3px;
   }
+  /* Top rung: the bar breathes with an ember glow and a light sweeps the
+     fill, so maximum effort reads as power, not just another notch. */
+  .effort-max .effort-track {
+    animation: effort-glow 1.8s ease-in-out infinite;
+  }
+  .effort-max .effort-fill::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(105deg, transparent 32%, rgb(255 243 224 / 0.5) 50%, transparent 68%);
+    transform: translateX(-110%);
+    animation: effort-sheen 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .effort-max .effort-fill::after {
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 55%, transparent), 0 0 14px color-mix(in oklab, var(--color-ember-500) 45%, transparent);
+  }
+  @keyframes effort-glow {
+    0%, 100% { box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35), 0 0 10px color-mix(in oklab, var(--color-ember-500) 22%, transparent); }
+    50% { box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35), 0 0 24px color-mix(in oklab, var(--color-ember-500) 55%, transparent); }
+  }
+  @keyframes effort-sheen {
+    0% { transform: translateX(-110%); }
+    55%, 100% { transform: translateX(110%); }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .effort-fill {
+    .effort-fill,
+    .effort-fill::after {
       transition: none;
+    }
+    .effort-max .effort-track,
+    .effort-max .effort-fill::before {
+      animation: none;
     }
   }
 </style>

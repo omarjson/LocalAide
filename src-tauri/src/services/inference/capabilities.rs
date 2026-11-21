@@ -169,7 +169,9 @@ pub fn guess_context(id: &str) -> Option<u64> {
     None
 }
 
-/// The effort levels offered for a model that thinks, by family.
+/// The effort levels offered for a model that thinks, by family. The full
+/// ladder is minimal < low < medium < high < xhigh < max < ultra; a family
+/// that answers to fewer rungs lists only those.
 pub fn effort_levels(id: &str, local: bool) -> Vec<String> {
     let id = id.to_ascii_lowercase();
     let owned = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -186,11 +188,16 @@ pub fn effort_levels(id: &str, local: bool) -> Vec<String> {
         // These always think; there is nothing to choose.
         return Vec::new();
     }
+    if has_any(&id, &["grok-4", "grok-5"]) {
+        return owned(&["minimal", "low", "medium", "high", "xhigh"]);
+    }
     if local {
         // Hybrid local models (Qwen3, GLM, Granite) switch thinking on or off.
         return owned(&["off", "on"]);
     }
-    owned(&["off", "low", "medium", "high"])
+    // An unknown online model: offer the whole ladder and let the provider
+    // clamp what it does not know.
+    owned(&["minimal", "low", "medium", "high", "xhigh", "max", "ultra"])
 }
 
 /// Capabilities from the name alone.
@@ -322,7 +329,12 @@ mod tests {
         );
         assert!(effort_levels("deepseek-reasoner", false).is_empty());
         assert_eq!(effort_levels("qwen3-4b", true), ["off", "on"]);
-        assert_eq!(effort_levels("gemini-2.5-flash", false)[0], "off");
+        assert_eq!(effort_levels("grok-4", false), ["minimal", "low", "medium", "high", "xhigh"]);
+        // Unknown online models get the whole ladder, medium in the middle.
+        assert_eq!(
+            effort_levels("some-router-model", false),
+            ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+        );
     }
 
     #[test]

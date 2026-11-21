@@ -5,7 +5,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import { addQuestion, addSubagentStep, appendReasoning, appendText, finishTool, partsForSaving, setSkillChange, setTodos, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
+  import { addQuestion, addSubagentStep, appendReasoning, appendText, effortLabel, finishTool, partsForSaving, setSkillChange, setTodos, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
   import PermissionMenu from "../components/PermissionMenu.svelte";
   import WorkStatus from "../components/WorkStatus.svelte";
   import { chatRequest, chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
@@ -205,11 +205,19 @@
   let useSubagents = $state(savedOptions.subagents !== false);
   // MCP servers switched off in chat (they stay on in Settings).
   let mcpOff = $state<string[]>(Array.isArray(savedOptions.mcpOff) ? savedOptions.mcpOff.filter((v): v is string => typeof v === "string") : []);
-  // The thinking effort chosen for each model, by picker key.
+  // The thinking effort chosen for each model, by picker key. A saved "auto"
+  // counts as unset, so the default below applies.
   let efforts = $state<Record<string, string>>(
     savedOptions.efforts && typeof savedOptions.efforts === "object" ? (savedOptions.efforts as Record<string, string>) : {},
   );
-  const effort = $derived(activeChoice ? efforts[activeChoice.key] ?? "auto" : "auto");
+  // Medium is the default rung for a model whose ladder has it; other models
+  // keep "auto" (nothing is sent, the template's own default applies).
+  const effort = $derived.by(() => {
+    if (!activeChoice) return "auto";
+    const saved = efforts[activeChoice.key];
+    if (saved && saved !== "auto") return saved;
+    return activeChoice.efforts.includes("medium") ? "medium" : "auto";
+  });
   let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
   $effect(() => {
     try {
@@ -381,7 +389,10 @@
     { title: "Compare options", prompt: "Compare these two choices and explain the trade-offs.", icon: "sliders" },
   ];
   // Learned from how the user's saved chats begin (on this computer); the
-  // defaults fill the rest.
+  // defaults fill the rest. Learned starters earn their spot: a phrase long
+  // enough to read, no URLs or code, and only the two most frequent — a bare
+  // link or a truncated fragment makes the whole empty state look broken.
+  const LEARNED_STARTER_MAX = 2;
   let learnedStarters = $state<Starter[]>([]);
   const loadStarters = async () => {
     try {
@@ -390,9 +401,20 @@
       learnedStarters = [];
     }
   };
+  const usableLearned = $derived(
+    learnedStarters
+      .filter((s) => {
+        const t = s.prompt.trim();
+        if (t.length < 12 || t.length > 120) return false;
+        if (/https?:\/\/|www\.|\/[^\s]+\/|^\s*\w+\.\w{2,}\s/i.test(t)) return false;
+        if (/[{}<>`\\[\]]/.test(t)) return false;
+        return true;
+      })
+      .slice(0, LEARNED_STARTER_MAX),
+  );
   const starterPrompts = $derived([
-    ...learnedStarters.map((s) => ({ title: s.title, prompt: s.prompt, icon: "sparkle" as const, learned: true })),
-    ...defaultStarters.filter((d) => !learnedStarters.some((l) => l.prompt === d.prompt)).map((d) => ({ ...d, learned: false })),
+    ...usableLearned.map((s) => ({ title: s.title, prompt: s.prompt, icon: "sparkle" as const, learned: true })),
+    ...defaultStarters.filter((d) => !usableLearned.some((l) => l.prompt === d.prompt)).map((d) => ({ ...d, learned: false })),
   ].slice(0, 4));
 
   const greeting = (() => {
@@ -774,7 +796,7 @@
       ts: Date.now(),
       steps: [],
       parts: [],
-      model: activeChoice ? (activeChoice.provider_id ? `${activeChoice.name} · ${activeChoice.provider_label}` : activeChoice.name) : undefined,
+      model: activeChoice?.name ?? undefined,
     });
     const started = performance.now();
     let firstTokenAt: number | null = null;
@@ -1097,10 +1119,11 @@
   // Ctrl+T steps through the active model's thinking levels.
   const cycleEffort = () => {
     if (!activeChoice || activeChoice.efforts.length === 0) return;
-    const levels = ["auto", ...activeChoice.efforts.filter((e) => e !== "auto")];
-    const next = levels[(levels.indexOf(effort) + 1) % levels.length];
+    const levels = activeChoice.efforts.filter((e) => e !== "auto");
+    if (levels.length === 0) return;
+    const next = levels[(levels.indexOf(effort) + 1) % levels.length] ?? levels[0];
     setEffort(next);
-    showToast(`Thinking effort: ${next === "auto" ? "Auto" : next.charAt(0).toUpperCase() + next.slice(1)}`);
+    showToast(`Thinking effort: ${effortLabel(next)}`);
   };
 
   // Work status: the newest to-do list, and every subagent in this chat.
@@ -1498,7 +1521,7 @@
           {:else}
             <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
             {#if onlineChoice}
-              <p class="text-[15px] text-ink-400">Answers come from {onlineChoice.name} via {onlineChoice.provider_label}. Messages are sent to that provider.</p>
+              <p class="text-[15px] text-ink-400">Answers come from <span class="font-semibold text-ink-200">{onlineChoice.name}</span>, through {onlineChoice.provider_label}. Messages are sent to that provider.</p>
             {:else if engineLoading || pickerBusy}
               <p class="flex items-center gap-2 text-[15px] text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeChoice.name}. This can take a minute.</p>
             {:else if !engineLoaded}
@@ -1523,19 +1546,19 @@
         {/if}
 
         {#if activeChoice}
-          <div class="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div class={`grid w-full ${chatWidth} grid-cols-1 gap-2.5 sm:grid-cols-2`}>
             {#each starterPrompts as sp, i (sp.prompt)}
               <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} title={sp.learned ? "You often start chats like this" : undefined} class="lift group flex items-start gap-3 rounded-2xl border border-ink-700 bg-veil/5 p-3.5 text-left hover:border-ink-700 hover:bg-ink-800/60">
                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-ember-500/12 text-ember-300 transition-colors group-hover:bg-ember-500/20"><Icon name={sp.icon} class="h-[17px] w-[17px]" /></span>
                 <span class="min-w-0">
-                  <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-100">{sp.title}{#if sp.learned}<span title="You often start chats like this"><Icon name="sparkle" class="h-3 w-3 shrink-0 text-ember-400" /></span>{/if}</span>
+                  <span class="block truncate text-sm font-semibold text-ink-100">{sp.title}</span>
                   <span class="line-clamp-2 block text-[13px] leading-5 text-ink-400">{sp.prompt}</span>
                 </span>
               </button>
             {/each}
           </div>
           {#if skills.length > 0 && moduleOn("skills")}
-            <div class="flex max-w-2xl flex-wrap items-center justify-center gap-2" in:fade={{ duration: dur(300), delay: dur(200) }}>
+            <div class={`flex w-full ${chatWidth} flex-wrap items-center justify-center gap-2`} in:fade={{ duration: dur(300), delay: dur(200) }}>
               <span class="text-xs text-ink-500">Your skills</span>
               {#each skills.slice(0, 6) as skill (skill.path)}
                 <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 bg-veil/5 px-3 py-1 font-mono text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
@@ -1713,7 +1736,7 @@
           />
         {/snippet}
       </ChatInput>
-      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts{onlineChoice ? `. Messages go to ${onlineChoice.provider_label}` : ""}.</p>
+      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts.</p>
     </div>
   </div>
 

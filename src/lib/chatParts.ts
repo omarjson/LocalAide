@@ -164,8 +164,9 @@ export function effortLabel(effort: string): string {
     low: "Low",
     medium: "Medium",
     high: "High",
-    xhigh: "Extra high",
+    xhigh: "Xhigh",
     max: "Max",
+    ultra: "Ultra",
   };
   return labels[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1);
 }

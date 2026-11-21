@@ -652,7 +652,13 @@
               <div class="truncate font-semibold text-ink-50">{doc.title}</div>
               <div class="truncate text-sm text-ink-400">{doc.path}</div>
               <p class="mt-1 text-sm leading-6 text-ink-200">{doc.snippet}</p>
-              <div class="mt-2 text-sm text-ink-400">Relevance {doc.score.toFixed(2)} · {(doc.size / 1024).toFixed(1)} KB</div>
+              <div class="mt-2 flex items-center gap-2 text-sm text-ink-400">
+                {#if query.trim()}
+                  <span>Relevance {doc.score.toFixed(2)}</span>
+                  <span class="h-3 w-px bg-ink-700" aria-hidden="true"></span>
+                {/if}
+                <span>{formatBytes(doc.size)}</span>
+              </div>
             </div>
             <div class="relative self-start justify-self-end" use:popover={{ open: openMenuPath === doc.path, onClose: () => openMenuPath = null }}>
               <Button

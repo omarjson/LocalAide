@@ -7,6 +7,7 @@
   import { api, errorMessage } from "../lib/api/client";
   import { chats, deleteChat, forgetFolder, groupChats, newChat, newChatInFolder, openChat } from "../lib/chats.svelte";
   import { dur, motion } from "../lib/motion";
+  import { portal } from "../lib/portal";
   import { fileManagerName } from "../lib/platform";
   import { showToast } from "../lib/toast.svelte";
   import type { ChatThread } from "../lib/api/bindings";
@@ -116,13 +117,17 @@
 </div>
 
 {#if pendingDelete}
-  <ConfirmDialog
-    title="Delete this chat?"
-    message={`“${pendingDelete.title}” is removed from this computer. You cannot undo it.`}
-    confirmLabel="Delete chat"
-    onConfirm={() => void confirmDelete()}
-    onCancel={() => (pendingDelete = null)}
-  />
+  <!-- The sidebar animates with a transform, which traps fixed-position
+       children; the dialog renders at the document root instead. -->
+  <div use:portal>
+    <ConfirmDialog
+      title="Delete this chat?"
+      message={`“${pendingDelete.title}” is removed from this computer. You cannot undo it.`}
+      confirmLabel="Delete chat"
+      onConfirm={() => void confirmDelete()}
+      onCancel={() => (pendingDelete = null)}
+    />
+  </div>
 {/if}
 
 <style>

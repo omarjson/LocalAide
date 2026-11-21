@@ -105,10 +105,10 @@ export function providerList(choices: ModelChoices | null): PickerProvider[] {
   return out;
 }
 
-/** One provider's models matching the search, starred first. */
-export function providerModels(choices: ModelChoices | null, key: string, query: string): ModelChoice[] {
+/** One provider's models matching the search and filters, starred first. */
+export function providerModels(choices: ModelChoices | null, key: string, query: string, filters: PickerFilters = NO_FILTERS): ModelChoice[] {
   if (!choices) return [];
   return choices.models
-    .filter((m) => providerKey(m) === key && matchesModel(m, query, NO_FILTERS))
+    .filter((m) => providerKey(m) === key && matchesModel(m, query, filters))
     .sort((a, b) => Number(b.favorite) - Number(a.favorite));
 }

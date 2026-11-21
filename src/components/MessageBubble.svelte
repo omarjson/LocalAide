@@ -212,7 +212,7 @@
           </div>
         {/if}
         {#if content}
-          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ink-800 bg-veil/6 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}</div>
+          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ember-500/25 bg-ember-500/12 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}</div>
           {#if longQuestion && !questionExpanded}
             <button type="button" onclick={() => (questionExpanded = true)} class="mt-0.5 text-xs font-medium text-ember-300 transition-colors hover:text-ember-200">Show full question</button>
           {/if}
@@ -232,7 +232,7 @@
     <div class="min-w-0 flex-1">
       <div class="mb-1 flex h-7 items-center gap-2 text-sm">
         <span class="font-semibold text-ink-100">LocalAide</span>
-        {#if model}<span class="truncate rounded-full border border-ink-800 px-2 py-px font-mono text-[11px] leading-4 text-ink-500" title="The model that wrote this answer">{model}</span>{/if}
+        {#if model}<span class="truncate rounded-full border border-ink-800 px-2 py-px text-xs leading-4 text-ink-400" title="The model that wrote this answer">{model}</span>{/if}
         {#if timeLabel}<span class="shrink-0 text-xs text-ink-500">{timeLabel}</span>{/if}
       </div>
 
@@ -348,7 +348,7 @@
           {#if allowRaw}<button type="button" onclick={() => raw = !raw} aria-pressed={raw} class="msg-action" aria-label="Show plain text" title="Plain text"><Icon name="eye" class="h-4 w-4" /></button>{/if}
           {#if onSendToOpenCode}<button type="button" onclick={onSendToOpenCode} class="msg-action" aria-label="Send to OpenCode" title="Continue this in OpenCode"><Icon name="code" class="h-4 w-4" /></button>{/if}
           {#if stats}
-            <span class="ml-1 font-mono text-xs text-ink-500" title="Answer statistics">{stats.inputTokens !== undefined ? `in ${stats.inputTokens} · out ${stats.outputTokens ?? stats.tokens}` : `${stats.tokens} tokens`} · {(stats.ms / 1000).toFixed(1)} s{speed ? ` · ${speed} tok/s` : ""}{stats.firstTokenMs !== null ? ` · first token ${Math.round(stats.firstTokenMs)} ms` : ""}</span>
+            <span class="ml-1 font-mono text-xs text-ink-500" title="Answer statistics">{stats.inputTokens !== undefined ? `${stats.inputTokens} in · ${stats.outputTokens ?? stats.tokens} out` : `${stats.tokens} tokens`} · {(stats.ms / 1000).toFixed(1)} s{speed ? ` · ${speed} tok/s` : ""}{stats.firstTokenMs !== null ? ` · first token ${(stats.firstTokenMs / 1000).toFixed(1)} s` : ""}</span>
           {/if}
           {#if copyError}<span role="alert" class="ml-1 text-xs text-rose-300">{copyError}</span>{/if}
         </div>
