@@ -12,6 +12,7 @@
   import { loadVoice } from "./lib/voice.svelte";
   import { refreshShare, share } from "./lib/share.svelte";
   import MarkdownDoc from "./components/MarkdownDoc.svelte";
+  import TitleBar from "./components/TitleBar.svelte";
   import Modal from "./components/Modal.svelte";
   import type { IconName } from "./components/Icon.svelte";
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
@@ -335,6 +336,7 @@
 </script>
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
+  <TitleBar />
   <div class="flex flex-1 min-h-0">
   {#if mobileNav}
     <div role="presentation" class="fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>

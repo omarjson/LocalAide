@@ -498,6 +498,8 @@ export function installShim(): void {
     invoke: (cmd: string, args: Record<string, unknown> = {}): Promise<unknown> => {
       if (cmd === "plugin:event|listen") return Promise.resolve(++callbackId);
       if (cmd === "plugin:event|unlisten") return Promise.resolve(null);
+      if (cmd === "plugin:window|is_maximized") return Promise.resolve(false);
+      if (cmd.startsWith("plugin:window|")) return Promise.resolve(null);
       const handler = fixtures[cmd];
       if (handler) return Promise.resolve(handler(args));
       if (cmd === "chat_stream") {
