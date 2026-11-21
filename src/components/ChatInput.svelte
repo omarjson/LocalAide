@@ -521,7 +521,7 @@
     border: 1px solid var(--color-edge);
     background: var(--color-ink-950);
     padding: 0.375rem;
-    box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55);
+    box-shadow: var(--shadow-elev);
   }
   /* The stop button announces itself: a soft ring breathes out while the
      answer runs, so "make it stop" is always the obvious click. */

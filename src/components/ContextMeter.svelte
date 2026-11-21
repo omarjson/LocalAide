@@ -122,7 +122,7 @@
   .meter-button { display: grid; height: 1.75rem; width: 1.75rem; place-items: center; border-radius: 9999px; transition: background-color 150ms ease-out; }
   .meter-button:hover, .meter-button[aria-expanded="true"] { background: color-mix(in oklab, var(--color-veil) 7%, transparent); }
   .meter { height: 1.15rem; width: 1.15rem; border-radius: 9999px; background: conic-gradient(var(--tone) var(--usage), var(--color-ink-700) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); transition: background 300ms ease-out; }
-  .meter-popover { position: absolute; right: 0; z-index: 45; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55); }
+  .meter-popover { position: absolute; right: 0; z-index: 45; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: var(--shadow-elev); }
   .meter-popover-down { top: calc(100% + 0.5rem); right: auto; left: -0.75rem; width: 16.5rem; }
   .segment-dot { height: 0.4rem; width: 0.4rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-ember-400); }
 </style>
