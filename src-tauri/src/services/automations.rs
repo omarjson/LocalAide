@@ -309,8 +309,9 @@ struct Answer {
 /// Run one prompt through the normal agent loop: no tools, no approvals,
 /// one quiet round. Runs land in no chat and record no usage.
 pub(crate) fn run_prompt(state: &AppState, prompt: &str) -> Answer {
-    use crate::services::agent::{AgentRun, ApprovalMode, ChatTarget};
-    use crate::services::inference::openai_stream::ChatTurn;
+    use crate::services::agent::{AgentRun, ApprovalMode};
+    use crate::services::inference::openai_stream::{ChatTurn, Effort};
+    use crate::services::inference::router::ChatTarget;
     let started = Instant::now();
     let system = "You are a helpful local AI assistant doing a scheduled task. Answer the prompt fully but compactly.".to_string();
     let run = AgentRun {
@@ -324,8 +325,8 @@ pub(crate) fn run_prompt(state: &AppState, prompt: &str) -> Answer {
             },
         ],
         answer_tokens: 1024,
-        temperature: None,
-        effort: "medium".to_string(),
+        temperature: 0.7,
+        effort: Effort::Auto,
         thinks: false,
         use_tools: false,
         perms: crate::services::agent::tools::Permissions::default(),

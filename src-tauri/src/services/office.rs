@@ -377,7 +377,7 @@ fn slide_text(x: i32, y: i32, w: i32, h: i32, size: i32, bold: bool, lines: &[St
 
 /// Builds a .pptx deck, one slide per `slides`, with the minimum part set
 /// PowerPoint accepts: presentation, master, layout, theme and slides.
-pub fn make_pptx(title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
+pub fn make_pptx(_title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
     if slides.is_empty() {
         return Err(AppError::invalid_input(
             "A deck needs at least one slide with a title.",

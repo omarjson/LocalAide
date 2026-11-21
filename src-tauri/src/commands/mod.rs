@@ -28,6 +28,7 @@ pub mod web;
 
 pub use assist::*;
 pub use attach::*;
+pub use automations::*;
 pub use backup::*;
 pub use chat::*;
 pub use cloud::*;
