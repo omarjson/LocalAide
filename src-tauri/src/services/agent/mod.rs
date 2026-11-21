@@ -368,7 +368,6 @@ fn run_inner(
     let mut ttft_ms: Option<u64> = None;
     let mut prompt_tokens: Option<usize> = None;
     let mut cache_tokens: Option<usize> = None;
-    let mut cache_tokens: Option<usize> = None;
     let mut seen_ids: HashSet<String> = HashSet::new();
     let client = engine.chat_client();
 

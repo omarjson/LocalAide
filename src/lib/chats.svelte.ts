@@ -112,6 +112,12 @@ export async function loadThreads(): Promise<void> {
   try {
     chats.threads = await api.listChatThreads();
     chats.error = null;
+    // Restored tabs carry their last known title; the saved one is better.
+    for (const tab of chats.tabs) {
+      if (!tab.id) continue;
+      const saved = chats.threads.find((t) => t.id === tab.id);
+      if (saved?.title) tab.title = saved.title;
+    }
   } catch (e: unknown) {
     chats.error = `Saved chats could not load: ${errorMessage(e)}`;
   }

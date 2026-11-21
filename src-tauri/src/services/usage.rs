@@ -157,7 +157,12 @@ pub fn summary(days: u32, folder: Option<&str>) -> Result<UsageSummary, AppError
 }
 
 /// Testable core: aggregates the file as if "now" were `now_secs`.
-fn summary_at(path: &Path, days: u32, now_secs: u64, folder: Option<&str>) -> Result<UsageSummary, AppError> {
+fn summary_at(
+    path: &Path,
+    days: u32,
+    now_secs: u64,
+    folder: Option<&str>,
+) -> Result<UsageSummary, AppError> {
     let cutoff = match days {
         0 => 0,
         // Today runs from midnight UTC, not a rolling 24 hours.
@@ -244,6 +249,24 @@ fn summary_at(path: &Path, days: u32, now_secs: u64, folder: Option<&str>) -> Re
         }
     }
 
+    // Longest run of consecutive active days. The days sort in BTreeMap
+    // order (YYYY-MM-DD), so consecutive entries differ by one calendar day.
+    let mut longest = 0usize;
+    let mut run = 0usize;
+    let mut prev: Option<i64> = None;
+    for day in per_day.keys() {
+        let stamp = match day_from_date(day) {
+            Some(d) => d,
+            None => continue,
+        };
+        run = match prev {
+            Some(p) if stamp == p + 1 => run + 1,
+            _ => 1,
+        };
+        longest = longest.max(run);
+        prev = Some(stamp);
+    }
+
     let per_day = per_day
         .into_iter()
         .map(|(date, (d_answers, d_input, d_output))| UsageDay {
@@ -283,24 +306,6 @@ fn summary_at(path: &Path, days: u32, now_secs: u64, folder: Option<&str>) -> Re
     per_model.sort_by(|a, b| b.output.cmp(&a.output).then(b.answers.cmp(&a.answers)));
     let mut per_folder: Vec<UsageProject> = per_folder.into_values().collect();
     per_folder.sort_by(|a, b| b.output.cmp(&a.output).then(b.answers.cmp(&a.answers)));
-
-    // Longest run of consecutive active days. The days sort in BTreeMap
-    // order (YYYY-MM-DD), so consecutive entries differ by one calendar day.
-    let mut longest = 0usize;
-    let mut run = 0usize;
-    let mut prev: Option<i64> = None;
-    for day in per_day.keys() {
-        let stamp = match day_from_date(day) {
-            Some(d) => d,
-            None => continue,
-        };
-        run = match prev {
-            Some(p) if stamp == p + 1 => run + 1,
-            _ => 1,
-        };
-        longest = longest.max(run);
-        prev = Some(stamp);
-    }
 
     Ok(UsageSummary {
         days,
@@ -463,7 +468,8 @@ mod tests {
 
     #[test]
     fn today_starts_at_utc_midnight() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-today-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .join(format!("localaide-usage-today-{}", std::process::id()));
         let path = dir.join("usage.jsonl");
         // 12:30 UTC today, and 23:00 yesterday: "today" sees only the first.
         let now = 86_400 + 45_000; // day 2, 12:30
@@ -474,15 +480,16 @@ mod tests {
         let today = summary_at(&path, 1, now, None).unwrap();
         assert_eq!(today.answers, 1);
         assert_eq!(today.output_tokens, 100);
-        // The rolling 24-hour window still sees both.
-        let rolling = summary_at(&path, 1, now + 86_400, None).unwrap();
+        // The rolling two-day window still sees both.
+        let rolling = summary_at(&path, 2, now + 86_400, None).unwrap();
         assert_eq!(rolling.answers, 2);
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn all_time_skips_no_records() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-all-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .join(format!("localaide-usage-all-{}", std::process::id()));
         let path = dir.join("usage.jsonl");
         write_log(&path, &[rec(1, "old", 10), rec(2_000_000_000, "new", 20)]);
         let all = summary_at(&path, 0, 2_000_000_000, None).unwrap();
@@ -493,7 +500,8 @@ mod tests {
 
     #[test]
     fn folder_filter_and_projects_rollup() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-folder-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .join(format!("localaide-usage-folder-{}", std::process::id()));
         let path = dir.join("usage.jsonl");
         let now = 1_900_000_000;
         write_log(
@@ -523,7 +531,8 @@ mod tests {
 
     #[test]
     fn sessions_and_streak_count_from_the_log() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-sessions-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .join(format!("localaide-usage-sessions-{}", std::process::id()));
         let path = dir.join("usage.jsonl");
         let now = 1_950_000_000;
         let today = date_from_ts(now);
@@ -553,7 +562,8 @@ mod tests {
 
     #[test]
     fn streak_breaks_on_a_gap() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-gap-{}", std::process::id()));
+        let dir = std::env::temp_dir()
+            .join(format!("localaide-usage-gap-{}", std::process::id()));
         let path = dir.join("usage.jsonl");
         let now = 1_960_000_000;
         // Active today and three days back, nothing between: streak is 1.

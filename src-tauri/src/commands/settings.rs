@@ -210,7 +210,9 @@ pub fn chat_prefs_get(state: State<'_, AppState>) -> Result<ChatPrefs, AppError>
 /// What each online model costs, for the Usage screen's cost figures.
 /// USD per 1M tokens, keyed by model id. Local models are free.
 #[tauri::command]
-pub fn settings_model_prices(state: State<'_, AppState>) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
+pub fn settings_model_prices(
+    state: State<'_, AppState>,
+) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
     let store = state
         .config_store
         .lock()
