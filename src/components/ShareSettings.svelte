@@ -9,9 +9,10 @@
   import { dur } from "../lib/motion";
   import { formatBytes } from "../lib/format";
   import { refreshShare, setShare, share } from "../lib/share.svelte";
-  import type { ShareStarted } from "../lib/api/bindings";
+  import type { PairInfo, ShareStarted } from "../lib/api/bindings";
 
   let links = $state<ShareStarted | null>(null);
+  let pair = $state<PairInfo | null>(null);
   let busy = $state<"start" | "local" | "stop" | "fetch" | null>(null);
   let pct = $state<number | null>(null);
   let error = $state<string | null>(null);
@@ -19,7 +20,18 @@
 
   onMount(() => {
     void refreshShare();
+    // The QR and pairing code are cheap and local; refresh whenever this
+    // screen opens, so a session started elsewhere still shows them.
+    void loadPair();
   });
+
+  const loadPair = async () => {
+    try {
+      pair = await api.sharePair();
+    } catch {
+      pair = null;
+    }
+  };
 
   const status = $derived(share.status);
   const tool = $derived(status?.cloudflared);
@@ -30,6 +42,7 @@
     try {
       links = await api.shareStart(tunnel);
       setShare(links.status);
+      void loadPair();
     } catch (e: unknown) {
       error = errorMessage(e);
     } finally {
@@ -121,6 +134,21 @@
       {:else}
         <p class="mt-4 text-sm text-ink-400">The links were shown when sharing started. Stop and share again for new ones; the old ones stop working.</p>
       {/if}
+
+      {#if pair && pair.on}
+        <!-- Pair your phone: scan the QR, or open the page and match codes. -->
+        <div class="mt-5 grid gap-4 rounded-xl border border-ink-700 bg-ink-950 p-4 sm:grid-cols-[auto_1fr]">
+          <div class="qr mx-auto w-40 self-start rounded-lg bg-white p-2" aria-hidden="true">
+            {@html pair.qr_svg}
+          </div>
+          <div class="min-w-0">
+            <h4 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="link" class="h-4 w-4 text-ember-300" />Pair your phone</h4>
+            <p class="mt-1 text-sm leading-6 text-ink-400">Scan the code with your phone's camera, or open the Remote link and look for the small code it shows. Match it against this one:</p>
+            <p class="pair-code mt-2 w-fit">{pair.pair_code}</p>
+            <p class="mt-2 text-sm text-ink-500">Matching codes mean the phone and this computer are the same session. Codes change every time sharing restarts.</p>
+          </div>
+        </div>
+      {/if}
     </section>
   {:else}
     <section class="mt-6 rounded-xl border border-ink-700 bg-ink-900 p-4">
@@ -187,6 +215,22 @@
   }
   @keyframes pulse {
     to { box-shadow: 0 0 0 8px transparent; }
+  }
+  .qr :global(svg) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .pair-code {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 1.375rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: var(--color-ember-200);
+    border: 1px solid color-mix(in oklab, var(--color-ember-500) 40%, transparent);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
   }
   @media (prefers-reduced-motion: reduce) {
     .pulse {

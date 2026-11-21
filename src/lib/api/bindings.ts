@@ -1136,8 +1136,16 @@ export interface ShareStatus {
   cloudflared: ProgramStatus;
 }
 
+export interface PairInfo {
+  pair_code: string;
+  qr_svg: string;
+  on: boolean;
+}
+
 export interface ShareStarted {
-  status: ShareStatus;
+  status: import("./bindings").ShareStatus;
   viewer_link: string;
   remote_link: string;
+  pair_code: string;
+  qr_svg: string;
 }

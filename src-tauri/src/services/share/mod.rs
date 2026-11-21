@@ -9,6 +9,7 @@
 //! Stopping sharing ends the tunnel and the server, so old links die.
 
 pub mod auth;
+pub mod qr;
 mod server;
 mod tunnel;
 
@@ -18,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
@@ -31,6 +33,10 @@ struct Running {
     tunnel: Option<tunnel::Tunnel>,
     started_at: u64,
     shared: Arc<Shared>,
+    /// Both screens show this; the phone derives the same from its token.
+    pair_code: String,
+    /// The remote link as a QR, made once at start.
+    qr_svg: String,
 }
 
 /// What the server threads share with the app.
@@ -71,6 +77,60 @@ pub struct ShareStarted {
     pub status: ShareStatus,
     pub viewer_link: String,
     pub remote_link: String,
+    /// What both screens show to confirm they are the same session:
+    /// eight capital letters and digits, grouped XXXX-XXXX.
+    pub pair_code: String,
+    /// The remote link as a QR, ready to drop into the page.
+    pub qr_svg: String,
+}
+
+/// What Settings → Share needs to pair a phone.
+#[derive(Debug, Clone, Serialize)]
+pub struct PairInfo {
+    pub pair_code: String,
+    pub qr_svg: String,
+    pub on: bool,
+}
+
+/// The confirmation code for a link token: the first five bytes of its
+/// SHA-256, Crockford-base32'd. No 0/O/1/I/L/U, so reading it aloud is
+/// unambiguous. The phone derives the same code from the token it holds,
+/// so matching codes mean "this is the same assistant".
+pub fn pair_code_from(token: &str) -> String {
+    const ALPHABET: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let digest = Sha256::digest(token.as_bytes());
+    let mut code = String::with_capacity(9);
+    let mut acc: u64 = 0;
+    let mut bits = 0u32;
+    for &b in digest.iter().take(5) {
+        acc = (acc << 8) | b as u64;
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            let index = ((acc >> bits) & 0x1f) as usize;
+            code.push(ALPHABET[index] as char);
+        }
+    }
+    // 5 bytes = exactly 8 five-bit groups.
+    let chars: Vec<char> = code.chars().collect();
+    let (a, b) = (&chars[0..4], &chars[4..8]);
+    format!("{}-{}", a.iter().collect::<String>(), b.iter().collect::<String>())
+}
+
+/// The pair info of the running share session, QR included.
+pub fn pair_info() -> PairInfo {
+    let (code, qr) = {
+        let guard = SHARE.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.as_ref() {
+            Some(r) => (r.pair_code.clone(), r.qr_svg.clone()),
+            None => (String::new(), String::new()),
+        }
+    };
+    PairInfo {
+        pair_code: code,
+        qr_svg: qr,
+        on: status().on,
+    }
 }
 
 pub fn status() -> ShareStatus {
@@ -149,6 +209,9 @@ pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppErro
         "started",
         Some("Sharing started; links made for Viewer and Remote user"),
     );
+    let remote_link = format!("{url}/#k={remote}");
+    let pair_code = pair_code_from(&remote);
+    let qr_svg = qr::svg(&remote_link)?;
     *guard = Some(Running {
         stop,
         port,
@@ -156,12 +219,16 @@ pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppErro
         tunnel,
         started_at: now(),
         shared,
+        pair_code: pair_code.clone(),
+        qr_svg: qr_svg.clone(),
     });
     drop(guard);
     Ok(ShareStarted {
         status: status(),
         viewer_link: format!("{url}/#k={viewer}"),
-        remote_link: format!("{url}/#k={remote}"),
+        remote_link,
+        pair_code,
+        qr_svg,
     })
 }
 
@@ -206,6 +273,22 @@ pub(crate) fn role_name(role: Role) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pair_codes_are_grouped_capitals_and_digits() {
+        let code = pair_code_from("abcdef0123456789abcdef0123456789abcdef0123456789ab");
+        // XXXX-XXXX, nine characters with the dash.
+        assert_eq!(code.len(), 9);
+        assert_eq!(code.as_bytes()[4], b'-');
+        for c in code.chars().filter(|c| *c != '-') {
+            assert!(c.is_ascii_digit() || c.is_ascii_uppercase(), "{c} is not readable");
+            assert!(!"IOU".contains(c), "{c} reads like another letter");
+        }
+        // The same token always makes the same code.
+        assert_eq!(pair_code_from("abcdef0123456789abcdef0123456789abcdef0123456789ab"), code);
+        // Different tokens differ.
+        assert_ne!(pair_code_from("ffffffff0123456789abcdef0123456789abcdef0123456789ab"), code);
+    }
     use std::sync::Arc as A;
 
     fn state() -> AppState {

@@ -306,6 +306,23 @@
     renderThread();
   };
 
+  // The pairing confirmation: the same XXXX-XXXX code the desktop shows.
+  // Matching codes mean this phone and that computer are the same session.
+  const showPairCode = async () => {
+    try {
+      const res = await (await api("/api/pair-code")).json();
+      if (!res.code) return;
+      const chip = document.createElement("div");
+      chip.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:9;background:var(--panel-2);border:1px solid var(--line-2);border-radius:10px;padding:6px 12px;font:600 14px/1 ui-monospace,monospace;letter-spacing:2px;color:var(--ink-2);opacity:0.9";
+      chip.title = "This matches the code on your computer";
+      chip.textContent = res.code;
+      document.body.append(chip);
+      setTimeout(() => { chip.style.transition = "opacity 1.2s"; chip.style.opacity = "0"; }, 6000);
+    } catch (e) {
+      // The code is a nicety; pairing still works without it.
+    }
+  };
+
   (async () => {
     if (!token) { center("This link needs its token", "Open the full link the owner gave you. It ends with #k= and a long code."); return; }
     try {
@@ -313,6 +330,7 @@
       current = null;
       build();
       await loadThreads();
+      void showPairCode();
     } catch (e) {
       center("The assistant did not let this link in", e.message);
     }

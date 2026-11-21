@@ -211,6 +211,34 @@ fn handle(mut req: Request, state: &AppState, shared: &Shared, stop: &AtomicBool
         let _ = req.respond(error(404, "Not found."));
         return;
     }
+    // The confirmation code for the token in the request. An unauthenticated
+    // caller learns nothing; a caller holding the link proves it is the
+    // same session the desktop shows the code for.
+    if method == Method::Get && path == "/api/pair-code" {
+        let auth = req
+            .headers()
+            .iter()
+            .find(|h| h.field.equiv("Authorization"))
+            .map(|h| h.value.as_str().to_string());
+        match bearer(auth.as_deref()).and_then(|t| shared.tokens.check(t)) {
+            Some(role) => {
+                let token = bearer(auth.as_deref()).unwrap_or_default();
+                let role_label = match role {
+                    crate::services::share::auth::Role::Viewer => "viewer",
+                    crate::services::share::auth::Role::Remote => "remote",
+                };
+                let _ = req.respond(json_response(
+                    &json!({ "code": crate::services::share::pair_code_from(token), "role": role_label }),
+                    200,
+                ));
+            }
+            None => {
+                shared.refused.fetch_add(1, Ordering::Relaxed);
+                let _ = req.respond(error(401, "This link needs its token."));
+            }
+        }
+        return;
+    }
     if too_many_failures() {
         std::thread::sleep(Duration::from_secs(1));
         let _ = req.respond(error(

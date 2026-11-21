@@ -44,6 +44,7 @@ hex = "0.4"
 dirs-next = "2.0"
 # OS-random bytes for the llama-server loopback API key (ADR-0007).
 getrandom = "0.4"
+qrcodegen = "1.8"
 notify = "8"
 # voice (deferred per ADR-0006)
 whisper-rs = { version = "0.16", optional = true }

@@ -35,6 +35,13 @@ pub fn share_stop(state: State<'_, AppState>) -> ShareStatus {
     share::stop(&state)
 }
 
+/// The pairing card for the phone: the QR of the remote link and the
+/// XXXX-XXXX code both screens confirm with.
+#[tauri::command]
+pub fn share_pair() -> share::PairInfo {
+    share::pair_info()
+}
+
 /// Download cloudflared (pinned release, checksum checked).
 #[tauri::command]
 pub async fn share_cloudflared_fetch(

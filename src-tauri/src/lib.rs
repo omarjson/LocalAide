@@ -259,6 +259,7 @@ pub fn run() {
             commands::share_status,
             commands::share_start,
             commands::share_stop,
+            commands::share_pair,
             commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,

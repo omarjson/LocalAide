@@ -411,6 +411,11 @@ mod tests {
         r
     }
 
+    /// A unique temp dir per test run, so parallel tests never share a log.
+    fn temp_dir_for(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("localaide-usage-{name}-{}", std::process::id()))
+    }
+
     fn write_log(path: &PathBuf, records: &[UsageRecord]) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut file = File::create(path).unwrap();
@@ -421,7 +426,7 @@ mod tests {
 
     #[test]
     fn summary_aggregates_days_and_models() {
-        let dir = std::env::temp_dir().join(format!("localaide-usage-{}", std::process::id()));
+        let dir = temp_dir_for("base");
         let path = dir.join("usage.jsonl");
         let now = 1_800_000_000; // fixed "now" so the test never ages out
         write_log(
@@ -468,8 +473,7 @@ mod tests {
 
     #[test]
     fn today_starts_at_utc_midnight() {
-        let dir = std::env::temp_dir()
-            .join(format!("localaide-usage-today-{}", std::process::id()));
+        let dir = temp_dir_for("today");
         let path = dir.join("usage.jsonl");
         // 12:30 UTC today, and 23:00 yesterday: "today" sees only the first.
         let now = 86_400 + 45_000; // day 2, 12:30
@@ -488,8 +492,7 @@ mod tests {
 
     #[test]
     fn all_time_skips_no_records() {
-        let dir = std::env::temp_dir()
-            .join(format!("localaide-usage-all-{}", std::process::id()));
+        let dir = temp_dir_for("all");
         let path = dir.join("usage.jsonl");
         write_log(&path, &[rec(1, "old", 10), rec(2_000_000_000, "new", 20)]);
         let all = summary_at(&path, 0, 2_000_000_000, None).unwrap();
@@ -500,8 +503,7 @@ mod tests {
 
     #[test]
     fn folder_filter_and_projects_rollup() {
-        let dir = std::env::temp_dir()
-            .join(format!("localaide-usage-folder-{}", std::process::id()));
+        let dir = temp_dir_for("folder");
         let path = dir.join("usage.jsonl");
         let now = 1_900_000_000;
         write_log(
@@ -531,8 +533,7 @@ mod tests {
 
     #[test]
     fn sessions_and_streak_count_from_the_log() {
-        let dir = std::env::temp_dir()
-            .join(format!("localaide-usage-sessions-{}", std::process::id()));
+        let dir = temp_dir_for("sessions");
         let path = dir.join("usage.jsonl");
         let now = 1_950_000_000;
         let today = date_from_ts(now);
@@ -560,8 +561,7 @@ mod tests {
 
     #[test]
     fn streak_breaks_on_a_gap() {
-        let dir = std::env::temp_dir()
-            .join(format!("localaide-usage-gap-{}", std::process::id()));
+        let dir = temp_dir_for("gap");
         let path = dir.join("usage.jsonl");
         let now = 1_960_000_000;
         // Active today and three days back, nothing between: streak is 1.

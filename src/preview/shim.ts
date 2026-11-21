@@ -472,6 +472,7 @@ const fixtures: Record<string, Handler> = {
   }),
 
   share_status: () => ({ on: false, url: null, started_at: null, requests: 0, refused: 0, last_seen: null, cloudflared: { installed: false, path: null, version: null, download_bytes: 17_000_000, available: true } }),
+  share_pair: () => ({ pair_code: "K7M3-XT2Q", on: false, qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3z" fill="#14100c"/></svg>' }),
   web_providers: () => [
     { id: "duckduckgo", label: "DuckDuckGo", needs_key: false, takes_key: true, supports: "search", note: "Works without a key.", key_set: false, is_default: true },
     { id: "wikipedia", label: "Wikipedia", needs_key: false, takes_key: false, supports: "search", note: "Works without a key.", key_set: false, is_default: false },

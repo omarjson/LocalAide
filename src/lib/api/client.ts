@@ -15,6 +15,7 @@ async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
 }
 import type {
   AppConfigDto,
+  PairInfo,
   AppError,
   BackfillResponse,
   BackupConfigDto,
@@ -486,6 +487,11 @@ export class ApiClient {
 
   async shareStop(): Promise<ShareStatus> {
     return invoke<ShareStatus>("share_stop");
+  }
+
+  /** The pairing card: QR of the remote link plus the XXXX-XXXX code. */
+  async sharePair(): Promise<PairInfo> {
+    return invoke<PairInfo>("share_pair");
   }
 
   async fetchCloudflared(onProgress: (e: DownloadProgressEvent) => void): Promise<ProgramStatus> {

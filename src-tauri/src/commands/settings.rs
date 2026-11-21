@@ -217,10 +217,7 @@ pub fn settings_model_prices(
         .config_store
         .lock()
         .map_err(|e| AppError::internal(e.to_string()))?;
-    Ok(store
-        .load()
-        .map_err(AppError::internal)?
-        .model_prices)
+    Ok(store.load().map_err(AppError::internal)?.model_prices)
 }
 
 /// Replace the whole price table. Prices are plain numbers, so negatives
