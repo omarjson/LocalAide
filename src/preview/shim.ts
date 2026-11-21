@@ -416,7 +416,8 @@ const fixtures: Record<string, Handler> = {
   settings_set_context: () => 8192,
   settings_set_model_memory: () => 60,
 
-  update_check: () => ({ current_version: "0.1.8", latest_version: null, update_available: false, release_url: "https://github.com/omarjson/LocalAide/releases", can_install: false, notes: null }),
+  update_check: () => ({ current_version: "0.2.0", latest_version: "0.2.1", update_available: true, release_url: "https://github.com/omarjson/LocalAide/releases", can_install: true, notes: null }),
+  update_install: () => null,
   backup_config_get: () => ({ target_dir: "C:\\Users\\Omar\\Backups", include_api_keys: false, last_backup_at: ago(60 * 24 * 2) }),
   backup_list: () => [
     { file_name: "localaide-20261119.labak", created_at: ago(60 * 24 * 2), size_bytes: 84_000, app_version: "0.1.5" },

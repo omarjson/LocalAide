@@ -30,7 +30,7 @@
   import SidebarChats from "./components/SidebarChats.svelte";
   import { chats, loadThreads, newChat } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
-  import type { EngineDownloadEvent } from "./lib/api/bindings";
+  import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
 
   type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage";
   type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage";
@@ -245,6 +245,29 @@
     }
   };
 
+  // A release found on its own, and its install progress for the chip.
+  let autoUpdate = $state<UpdateCheckResponse | null>(null);
+  let updateStage = $state<"idle" | "running" | "done" | "failed">("idle");
+  let updatePercent = $state(0);
+  const installFromChip = async () => {
+    if (!autoUpdate || updateStage === "running") return;
+    if (!autoUpdate.can_install) {
+      void api.openLink(autoUpdate.release_url);
+      return;
+    }
+    updateStage = "running";
+    updatePercent = 0;
+    try {
+      await api.installUpdate((event) => {
+        updatePercent = event.total ? Math.min(100, Math.round((event.downloaded / event.total) * 100)) : updatePercent;
+        if (event.stage === "installing") updatePercent = 100;
+      });
+      updateStage = "done";
+    } catch {
+      updateStage = "failed";
+    }
+  };
+
   onMount(() => {
     void (async () => {
       try {
@@ -262,6 +285,15 @@
       void refreshShare();
       await decideStartScreen();
       await refreshProbe();
+      // One quiet update check shortly after launch, so a new release is
+      // found without digging through Settings. Never blocks startup.
+      setTimeout(() => {
+        void api.checkForUpdate()
+          .then((res) => {
+            if (res.update_available) autoUpdate = res;
+          })
+          .catch(() => undefined);
+      }, 6000);
     })();
 
     const onKey = (e: KeyboardEvent) => {
@@ -469,6 +501,28 @@
     {#if share.status?.on}
       <button type="button" onclick={() => { if (navigate("settings")) requestSettings("share"); }} class="sharing-on" title={`Anyone with a link can reach this assistant: ${share.status.url ?? ""}`}>
         <span class="sharing-dot" aria-hidden="true"></span>Sharing is on · {share.status.requests} {share.status.requests === 1 ? "request" : "requests"}
+      </button>
+    {/if}
+    {#if autoUpdate?.update_available}
+      <button
+        type="button"
+        onclick={() => void installFromChip()}
+        disabled={updateStage === "running"}
+        class={`flex items-center gap-2 rounded px-1.5 py-0.5 font-medium transition-colors ${updateStage === "failed" ? "text-rose-300 hover:text-rose-200" : "text-ember-200 hover:text-ember-100"}`}
+        title={autoUpdate.can_install ? "Download and install the new version" : autoUpdate.release_url}
+      >
+        <span class="h-1.5 w-1.5 rounded-full bg-ember-400" aria-hidden="true"></span>
+        {#if updateStage === "running"}
+          Updating… {updatePercent}%
+        {:else if updateStage === "done"}
+          Installed — restarting
+        {:else if updateStage === "failed"}
+          Update failed — try again
+        {:else if autoUpdate.can_install}
+          LocalAide {autoUpdate.latest_version ?? ""} is ready — install
+        {:else}
+          Update available — see what's new
+        {/if}
       </button>
     {/if}
     <span class="ml-auto hidden sm:flex items-center gap-2">
