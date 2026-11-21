@@ -26,6 +26,9 @@ import type {
   ChatStreamEvent,
   ChatStreamRequest,
   ChatThread,
+  EngineInfo,
+  OpenWithApp,
+  Starter,
   CompactResponse,
   CloudConfigStatus,
   CloudModeRequest,
@@ -239,14 +242,74 @@ export class ApiClient {
     threadId: string,
     title: string,
     systemPrompt: string | undefined | null,
-    messages: ChatMessage[]
+    messages: ChatMessage[],
+    folder?: string | null,
   ): Promise<void> {
     return invoke<void>("chat_thread_save", {
       threadId,
       title,
       systemPrompt,
       messages,
+      folder: folder ?? null,
     });
+  }
+
+  /** Rewrite a draft into a clearer prompt with the chat's model. */
+  async enhancePrompt(text: string, target?: ChatTarget): Promise<string> {
+    return invoke<string>("chat_enhance_prompt", { text, target: target ?? null });
+  }
+
+  /** One suggested next message, or null. */
+  async suggestNext(question: string, answer: string, target?: ChatTarget): Promise<string | null> {
+    return invoke<string | null>("chat_suggest_next", { question, answer, target: target ?? null });
+  }
+
+  /** Starter prompts learned from how the user's saved chats begin. */
+  async chatStarters(): Promise<Starter[]> {
+    return invoke<Starter[]>("chat_starters");
+  }
+
+  /** Undo a skill the model saved or improved. Returns its name. */
+  async skillsUndo(changeId: string): Promise<string> {
+    return invoke<string>("skills_undo", { changeId });
+  }
+
+  async openFile(path: string, folder?: string | null): Promise<void> {
+    return invoke<void>("files_open", { path, folder: folder ?? null });
+  }
+
+  /** Show a file, or the chat's folder for an empty path, in the file manager. */
+  async revealFile(path: string, folder?: string | null): Promise<void> {
+    return invoke<void>("files_reveal", { path, folder: folder ?? null });
+  }
+
+  async openWithApps(): Promise<OpenWithApp[]> {
+    return invoke<OpenWithApp[]>("files_open_with_apps");
+  }
+
+  async openFileWith(path: string, folder: string | null | undefined, appId: string): Promise<void> {
+    return invoke<void>("files_open_with", { path, folder: folder ?? null, appId });
+  }
+
+  async uiScale(): Promise<number> {
+    return invoke<number>("ui_scale_get");
+  }
+
+  async setUiScale(scale: number): Promise<number> {
+    return invoke<number>("ui_scale_set", { scale });
+  }
+
+  /** Keep a mockup page for the sandboxed frame; returns its id. */
+  async renderFrame(html: string): Promise<string> {
+    return invoke<string>("render_frame_put", { html });
+  }
+
+  async engineInfo(): Promise<EngineInfo> {
+    return invoke<EngineInfo>("engine_info");
+  }
+
+  async engineFetch(): Promise<EngineInfo> {
+    return invoke<EngineInfo>("engine_fetch");
   }
 
   async loadChatThread(threadId: string): Promise<ChatMessage[]> {

@@ -5,25 +5,26 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import { addQuestion, appendReasoning, appendText, finishTool, partsForSaving, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
-  import ApprovalModeMenu from "../components/ApprovalModeMenu.svelte";
+  import { addQuestion, addSubagentStep, appendReasoning, appendText, finishTool, partsForSaving, setSkillChange, setTodos, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
+  import PermissionMenu from "../components/PermissionMenu.svelte";
+  import WorkStatus from "../components/WorkStatus.svelte";
+  import { chatRequest, chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
+  import { fileManagerName } from "../lib/platform";
   import { dur, motion, stagger } from "../lib/motion";
   import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
   import Button from "../components/Button.svelte";
-  import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Slider from "../components/Slider.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ApprovalMode, ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, ModelChoice, ModelChoices, Skill, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ApprovalMode, ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, MessagePart, ModelChoice, ModelChoices, Skill, Starter, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
   import ChatInput from "../components/ChatInput.svelte";
   import ModelPicker from "../components/ModelPicker.svelte";
-  import EffortPicker from "../components/EffortPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
   import { compactionStart, contextUsage, fits } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
@@ -51,9 +52,11 @@
   const removeImage = (index: number) => {
     pendingImages.splice(index, 1);
   };
-  let threads = $state<ChatThread[]>([]);
   let activeThreadId = $state<string | null>(null);
   let activeThreadTitle = $state<string>("New Conversation");
+  // The project folder this chat works in; null for a plain chat in the
+  // shared workspace.
+  let activeFolder = $state<string | null>(null);
 
   let input = $state("");
   let streaming = $state(false);
@@ -79,7 +82,6 @@
   // Read by screen readers once per answer, instead of every streamed token.
   let liveStatus = $state("");
   let showMoreActions = $state(false);
-  let pendingDeleteThreadId = $state<string | null>(null);
   let modelsChecked = $state(false);
 
   // Files waiting to go with the next message.
@@ -92,7 +94,7 @@
   let allowedTools = $state<string[]>([]);
   let mcpList = $state<McpServer[]>([]);
 
-  let { onOpenModels, newThreadTick = 0 }: { onOpenModels?: () => void; newThreadTick?: number } = $props();
+  let { onOpenModels, newThreadTick = 0, active = true }: { onOpenModels?: () => void; newThreadTick?: number; active?: boolean } = $props();
 
   // Mode and context switches, remembered between sessions.
   const OPTIONS_KEY = "localaide-chat-options";
@@ -109,6 +111,11 @@
         mcpOff?: unknown;
         efforts?: unknown;
         autoCompactAt?: unknown;
+        learnSkills?: unknown;
+        suggestNext?: unknown;
+        visuals?: unknown;
+        subagents?: unknown;
+        buildMode?: unknown;
       };
     } catch {
       return {};
@@ -120,15 +127,20 @@
   let useFiles = $state(savedOptions.files !== false);
   let useSkills = $state(savedOptions.skills !== false);
   let useShell = $state(savedOptions.shell !== false);
-  // The approval switch in the header: "auto" is remembered for every chat,
-  // "Allow for this chat" lasts until the chat changes.
-  let approveAuto = $state(savedOptions.approvals === "auto");
-  let approveChat = $state(false);
-  const approvalMode = $derived<ApprovalMode>(approveAuto ? "auto" : approveChat ? "chat" : "ask");
+  // The permission icon in the chat box: Plan mode, Ask before changes,
+  // Autonomous or Full access. Remembered for every chat.
+  const isMode = (v: unknown): v is ApprovalMode => v === "plan" || v === "ask" || v === "smart" || v === "auto";
+  let approvalMode = $state<ApprovalMode>(isMode(savedOptions.approvals) ? savedOptions.approvals : "ask");
+  // The mode Build switches back to after a plan.
+  let buildMode = $state<ApprovalMode>(isMode(savedOptions.buildMode) && savedOptions.buildMode !== "plan" ? savedOptions.buildMode : "ask");
   const setApprovalMode = (next: ApprovalMode) => {
-    approveAuto = next === "auto";
-    approveChat = next === "chat";
+    approvalMode = next;
+    if (next !== "plan") buildMode = next;
   };
+  let learnSkills = $state(savedOptions.learnSkills !== false);
+  let suggestNext = $state(savedOptions.suggestNext !== false);
+  let visuals = $state(savedOptions.visuals !== false);
+  let useSubagents = $state(savedOptions.subagents !== false);
   // MCP servers switched off in chat (they stay on in Settings).
   let mcpOff = $state<string[]>(Array.isArray(savedOptions.mcpOff) ? savedOptions.mcpOff.filter((v): v is string => typeof v === "string") : []);
   // The thinking effort chosen for each model, by picker key.
@@ -141,7 +153,7 @@
     try {
       localStorage.setItem(
         OPTIONS_KEY,
-        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, shell: useShell, approvals: approveAuto ? "auto" : "ask", mcpOff, efforts, autoCompactAt }),
+        JSON.stringify({ mode, web: useWeb, recall: useRecall, files: useFiles, skills: useSkills, shell: useShell, approvals: approvalMode, buildMode, mcpOff, efforts, autoCompactAt, learnSkills, suggestNext, visuals, subagents: useSubagents }),
       );
     } catch {
       // Storage can be unavailable; the switches still work for this session.
@@ -158,7 +170,6 @@
   };
   const currentModeInfo = $derived(chatModes().find((m) => m.id === mode));
   let showSettingsPanel = $state(false);
-  let threadQuery = $state("");
 
   // The saved model loads in the background at startup. Show progress, and show a
   // failed load in the chat so the user knows why nothing answers.
@@ -264,7 +275,6 @@
   let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
   let showTools = $state(false);
-  let showThreads = $state(false);
   let scrollEl = $state<HTMLDivElement>();
   let toolPath = $state("");
   let toolContent = $state("");
@@ -282,12 +292,26 @@
     { label: "Concise", prompt: "You are a concise analyst. Answer directly with bullet points. No conversational filler." },
   ];
 
-  const starterPrompts: { title: string; prompt: string; icon: "clock" | "chat" | "file" | "sliders" }[] = [
+  const defaultStarters: { title: string; prompt: string; icon: "clock" | "chat" | "file" | "sliders" }[] = [
     { title: "Plan my week", prompt: "Help me plan my week.", icon: "clock" },
     { title: "Write an email", prompt: "Draft a polite email about a late payment.", icon: "chat" },
     { title: "Summarize", prompt: "Summarize this note in five short points.", icon: "file" },
     { title: "Compare options", prompt: "Compare these two choices and explain the trade-offs.", icon: "sliders" },
   ];
+  // Learned from how the user's saved chats begin (on this computer); the
+  // defaults fill the rest.
+  let learnedStarters = $state<Starter[]>([]);
+  const loadStarters = async () => {
+    try {
+      learnedStarters = await api.chatStarters();
+    } catch {
+      learnedStarters = [];
+    }
+  };
+  const starterPrompts = $derived([
+    ...learnedStarters.map((s) => ({ title: s.title, prompt: s.prompt, icon: "sparkle" as const, learned: true })),
+    ...defaultStarters.filter((d) => !learnedStarters.some((l) => l.prompt === d.prompt)).map((d) => ({ ...d, learned: false })),
+  ].slice(0, 4));
 
   const greeting = (() => {
     const hour = new Date().getHours();
@@ -320,26 +344,40 @@
     }
   });
 
-  const loadThreads = async () => {
-    try {
-      threads = await api.listChatThreads();
-    } catch (e: unknown) {
-      threads = [];
-      chatError = `Saved chats could not load: ${errorMessage(e)}`;
-    }
-  };
+  const loadThreads = () => loadSavedChats();
 
-  const newChat = () => {
+  const newChat = (folder: string | null = null) => {
     if (streaming) return;
     activeThreadId = `t_${Date.now()}`;
     activeThreadTitle = "New Conversation";
+    activeFolder = folder;
     messages = [];
     pendingFiles = [];
     allowedTools = [];
-    approveChat = false;
     approvals = {};
     compactedBefore = 0;
+    suggestion = null;
+    void loadStarters();
   };
+
+  // The sidebar opens chats and starts new ones through the chats store.
+  let handledRequest = untrack(() => chatRequest.tick);
+  $effect(() => {
+    const tick = chatRequest.tick;
+    const action = chatRequest.action;
+    if (tick === handledRequest || !action) return;
+    handledRequest = tick;
+    untrack(() => {
+      if (action.kind === "open") void selectThread(action.thread);
+      else if (action.kind === "new") newChat(action.folder);
+      else if (action.kind === "deleted" && action.id === activeThreadId) newChat(activeFolder);
+    });
+  });
+  $effect(() => {
+    chats.activeId = messages.length > 0 ? activeThreadId : null;
+    chats.activeFolder = activeFolder;
+    chats.busy = streaming;
+  });
 
   // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
   // on a remount (navigating back to chat) the tick already equals its initial
@@ -357,8 +395,9 @@
     if (streaming) return;
     activeThreadId = t.id;
     activeThreadTitle = t.title;
+    activeFolder = t.folder ?? null;
+    suggestion = null;
     allowedTools = [];
-    approveChat = false;
     approvals = {};
     compactedBefore = 0;
     systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
@@ -368,28 +407,7 @@
       messages = [];
       chatError = `That chat could not load: ${errorMessage(e)}`;
     }
-    showThreads = false;
     scrollToBottom(true);
-  };
-
-  const deleteThread = async (id: string) => {
-    try {
-      await api.deleteChatThread(id);
-      if (activeThreadId === id) newChat();
-      await loadThreads();
-    } catch (e: unknown) {
-      chatError = `That chat could not be deleted: ${errorMessage(e)}`;
-    }
-  };
-
-  const askDeleteThread = (id: string) => {
-    pendingDeleteThreadId = id;
-  };
-
-  const confirmDeleteThread = async () => {
-    const id = pendingDeleteThreadId;
-    pendingDeleteThreadId = null;
-    if (id) await deleteThread(id);
   };
 
   const persistCurrentThread = async () => {
@@ -410,7 +428,7 @@
       attachments: rest.attachments?.map((a) => ({ ...a, data_url: null })),
     }));
     try {
-      await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, textOnly);
+      await api.saveChatThread(activeThreadId, activeThreadTitle, systemPrompt, textOnly, activeFolder);
       await loadThreads();
     } catch (e: unknown) {
       sendFailed = false;
@@ -535,13 +553,88 @@
     return `${d.toLocaleString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}${zone ? ` (${zone})` : ""}`;
   };
 
-  // A tapped answer is sent as the user's reply.
+  // A tapped answer is sent as the user's reply. An earlier question the
+  // user moved past can still be answered; it goes as a new message.
+  const findQuestion = (questionId: string) => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const part = messages[i].parts?.find((p) => p.type === "question" && p.id === questionId);
+      if (part && part.type === "question") return part;
+    }
+    return undefined;
+  };
   const answerQuestion = (text: string, questionId: string | null) => {
     if (streaming || !text.trim()) return;
-    const last = messages.at(-1);
-    const part = questionId ? last?.parts?.find((p) => p.type === "question" && p.id === questionId) : undefined;
-    if (part && part.type === "question") part.answer = text;
+    const part = questionId ? findQuestion(questionId) : undefined;
+    if (part) part.answer = text;
     input = text;
+    void send();
+  };
+  const dismissQuestion = (questionId: string) => {
+    const part = findQuestion(questionId);
+    if (part) {
+      part.dismissed = true;
+      void persistCurrentThread();
+    }
+  };
+  // Undo a skill the model saved or improved on its own.
+  const undoSkill = async (toolId: string) => {
+    for (const m of messages) {
+      const part = m.parts?.find((p) => p.type === "tool" && p.id === toolId);
+      if (part?.type === "tool" && part.skill && !part.skill.undone) {
+        try {
+          const name = await api.skillsUndo(part.skill.change_id);
+          part.skill.undone = true;
+          showToast(`Undone: “${name}” is as it was before.`);
+          void persistCurrentThread();
+          skills = await api.skillsList().catch(() => skills);
+        } catch (e: unknown) {
+          showToast(`The skill could not be undone: ${errorMessage(e)}`, "error");
+        }
+        return;
+      }
+    }
+  };
+
+  // The suggested next message, after an answer (Settings: chat settings).
+  let suggestion = $state<string | null>(null);
+  let suggestTicket = 0;
+  const askSuggestion = async (question: string, answer: string) => {
+    const ticket = ++suggestTicket;
+    try {
+      const next = await api.suggestNext(question, answer, activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
+      if (ticket === suggestTicket && !streaming && !input.trim()) suggestion = next;
+    } catch {
+      // A suggestion is a nicety; nothing to report.
+    }
+  };
+
+  // Rewrite the draft into a clearer prompt with the chat's model.
+  let enhancing = $state(false);
+  const enhancePrompt = async () => {
+    const draft = input.trim();
+    if (!draft || enhancing) return;
+    enhancing = true;
+    try {
+      const better = await api.enhancePrompt(draft, activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
+      if (input.trim() === draft) {
+        previousDraft = draft;
+        input = better;
+        showToast("Prompt improved. Press Ctrl+Z in the box, or Undo here, to go back.");
+      }
+    } catch (e: unknown) {
+      showToast(`The prompt could not be improved: ${errorMessage(e)}`, "error");
+    } finally {
+      enhancing = false;
+    }
+  };
+  let previousDraft = $state<string | null>(null);
+
+  // A finished plan (Plan mode) can be carried out with one press.
+  let planReady = $state(false);
+  const buildPlan = () => {
+    planReady = false;
+    setApprovalMode(buildMode === "plan" ? "ask" : buildMode);
+    input = "Go ahead and carry out the plan above.";
     void send();
   };
   const focusComposer = () => {
@@ -553,6 +646,16 @@
     if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
     const userMsg = input.trim();
     input = "";
+    suggestion = null;
+    previousDraft = null;
+    planReady = false;
+    const sentInMode = approvalMode;
+    // Questions left open count as moved past; they stay answerable.
+    for (const m of messages) {
+      for (const p of m.parts ?? []) {
+        if (p.type === "question" && !p.answer && !p.dismissed) p.deferred = true;
+      }
+    }
     if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, { from: historyFrom, draft: userMsg, systemPrompt, reserve: answerReserve }), autoCompactAt)) {
       if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
     }
@@ -632,6 +735,10 @@
           effort,
           attachments: files,
           now: nowLabel(),
+          folder: activeFolder,
+          learn_skills: learnSkills,
+          use_subagents: useSubagents,
+          rich_output: visuals,
         },
         (event) => {
           const now = performance.now();
@@ -654,6 +761,13 @@
           } else if (event.type === "tool_result") {
             finishTool(parts(), event.payload);
             delete approvals[event.payload.id];
+          } else if (event.type === "todos") {
+            setTodos(parts(), event.payload.items);
+          } else if (event.type === "subagent_step") {
+            addSubagentStep(parts(), event.payload.id, event.payload.step);
+          } else if (event.type === "skill_change") {
+            setSkillChange(parts(), event.payload);
+            void api.skillsList().then((list) => (skills = list)).catch(() => undefined);
           } else if (event.type === "status") {
             const label = event.payload.label;
             if (label.startsWith("Answering with ")) {
@@ -677,7 +791,13 @@
             activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
-            void persistCurrentThread();
+            void persistCurrentThread().then(() => {
+              if (messages.length <= 2) void loadStarters();
+            });
+            if (sentInMode === "plan" && answer().content.trim() && event.payload.finish_reason !== "cancelled") planReady = true;
+            if (suggestNext && event.payload.finish_reason !== "question" && event.payload.finish_reason !== "cancelled" && answer().content.trim()) {
+              void askSuggestion(userMsg, answer().content);
+            }
           } else if (event.type === "error") {
             fail(errorMessage(event.payload.error));
           }
@@ -849,26 +969,6 @@
     }
   };
 
-  // Group saved chats by when they were last used.
-  const threadGroups = $derived.by(() => {
-    const q = threadQuery.trim().toLowerCase();
-    const list = threads.filter((t) => !q || t.title.toLowerCase().includes(q));
-    const day = 24 * 60 * 60 * 1000;
-    const startOfToday = new Date().setHours(0, 0, 0, 0);
-    const groups: { label: string; items: ChatThread[] }[] = [
-      { label: "Today", items: [] },
-      { label: "Yesterday", items: [] },
-      { label: "This week", items: [] },
-      { label: "Older", items: [] },
-    ];
-    for (const t of [...list].sort((a, b) => b.updated_at - a.updated_at)) {
-      const at = t.updated_at < 1e12 ? t.updated_at * 1000 : t.updated_at;
-      const i = at >= startOfToday ? 0 : at >= startOfToday - day ? 1 : at >= startOfToday - 6 * day ? 2 : 3;
-      groups[i].items.push(t);
-    }
-    return groups.filter((g) => g.items.length > 0);
-  });
-
   // Make the chosen model the one that answers. A local model loads first.
   const selectModel = async (choice: ModelChoice) => {
     if (choice.active) return;
@@ -909,6 +1009,26 @@
   const setEffort = (value: string) => {
     if (activeChoice) efforts = { ...efforts, [activeChoice.key]: value };
   };
+  // Ctrl+T steps through the active model's thinking levels.
+  const cycleEffort = () => {
+    if (!activeChoice || activeChoice.efforts.length === 0) return;
+    const levels = ["auto", ...activeChoice.efforts.filter((e) => e !== "auto")];
+    const next = levels[(levels.indexOf(effort) + 1) % levels.length];
+    setEffort(next);
+    showToast(`Thinking effort: ${next === "auto" ? "Auto" : next.charAt(0).toUpperCase() + next.slice(1)}`);
+  };
+
+  // Work status: the newest to-do list, and every subagent in this chat.
+  type ToolPart = Extract<MessagePart, { type: "tool" }>;
+  const workTodos = $derived.by(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const t = messages[i].parts?.find((p) => p.type === "todos");
+      if (t?.type === "todos") return t.items;
+      if (messages[i].role === "user" && i < messages.length - 2) break;
+    }
+    return null;
+  });
+  const workAgents = $derived(messages.flatMap((m) => (m.parts ?? []).filter((p): p is ToolPart => p.type === "tool" && p.group === "subagent")));
 
   const toggleMcp = (id: string) => {
     mcpOff = mcpOff.includes(id) ? mcpOff.filter((x) => x !== id) : [...mcpOff, id];
@@ -955,6 +1075,7 @@
     void getCurrentWebview()
       .onDragDropEvent((event) => {
         const p = event.payload;
+        if (!active) return;
         if (p.type === "enter" || p.type === "over") dragging = true;
         else if (p.type === "leave") dragging = false;
         else if (p.type === "drop") {
@@ -995,20 +1116,28 @@
   onMount(() => {
     activeThreadId = `t_${Date.now()}`;
     loadThreads();
+    void loadStarters();
   });
 
   // Escape stops an answer even when the message box does not have focus.
   // The message box and open menus handle Escape first and mark it handled.
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
+      // The chat stays loaded while other screens show; it only listens
+      // while it is on screen.
+      if (!active) return;
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
         pickerOpen = !pickerOpen;
         return;
       }
-      if (event.key === "Escape" && (showSettingsPanel || showThreads) && !event.defaultPrevented) {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        cycleEffort();
+        return;
+      }
+      if (event.key === "Escape" && showSettingsPanel && !event.defaultPrevented) {
         showSettingsPanel = false;
-        showThreads = false;
         return;
       }
       if (event.key === "Escape" && streaming && !event.defaultPrevented) {
@@ -1033,18 +1162,14 @@
 <div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
   <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
-    <button
-      type="button"
-      aria-expanded={showThreads}
-      aria-controls="chat-history"
-      onclick={() => { showThreads = !showThreads; if (showThreads) void loadThreads(); }}
-      class="flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-ink-100 transition-colors hover:bg-veil/5"
-      title="Saved chats"
-    >
-      <Icon name="clock" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
-      <span class="max-w-[16rem] truncate font-semibold">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</span>
-      <Icon name="chevron-down" class={`h-4 w-4 shrink-0 text-ink-500 transition-transform duration-200 ${showThreads ? "rotate-180" : ""}`} />
-    </button>
+    <div class="flex min-w-0 items-center gap-2 px-1">
+      <h2 class="max-w-[18rem] truncate text-sm font-semibold text-ink-100">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</h2>
+      {#if activeFolder}
+        <button type="button" onclick={() => void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error"))} class="folder-chip" title={`This chat works in ${activeFolder}. Show it in ${fileManagerName()}.`}>
+          <Icon name="folder" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">{folderName(activeFolder)}</span>
+        </button>
+      {/if}
+    </div>
 
     <div class="ml-auto flex items-center gap-1.5">
       {#if onlineChoice}
@@ -1057,7 +1182,6 @@
         </span>
       {/if}
 
-      <ApprovalModeMenu mode={approvalMode} onChange={setApprovalMode} />
       <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
       <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
@@ -1067,50 +1191,14 @@
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void copyCurrentThread(); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("json"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="menu-item"><Icon name="file" class="h-4 w-4" />Summarize last answer</button>
+            <div class="my-1 h-px bg-ink-800" role="separator"></div>
+            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error")); }} class="menu-item"><Icon name="folder-open" class="h-4 w-4" />Open {activeFolder ? "the chat's folder" : "the workspace folder"} in {fileManagerName()}</button>
           </div>
         {/if}
       </div>
-      <button type="button" onclick={newChat} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-sm shadow-ember-900/40 transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
+      <button type="button" onclick={() => newChat(activeFolder)} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-sm shadow-ember-900/40 transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
     </div>
   </header>
-
-  <!-- Saved chats drawer -->
-  {#if showThreads}
-    <div role="presentation" class="absolute inset-0 top-14 z-20 bg-black/30" onclick={() => showThreads = false} in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(motion.fast) }}></div>
-    <div
-      id="chat-history"
-      role="dialog"
-      aria-label="Saved chats"
-      tabindex="-1"
-      onkeydown={(e) => { if (e.key === "Escape") showThreads = false; }}
-      class="absolute bottom-0 left-0 top-14 z-30 flex w-80 max-w-[85vw] flex-col border-r border-edge bg-ink-950 shadow-2xl"
-      transition:fly={{ x: -24, duration: dur(motion.base), easing: motion.enter }}
-    >
-      <div class="flex items-center gap-2 border-b border-ink-800 p-3">
-        <span class="field-shell flex h-9 flex-1 items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-2.5">
-          <Icon name="search" class="h-4 w-4 shrink-0 text-ink-500" />
-          <input type="search" bind:value={threadQuery} aria-label="Find a chat" placeholder="Find a chat" class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500" />
-        </span>
-        <button type="button" aria-label="Close saved chats" onclick={() => showThreads = false} class="chat-icon-btn"><Icon name="close" class="h-4 w-4" /></button>
-      </div>
-      <div class="flex-1 overflow-y-auto p-2">
-        {#each threadGroups as group (group.label)}
-          <div class="px-2 pb-1 pt-3 text-xs font-semibold text-ink-500">{group.label}</div>
-          {#each group.items as t (t.id)}
-            <div class={`group flex items-center rounded-lg transition-colors ${t.id === activeThreadId ? "bg-ember-500/10 text-ink-50" : "text-ink-300 hover:bg-veil/5"}`}>
-              <button type="button" aria-current={t.id === activeThreadId ? "true" : undefined} onclick={() => selectThread(t)} class="min-w-0 flex-1 px-2.5 py-2 text-left">
-                <div class="truncate text-sm font-medium">{t.title}</div>
-                <div class="text-xs text-ink-500">{t.message_count} messages</div>
-              </button>
-              <button type="button" onclick={() => askDeleteThread(t.id)} class="mr-1 rounded p-1.5 text-ink-500 opacity-0 transition-opacity hover:text-rose-400 focus:opacity-100 group-hover:opacity-100" aria-label={`Delete chat ${t.title}`} title="Delete chat"><Icon name="trash" class="h-4 w-4" /></button>
-            </div>
-          {/each}
-        {:else}
-          <p class="px-3 py-8 text-center text-sm text-ink-500">{threadQuery ? "No chat matches." : "No saved chats yet. Chats save themselves after the first answer."}</p>
-        {/each}
-      </div>
-    </div>
-  {/if}
 
   <!-- Chat settings sheet -->
   {#if showSettingsPanel}
@@ -1128,7 +1216,7 @@
       </div>
       <div class="flex-1 space-y-6 overflow-y-auto p-4">
         <section>
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Response style</h3>
+          <h3 class="mb-2 text-[13px] font-semibold text-ink-300">Response style</h3>
           <div class="grid grid-cols-2 gap-2">
             {#each systemPresets as p (p.label)}
               <button type="button" onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }} aria-pressed={systemPrompt === p.prompt} class={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${systemPrompt === p.prompt ? "border-ember-500/50 bg-ember-500/10 text-ink-50" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}>{p.label}</button>
@@ -1137,7 +1225,24 @@
         </section>
 
         <section>
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Mode</h3>
+          <h3 class="mb-2 text-[13px] font-semibold text-ink-300">While it works</h3>
+          <div class="space-y-1">
+            {#each [
+              { label: "Learn skills from chats", hint: "Saves and improves skills on its own, with a note and Undo.", on: learnSkills, toggle: () => (learnSkills = !learnSkills), show: moduleOn("skills") },
+              { label: "Suggest a next prompt", hint: "One short suggestion after each answer. Tab takes it.", on: suggestNext, toggle: () => (suggestNext = !suggestNext), show: true },
+              { label: "Charts, diagrams and mockups", hint: "Draws them in the chat, sandboxed from your files.", on: visuals, toggle: () => (visuals = !visuals), show: true },
+              { label: "Subagents", hint: "Hands parts of a task to helpers that only read.", on: useSubagents, toggle: () => (useSubagents = !useSubagents), show: true },
+            ].filter((o) => o.show) as o (o.label)}
+              <button type="button" role="switch" aria-checked={o.on} onclick={o.toggle} class="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-veil/5">
+                <span class="min-w-0 flex-1"><span class="block text-sm text-ink-100">{o.label}</span><span class="block text-xs leading-5 text-ink-400">{o.hint}</span></span>
+                <span class={`sheet-switch ${o.on ? "sheet-switch-on" : ""}`} aria-hidden="true"><span></span></span>
+              </button>
+            {/each}
+          </div>
+        </section>
+
+        <section>
+          <h3 class="mb-2 text-[13px] font-semibold text-ink-300">How LocalAide answers</h3>
           <div class="space-y-1.5">
             {#each chatModes() as m (m.id)}
               <button type="button" onclick={() => changeMode(m.id)} aria-pressed={mode === m.id} class={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${mode === m.id ? "border-ember-500/50 bg-ember-500/10" : "border-ink-700 hover:border-edge"}`}>
@@ -1150,7 +1255,7 @@
 
         {#if flag("sampling_controls")}
           <section>
-            <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="flask" class="h-3.5 w-3.5" />Sampling</h3>
+            <h3 class="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink-300"><Icon name="flask" class="h-3.5 w-3.5" />Sampling</h3>
             <label class="block text-sm text-ink-300">
               <span class="flex justify-between"><span>Creativity (temperature)</span><span class="font-mono text-ink-100">{temperature.toFixed(1)}{mode === "strict" ? " · capped at 0.3" : ""}</span></span>
               <Slider min={0} max={2} step={0.1} bind:value={temperature} onchange={savePrefs} class="mt-1 w-full" label="Temperature" />
@@ -1163,7 +1268,7 @@
         {/if}
 
         <section>
-          <h3 class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-500"><Icon name="layers" class="h-3.5 w-3.5" />Context window</h3>
+          <h3 class="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink-300"><Icon name="layers" class="h-3.5 w-3.5" />Context window</h3>
           <label class="block text-sm text-ink-300">
             <span class="flex justify-between"><span>Auto-compact at</span><span class="font-mono text-ink-100">{autoCompactAt}%</span></span>
             <Slider min={50} max={95} step={5} bind:value={autoCompactAt} class="mt-1 w-full" label="Auto-compact threshold" />
@@ -1226,12 +1331,12 @@
 
         {#if activeChoice}
           <div class="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {#each starterPrompts as sp, i (sp.title)}
-              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} class="lift group flex items-start gap-3 rounded-xl border border-ink-700 bg-ink-900/80 p-3.5 text-left hover:border-edge hover:bg-ink-900">
+            {#each starterPrompts as sp, i (sp.prompt)}
+              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} title={sp.learned ? "You often start chats like this" : undefined} class="lift group flex items-start gap-3 rounded-xl border border-ink-700 bg-ink-900/80 p-3.5 text-left hover:border-edge hover:bg-ink-900">
                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-300 transition-colors group-hover:bg-ember-500/15 group-hover:text-ember-300"><Icon name={sp.icon} class="h-[18px] w-[18px]" /></span>
                 <span class="min-w-0">
                   <span class="block text-sm font-semibold text-ink-100">{sp.title}</span>
-                  <span class="block text-sm text-ink-400">{sp.prompt}</span>
+                  <span class="line-clamp-2 block text-sm text-ink-400">{sp.prompt}</span>
                 </span>
               </button>
             {/each}
@@ -1271,6 +1376,10 @@
             approvals={idx === messages.length - 1 ? approvals : {}}
             onDecide={(toolId, decision) => void decideTool(toolId, decision)}
             onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
+            onAnswerDeferred={!streaming ? (text, id) => answerQuestion(text, id) : undefined}
+            onDismissQuestion={dismissQuestion}
+            onUndoSkill={(id) => void undoSkill(id)}
+            folder={activeFolder}
             onOther={focusComposer}
             stats={flag("answer_stats") ? msg.stats ?? null : null}
             allowRaw={flag("raw_messages")}
@@ -1300,6 +1409,27 @@
       {#if chatError}
         <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
       {/if}
+      <WorkStatus todos={workTodos} subagents={workAgents} />
+      {#if planReady && !streaming}
+        <div class="mb-2 flex items-center gap-3 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+          <Icon name="lightbulb" class="h-4 w-4 shrink-0 text-sky-300" />
+          <span class="min-w-0 flex-1 text-ink-200">The plan is ready. Build carries it out with the {buildMode === "auto" ? "Full access" : buildMode === "smart" ? "Autonomous" : "Ask before changes"} permission.</span>
+          <button type="button" onclick={() => (planReady = false)} class="rounded-lg px-2.5 py-1 text-ink-300 hover:bg-veil/5">Keep planning</button>
+          <button type="button" onclick={buildPlan} class="rounded-lg bg-ember-500 px-3 py-1 font-semibold text-on-ember hover:bg-ember-400">Build</button>
+        </div>
+      {/if}
+      {#if suggestion && !input.trim() && !streaming}
+        <div class="mb-2 flex items-center gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+          <button type="button" class="suggest-chip" onclick={() => { input = suggestion ?? ""; focusComposer(); }} title="Use this prompt (Tab)"><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="truncate">{suggestion}</span></button>
+          <button type="button" aria-label="Hide the suggestion" class="grid h-6 w-6 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestion = null)}><Icon name="close" class="h-3.5 w-3.5" /></button>
+        </div>
+      {/if}
+      {#if previousDraft && input.trim() && !streaming}
+        <div class="mb-2 flex items-center gap-2 text-xs text-ink-400">
+          <Icon name="wand" class="h-3.5 w-3.5 text-ember-300" />Improved by the model.
+          <button type="button" class="underline underline-offset-2 hover:text-ink-100" onclick={() => { input = previousDraft ?? input; previousDraft = null; }}>Undo</button>
+        </div>
+      {/if}
       <ChatInput
         bind:input={input}
         bind:toolPath={toolPath}
@@ -1316,9 +1446,9 @@
         skills={moduleOn("skills") ? skills : []}
         onPickSkill={(body) => { input = body; }}
         onSlashCommand={handleSlashCommand}
-        {mode}
-        modes={chatModes()}
-        onModeChange={changeMode}
+        onEnhance={() => void enhancePrompt()}
+        {enhancing}
+        {suggestion}
         {useWeb}
         {webAvailable}
         onToggleWeb={() => useWeb = !useWeb}
@@ -1342,12 +1472,14 @@
         onToggleMcp={toggleMcp}
         onManageTools={() => requestSettings("tools")}
       >
+        {#snippet leading()}
+          <PermissionMenu mode={approvalMode} onChange={setApprovalMode} />
+        {/snippet}
         {#snippet trailing()}
           <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} onCompact={() => handleSlashCommand("compact")} />
-          {#if activeChoice && activeChoice.efforts.length > 0}
-            <EffortPicker efforts={activeChoice.efforts} value={effort} onChange={setEffort} />
-          {/if}
           <ModelPicker
+            {effort}
+            onEffort={setEffort}
             {choices}
             bind:open={pickerOpen}
             busy={pickerBusy || engineLoading}
@@ -1383,15 +1515,7 @@
     onDeny={() => runApprovedTool(false)}
   />
 
-  {#if pendingDeleteThreadId}
-    <ConfirmDialog
-      title="Delete this chat?"
-      message="This removes the saved conversation from this computer. You cannot undo it."
-      confirmLabel="Delete chat"
-      onConfirm={() => void confirmDeleteThread()}
-      onCancel={() => pendingDeleteThreadId = null}
-    />
-  {/if}
+
 </div>
 
 <style>
@@ -1408,6 +1532,67 @@
   .chat-icon-btn[aria-pressed="true"] {
     background: color-mix(in oklab, var(--color-veil) 6%, transparent);
     color: var(--color-ink-50);
+  }
+  .folder-chip {
+    display: inline-flex;
+    max-width: 14rem;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-ink-700);
+    padding: 0.1rem 0.55rem;
+    font-size: 0.75rem;
+    color: var(--color-ink-300);
+    transition: border-color 150ms ease-out, color 150ms ease-out;
+  }
+  .folder-chip:hover {
+    border-color: var(--color-edge);
+    color: var(--color-ink-50);
+  }
+  .suggest-chip {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 9999px;
+    border: 1px dashed var(--color-ink-700);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-ink-300);
+    transition: border-color 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .suggest-chip:hover {
+    border-style: solid;
+    border-color: var(--color-edge);
+    background: color-mix(in oklab, var(--color-veil) 4%, transparent);
+    color: var(--color-ink-50);
+  }
+  .sheet-switch {
+    position: relative;
+    margin-top: 0.2rem;
+    height: 1.25rem;
+    width: 2.25rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-ink-700);
+    transition: background-color 150ms ease-out;
+  }
+  .sheet-switch span {
+    position: absolute;
+    left: 0.15rem;
+    top: 0.15rem;
+    height: 0.95rem;
+    width: 0.95rem;
+    border-radius: 9999px;
+    background: white;
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .sheet-switch-on {
+    background: var(--color-ember-500);
+  }
+  .sheet-switch-on span {
+    transform: translateX(1rem);
   }
   .menu-item {
     display: flex;

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { fade, fly, scale } from "svelte/transition";
   import { api, errorMessage } from "./lib/api/client";
   import { dur, enterDialog, enterScreen, leaveDialog, motion } from "./lib/motion";
@@ -24,6 +25,10 @@
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
   import SearchScreen from "./screens/SearchScreen.svelte";
+  import SidebarChats from "./components/SidebarChats.svelte";
+  import { chats, loadThreads, newChat } from "./lib/chats.svelte";
+  import { applyScale, nudgeScale } from "./lib/scale.svelte";
+  import type { EngineDownloadEvent } from "./lib/api/bindings";
 
   type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search";
   type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings";
@@ -66,9 +71,16 @@
   // True while setup downloads a model. Leaving setup then would hide the
   // download, so navigation waits until it ends or is cancelled.
   let setupBusy = $state(false);
-  // Bumped by Ctrl/Cmd+N so ChatScreen starts a fresh thread even when it is
-  // already on screen.
-  let chatResetTick = $state(0);
+
+  // The chat screen stays loaded once opened, so its conversation (and an
+  // answer that is still streaming) survives a visit to another screen.
+  let chatMounted = $state(false);
+  $effect(() => {
+    if (screen === "chat") chatMounted = true;
+  });
+  // Where each screen was scrolled, so coming back keeps the place.
+  let canvasEl = $state<HTMLElement>();
+  const scrollTops: Partial<Record<Screen, number>> = {};
 
   /** Shows a screen. Returns false when setup is busy and the screen stays. */
   const navigate = (s: Screen): boolean => {
@@ -78,10 +90,41 @@
     }
     // The memory share for models can change in Settings, so read it again.
     if (screen === "settings" && s !== "settings") void refreshProbe();
+    if (screen && canvasEl) scrollTops[screen] = canvasEl.scrollTop;
     screen = s;
     mobileNav = false;
+    const top = scrollTops[s] ?? 0;
+    void tick().then(() => tick()).then(() => {
+      if (canvasEl) canvasEl.scrollTop = top;
+    });
     return true;
   };
+
+  // The model engine downloads the first time a model loads.
+  let engineDownload = $state<EngineDownloadEvent | null>(null);
+  onMount(() => {
+    let stop: (() => void) | undefined;
+    let closed = false;
+    void listen<EngineDownloadEvent>("engine-download", (event) => {
+      engineDownload = event.payload;
+      if (event.payload.state === "ready") {
+        showToast("The model engine for this processor is ready.");
+        setTimeout(() => (engineDownload = null), 1500);
+      } else if (event.payload.state === "failed") {
+        showToast(`The model engine could not be downloaded: ${event.payload.message ?? "unknown error"}`, "error");
+        engineDownload = null;
+      }
+    })
+      .then((unlisten) => {
+        if (closed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => undefined);
+    return () => {
+      closed = true;
+      stop?.();
+    };
+  });
 
   // Screens can ask for another screen (for example chat opening Settings).
   let handledScreenTick = 0;
@@ -123,7 +166,7 @@
     { id: "skills", label: "Skills", hint: `${mod}4`, icon: "skills", group: "Go to", run: () => navigate("skills") },
     { id: "models", label: "Models", hint: `${mod}5`, icon: "models", group: "Go to", run: () => navigate("models") },
     { id: "settings", label: "Settings", hint: `${mod}6`, icon: "settings", group: "Go to", run: () => navigate("settings") },
-    { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) chatResetTick += 1; } },
+    { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) newChat(chats.activeFolder); } },
     { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
     { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
@@ -211,6 +254,8 @@
         console.error("Theme could not load", e);
       }
       await loadDev();
+      void applyScale();
+      void loadThreads();
       void loadVoice();
       void refreshShare();
       await decideStartScreen();
@@ -230,9 +275,18 @@
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
         if (navigate("chat")) {
-          chatResetTick += 1;
+          newChat(chats.activeFolder);
           showToast("New chat ready");
         }
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        void nudgeScale(0.1);
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key === "-") {
+        e.preventDefault();
+        void nudgeScale(-0.1);
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key === "0") {
+        e.preventDefault();
+        void nudgeScale(0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         navigate("settings");
@@ -309,6 +363,11 @@
       {#if navVisible("memory")}{@render navItem("memory", "Memory")}{/if}
       {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
       {@render navItem("models", "Models")}
+      {#if showLabels && screen !== "setup"}
+        <div class="mt-2 border-t border-ink-800">
+          <SidebarChats onOpen={() => navigate("chat")} />
+        </div>
+      {/if}
     </nav>
     <div class="shrink-0 space-y-0.5 pt-1.5 border-t border-ink-800">
       {@render navItem("settings", "Settings")}
@@ -326,13 +385,18 @@
     </div>
   </aside>
 
-  <section class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+  <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
     <div class="lg:hidden sticky top-0 z-30 shrink-0 bg-ink-950 p-3 border-b border-edge flex items-center gap-3">
       <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-md hover:bg-veil/5 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
       <LogoMark class="w-6 h-6 shrink-0" />
       <span class="font-semibold">LocalAide</span>
     </div>
-    <div class={screen === "chat" ? "flex-1 min-h-0" : "flex-1 p-6 md:p-10"}>
+    {#if chatMounted && !startupError}
+      <div class="min-h-0 flex-1" class:hidden={screen !== "chat"}>
+        <ChatScreen onOpenModels={() => navigate("models")} active={screen === "chat"} />
+      </div>
+    {/if}
+    <div class={screen === "chat" ? "hidden" : "flex-1 p-6 md:p-10"}>
       {#key screen}
         <div in:fly={enterScreen()} class={screen === "chat" ? "h-full" : ""}>
       {#if startupError}
@@ -353,7 +417,7 @@
       {:else if screen === "setup"}
         <SetupWizard onFinished={() => { setupBusy = false; navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => navigate("chat")} />
       {:else if screen === "chat"}
-        <ChatScreen onOpenModels={() => navigate("models")} newThreadTick={chatResetTick} />
+        <!-- The chat lives outside this block, so it is not reloaded. -->
       {:else if screen === "search"}
         <SearchScreen />
       {:else if screen === "memory"}
@@ -428,6 +492,15 @@
         </div>
         </FocusTrap>
       </div>
+    </div>
+  {/if}
+
+  {#if engineDownload && engineDownload.state === "downloading"}
+    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:fly={{ y: 8, duration: dur(motion.base), easing: motion.enter }} out:fade={{ duration: dur(motion.fast) }}>
+      <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ember-300" />Getting the model engine</div>
+      <p class="mt-1 text-xs leading-5 text-ink-400">Once only: the llama.cpp build for this processor, from github.com.</p>
+      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.max(3, engineDownload.percent)}%`}></div></div>
+      <p class="mt-1 text-right text-xs tabular-nums text-ink-500">{formatBytes(engineDownload.downloaded_bytes)} of {formatBytes(engineDownload.total_bytes)}</p>
     </div>
   {/if}
 

@@ -64,7 +64,17 @@
     | "terminal"
     | "volume"
     | "mic"
-    | "link";
+    | "link"
+    | "lightbulb"
+    | "hand"
+    | "shield-check"
+    | "users"
+    | "list-check"
+    | "undo"
+    | "help"
+    | "chart"
+    | "folder-open"
+    | "wand";
 
   interface Props {
     name: IconName;
@@ -256,6 +266,33 @@
   {:else if name === "link"}
     <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
     <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+  {:else if name === "lightbulb"}
+    <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2l.1.7h4.8l.1-.7c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3Z" />
+  {:else if name === "hand"}
+    <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8" />
+    <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4L2.4 16a2 2 0 0 1 2.8-2.8L7 15" />
+  {:else if name === "shield-check"}
+    <path d="M12 3 5 6v5c0 4.4 3 8.4 7 10 4-1.6 7-5.6 7-10V6l-7-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  {:else if name === "users"}
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5a6.5 6.5 0 0 1 3.5 5.5" />
+  {:else if name === "list-check"}
+    <path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17M11 6h10M11 12h10M11 18h10" />
+  {:else if name === "undo"}
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  {:else if name === "help"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" />
+  {:else if name === "chart"}
+    <path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" />
+  {:else if name === "folder-open"}
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1" />
+    <path d="M3 7v11a2 2 0 0 0 2 2h12.5a2 2 0 0 0 1.9-1.4l1.9-6A1.5 1.5 0 0 0 19.9 11H7.4a2 2 0 0 0-1.9 1.4L3 20" />
+  {:else if name === "wand"}
+    <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2ZM19 13l.6 1.4L21 15l-1.4.6L19 17l-.6-1.4L17 15l1.4-.6L19 13Z" />
+    <path d="M4 20 14 10" />
   {:else if name === "volume"}
     <path d="M11 5 6 9H3v6h3l5 4V5Z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />

@@ -24,10 +24,11 @@
   import { openInBrowser } from "../lib/links";
   import { dur, enterScreen } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
-  import { settingsRequest, type SettingsSectionId } from "../lib/nav.svelte";
+  import { settingsRequest, settingsView, type SettingsSectionId } from "../lib/nav.svelte";
   import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
-  import type { OpenCodeSettings } from "../lib/api/bindings";
+  import type { EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
+  import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
   import { applyTheme, currentTheme } from "../lib/theme";
@@ -148,7 +149,24 @@
     { value: "light", label: "Light" },
   ];
 
-  let activeTab = $state<SettingsSection>("general");
+  // Starts where the user left Settings last time.
+  let activeTab = $state<SettingsSection>(settingsView.section as SettingsSection);
+  let engine = $state<EngineInfo | null>(null);
+  let scalePct = $state(Math.round(scale.value * 100));
+  $effect(() => {
+    scalePct = Math.round(scale.value * 100);
+  });
+  let engineBusy = $state(false);
+  const fetchEngine = async () => {
+    engineBusy = true;
+    try {
+      engine = await api.engineFetch();
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      engineBusy = false;
+    }
+  };
   let appVersion = $state("");
   let usableRamGb = $state(0);
   let health = $state<SystemHealthResponse | null>(null);
@@ -216,6 +234,7 @@
 
   const selectSection = (section: SettingsSection) => {
     activeTab = section;
+    settingsView.section = section as SettingsSectionId;
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
     if (section === "about") void loadDiagnostics();
@@ -465,7 +484,10 @@
 
   // The command palette can open a section (and start an update check).
   $effect(() => {
-    if (settingsRequest.tick === 0 || !settingsRequest.section) return;
+    // Each request opens its section once; coming back later keeps the
+    // section the user chose since.
+    if (settingsRequest.tick === 0 || !settingsRequest.section || settingsRequest.tick === settingsView.handledTick) return;
+    settingsView.handledTick = settingsRequest.tick;
     selectSection(settingsRequest.section);
     if (settingsRequest.checkUpdates) {
       settingsRequest.checkUpdates = false;
@@ -608,6 +630,9 @@
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
+    // Load what the remembered section shows.
+    selectSection(activeTab);
+    void api.engineInfo().then((info) => (engine = info)).catch(() => undefined);
     // A setting that fails to load shows a message, so it never looks empty.
     const failed: string[] = [];
     try {
@@ -692,10 +717,26 @@
                 <Tabs items={themeTabs} value={theme} onChange={(value) => { if (value === "dark" || value === "light") void setTheme(value); }} ariaLabel="Theme" />
               {/snippet}
             </SettingsRow>
+            <SettingsRow icon="scale" title="Interface scale" description="Makes everything bigger or smaller, from 70% to 250%. Ctrl + and Ctrl − change it anywhere; Ctrl 0 resets it." class="border-t border-ink-800">
+              {#snippet control()}
+                <Slider min={70} max={250} step={10} bind:value={scalePct} onchange={() => void setScale(scalePct / 100)} class="w-44" label="Interface scale" />
+                <span class="min-w-12 text-right text-sm tabular-nums text-ink-200">{scalePct}%</span>
+                {#if scale.value !== 1}<button type="button" class="rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-veil/5 hover:text-ink-100" onclick={() => void setScale(1)}>Reset</button>{/if}
+              {/snippet}
+            </SettingsRow>
           </SettingsGroup>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Performance</h3>
           <SettingsGroup>
+            <SettingsRow icon="computer" title="Model engine" description={engine ? (engine.custom ? `A llama-server you placed yourself is in use: ${engine.path ?? ""}` : engine.installed ? `llama.cpp ${engine.build}, the build for ${engine.cpu} processors. It picks the fastest instructions this processor has.` : `Downloads once, the first time a model loads: llama.cpp ${engine.build} for ${engine.cpu} processors${engine.download_bytes ? `, ${formatBytes(engine.download_bytes)}` : ""}, from github.com.`) : "Checking…"}>
+              {#snippet control()}
+                {#if engine && !engine.installed}
+                  <Button variant="secondary" onclick={() => void fetchEngine()} disabled={engineBusy}>{engineBusy ? "Downloading…" : "Download now"}</Button>
+                {:else if engine}
+                  <span class="text-sm text-emerald-300">Ready</span>
+                {/if}
+              {/snippet}
+            </SettingsRow>
             <SettingsRow icon="models" title="Memory for models" description="How much of this computer's memory the AI may use. More lets you run bigger models.">
               {#snippet control()}
                 <Slider min={20} max={90} bind:value={ramBudget} oninput={scheduleSave} class="w-44" label="Memory for models" />

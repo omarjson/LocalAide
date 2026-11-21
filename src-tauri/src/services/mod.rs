@@ -3,6 +3,7 @@ pub mod backup;
 pub mod cloud_audit;
 pub mod engine;
 pub mod externals;
+pub mod frames;
 pub mod inference;
 pub mod library;
 pub mod mcp;

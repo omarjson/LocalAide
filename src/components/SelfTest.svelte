@@ -8,6 +8,7 @@
 
   const PLAN: { step: SelfTestStep["step"]; label: string; hint: string }[] = [
     { step: "model", label: "Tiny model on this computer", hint: "Downloads it once if it is missing (about 0.7 GB), with its checksum checked." },
+    { step: "engine", label: "Model engine", hint: "Downloads the llama.cpp build for this processor once, if it is missing." },
     { step: "load", label: "Load the model", hint: "Starts it in the local engine." },
     { step: "reply", label: "First reply", hint: "Asks it to say hello, on this computer only." },
   ];

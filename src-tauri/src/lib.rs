@@ -284,6 +284,7 @@ pub fn run() {
             commands::files_open_with,
             commands::ui_scale_get,
             commands::ui_scale_set,
+            crate::services::frames::render_frame_put,
             commands::engine_fetch,
             commands::backup_config_get,
             commands::backup_config_set,
@@ -337,6 +338,10 @@ pub fn run() {
             commands::mcp_server_test,
             commands::mcp_import,
         ])
+        // Pages the model draws in chat, each with its own strict policy.
+        .register_uri_scheme_protocol("mockup", |_ctx, request| {
+            crate::services::frames::serve(&request)
+        })
         .setup(move |setup_app| {
             crate::services::engine::init(setup_app.handle().clone());
             // The interface scale from Settings → Appearance.

@@ -37,6 +37,9 @@ function partLines(part: MessagePart, withThinking: boolean): string[] {
   if (part.type === "question") {
     return [`**Question:** ${part.question}`, "", ...part.options.map((o, i) => `${i + 1}. ${o}`), ...(part.answer ? ["", `**Answer:** ${part.answer}`] : []), ""];
   }
+  if (part.type === "todos") {
+    return ["**Plan:**", "", ...part.items.map((t) => `- [${t.status === "done" ? "x" : " "}] ${t.text}`), ""];
+  }
   const status = TOOL_STATUS[part.status] ?? part.status;
   const head = `**Tool: ${part.title}**${part.detail ? ` · ${part.detail}` : ""} · ${status}${part.summary ? ` · ${part.summary}` : ""}`;
   const out: string[] = [head, ""];
