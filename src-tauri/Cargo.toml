@@ -63,7 +63,7 @@ zeroize = "1"
 # The local server behind "Share my assistant" (127.0.0.1 only).
 tiny_http = "0.12"
 # Audio for online transcription is sent as base64.
-base64 = "0.22"
+base64 = "0.23"
 # Live transcription over WebSocket (Gemini Live, Deepgram, Soniox).
 tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 
