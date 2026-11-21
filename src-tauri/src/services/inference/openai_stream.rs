@@ -713,7 +713,10 @@ impl ToolCallGuard {
                     break;
                 };
                 if !key.is_empty() {
-                    arguments.insert(key, Value::String(after_tag[..value_end].trim().to_string()));
+                    arguments.insert(
+                        key,
+                        Value::String(after_tag[..value_end].trim().to_string()),
+                    );
                 }
                 scan = &after_tag[value_end + "</parameter>".len()..];
             }
@@ -784,7 +787,11 @@ pub fn apply_event(
 /// A refused request, before any text arrived.
 #[derive(Debug)]
 pub enum StreamError {
-    Http { status: u16, body: String, retry_after: Option<Duration> },
+    Http {
+        status: u16,
+        body: String,
+        retry_after: Option<Duration>,
+    },
     Other(AppError),
 }
 
@@ -968,7 +975,13 @@ pub fn stream_once(
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             continue;
         };
-        match apply_event(&event, &mut splitter, &mut calls, &mut outcome, &mut toolguard) {
+        match apply_event(
+            &event,
+            &mut splitter,
+            &mut calls,
+            &mut outcome,
+            &mut toolguard,
+        ) {
             Ok(pieces) => deliver(pieces, &mut outcome),
             Err(message) => {
                 return Err(StreamError::Other(AppError::internal(format!(
@@ -1017,7 +1030,11 @@ pub fn stream_with_retries(
         let body = build_body(endpoint, turns, opts);
         match stream_once(client, endpoint, &body, cancel, on_delta) {
             Ok(outcome) => return Ok((outcome, adjustments)),
-            Err(StreamError::Http { status, body, retry_after }) => {
+            Err(StreamError::Http {
+                status,
+                body,
+                retry_after,
+            }) => {
                 let retryable = matches!(status, 400 | 422 | 500) && adjustments.len() < 4;
                 // A local server answers 500 when its template cannot render
                 // tools; other providers use 400 and 422.
@@ -1187,8 +1204,14 @@ mod tests {
         let mut g = ToolCallGuard::default();
         let shown = g.push("Let me check the sources: <tool_call>");
         assert_eq!(shown, "Let me check the sources: ");
-        assert_eq!(g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"), "");
-        assert_eq!(g.push("</function></tool_call>And here is what I found."), "And here is what I found.");
+        assert_eq!(
+            g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"),
+            ""
+        );
+        assert_eq!(
+            g.push("</function></tool_call>And here is what I found."),
+            "And here is what I found."
+        );
         let (_, calls) = g.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "list_files");
