@@ -14,7 +14,7 @@ pub fn svg(text: &str) -> Result<String, crate::app::error::AppError> {
             "This link is too long to fit in a QR code.",
         )
     })?;
-    let size = qr.size() as i32;
+    let size = qr.size();
     // One-module border (the norm is four, but the SVG sits on a card with
     // its own padding).
     let border = 2;

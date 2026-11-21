@@ -342,6 +342,7 @@ pub fn run() {
             commands::cloud_models_refresh,
             commands::mcp_servers_list,
             commands::mcp_presets,
+            commands::mcp_artcraft_presets,
             commands::mcp_server_save,
             commands::mcp_server_toggle,
             commands::mcp_server_delete,
