@@ -21,7 +21,7 @@ use crate::services::inference::router::ChatTarget;
 /// One step's state, sent while the check runs and kept in the report.
 #[derive(Debug, Clone, Serialize)]
 pub struct SelfTestStep {
-    /// "model", "load" or "reply".
+    /// "model", "engine", "load" or "reply".
     pub step: &'static str,
     pub label: &'static str,
     /// "running", "pass", "fail" or "skip".
@@ -180,7 +180,62 @@ pub async fn run_selftest(
         };
     }
 
-    // 2. Load it.
+    // 2. The model engine for this processor.
+    let t = Instant::now();
+    let engine = crate::services::engine::info();
+    let what = format!("llama.cpp {} for {} processors", engine.build, engine.cpu);
+    if !engine.installed {
+        emit(SelfTestStep {
+            step: "engine",
+            label: "Model engine",
+            status: "running",
+            ms: 0,
+            detail: format!("Downloading {what}…"),
+            percent: None,
+        });
+    }
+    match crate::services::engine::ensure().await {
+        Ok(_) => push(
+            SelfTestStep {
+                step: "engine",
+                label: "Model engine",
+                status: "pass",
+                ms: t.elapsed().as_millis(),
+                detail: if engine.custom {
+                    "A llama-server you placed yourself is in use.".to_string()
+                } else if engine.installed {
+                    format!("{what} is ready.")
+                } else {
+                    format!("Downloaded {what}; the checksum matches.")
+                },
+                percent: None,
+            },
+            &emit,
+        ),
+        Err(e) => {
+            push(
+                SelfTestStep {
+                    step: "engine",
+                    label: "Model engine",
+                    status: "fail",
+                    ms: t.elapsed().as_millis(),
+                    detail: e.message,
+                    percent: None,
+                },
+                &emit,
+            );
+            push(skip("load", "Load the model"), &emit);
+            push(skip("reply", "First reply"), &emit);
+            return SelfTestReport {
+                passed: false,
+                model_id,
+                steps,
+                ms: started.elapsed().as_millis(),
+            };
+        }
+    }
+
+    // 3. Load it.
     let t = Instant::now();
     emit(SelfTestStep {
         step: "load",
@@ -241,7 +296,7 @@ pub async fn run_selftest(
         };
     }
 
-    // 3. One reply from the local model, never an online one.
+    // 4. One reply from the local model, never an online one.
     let t = Instant::now();
     emit(SelfTestStep {
         step: "reply",

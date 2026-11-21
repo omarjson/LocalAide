@@ -329,6 +329,7 @@ pub async fn library_embedding_select(
     state: State<'_, AppState>,
     model_id: String,
 ) -> Result<LibraryStatus, AppError> {
+    crate::services::engine::ensure().await?;
     with_app_state(&state, move |state| {
         let entry = state
             .model_service
@@ -382,6 +383,10 @@ pub fn start_embedding_at_launch(state: AppState) {
         };
         if !state.model_service.is_installed(&id) {
             log::info!("The chosen embedding model {id} is not installed; search uses keywords.");
+            return;
+        }
+        if let Err(e) = tauri::async_runtime::block_on(crate::services::engine::ensure()) {
+            log::warn!("The model engine is not available: {e}");
             return;
         }
         match state.embedding_engine.start(Some(&id)) {

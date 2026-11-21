@@ -75,7 +75,7 @@ LocalAide runs GGUF models with llama.cpp v1.0.0. The built-in catalog lists 41 
 | Balanced | about 9.5 GB | Qwen3.5 9B, Gemma 4 E4B (QAT) |
 | Advanced | about 20 GB | Gemma 4 26B-A4B (MoE), Qwen3.8 27B |
 
-Minimum hardware: x86_64 CPU with AVX2 or Apple Silicon; 8 GB RAM (16 GB for 3B–7B models); 2 GB of SSD space for the app plus 0.15–22 GB per model, depending on the entry.
+Minimum hardware: a 64-bit x64 or ARM64 processor; 8 GB RAM (16 GB for 3B–7B models); 2 GB of SSD space for the app plus 0.15–22 GB per model, depending on the entry.
 
 Full list, sources, and rejected models: [docs/evidence/models-2026-11.md](docs/evidence/models-2026-11.md).
 
@@ -87,10 +87,11 @@ Grab a package from the [Releases page](https://github.com/omarjson/LocalAide/re
 
 - **macOS (Apple Silicon)**: `LocalAide_<version>_aarch64.dmg`
 - **macOS (Intel)**: `LocalAide_<version>_x64.dmg`
-- **Windows (x64)**: the installer ending in `-setup.exe`
+- **Windows (x64)**: the installer ending in `_x64-setup.exe`
+- **Windows on ARM**: the installer ending in `_arm64-setup.exe`
 - **Linux (x64)**: the `.deb` package or the `.AppImage`
 
-The local engine needs a 64-bit CPU with AVX2 (most PCs from 2013 on) or an Apple Silicon Mac.
+The first time a model loads, LocalAide downloads the llama.cpp engine built for your processor (about 13 to 25 MB, from github.com). Any 64-bit x64 or ARM64 processor works.
 
 **Check your download.** Each release has `SHA256SUMS.txt`. On Linux or macOS run `sha256sum -c SHA256SUMS.txt --ignore-missing` in the download folder. On Windows run `Get-FileHash <file>` in PowerShell and compare the result with the line for that file.
 
@@ -126,13 +127,12 @@ How releases are built, and what signing needs, is in [docs/release.md](docs/rel
    ```bash
    npx tauri dev   # or `npm run dev` for the frontend alone
    ```
-5. **Build a package**: the app chats through a local `llama-server` sidecar (ADR-0007), so the package must bundle that binary next to the app executable. Stage it, write the license file, then build:
+5. **Build a package**: the app chats through a local `llama-server` (ADR-0007), which it downloads for the user's processor on first use (ADR-0012). Write the license file, then build:
    ```bash
-   scripts/prepare-sidecar.sh <folder-with-llama-server> <target-triple>
    (cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html)
    make release
    ```
-   `make release` passes the `src-tauri/tauri.sidecar.conf.json` overlay, which bundles the sidecar and the license file. A bare `npx tauri build` produces an app that cannot chat. Artifacts land in `src-tauri/target/release/bundle/`. The full steps, including where to get `llama-server`, are in [docs/release.md](docs/release.md).
+   `make release` passes the `src-tauri/tauri.release.conf.json` overlay, which bundles the license file. Artifacts land in `src-tauri/target/release/bundle/`. The full steps are in [docs/release.md](docs/release.md).
 
 ## Keyboard Navigation
 
@@ -176,6 +176,7 @@ LocalAide keeps a strict scope. What is in and out, with reasons, lives in [docs
 - [ADR-0005: Cryptographic Verification of App Updates and Model Catalog](docs/adr/0005-updates.md)
 - [ADR-0006: Feature Gating & Deferred Scopes](docs/adr/0006-optional-features.md)
 - [ADR-0007: llama-server Sidecar for Chat](docs/adr/0007-sidecar-engine.md)
+- [ADR-0012: Model engine downloaded for the processor](docs/adr/0012-engine-download.md)
 - [ADR-0008: Model Catalog Refresh](docs/adr/0008-catalog-refresh.md)
 - [ADR-0009: Encrypted Local Backups](docs/adr/0009-encrypted-backups.md)
 - [ADR-0010: Community Models from the Hugging Face Hub](docs/adr/0010-community-models.md)

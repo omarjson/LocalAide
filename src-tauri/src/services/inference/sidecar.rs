@@ -223,9 +223,7 @@ impl InferenceEngine for SidecarEngine {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(AppError::model_load_failed(
                     &model_id,
-                    &format!(
-                        "llama-server exited during startup ({status}). See logs/llama-server.log."
-                    ),
+                    &startup_exit_message(&status),
                 ));
             }
             if self.health_ok(running.port) {
@@ -422,6 +420,11 @@ pub(crate) fn locate_binary() -> Result<PathBuf, AppError> {
             return Ok(path);
         }
     }
+    // The build LocalAide downloaded for this computer's processor.
+    if let Some(path) = crate::services::externals::llama_binary() {
+        return Ok(path);
+    }
+    // A server placed next to the app by hand (development, older installs).
     let exe = std::env::current_exe().map_err(|e| AppError::internal(e.to_string()))?;
     let dir = exe
         .parent()
@@ -432,9 +435,34 @@ pub(crate) fn locate_binary() -> Result<PathBuf, AppError> {
             return Ok(candidate);
         }
     }
-    Err(AppError::internal(format!(
-        "llama-server not found. Put it next to the app or set {ENV_BIN}."
-    )))
+    Err(AppError::new(
+        "ENGINE_MISSING",
+        "The model engine is not on this computer yet. LocalAide downloads it (about 25 MB) the first time a model loads.",
+    ))
+}
+
+/// Why llama-server stopped while starting, in words. Exit code 0xC000001D
+/// (Windows) or SIGILL (signal 4) means the processor lacks an instruction
+/// the build needs.
+pub(crate) fn startup_exit_message(status: &std::process::ExitStatus) -> String {
+    let illegal = status.code().map(|c| c as u32) == Some(0xC000_001D) || {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            status.signal() == Some(4)
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    };
+    if illegal {
+        format!(
+            "llama-server stopped at once ({status}): this processor does not support an instruction the model engine uses. If you set {ENV_BIN} or put a llama-server next to the app, remove it so LocalAide uses the build it downloads for this processor. See logs/llama-server.log."
+        )
+    } else {
+        format!("llama-server exited during startup ({status}). See logs/llama-server.log.")
+    }
 }
 
 /// Pick a free loopback port. There is a small race before the server binds it.

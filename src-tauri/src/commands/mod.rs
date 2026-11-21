@@ -1,3 +1,4 @@
+pub mod assist;
 pub mod attach;
 pub mod backup;
 pub mod chat;
@@ -23,6 +24,7 @@ pub mod updates;
 pub mod voice;
 pub mod web;
 
+pub use assist::*;
 pub use attach::*;
 pub use backup::*;
 pub use chat::*;

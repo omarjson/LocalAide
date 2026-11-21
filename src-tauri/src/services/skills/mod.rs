@@ -18,6 +18,22 @@ pub mod discover;
 pub const MAX_SKILL_BYTES: u64 = 256 * 1024;
 const MAX_SKILLS: usize = 200;
 
+/// A skill the model saved or improved, and the id that undoes it.
+#[derive(Debug, Clone)]
+pub struct Learned {
+    pub skill: Skill,
+    pub change_id: String,
+    pub created: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SkillUndo {
+    path: String,
+    name: String,
+    /// The whole file before the change; None when the change created it.
+    previous: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Skill {
     /// Short identifier shown in the slash menu (from frontmatter `name`).
@@ -253,6 +269,111 @@ impl SkillsService {
         Ok(skill)
     }
 
+    /// Save a skill the model learned from a chat: a new one, or a better
+    /// version of the skill with the same name. What it replaced is kept in
+    /// `.history/`, so the chat's Undo can put it back.
+    pub fn learn(&self, name: &str, description: &str, body: &str) -> Result<Learned, AppError> {
+        let name = one_line(name);
+        if name.is_empty() || body.trim().is_empty() {
+            return Err(AppError::invalid_input(
+                "A skill needs a name and instructions.",
+            ));
+        }
+        let existing = self
+            .list()?
+            .into_iter()
+            .find(|s| s.name.eq_ignore_ascii_case(&name));
+        let (skill, previous) = match existing {
+            Some(old) => {
+                let previous = std::fs::read_to_string(&old.path).ok();
+                let description = if description.trim().is_empty() {
+                    old.description.clone()
+                } else {
+                    description.to_string()
+                };
+                let mut tags = old.tags.clone();
+                if !tags.iter().any(|t| t == "learned") {
+                    tags.push("learned".into());
+                }
+                let skill = self.update(&old.path, &old.name, &description, tags, body)?;
+                (skill, previous)
+            }
+            None => (
+                self.create(&name, description, vec!["learned".into()], body)?,
+                None,
+            ),
+        };
+        let created = previous.is_none();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let history = self.dir.join(".history");
+        std::fs::create_dir_all(&history)
+            .map_err(|e| AppError::storage(format!("Could not keep the skill's history: {e}")))?;
+        let mut change_id = format!("{stamp}-{}", slugify(&skill.name));
+        let mut n = 2;
+        while history.join(format!("{change_id}.json")).exists() {
+            change_id = format!("{stamp}-{}-{n}", slugify(&skill.name));
+            n += 1;
+        }
+        let record = SkillUndo {
+            path: skill.path.clone(),
+            name: skill.name.clone(),
+            previous,
+        };
+        let json = serde_json::to_string(&record).map_err(AppError::from)?;
+        std::fs::write(history.join(format!("{change_id}.json")), json)
+            .map_err(|e| AppError::storage(format!("Could not keep the skill's history: {e}")))?;
+        // Keep the newest 100 changes.
+        if let Ok(entries) = std::fs::read_dir(&history) {
+            let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+            files.sort();
+            let extra = files.len().saturating_sub(100);
+            for old in files.into_iter().take(extra) {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+        Ok(Learned {
+            skill,
+            change_id,
+            created,
+        })
+    }
+
+    /// Undo one learned change: put the old text back, or remove a skill
+    /// that the change created. Returns the skill's name.
+    pub fn undo(&self, change_id: &str) -> Result<String, AppError> {
+        if change_id.is_empty()
+            || !change_id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(AppError::invalid_input("That change is not known."));
+        }
+        let file = self.dir.join(".history").join(format!("{change_id}.json"));
+        let text = std::fs::read_to_string(&file).map_err(|_| {
+            AppError::invalid_input("That change was already undone or is too old.")
+        })?;
+        let record: SkillUndo = serde_json::from_str(&text).map_err(AppError::from)?;
+        match &record.previous {
+            Some(previous) => {
+                let path = self.guard_path(&record.path)?;
+                std::fs::write(path, previous)
+                    .map_err(|e| AppError::storage(format!("Could not restore the skill: {e}")))?;
+            }
+            None => {
+                if let Ok(path) = self.guard_path(&record.path) {
+                    std::fs::remove_file(path).map_err(|e| {
+                        AppError::storage(format!("Could not remove the skill: {e}"))
+                    })?;
+                }
+            }
+        }
+        let _ = std::fs::remove_file(file);
+        Ok(record.name)
+    }
+
     pub fn delete(&self, path: &str) -> Result<(), AppError> {
         let path = self.guard_path(path)?;
         std::fs::remove_file(path)
@@ -391,6 +512,38 @@ fn slugify(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn learned_skills_can_be_undone() {
+        let dir = std::env::temp_dir().join(format!("la-learn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let skills = SkillsService::with_dir(dir.clone());
+
+        let first = skills
+            .learn(
+                "Weekly report",
+                "How the user wants reports",
+                "Use 3 bullets.",
+            )
+            .unwrap();
+        assert!(first.created);
+        let second = skills
+            .learn("weekly report", "", "Use 3 bullets and a summary line.")
+            .unwrap();
+        assert!(!second.created);
+        let now = skills.list().unwrap();
+        assert_eq!(now.len(), 1);
+        assert!(now[0].body.contains("summary line"));
+        assert!(now[0].tags.iter().any(|t| t == "learned"));
+
+        assert_eq!(skills.undo(&second.change_id).unwrap(), "Weekly report");
+        assert_eq!(skills.list().unwrap()[0].body.trim(), "Use 3 bullets.");
+        skills.undo(&first.change_id).unwrap();
+        assert!(skills.list().unwrap().is_empty());
+        assert!(skills.undo(&first.change_id).is_err(), "only once");
+        assert!(skills.undo("../../etc").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn frontmatter_and_body_split() {

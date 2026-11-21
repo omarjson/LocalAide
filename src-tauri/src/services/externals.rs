@@ -1,6 +1,7 @@
 //! Programs LocalAide fetches once, on request, with pinned checksums:
-//! the sherpa-onnx speech engine (local voice input) and cloudflared
-//! (Share my assistant). Each pin names the exact release file for this
+//! the llama.cpp model engine (llama-server, picked for this computer's
+//! processor), the sherpa-onnx speech engine (local voice input) and
+//! cloudflared (Share my assistant). Each pin names the exact release file for this
 //! platform and its SHA-256; a file that does not match is deleted and
 //! never run. Fetched programs live in `~/.aiassistant/tools/`.
 
@@ -21,6 +22,7 @@ enum Archive {
     Plain,
     TarBz2,
     TarGz,
+    Zip,
 }
 
 /// One pinned release file.
@@ -38,6 +40,154 @@ pub struct Pin {
 
 const SHERPA: &str = "sherpa-onnx";
 const CLOUDFLARED: &str = "cloudflared";
+pub const LLAMA: &str = "llama.cpp";
+/// The llama.cpp release LocalAide runs models with.
+pub const LLAMA_BUILD: &str = "b12359";
+
+/// The processor family of this computer, which can differ from the app's
+/// own build: an x64 app on Windows on ARM runs under emulation, and an
+/// Intel Mac build runs under Rosetta on Apple silicon. The model engine is
+/// a separate program, so it can always use the native build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpuArch {
+    X64,
+    Arm64,
+    Other,
+}
+
+impl CpuArch {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::X64 => "x64",
+            Self::Arm64 => "ARM64",
+            Self::Other => std::env::consts::ARCH,
+        }
+    }
+}
+
+/// The native processor family, seeing through emulation.
+pub fn native_arch() -> CpuArch {
+    #[cfg(windows)]
+    {
+        // IsWow64Process2 reports the machine's own architecture even to an
+        // emulated x64 process. Windows 10 1709 and later.
+        use std::ffi::c_void;
+        unsafe extern "system" {
+            fn GetCurrentProcess() -> *mut c_void;
+            fn IsWow64Process2(process: *mut c_void, own: *mut u16, native: *mut u16) -> i32;
+        }
+        let (mut own, mut native) = (0u16, 0u16);
+        // SAFETY: both pointers are valid for the call; the handle is the
+        // pseudo-handle of this process.
+        let ok = unsafe { IsWow64Process2(GetCurrentProcess(), &mut own, &mut native) };
+        if ok != 0 {
+            match native {
+                0xAA64 => return CpuArch::Arm64,
+                0x8664 => return CpuArch::X64,
+                _ => {}
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // 1 when this process runs under Rosetta on Apple silicon.
+        let mut translated: libc::c_int = 0;
+        let mut size = std::mem::size_of::<libc::c_int>();
+        let name = c"sysctl.proc_translated";
+        // SAFETY: the buffer and its size match; the name is a C string.
+        let rc = unsafe {
+            libc::sysctlbyname(
+                name.as_ptr(),
+                (&mut translated as *mut libc::c_int).cast(),
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if rc == 0 && translated == 1 {
+            return CpuArch::Arm64;
+        }
+    }
+    match std::env::consts::ARCH {
+        "x86_64" => CpuArch::X64,
+        "aarch64" => CpuArch::Arm64,
+        _ => CpuArch::Other,
+    }
+}
+
+/// The official llama.cpp build for this computer, from
+/// github.com/ggml-org/llama.cpp/releases. The x64 Windows and Linux builds
+/// carry one CPU library per instruction set (SSE4.2 up to AVX-512) and
+/// pick the one this processor supports when they start, so older
+/// processors without AVX2 work too.
+pub fn llama_pin() -> Option<Pin> {
+    llama_pin_for(std::env::consts::OS, native_arch())
+}
+
+fn llama_pin_for(os: &str, arch: CpuArch) -> Option<Pin> {
+    let (url, sha256, size, archive, root) = match (os, arch) {
+        ("windows", CpuArch::X64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-win-cpu-x64.zip",
+            "837c1655e87df3b66989f4be33a792a1399c785bf259038dc75c900096683e69",
+            25_097_509,
+            Archive::Zip,
+            "",
+        ),
+        ("windows", CpuArch::Arm64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-win-cpu-arm64.zip",
+            "d27564c754478d2832789dfcebfc5ace018e36a224c41d810b7cbc1ba8243ec0",
+            13_455_326,
+            Archive::Zip,
+            "",
+        ),
+        ("macos", CpuArch::Arm64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-macos-arm64.tar.gz",
+            "82b00abc740160e1b9980e6cc79c117345fa34af058c80e6c0a69aa8ddccde75",
+            16_907_811,
+            Archive::TarGz,
+            "llama-b12359",
+        ),
+        ("macos", CpuArch::X64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-macos-x64.tar.gz",
+            "25320d529077ef5a3d16e7b5da26438f221d88c8c0930a32b0c79457f5eede56",
+            12_661_621,
+            Archive::TarGz,
+            "llama-b12359",
+        ),
+        ("linux", CpuArch::X64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-ubuntu-x64.tar.gz",
+            "0bc1f091e8916102b6d8f2cf944233a620e90a0f856c72d0ce41150c65c2e72e",
+            23_311_084,
+            Archive::TarGz,
+            "llama-b12359",
+        ),
+        ("linux", CpuArch::Arm64) => (
+            "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-ubuntu-arm64.tar.gz",
+            "dc7aa17a67884619b7223870aca9fd6addbc01717713b04a714add1c31137359",
+            18_949_862,
+            Archive::TarGz,
+            "llama-b12359",
+        ),
+        _ => return None,
+    };
+    Some(Pin {
+        tool: LLAMA,
+        version: LLAMA_BUILD,
+        url,
+        sha256,
+        size,
+        archive,
+        root,
+    })
+}
+
+/// The fetched llama-server program, when it is on this computer.
+pub fn llama_binary() -> Option<PathBuf> {
+    let pin = llama_pin()?;
+    let p = tool_dir(&pin).join(exe("llama-server"));
+    p.is_file().then_some(p)
+}
 
 /// The sherpa-onnx v2.0.2 build for this platform (shared libraries, no
 /// text-to-speech), from github.com/k2-fsa/sherpa-onnx/releases.
@@ -69,6 +219,13 @@ pub fn sherpa_pin() -> Option<Pin> {
             "acfd6923924fd1eccc917e383742758cb972adc5a42ee151044a74032498ee16",
             23_636_378,
             "sherpa-onnx-v2.0.2-win-x64-shared-MT-MinSizeRel-no-tts",
+        )
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        (
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-arm64-shared-MT-Release-no-tts.tar.bz2",
+            "19f8bdf7871e6f57f71cf4e1a7221e499fa49fe9f95eb58c584faae585b9f201",
+            23_864_664,
+            "sherpa-onnx-v2.0.2-win-arm64-shared-MT-Release-no-tts",
         )
     } else {
         return None;
@@ -108,7 +265,9 @@ pub fn cloudflared_pin() -> Option<Pin> {
             21_857_340,
             Archive::TarGz,
         )
-    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+    } else if cfg!(target_os = "windows") {
+        // There is no ARM64 Windows build; Windows on ARM runs this one
+        // under its x64 emulation.
         (
             "https://github.com/cloudflare/cloudflared/releases/download/2026.11.1/cloudflared-windows-amd64.exe",
             "341deda3db5ec498a0482254d6c38c0b7cf01a30c37bb5dd95d2216d08955e35",
@@ -191,6 +350,7 @@ pub struct ToolStatus {
 pub fn status_of(which: &str) -> ToolStatus {
     let (bin, pin) = match which {
         SHERPA => (sherpa_binary(), sherpa_pin()),
+        LLAMA => (llama_binary(), llama_pin()),
         _ => (cloudflared_binary(), cloudflared_pin()),
     };
     ToolStatus {
@@ -204,10 +364,11 @@ pub fn status_of(which: &str) -> ToolStatus {
 
 /// Unpack with the system's tar (built into macOS, Linux and Windows 10+).
 fn untar(archive: &Path, into: &Path, kind: Archive) -> Result<(), AppError> {
-    let flag = if kind == Archive::TarBz2 {
-        "-xjf"
-    } else {
-        "-xzf"
+    let flag = match kind {
+        Archive::TarBz2 => "-xjf",
+        Archive::TarGz => "-xzf",
+        // bsdtar (Windows, macOS) reads zip files too.
+        _ => "-xf",
     };
     let tar = if cfg!(windows) {
         std::env::var_os("SystemRoot")
@@ -319,9 +480,14 @@ where
                 }
                 // Headers are not needed to run.
                 let _ = std::fs::remove_dir_all(staging.join("include"));
+                let program = if pin.tool == LLAMA {
+                    "llama-server"
+                } else {
+                    pin.tool
+                };
                 for sub in ["bin", ""] {
                     let p = if sub.is_empty() {
-                        staging.join(exe(pin.tool))
+                        staging.join(exe(program))
                     } else {
                         staging.join(sub)
                     };
@@ -346,6 +512,7 @@ where
     result?;
     match pin.tool {
         SHERPA => sherpa_binary(),
+        LLAMA => llama_binary(),
         _ => cloudflared_binary(),
     }
     .ok_or_else(|| {
@@ -405,8 +572,51 @@ mod tests {
     }
 
     #[test]
+    fn every_desktop_gets_a_model_engine() {
+        for os in ["windows", "macos", "linux"] {
+            for arch in [CpuArch::X64, CpuArch::Arm64] {
+                let pin = llama_pin_for(os, arch).expect("a pinned build");
+                assert!(pin.url.contains(LLAMA_BUILD));
+                let wants = match arch {
+                    CpuArch::X64 => "x64",
+                    _ => "arm64",
+                };
+                assert!(pin.url.contains(wants), "{os} {arch:?}: {}", pin.url);
+                assert_eq!(pin.archive == Archive::Zip, os == "windows");
+            }
+        }
+        assert!(llama_pin_for("freebsd", CpuArch::X64).is_none());
+    }
+
+    /// Downloads the model engine for this computer and checks it starts.
+    /// `cargo test -- --ignored real_llama_fetch` (needs the network).
+    #[test]
+    #[ignore]
+    fn real_llama_fetch() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let pin = llama_pin().unwrap();
+        let bin = rt
+            .block_on(fetch(pin, Arc::new(AtomicBool::new(false)), |_| {}))
+            .unwrap();
+        let out = Command::new(&bin).arg("--version").output().unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        println!("{}", text.trim());
+        assert!(text.contains("build 12359"), "{text}");
+    }
+
+    #[test]
     fn pins_are_well_formed() {
-        for pin in [sherpa_pin(), cloudflared_pin()].into_iter().flatten() {
+        for pin in [sherpa_pin(), cloudflared_pin(), llama_pin()]
+            .into_iter()
+            .flatten()
+        {
             assert!(pin.url.starts_with("https://github.com/"));
             assert_eq!(pin.sha256.len(), 64);
             assert!(pin.size > 1_000_000);

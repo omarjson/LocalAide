@@ -42,7 +42,9 @@ function classify(file) {
     if (job.includes("aarch64")) return { platform: "darwin-aarch64", asset: `LocalAide_${version}_aarch64.app.tar.gz` };
     if (job.includes("x86_64")) return { platform: "darwin-x86_64", asset: `LocalAide_${version}_x64.app.tar.gz` };
   }
-  if (name.endsWith("-setup.exe") && job.startsWith("windows")) return { platform: "windows-x86_64", asset: name };
+  if (name.endsWith("-setup.exe") && job.startsWith("windows")) {
+    return { platform: job.includes("aarch64") ? "windows-aarch64" : "windows-x86_64", asset: name };
+  }
   if (name.endsWith(".AppImage") && job.startsWith("linux")) return { platform: "linux-x86_64", asset: name };
   return null;
 }

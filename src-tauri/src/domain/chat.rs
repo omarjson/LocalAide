@@ -108,6 +108,10 @@ pub struct ChatThread {
     pub created_at: u64,
     pub updated_at: u64,
     pub message_count: usize,
+    /// The project folder this chat works in. None = a plain chat in the
+    /// shared workspace.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 /// The model the picker chose. No provider = the local model.
@@ -175,6 +179,19 @@ pub struct ChatStreamRequest {
     /// 2026, 14:05 (Europe/Berlin)". Models do not know today's date.
     #[serde(default)]
     pub now: Option<String>,
+    /// The project folder this chat works in (picked by the user). None =
+    /// the shared workspace.
+    #[serde(default)]
+    pub folder: Option<String>,
+    /// Let the model save and improve skills on its own. Default true.
+    #[serde(default)]
+    pub learn_skills: Option<bool>,
+    /// Let the model hand work to read-only subagents. Default true.
+    #[serde(default)]
+    pub use_subagents: Option<bool>,
+    /// Tell the model it can draw charts, diagrams and mockups. Default true.
+    #[serde(default)]
+    pub rich_output: Option<bool>,
 }
 
 /// The user's answer to a tool approval question.

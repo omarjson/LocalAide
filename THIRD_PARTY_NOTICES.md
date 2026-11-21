@@ -6,7 +6,7 @@ LocalAide is MIT licensed (see `LICENSE`). It includes open-source software made
 
 | Part | What it does | License |
 |---|---|---|
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) and ggml, as `llama-server` | Runs the local models | MIT, Copyright (c) 2023-2024 The ggml authors |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) and ggml, as `llama-server` | Runs the local models. Not bundled: downloaded from the official llama.cpp release on first use | MIT, Copyright (c) 2023-2024 The ggml authors |
 | [SQLite](https://sqlite.org) (compiled in through `rusqlite`) | Stores the library, notes and activity log | Public domain |
 | [Tauri](https://tauri.app) | The app window and its link to the system | Apache-2.0 or MIT |
 | Microsoft Edge WebView2 bootstrapper (Windows installer only) | Installs the system web view if it is missing | Microsoft WebView2 distribution terms |

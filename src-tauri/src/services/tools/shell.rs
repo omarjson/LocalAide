@@ -358,6 +358,117 @@ pub fn classify(command: &str) -> Verdict {
     verdict
 }
 
+/// Programs whose changes are hard to undo: deleting, moving over files,
+/// changing permissions, stopping processes, publishing.
+const RISKY: &[&str] = &[
+    "rm",
+    "rmdir",
+    "del",
+    "erase",
+    "rd",
+    "remove-item",
+    "mv",
+    "move",
+    "move-item",
+    "chmod",
+    "chown",
+    "chgrp",
+    "icacls",
+    "takeown",
+    "kill",
+    "pkill",
+    "killall",
+    "taskkill",
+    "stop-process",
+    "shred",
+    "truncate",
+    "dd",
+    "mkfs",
+    "format",
+    "diskpart",
+    "reg",
+    "regedit",
+    "setx",
+    "launchctl",
+    "systemctl",
+    "service",
+    "crontab",
+    "schtasks",
+    "scp",
+    "rsync",
+    "ssh",
+    "sftp",
+    "ftp",
+];
+
+/// Commands Autonomous mode still asks about: anything that reaches
+/// outside the folder, deletes or moves files, rewrites git history,
+/// publishes, installs system-wide, or cannot be read with confidence.
+/// Building, testing and writing new files inside the folder are not risky.
+pub fn risky(command: &str) -> bool {
+    match classify(command) {
+        Verdict::ReadOnly => return false,
+        Verdict::Blocked(_) => return true,
+        Verdict::Changes => {}
+    }
+    for (seg, _) in parse(command.trim()) {
+        if seg.opaque {
+            return true;
+        }
+        let prog = program(&seg);
+        let args = args(&seg);
+        if RISKY.contains(&prog.as_str()) {
+            return true;
+        }
+        // A shell, or inline code for an interpreter, can do anything.
+        // Running a script file in the folder (python3 build.py) is like a
+        // build step.
+        if SHELLS.contains(&prog.as_str()) {
+            let interpreter = matches!(
+                prog.as_str(),
+                "python" | "python3" | "perl" | "ruby" | "node"
+            );
+            let inline = args
+                .iter()
+                .any(|a| matches!(a.as_str(), "-c" | "-e" | "--eval" | "-p" | "--print"));
+            if !interpreter || inline || args.is_empty() {
+                return true;
+            }
+        }
+        if seg.words.iter().skip(1).any(|w| reaches_outside(w)) {
+            return true;
+        }
+        let first = args.first().map(String::as_str).unwrap_or("");
+        let risky_sub = match prog.as_str() {
+            "git" => {
+                matches!(
+                    first,
+                    "push" | "reset" | "clean" | "rebase" | "filter-branch" | "gc" | "prune"
+                ) || (first == "checkout" && args.iter().any(|a| a == "--" || a == "."))
+                    || (first == "branch" && args.iter().any(|a| a == "-d" || a == "--delete"))
+                    || (first == "stash" && args.iter().any(|a| a == "drop" || a == "clear"))
+            }
+            "npm" | "pnpm" | "yarn" | "bun" | "cargo" => {
+                matches!(
+                    first,
+                    "publish" | "unpublish" | "login" | "logout" | "owner"
+                ) || args.iter().any(|a| a == "-g" || a == "--global")
+            }
+            "pip" | "pip3" | "uv" => args
+                .iter()
+                .any(|a| a == "--user" || a == "--break-system-packages"),
+            "brew" | "apt" | "apt-get" | "dnf" | "yum" | "pacman" | "winget" | "choco"
+            | "scoop" => true,
+            "docker" | "podman" => matches!(first, "rm" | "rmi" | "system" | "volume" | "push"),
+            _ => false,
+        };
+        if risky_sub {
+            return true;
+        }
+    }
+    false
+}
+
 /// Programs that only read, whatever their arguments (output redirection
 /// and paths outside the workspace are checked separately).
 const READ_ONLY: &[&str] = &[
@@ -710,6 +821,38 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn autonomous_mode_asks_only_about_risky_commands() {
+        for c in [
+            "npm install",
+            "cargo build --release",
+            "npm test",
+            "mkdir out && echo hi > out/a.txt",
+            "git add -A && git commit -m wip",
+            "python3 make.py",
+            "node scripts/build.mjs",
+        ] {
+            assert!(!risky(c), "{c} should run without asking");
+        }
+        for c in [
+            "rm build.log",
+            "mv a.txt b.txt",
+            "git push origin main",
+            "git reset --hard HEAD~1",
+            "npm install -g serve",
+            "cp notes.txt ~/Desktop/",
+            "cat ../secret.txt > copy.txt",
+            "brew install jq",
+            "echo $(whoami)",
+            "bash script.sh",
+            "chmod +x run.sh",
+            "python3 -c 'import os'",
+        ] {
+            assert!(risky(c), "{c} should ask");
+        }
+        assert!(!risky("ls -la"));
+    }
 
     fn ro(c: &str) {
         assert_eq!(classify(c), Verdict::ReadOnly, "{c} should be read-only");

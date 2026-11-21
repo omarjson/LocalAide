@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 pub mod app;
 pub mod commands;
@@ -273,6 +273,18 @@ pub fn run() {
             commands::update_check,
             commands::update_install,
             commands::logs_tail,
+            commands::engine_info,
+            commands::chat_enhance_prompt,
+            commands::chat_suggest_next,
+            commands::chat_starters,
+            commands::skills_undo,
+            commands::files_open,
+            commands::files_reveal,
+            commands::files_open_with_apps,
+            commands::files_open_with,
+            commands::ui_scale_get,
+            commands::ui_scale_set,
+            commands::engine_fetch,
             commands::backup_config_get,
             commands::backup_config_set,
             commands::backup_run,
@@ -326,6 +338,14 @@ pub fn run() {
             commands::mcp_import,
         ])
         .setup(move |setup_app| {
+            crate::services::engine::init(setup_app.handle().clone());
+            // The interface scale from Settings → Appearance.
+            let scale = commands::assist::saved_scale();
+            if (scale - 1.0).abs() > f64::EPSILON
+                && let Some(window) = setup_app.get_webview_window("main")
+            {
+                let _ = window.set_zoom(scale);
+            }
             if let Some((model_id, path, context)) = pending_load {
                 let handle = setup_app.handle().clone();
                 engine_loading.store(true, Ordering::SeqCst);
@@ -338,7 +358,8 @@ pub fn run() {
                     },
                 );
                 std::thread::spawn(move || {
-                    let result = startup_state.inference_engine.load(&path, context);
+                    let result = tauri::async_runtime::block_on(crate::services::engine::ensure())
+                        .and_then(|_| startup_state.inference_engine.load(&path, context));
                     engine_loading.store(false, Ordering::SeqCst);
                     let payload = match result {
                         Ok(_) => {

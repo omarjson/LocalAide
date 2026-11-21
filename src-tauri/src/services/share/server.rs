@@ -362,7 +362,7 @@ fn save_thread(id: String, body: Value) -> Response<Box<dyn Read + Send>> {
     let Ok(b) = serde_json::from_value::<SaveBody>(body) else {
         return error(400, "The chat could not be read.");
     };
-    match crate::commands::chat::chat_thread_save_work(id, b.title, None, b.messages) {
+    match crate::commands::chat::chat_thread_save_work(id, b.title, None, b.messages, None) {
         Ok(()) => json_response(&json!({"ok": true}), 200),
         Err(e) => error(400, &e.message),
     }

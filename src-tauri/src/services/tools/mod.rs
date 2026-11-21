@@ -34,7 +34,23 @@ impl ToolService {
         }
     }
 
+    /// The shared workspace folder's jail.
+    pub fn workspace_jail(&self) -> Arc<WorkspaceJail> {
+        self.jail.clone()
+    }
+
     pub fn execute(&self, req: ToolExecutionRequest) -> Result<ToolExecutionResponse, AppError> {
+        let jail = self.jail.clone();
+        self.execute_in(&jail, req)
+    }
+
+    /// Run a file action inside `jail`: the workspace, or the folder a chat
+    /// works in.
+    pub fn execute_in(
+        &self,
+        jail: &WorkspaceJail,
+        req: ToolExecutionRequest,
+    ) -> Result<ToolExecutionResponse, AppError> {
         let action_name = match req.action.action_type {
             ToolActionType::ListDir => "list_dir",
             ToolActionType::ReadFile => "read_file",
@@ -100,7 +116,7 @@ impl ToolService {
 
         // Errors are kept, not returned early, so a refused or failed action
         // is still recorded below.
-        let exec_result = self.run_in_jail(&req);
+        let exec_result = Self::run_in_jail(jail, &req);
 
         let (status, details) = match &exec_result {
             Ok(_) => ("success", None),
@@ -143,10 +159,13 @@ impl ToolService {
     }
 
     /// Runs one approved action inside the workspace jail.
-    fn run_in_jail(&self, req: &ToolExecutionRequest) -> Result<(String, bool), AppError> {
+    fn run_in_jail(
+        jail: &WorkspaceJail,
+        req: &ToolExecutionRequest,
+    ) -> Result<(String, bool), AppError> {
         match req.action.action_type {
             ToolActionType::ListDir => {
-                let entries = self.jail.list_dir(Some(&req.action.path))?;
+                let entries = jail.list_dir(Some(&req.action.path))?;
                 let mut out = format!("Found {} entries:\n", entries.len());
                 for e in entries {
                     let kind = if e.is_dir { "DIR " } else { "FILE" };
@@ -158,12 +177,12 @@ impl ToolService {
                 Ok((out, false))
             }
             ToolActionType::ReadFile => {
-                let (content, truncated) = self.jail.read_file(&req.action.path)?;
+                let (content, truncated) = jail.read_file(&req.action.path)?;
                 Ok((content, truncated))
             }
             ToolActionType::WriteFile => {
                 let content = req.action.content.as_deref().unwrap_or("");
-                let bytes = self.jail.write_file(&req.action.path, content)?;
+                let bytes = jail.write_file(&req.action.path, content)?;
                 Ok((
                     format!("Successfully wrote {bytes} bytes to {}", req.action.path),
                     false,
@@ -171,7 +190,7 @@ impl ToolService {
             }
             ToolActionType::SearchFiles => {
                 let query = req.action.query.as_deref().unwrap_or("");
-                let matches = self.jail.search_files(query, Some(&req.action.path))?;
+                let matches = jail.search_files(query, Some(&req.action.path))?;
                 let mut out = format!("Search for '{query}' returned {} matches:\n", matches.len());
                 for m in matches {
                     out.push_str(&format!("  - {m}\n"));
@@ -212,6 +231,22 @@ impl ToolService {
         cancel: &std::sync::atomic::AtomicBool,
         note: Option<&str>,
     ) -> Result<CommandRun, AppError> {
+        let jail = self.jail.clone();
+        self.run_command_in(&jail, source, command, cwd, timeout, cancel, note)
+    }
+
+    /// Run a terminal command in `jail`'s folder (or a folder inside it).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_command_in(
+        &self,
+        jail: &WorkspaceJail,
+        source: &str,
+        command: &str,
+        cwd: Option<&str>,
+        timeout: std::time::Duration,
+        cancel: &std::sync::atomic::AtomicBool,
+        note: Option<&str>,
+    ) -> Result<CommandRun, AppError> {
         if let shell::Verdict::Blocked(reason) = shell::classify(command) {
             self.record_event(
                 &format!("{source}:execute_command"),
@@ -224,7 +259,7 @@ impl ToolService {
         }
         let folder = match cwd.map(str::trim).filter(|c| !c.is_empty() && *c != ".") {
             Some(dir) => {
-                let path = self.jail.resolve_path(dir)?;
+                let path = jail.resolve_path(dir)?;
                 if !path.is_dir() {
                     return Err(AppError::invalid_input(format!(
                         "There is no folder called {dir} in the workspace."
@@ -232,10 +267,10 @@ impl ToolService {
                 }
                 path
             }
-            None => self.jail.root_path().to_path_buf(),
+            None => jail.root_path().to_path_buf(),
         };
         let shown_cwd = folder
-            .strip_prefix(self.jail.root_path())
+            .strip_prefix(jail.root_path())
             .map(|p| p.display().to_string())
             .unwrap_or_default();
         let audit_id = self.db.record_tool_audit(
@@ -278,7 +313,7 @@ impl ToolService {
         Ok(CommandRun {
             output,
             cwd: shown_cwd,
-            workspace: self.jail.root_path().to_path_buf(),
+            workspace: jail.root_path().to_path_buf(),
         })
     }
 

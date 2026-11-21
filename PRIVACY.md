@@ -35,6 +35,7 @@ Nothing is contacted when the app starts. The app connects only when you take on
 
 | Your action | Who is contacted | What is sent |
 |---|---|---|
+| Load the first local model (once) | GitHub (`github.com`, `objects.githubusercontent.com`) | A download of the llama.cpp model engine built for your processor; nothing about you or your data |
 | Download a model, refresh the model catalog, or browse Hugging Face | Hugging Face (`huggingface.co`) and GitHub (`raw.githubusercontent.com`) | The model or search words you chose |
 | Search the web or read a web page from the Search screen | The search provider you picked (for example DuckDuckGo, Wikipedia, Jina, Exa or Firecrawl; "Automatic" tries DuckDuckGo, then Exa, then Wikipedia) | Your search words or the page address, plus your key for that provider if you added one |
 | Send a chat message with **Web** turned on | The same search provider, and the page reader, only when the model decides to search or read a page | The search words the model chose, and the addresses of pages it reads. The tool cards under the answer show each one |

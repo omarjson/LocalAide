@@ -25,6 +25,12 @@ pub struct Permissions {
     pub shell: bool,
     /// Ask the user a question with buttons (off in Autonomous mode).
     pub ask: bool,
+    /// Keep a to-do list for a longer task (`update_todos`).
+    pub todos: bool,
+    /// Hand parts of a task to read-only subagents (`run_subagent`).
+    pub subagents: bool,
+    /// Save and improve skills learned from the chat (`save_skill`).
+    pub learn_skills: bool,
     /// MCP servers switched on for this chat.
     pub mcp: Vec<McpServerConfig>,
 }
@@ -50,6 +56,9 @@ pub enum ToolKind {
     WriteFile,
     RunCommand,
     AskUser,
+    Todos,
+    Subagent,
+    SaveSkill,
     Mcp,
 }
 
@@ -59,7 +68,9 @@ impl ToolKind {
         match self {
             Self::WebSearch | Self::ReadPage => "web",
             Self::SearchNotes | Self::SaveNote => "notes",
-            Self::ListSkills | Self::UseSkill => "skills",
+            Self::ListSkills | Self::UseSkill | Self::SaveSkill => "skills",
+            Self::Todos => "todos",
+            Self::Subagent => "subagent",
             Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile => "files",
             Self::RunCommand => "shell",
             Self::AskUser => "question",
@@ -112,6 +123,28 @@ impl ToolSpec {
             return shell::classify(command) != shell::Verdict::ReadOnly;
         }
         self.needs_approval()
+    }
+
+    /// Whether Autonomous mode still asks first: commands whose effects are
+    /// hard to undo, replacing a file that exists, and MCP tools (LocalAide
+    /// cannot tell what they do).
+    pub fn risky(
+        &self,
+        args: &Value,
+        jail: &crate::services::tools::sandbox::WorkspaceJail,
+    ) -> bool {
+        match self.kind {
+            ToolKind::RunCommand => {
+                let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+                shell::risky(command)
+            }
+            ToolKind::WriteFile => {
+                let path = args.get("path").and_then(Value::as_str).unwrap_or("");
+                jail.resolve_path(path).map(|p| p.exists()).unwrap_or(true)
+            }
+            ToolKind::Mcp => true,
+            _ => false,
+        }
     }
 
     /// A reason this call may never run, checked before asking the user.
@@ -207,7 +240,7 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "list_files",
             ToolKind::ListFiles,
-            "List files in the LocalAide workspace folder. Paths are relative to it.",
+            "List files in the folder this chat works in. Paths are relative to it.",
             object(
                 json!({"path": {"type": "string", "description": "A folder inside the workspace. Empty for the top."}}),
                 &[],
@@ -216,13 +249,13 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "read_file",
             ToolKind::ReadFile,
-            "Read a text file from the LocalAide workspace folder.",
+            "Read a text file from the folder this chat works in.",
             object(json!({"path": {"type": "string"}}), &["path"]),
         ));
         specs.push(builtin(
             "search_files",
             ToolKind::SearchFiles,
-            "Find files in the workspace whose name contains the words.",
+            "Find files in the chat's folder whose name contains the words.",
             object(
                 json!({"query": {"type": "string"}, "path": {"type": "string"}}),
                 &["query"],
@@ -231,7 +264,7 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "write_file",
             ToolKind::WriteFile,
-            "Write a text file in the LocalAide workspace folder. Replaces the file if it exists. The user approves each write.",
+            "Write a text file in the folder this chat works in. Replaces the file if it exists. Depending on the user's permission mode, the user approves the write first.",
             object(
                 json!({"path": {"type": "string"}, "content": {"type": "string"}}),
                 &["path", "content"],
@@ -243,7 +276,7 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
             "execute_command",
             ToolKind::RunCommand,
             &format!(
-                "Run a terminal command on the user's computer with {}, in the LocalAide workspace folder. Use it when the user asks you to run, build, check or inspect something with a command. Read-only commands (ls, cat, git status and similar) run at once; commands that change something wait for the user's OK; destructive commands (recursive deletes, disk formatting, piping downloads into a shell, administrator rights) are refused. The result has the exit code and the output, which may be shortened.",
+                "Run a terminal command on the user's computer with {}, in the folder this chat works in. Use it when the user asks you to run, build, check or inspect something with a command. Read-only commands (ls, cat, git status and similar) run at once; commands that change something wait for the user's OK; destructive commands (recursive deletes, disk formatting, piping downloads into a shell, administrator rights) are refused. The result has the exit code and the output, which may be shortened.",
                 shell::shell_name()
             ),
             object(
@@ -260,14 +293,91 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "ask_user",
             ToolKind::AskUser,
-            "Ask the user a short question with answer options they can tap, when you need their choice before you can continue. Give 2 to 6 short options. Do not use it for questions you can answer yourself.",
+            "Ask the user one or more short questions with answer options they can pick, when you need their choice before you can continue. Give 2 to 6 options per question, each with a short label and an optional one-line description. The user can also type their own answer. Do not use it for questions you can answer yourself.",
             object(
                 json!({
-                    "question": {"type": "string", "description": "The question, in one sentence."},
-                    "options": {"type": "array", "items": {"type": "string"}, "description": "2 to 6 short answers."},
-                    "multiple": {"type": "boolean", "description": "True when the user may pick more than one."}
+                    "questions": {
+                        "type": "array",
+                        "description": "1 to 4 questions, asked together.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "header": {"type": "string", "description": "One or two words, for example Clarify or Format."},
+                                "question": {"type": "string", "description": "The question, in one sentence."},
+                                "options": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "description": {"type": "string"}
+                                        },
+                                        "required": ["label"]
+                                    },
+                                    "description": "2 to 6 answers."
+                                },
+                                "multiple": {"type": "boolean", "description": "True when the user may pick more than one."}
+                            },
+                            "required": ["question", "options"]
+                        }
+                    },
+                    "question": {"type": "string", "description": "A single question (older form; use questions)."},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": "Its answers (older form)."},
+                    "multiple": {"type": "boolean"}
                 }),
-                &["question", "options"],
+                &[],
+            ),
+        ));
+    }
+    if perms.todos {
+        specs.push(builtin(
+            "update_todos",
+            ToolKind::Todos,
+            "Keep a short to-do list for a task with several steps, so the user sees progress. Send the whole list each time, with each step's status. Use it only for tasks of 3 or more steps.",
+            object(
+                json!({
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "status": {"type": "string", "enum": ["pending", "in_progress", "done"]}
+                            },
+                            "required": ["text", "status"]
+                        }
+                    }
+                }),
+                &["items"],
+            ),
+        ));
+    }
+    if perms.subagents {
+        specs.push(builtin(
+            "run_subagent",
+            ToolKind::Subagent,
+            "Give one self-contained part of a bigger task to a subagent: a helper with its own fresh context that can search and read (web, notes, files, read-only commands) but cannot change anything. Several calls in one turn run at the same time. Use it to research or inspect several things in parallel; it returns its findings.",
+            object(
+                json!({
+                    "title": {"type": "string", "description": "A few words naming the job, for example Check the tests."},
+                    "task": {"type": "string", "description": "Everything the subagent needs to know: the goal, where to look, and what to report back."}
+                }),
+                &["task"],
+            ),
+        ));
+    }
+    if perms.learn_skills {
+        specs.push(builtin(
+            "save_skill",
+            ToolKind::SaveSkill,
+            "Save a reusable skill, or improve the user's skill with the same name: instructions for a kind of task, learned from this chat. Use it when the user teaches you how they want a recurring task done, or corrects how you did a task a skill covers. Not for one-off facts (those are notes). It saves at once; the user can undo it. Tell the user in one short sentence.",
+            object(
+                json!({
+                    "name": {"type": "string", "description": "A short name, for example Weekly report."},
+                    "description": {"type": "string", "description": "One line: when to use it."},
+                    "instructions": {"type": "string", "description": "The full, improved instructions in markdown. For an existing skill, keep what still applies and add what you learned."}
+                }),
+                &["name", "instructions"],
             ),
         ));
     }
@@ -358,6 +468,9 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::WriteFile => "Write a file".to_string(),
         ToolKind::RunCommand => "Run a command".to_string(),
         ToolKind::AskUser => "Asked you".to_string(),
+        ToolKind::Todos => "Updated the plan".to_string(),
+        ToolKind::Subagent => "Subagent".to_string(),
+        ToolKind::SaveSkill => "Learned a skill".to_string(),
         ToolKind::Mcp => match &spec.mcp {
             Some((server, tool)) => format!("{} · {}", server.name, tool),
             None => spec.name.clone(),
@@ -372,6 +485,16 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ListSkills => String::new(),
         ToolKind::RunCommand => text("command"),
         ToolKind::AskUser => text("question"),
+        ToolKind::Todos => String::new(),
+        ToolKind::Subagent => {
+            let title = text("title");
+            if title.is_empty() {
+                text("task")
+            } else {
+                title
+            }
+        }
+        ToolKind::SaveSkill => text("name"),
         ToolKind::Mcp => {
             // The first short string argument says the most.
             args.as_object()
@@ -390,6 +513,8 @@ pub struct RunContext<'a> {
     /// Set when approval was skipped by the chat's approval mode.
     pub note: Option<&'a str>,
     pub cancel: &'a std::sync::atomic::AtomicBool,
+    /// The folder this chat works in.
+    pub jail: &'a crate::services::tools::sandbox::WorkspaceJail,
 }
 
 /// Run a terminal command and describe the result for the model and the
@@ -407,7 +532,8 @@ fn run_command(state: &AppState, args: &Value, max_chars: usize, ctx: &RunContex
         .and_then(Value::as_u64)
         .unwrap_or(shell::DEFAULT_TIMEOUT_SECS)
         .clamp(1, shell::MAX_TIMEOUT_SECS);
-    let run = match state.tools.run_command(
+    let run = match state.tools.run_command_in(
+        ctx.jail,
         ctx.source,
         &command,
         cwd,
@@ -563,6 +689,7 @@ pub fn run(
         ToolKind::UseSkill => use_skill(state, &text("name"), max_chars),
         ToolKind::ListFiles => workspace(
             state,
+            ctx.jail,
             ToolActionType::ListDir,
             &text("path"),
             None,
@@ -571,6 +698,7 @@ pub fn run(
         ),
         ToolKind::ReadFile => workspace(
             state,
+            ctx.jail,
             ToolActionType::ReadFile,
             &text("path"),
             None,
@@ -579,6 +707,7 @@ pub fn run(
         ),
         ToolKind::SearchFiles => workspace(
             state,
+            ctx.jail,
             ToolActionType::SearchFiles,
             &text("path"),
             None,
@@ -587,6 +716,7 @@ pub fn run(
         ),
         ToolKind::WriteFile => workspace(
             state,
+            ctx.jail,
             ToolActionType::WriteFile,
             &text("path"),
             Some(text("content")),
@@ -601,6 +731,10 @@ pub fn run(
             summary: "Waiting for your answer".into(),
             ..Default::default()
         },
+        // Run by the chat loop, which needs the stream and the model.
+        ToolKind::Todos | ToolKind::Subagent | ToolKind::SaveSkill => {
+            failed("This tool runs in the chat loop.")
+        }
         ToolKind::Mcp => mcp_call(state, spec, args, max_chars),
     };
     // Workspace actions and commands write their own audit rows; the rest
@@ -613,6 +747,9 @@ pub fn run(
             | ToolKind::WriteFile
             | ToolKind::RunCommand
             | ToolKind::AskUser
+            | ToolKind::Todos
+            | ToolKind::Subagent
+            | ToolKind::SaveSkill
     ) {
         let (_, detail) = describe(spec, args);
         state.tools.record_event(
@@ -904,6 +1041,7 @@ fn use_skill(state: &AppState, name: &str, max_chars: usize) -> ToolOutcome {
 
 fn workspace(
     state: &AppState,
+    jail: &crate::services::tools::sandbox::WorkspaceJail,
     action_type: ToolActionType,
     path: &str,
     content: Option<String>,
@@ -923,7 +1061,7 @@ fn workspace(
         approved: Some(true),
         session_token: None,
     };
-    match state.tools.execute(req) {
+    match state.tools.execute_in(jail, req) {
         Ok(res) if res.success => {
             let (text, truncated) = cut(&res.output, max_chars);
             let summary = match action_type {
@@ -1049,8 +1187,19 @@ mod tests {
             skills: true,
             shell: true,
             ask: true,
+            todos: true,
+            subagents: true,
+            learn_skills: true,
             mcp: vec![],
         });
+        for name in ["update_todos", "run_subagent", "save_skill", "ask_user"] {
+            assert!(all.iter().any(|s| s.name == name), "{name} is offered");
+        }
+        assert!(
+            all.iter()
+                .all(|s| s.name != "save_skill" || !s.needs_approval()),
+            "learned skills save at once, with Undo"
+        );
         let cmd = all.iter().find(|s| s.name == "execute_command").unwrap();
         assert!(!cmd.needs_approval_for(&serde_json::json!({"command": "git status"})));
         assert!(cmd.needs_approval_for(&serde_json::json!({"command": "npm install"})));

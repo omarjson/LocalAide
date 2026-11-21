@@ -93,6 +93,19 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
     })
 }
 
+/// The model engine: whether it is on this computer, and which build.
+#[tauri::command]
+pub fn engine_info() -> crate::services::engine::EngineInfo {
+    crate::services::engine::info()
+}
+
+/// Download the model engine now, instead of at the first model load.
+#[tauri::command]
+pub async fn engine_fetch() -> Result<crate::services::engine::EngineInfo, AppError> {
+    crate::services::engine::ensure().await?;
+    Ok(crate::services::engine::info())
+}
+
 /// Tail of a local log for the Settings diagnostics panel. `source` "app" is
 /// LocalAide's own log; anything else is the model engine's log.
 #[tauri::command]

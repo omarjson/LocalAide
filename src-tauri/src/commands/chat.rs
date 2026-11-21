@@ -32,6 +32,8 @@ struct StoredThread {
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<ChatMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 const MAX_IMAGES: usize = 4;
@@ -118,6 +120,8 @@ pub(crate) async fn load_and_activate(state: &AppState, id: String) -> Result<St
     if !path.is_file() {
         return Err(AppError::model_not_installed(&id));
     }
+    // The first load downloads the model engine for this processor.
+    crate::services::engine::ensure().await?;
     // The engine uses a blocking HTTP client. Run it on a plain thread, not the async runtime.
     let engine = state.inference_engine.clone();
     let load_path = path.clone();
@@ -189,7 +193,7 @@ pub(crate) fn history_text(content: &str, attachments: &[ChatAttachment]) -> Str
 }
 
 /// The model this message goes to: the picker's choice, or the default.
-fn resolve_target(
+pub(crate) fn resolve_target(
     state: &AppState,
     cfg: &crate::config::AppConfig,
     requested: Option<&ChatTargetRequest>,
@@ -305,8 +309,13 @@ pub(crate) fn prepare_run(
     AppError,
 > {
     if source == "share" {
+        // Shared links always ask, stay in the shared workspace and never
+        // change the owner's skills.
         req.approval_mode = None;
+        req.folder = None;
+        req.learn_skills = Some(false);
     }
+    let jail = folder_jail(state, req.folder.as_deref())?;
     validate_images(&req.images)?;
     let cfg = {
         let store = state
@@ -347,8 +356,14 @@ pub(crate) fn prepare_run(
         shell: req.use_shell.unwrap_or(true) && module_on("terminal"),
         // Autonomous mode works on without asking follow-up questions.
         ask: mode != ChatMode::Autonomous,
+        todos: true,
+        subagents: req.use_subagents.unwrap_or(true),
+        learn_skills: req.learn_skills.unwrap_or(true)
+            && req.use_skills.unwrap_or(true)
+            && module_on("skills"),
         mcp,
     };
+    let approval_mode = crate::services::agent::ApprovalMode::parse(req.approval_mode.as_deref());
 
     let context_tokens = match &target {
         ChatTarget::Local => state
@@ -380,6 +395,17 @@ pub(crate) fn prepare_run(
     );
     if caps.tools && !guidance.is_empty() {
         extra.push(guidance);
+    }
+    if let Some(folder) = req.folder.as_deref().filter(|f| !f.trim().is_empty()) {
+        extra.push(format!(
+            "This chat works in the user's project folder {folder}. File tools and terminal commands use it; paths are relative to it."
+        ));
+    }
+    if approval_mode == crate::services::agent::ApprovalMode::Plan {
+        extra.push(PLAN_GUIDANCE.to_string());
+    }
+    if req.rich_output.unwrap_or(true) {
+        extra.push(RICH_OUTPUT_GUIDANCE.to_string());
     }
     let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
 
@@ -434,13 +460,54 @@ pub(crate) fn prepare_run(
         max_rounds: mode.max_rounds(),
         context_tokens,
         auto_approve: req.allowed_tools.iter().cloned().collect(),
-        approval_mode: crate::services::agent::ApprovalMode::parse(req.approval_mode.as_deref()),
+        approval_mode,
         source,
         first_citation: 1,
         user_message: req.message.clone(),
         read_top_page: mode.gathers_web(),
+        jail,
     };
     Ok((run, model_label, job_id, cancel_flag))
+}
+
+const PLAN_GUIDANCE: &str = "Plan mode is on. Look around with the read-only tools as much as you need, then answer with a short numbered plan: what you would change, in which files, and which commands you would run. Do not try to make the changes; they will not run. End by saying the user can press Build to carry out the plan.";
+
+const RICH_OUTPUT_GUIDANCE: &str = "The chat can draw visuals from fenced code blocks. Use one only when a visual helps more than text:\n- ```chart with JSON: {\"type\": \"bar\" | \"line\" | \"pie\", \"title\": \"...\", \"labels\": [\"...\"], \"series\": [{\"name\": \"...\", \"values\": [1, 2]}]}\n- ```mermaid for diagrams (flowchart, sequence, class, state, timeline, gantt).\n- ```html for an interface mockup or a small page. It runs in a sandbox with no network and no access to the user's files; inline all CSS and scripts. To let the user pick an option on it, call localaide.choose(\"the choice in a few words\") from a button; the choice comes back as the user's next message.\nFor tables, use markdown tables.";
+
+/// The jail for the folder a chat works in. A project folder must be a
+/// real folder the user picked; the whole disk, the home folder itself and
+/// LocalAide's own data folder (keys, settings, chats) are refused.
+pub(crate) fn folder_jail(
+    state: &AppState,
+    folder: Option<&str>,
+) -> Result<std::sync::Arc<crate::services::tools::sandbox::WorkspaceJail>, AppError> {
+    let Some(folder) = folder.map(str::trim).filter(|f| !f.is_empty()) else {
+        return Ok(state.tools.workspace_jail());
+    };
+    let path = std::path::Path::new(folder);
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(AppError::invalid_input(format!(
+            "The chat's folder {folder} is not there any more. Start a chat in another folder."
+        )));
+    }
+    let real = fs::canonicalize(path).map_err(|e| AppError::storage(e.to_string()))?;
+    let home = dirs_next::home_dir().and_then(|h| fs::canonicalize(h).ok());
+    if real.parent().is_none() || home.as_deref() == Some(real.as_path()) {
+        return Err(AppError::invalid_input(
+            "Pick a project folder, not the whole disk or your home folder.",
+        ));
+    }
+    if let Ok(app) = fs::canonicalize(crate::app::paths::app_dir())
+        && (real.starts_with(&app) || app.starts_with(&real))
+        && fs::canonicalize(crate::app::paths::workspace_dir()).ok() != Some(real.clone())
+    {
+        return Err(AppError::invalid_input(
+            "That folder holds LocalAide's own data, so a chat cannot work in it.",
+        ));
+    }
+    Ok(std::sync::Arc::new(
+        crate::services::tools::sandbox::WorkspaceJail::new(&real)?,
+    ))
 }
 
 /// The user's answer to a tool approval question.
@@ -544,6 +611,7 @@ pub(crate) fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
                 created_at: stored.created_at,
                 updated_at: stored.updated_at,
                 message_count: stored.messages.len(),
+                folder: stored.folder,
             });
         }
     }
@@ -557,15 +625,19 @@ pub async fn chat_thread_save(
     title: String,
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
+    folder: Option<String>,
 ) -> Result<(), AppError> {
-    run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages)).await
+    run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages, folder))
+        .await
 }
 
+/// `folder` None keeps the folder the saved chat already has.
 pub(crate) fn chat_thread_save_work(
     thread_id: String,
     title: String,
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
+    folder: Option<String>,
 ) -> Result<(), AppError> {
     validate_thread_id(&thread_id)?;
     let dir = conversations_dir();
@@ -577,17 +649,13 @@ pub(crate) fn chat_thread_save_work(
         .as_secs();
 
     let path = dir.join(format!("{thread_id}.json"));
-    let created_at = if path.exists() {
-        if let Ok(existing) = fs::read_to_string(&path) {
-            serde_json::from_str::<StoredThread>(&existing)
-                .map(|t| t.created_at)
-                .unwrap_or(now)
-        } else {
-            now
-        }
-    } else {
-        now
-    };
+    let existing: Option<StoredThread> = fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok());
+    let created_at = existing.as_ref().map(|t| t.created_at).unwrap_or(now);
+    let folder = folder
+        .filter(|f| !f.trim().is_empty())
+        .or_else(|| existing.and_then(|t| t.folder));
 
     let stored = StoredThread {
         id: thread_id,
@@ -596,6 +664,7 @@ pub(crate) fn chat_thread_save_work(
         created_at,
         updated_at: now,
         messages,
+        folder,
     };
 
     let json = serde_json::to_string_pretty(&stored).map_err(AppError::from)?;

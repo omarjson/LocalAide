@@ -78,6 +78,7 @@ pub async fn rerank_start(
     state: State<'_, AppState>,
     model_id: Option<String>,
 ) -> Result<crate::services::library::rerank::RerankState, AppError> {
+    crate::services::engine::ensure().await?;
     with_app_state(&state, move |state| {
         state.rerank_engine.start(model_id.as_deref())
     })
@@ -107,6 +108,7 @@ pub async fn embedding_start(
     state: State<'_, AppState>,
     model_id: Option<String>,
 ) -> Result<crate::services::library::embedding::EmbeddingState, AppError> {
+    crate::services::engine::ensure().await?;
     with_app_state(&state, move |state| {
         state.embedding_engine.start(model_id.as_deref())
     })
