@@ -501,7 +501,7 @@ mod tests {
             &[
                 rec_in(now, 300, Some("C:\\code\\finance")),
                 rec_in(now - 60, 200, Some("C:\\code\\finance")),
-                rec_in(now - 120, 500, Some("C:\\code\\site")),
+                rec_in(now - 120, 700, Some("C:\\code\\site")),
                 rec_in(now - 180, 50, None),
             ],
         );
@@ -512,7 +512,7 @@ mod tests {
         // The project rollup always covers the whole window.
         assert_eq!(finance.per_folder.len(), 2);
         assert_eq!(finance.per_folder[0].folder, "C:\\code\\site");
-        assert_eq!(finance.per_folder[0].output, 500);
+        assert_eq!(finance.per_folder[0].output, 700);
         assert_eq!(finance.per_folder[1].folder, "C:\\code\\finance");
         assert_eq!(finance.per_folder[1].answers, 2);
         // Plain chats (no folder) count in the totals but not in projects.
@@ -536,7 +536,8 @@ mod tests {
         c.session = Some("t2".into());
         let mut d = rec_in(now - 86_400, 10, None);
         d.session = Some("t2".into());
-        write_log(&path, &[a, b, c, d]);
+        let sessionless = rec(now - 30, "local-model", 10);
+        write_log(&path, &[a, b, c, d, sessionless]);
         let sum = summary_at(&path, 7, now, None).unwrap();
         // t1 twice, t2 across two days.
         assert_eq!(sum.sessions, 2);
@@ -545,7 +546,6 @@ mod tests {
         assert_eq!(sum.longest_streak, 2);
         let _ = (yesterday, today);
         // A record with no session id is its own session.
-        write_log(&path, &[rec(now - 30, "local-model", 10)]);
         let with_none = summary_at(&path, 7, now, None).unwrap();
         assert_eq!(with_none.sessions, 3);
         let _ = fs::remove_dir_all(&dir);

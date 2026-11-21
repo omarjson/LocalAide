@@ -18,6 +18,7 @@
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
+  import TabStrip from "./components/TabStrip.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
   import LogoMark from "./components/LogoMark.svelte";
@@ -28,7 +29,7 @@
   import SearchScreen from "./screens/SearchScreen.svelte";
   import UsageScreen from "./screens/UsageScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
-  import { chats, loadThreads, newChat } from "./lib/chats.svelte";
+  import { chats, loadThreads, newChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
   import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
 
@@ -78,7 +79,11 @@
   // answer that is still streaming) survives a visit to another screen.
   let chatMounted = $state(false);
   $effect(() => {
-    if (screen === "chat") chatMounted = true;
+    if (screen === "chat") {
+      chatMounted = true;
+      // Reopen the last session's tabs, or seed one fresh chat.
+      if (!restoreTabs()) seedTab(chats.activeFolder);
+    }
   });
   // Where each screen was scrolled, so coming back keeps the place.
   let canvasEl = $state<HTMLElement>();
@@ -449,8 +454,28 @@
       <span class="font-semibold">LocalAide</span>
     </div>
     {#if chatMounted && !startupError}
-      <div class="min-h-0 flex-1" class:hidden={screen !== "chat"}>
-        <ChatScreen onOpenModels={() => navigate("models")} active={screen === "chat"} />
+      <div class="min-h-0 flex-1 flex flex-col" class:hidden={screen !== "chat"}>
+        <TabStrip
+          tabs={chats.tabs}
+          activeKey={chats.activeTabKey}
+          visible={screen === "chat"}
+          onFocus={focusTab}
+          onClose={closeTab}
+          onNew={() => newChat(chats.activeFolder)}
+        />
+        {#each chats.tabs as tab (tab.key)}
+          <div class="min-h-0 flex-1" class:hidden={tab.key !== chats.activeTabKey}>
+            <ChatScreen
+              onOpenModels={() => navigate("models")}
+              active={screen === "chat" && tab.key === chats.activeTabKey}
+              startThread={{ id: tab.id, folder: tab.folder }}
+              onThreadStarted={(id) => tabThreadStarted(tab.key, id)}
+              onTitleChanged={(title) => tabTitleChanged(tab.key, title)}
+              onBusyChanged={(busy) => tabBusyChanged(tab.key, busy)}
+              onNewChatRequested={() => newChat(tab.folder)}
+            />
+          </div>
+        {/each}
       </div>
     {/if}
     <div class={screen === "chat" ? "hidden" : "flex-1 p-6 md:p-10"}>

@@ -9,7 +9,7 @@
   import PermissionMenu from "../components/PermissionMenu.svelte";
   import WorkStatus from "../components/WorkStatus.svelte";
   import PanelRail from "../components/PanelRail.svelte";
-  import { chatRequest, chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
+  import { chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
   import { fileManagerName } from "../lib/platform";
   import { dur, motion, stagger } from "../lib/motion";
   import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
@@ -278,7 +278,27 @@
   let allowedTools = $state<string[]>([]);
   let mcpList = $state<McpServer[]>([]);
 
-  let { onOpenModels, newThreadTick = 0, active = true }: { onOpenModels?: () => void; newThreadTick?: number; active?: boolean } = $props();
+  let {
+    onOpenModels,
+    active = true,
+    startThread = null,
+    onThreadStarted,
+    onTitleChanged,
+    onBusyChanged,
+    onNewChatRequested,
+  }: {
+    onOpenModels?: () => void;
+    active?: boolean;
+    /** The chat this tab opens with: a saved thread, or a fresh chat. */
+    startThread?: { id: string | null; folder: string | null } | null;
+    onThreadStarted?: (id: string) => void;
+    onTitleChanged?: (title: string) => void;
+    onBusyChanged?: (busy: boolean) => void;
+    onNewChatRequested?: () => void;
+  } = $props();
+  // The starting chat is consumed once, on mount; later changes are the
+  // tab strip's own bookkeeping and are ignored.
+  let startHandled = $state(false);
 
   let mode = $state<ChatModeId>(isChatMode(savedOptions.mode) ? savedOptions.mode : "standard");
   let useWeb = $state(savedOptions.web === true);
@@ -552,6 +572,7 @@
   const newChat = (folder: string | null = null) => {
     if (streaming) return;
     activeThreadId = `t_${Date.now()}`;
+    onThreadStarted?.(activeThreadId);
     activeThreadTitle = "New Conversation";
     aiTitle = false;
     editingTitle = false;
@@ -565,54 +586,57 @@
     void loadStarters();
   };
 
-  // The sidebar opens chats and starts new ones through the chats store.
-  let handledRequest = untrack(() => chatRequest.tick);
+  // Each tab's chat screen owns one chat. Only the active tab speaks for
+  // the app (sidebar highlight, global busy), and its title and id flow
+  // back up so the tab strip can show them.
   $effect(() => {
-    const tick = chatRequest.tick;
-    const action = chatRequest.action;
-    if (tick === handledRequest || !action) return;
-    handledRequest = tick;
-    untrack(() => {
-      if (action.kind === "open") void selectThread(action.thread);
-      else if (action.kind === "new") newChat(action.folder);
-      else if (action.kind === "deleted" && action.id === activeThreadId) newChat(activeFolder);
-    });
-  });
-  $effect(() => {
+    if (!active) return;
     chats.activeId = messages.length > 0 ? activeThreadId : null;
     chats.activeFolder = activeFolder;
     chats.busy = streaming;
   });
-
-  // Ctrl/Cmd+N bumps the tick in App.svelte. Only react to actual changes:
-  // on a remount (navigating back to chat) the tick already equals its initial
-  // value, and the fresh component is a new conversation anyway. The seen-tick
-  // marker is deliberately non-reactive; untrack captures the initial value.
-  let lastThreadTick = untrack(() => newThreadTick);
   $effect(() => {
-    if (newThreadTick !== lastThreadTick) {
-      lastThreadTick = newThreadTick;
-      newChat();
+    onBusyChanged?.(streaming);
+  });
+  $effect(() => {
+    onTitleChanged?.(activeThreadTitle);
+  });
+
+  // The tab's starting chat, set once by the tab strip when this screen
+  // was created: either a saved thread or a fresh chat.
+  $effect(() => {
+    const start = startThread;
+    if (!start || startHandled) return;
+    startHandled = true;
+    if (start.id) {
+      void loadThreadId(start.id, start.folder);
+    } else {
+      activeFolder = start.folder;
     }
   });
 
-  const selectThread = async (t: ChatThread) => {
-    if (streaming) return;
-    activeThreadId = t.id;
-    activeThreadTitle = t.title;
+  const loadThreadId = async (id: string, folder: string | null) => {
+    activeThreadId = id;
+    activeThreadTitle = chats.threads.find((t) => t.id === id)?.title ?? "Chat";
     aiTitle = true;
     editingTitle = false;
-    activeFolder = t.folder ?? null;
+    activeFolder = folder;
     suggestions = [];
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
-    systemPrompt = t.system_prompt || "You are a helpful local AI assistant.";
+    systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
     try {
-      messages = await api.loadChatThread(t.id);
+      messages = await api.loadChatThread(id);
     } catch (e: unknown) {
       messages = [];
       chatError = `That chat could not load: ${errorMessage(e)}`;
+    }
+    // The thread list may have landed after this tab started opening.
+    const saved = chats.threads.find((t) => t.id === id);
+    if (saved) {
+      activeThreadTitle = saved.title;
+      systemPrompt = saved.system_prompt || "You are a helpful local AI assistant.";
     }
     scrollToBottom(true);
   };
@@ -620,6 +644,7 @@
   const persistCurrentThread = async () => {
     if (!activeThreadId) {
       activeThreadId = `t_${Date.now()}`;
+      onThreadStarted?.(activeThreadId);
     }
     if (messages.length === 0) return;
 
@@ -1451,7 +1476,12 @@
   };
 
   onMount(() => {
-    activeThreadId = `t_${Date.now()}`;
+    // A fresh chat gets its id now and tells the tab strip; a restored
+    // tab gets its id from the thread it opens below.
+    if (!startThread?.id) {
+      activeThreadId = `t_${Date.now()}`;
+      onThreadStarted?.(activeThreadId);
+    }
     loadThreads();
     void loadStarters();
   });
@@ -1557,7 +1587,7 @@
           </div>
         {/if}
       </div>
-      <button type="button" onclick={() => newChat(activeFolder)} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
+      <button type="button" onclick={() => (onNewChatRequested ? onNewChatRequested() : newChat(activeFolder))} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97]" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
     </div>
   </header>
 

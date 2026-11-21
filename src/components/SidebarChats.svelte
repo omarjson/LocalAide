@@ -24,18 +24,11 @@
   const LIMIT = 6;
 
   const open = (t: ChatThread) => {
-    if (chats.busy) {
-      showToast("Wait for the answer to finish, or stop it first.");
-      return;
-    }
+    // Tabs make switching free: each chat streams in its own tab.
     openChat(t);
     onOpen?.();
   };
   const start = (folder: string | null) => {
-    if (chats.busy) {
-      showToast("Wait for the answer to finish, or stop it first.");
-      return;
-    }
     newChat(folder);
     onOpen?.();
   };
