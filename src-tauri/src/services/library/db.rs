@@ -32,6 +32,8 @@ pub struct DbNote {
     pub size: u64,
     pub modified: u64,
     pub created_at: u64,
+    /// Kept in every chat's context while recall is on.
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -82,7 +84,7 @@ pub struct ChunkDetail {
 }
 
 /// The newest schema version. See `migrate`.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// The activity log keeps this many of the newest rows.
 const MAX_AUDIT_ROWS: i64 = 10_000;
@@ -266,6 +268,16 @@ impl LibraryDb {
         let tx = conn
             .transaction()
             .map_err(|e| AppError::storage(format!("Failed to start the migration: {e}")))?;
+        if version < 3 {
+            let has_pinned = tx
+                .prepare("SELECT 1 FROM pragma_table_info('notes') WHERE name = 'pinned'")
+                .and_then(|mut stmt| stmt.exists([]))
+                .map_err(|e| AppError::storage(format!("Failed to inspect the notes table: {e}")))?;
+            if !has_pinned {
+                tx.execute_batch("ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;")
+                    .map_err(|e| AppError::storage(format!("Failed to add notes.pinned: {e}")))?;
+            }
+        }
         if version < 2 {
             let has_column = tx
                 .prepare("SELECT 1 FROM pragma_table_info('chunks') WHERE name = 'fts_rowid'")
@@ -828,8 +840,8 @@ impl LibraryDb {
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
         let tags_str = note.tags.join(",");
         conn.execute(
-            "INSERT INTO notes (id, path, title, content, tags, size, modified, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO notes (id, path, title, content, tags, size, modified, created_at, pinned)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(path) DO UPDATE SET
                 title = excluded.title,
                 content = excluded.content,
@@ -845,6 +857,7 @@ impl LibraryDb {
                 note.size as i64,
                 note.modified as i64,
                 note.created_at as i64,
+                note.pinned as i64,
             ],
         )
         .map_err(|e| AppError::storage(format!("Failed to insert/update note: {e}")))?;
@@ -869,7 +882,7 @@ impl LibraryDb {
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
         let res = conn
             .query_row(
-                "SELECT id, path, title, content, tags, size, modified, created_at
+                "SELECT id, path, title, content, tags, size, modified, created_at, pinned
              FROM notes WHERE path = ?1",
                 params![path],
                 |row| {
@@ -888,6 +901,7 @@ impl LibraryDb {
                         size: row.get::<_, i64>(5)? as u64,
                         modified: row.get::<_, i64>(6)? as u64,
                         created_at: row.get::<_, i64>(7)? as u64,
+                        pinned: row.get::<_, i64>(8)? != 0,
                     })
                 },
             )
@@ -903,8 +917,8 @@ impl LibraryDb {
             .map_err(|_| AppError::internal("DB lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, path, title, content, tags, size, modified, created_at
-             FROM notes ORDER BY modified DESC",
+                "SELECT id, path, title, content, tags, size, modified, created_at, pinned
+             FROM notes ORDER BY pinned DESC, modified DESC",
             )
             .map_err(|e| AppError::storage(format!("Failed to prepare notes list query: {e}")))?;
 
@@ -925,6 +939,7 @@ impl LibraryDb {
                     size: row.get::<_, i64>(5)? as u64,
                     modified: row.get::<_, i64>(6)? as u64,
                     created_at: row.get::<_, i64>(7)? as u64,
+                    pinned: row.get::<_, i64>(8)? != 0,
                 })
             })
             .map_err(|e| AppError::storage(format!("Failed to query notes: {e}")))?;
@@ -933,6 +948,61 @@ impl LibraryDb {
         for r in rows {
             notes.push(r.map_err(|e| AppError::storage(format!("Note row read error: {e}")))?);
         }
+
+    /// Pins or unpins a note. Returns whether a row matched.
+    pub fn set_note_pinned(&self, path: &str, pinned: bool) -> Result<bool, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let count = conn
+            .execute(
+                "UPDATE notes SET pinned = ?2 WHERE path = ?1",
+                params![path, pinned as i64],
+            )
+            .map_err(|e| AppError::storage(format!("Failed to pin the note: {e}")))?;
+        Ok(count > 0)
+    }
+
+    /// The pinned notes, oldest first, for the always-in-context block.
+    pub fn pinned_notes(&self) -> Result<Vec<DbNote>, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, path, title, content, tags, size, modified, created_at, pinned
+             FROM notes WHERE pinned = 1 ORDER BY created_at ASC",
+            )
+            .map_err(|e| AppError::storage(format!("Failed to prepare pinned notes query: {e}")))?;
+        let rows = stmt
+            .query_map([], |row| {
+                let tags_str: String = row.get(4)?;
+                let tags = tags_str
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect();
+                Ok(DbNote {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    title: row.get(2)?,
+                    content: row.get(3)?,
+                    tags,
+                    size: row.get::<_, i64>(5)? as u64,
+                    modified: row.get::<_, i64>(6)? as u64,
+                    created_at: row.get::<_, i64>(7)? as u64,
+                    pinned: row.get::<_, i64>(8)? != 0,
+                })
+            })
+            .map_err(|e| AppError::storage(format!("Failed to query pinned notes: {e}")))?;
+        let mut notes = Vec::new();
+        for r in rows {
+            notes.push(r.map_err(|e| AppError::storage(format!("Pinned note row read error: {e}")))?);
+        }
+        Ok(notes)
+    }
         Ok(notes)
     }
 

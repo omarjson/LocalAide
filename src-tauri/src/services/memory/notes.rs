@@ -151,6 +151,7 @@ impl NotesManager {
             size: meta.len(),
             modified,
             created_at: now,
+            pinned: false,
         };
 
         self.db.insert_or_replace_note(&db_note)?;
@@ -235,6 +236,7 @@ impl NotesManager {
             size: meta.len(),
             modified,
             created_at: existing.as_ref().map(|n| n.created_at).unwrap_or(now),
+            pinned: existing.as_ref().map(|n| n.pinned).unwrap_or(false),
         };
 
         self.db.insert_or_replace_note(&db_note)?;
@@ -269,19 +271,43 @@ impl NotesManager {
     pub fn list_notes(&self) -> Result<Vec<MemoryNote>, AppError> {
         // Read synchronized records from SQLite
         let db_notes = self.db.list_notes()?;
-        let results = db_notes
-            .into_iter()
-            .map(|n| MemoryNote {
-                id: n.id,
-                path: n.path,
-                title: n.title,
-                content: Some(n.content),
-                tags: n.tags,
-                size: n.size,
-                modified: n.modified,
-            })
-            .collect();
-        Ok(results)
+        Ok(db_notes.into_iter().map(Self::to_note).collect())
+    }
+
+    /// Pins or unpins a note: pinned notes ride in every chat's context
+    /// while recall is on.
+    pub fn set_pinned(&self, path_str: &str, pinned: bool) -> Result<MemoryNote, AppError> {
+        self.ensure_note_path(path_str)?;
+        let updated = self.db.set_note_pinned(path_str, pinned)?;
+        if !updated {
+            return Err(AppError::invalid_input(format!(
+                "Memory note not found: {path_str}"
+            )));
+        }
+        match self.db.get_note_by_path(path_str)? {
+            Some(n) => Ok(Self::to_note(n)),
+            None => Err(AppError::invalid_input(format!(
+                "Memory note not found: {path_str}"
+            ))),
+        }
+    }
+
+    /// The pinned notes, in the order the user pinned them.
+    pub fn pinned_notes(&self) -> Result<Vec<DbNote>, AppError> {
+        self.db.pinned_notes()
+    }
+
+    fn to_note(n: DbNote) -> MemoryNote {
+        MemoryNote {
+            id: n.id,
+            path: n.path,
+            title: n.title,
+            content: Some(n.content),
+            tags: n.tags,
+            size: n.size,
+            modified: n.modified,
+            pinned: n.pinned,
+        }
     }
 
     pub fn forget_all(&self) -> Result<usize, AppError> {

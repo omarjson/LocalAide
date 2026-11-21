@@ -367,7 +367,7 @@ export type ChatStreamEvent =
   | { type: "token"; payload: { token: string } }
   | { type: "citation"; payload: Citation }
   | { type: "status"; payload: { label: string } }
-  | { type: "done"; payload: { finish_reason: string; total_tokens: number } }
+  | { type: "done"; payload: { finish_reason: string; total_tokens: number; prompt_tokens?: number | null } }
   | { type: "error"; payload: { error: string } }
   | { type: "reasoning"; payload: { text: string } }
   | {
@@ -466,6 +466,36 @@ export interface IndexerStatsResponse {
   storage_path: string;
 }
 
+export interface UsageDay {
+  date: string;
+  answers: number;
+  input: number;
+  output: number;
+}
+
+export interface UsageModel {
+  model: string;
+  provider: string;
+  answers: number;
+  input: number;
+  output: number;
+  avg_ms: number;
+  avg_tok_s: number | null;
+  avg_ttft_ms: number | null;
+}
+
+export interface UsageSummary {
+  days: number;
+  answers: number;
+  cancelled: number;
+  input_tokens: number;
+  output_tokens: number;
+  ms: number;
+  tool_calls: number;
+  per_day: UsageDay[];
+  per_model: UsageModel[];
+}
+
 export interface WatchFolderResponse {
   folder: string;
   status: string;
@@ -490,6 +520,16 @@ export interface MemoryNote {
   content?: string | null;
   tags?: string[];
   size: number;
+  modified: number;
+  /** Pinned notes ride in every chat's context while recall is on. */
+  pinned?: boolean;
+}
+
+/** A model-suggested note waiting in the review queue. */
+export interface MemorySuggestion {
+  file: string;
+  title: string;
+  content: string;
   modified: number;
 }
 

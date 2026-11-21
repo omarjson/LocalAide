@@ -351,6 +351,23 @@ select option {
   background: transparent;
 }
 
+/* The sidebar's chat list scrolls a lot but should not wear a permanent
+   scrollbar: the thumb fades in only while the sidebar is hovered. */
+aside nav {
+  scrollbar-color: transparent transparent;
+}
+aside nav:hover,
+aside nav:focus-within {
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+aside nav::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+aside nav:hover::-webkit-scrollbar-thumb,
+aside nav:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--color-ink-700);
+}
+
 /* Developer → "Compact layout". */
 :root[data-density="compact"] .space-y-3 > :not(:last-child) {
   margin-bottom: 0.5rem;

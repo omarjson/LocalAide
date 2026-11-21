@@ -279,6 +279,7 @@ pub async fn chat_stream(
                         done.finish_reason
                     },
                     total_tokens: done.tokens,
+                    prompt_tokens: done.prompt_tokens,
                 });
             }
             Err(e) => {

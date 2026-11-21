@@ -42,6 +42,7 @@ pub fn run() {
         library.db(),
         library.clone(),
         memory_dir(),
+        app_dir().join("note_suggestions"),
     ));
 
     let model_service = Arc::new(
@@ -204,6 +205,7 @@ pub fn run() {
             commands::chat_thread_delete,
             commands::chat_thread_export_save,
             commands::chat_export_text_save,
+            commands::usage_summary,
             commands::pick_folder,
             commands::pick_document,
             commands::open_link,
@@ -223,6 +225,10 @@ pub fn run() {
             commands::memory_read,
             commands::memory_delete,
             commands::memory_search,
+            commands::memory_pinned_set,
+            commands::memory_pending_list,
+            commands::memory_pending_accept,
+            commands::memory_pending_dismiss,
             commands::memory_forget_all,
             commands::tool_execute,
             commands::tool_audits_list,

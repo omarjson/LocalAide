@@ -48,6 +48,7 @@ pub enum ToolKind {
     ReadPage,
     SearchNotes,
     SaveNote,
+    SuggestNote,
     ListSkills,
     UseSkill,
     ListFiles,
@@ -67,7 +68,7 @@ impl ToolKind {
     pub fn group(self) -> &'static str {
         match self {
             Self::WebSearch | Self::ReadPage => "web",
-            Self::SearchNotes | Self::SaveNote => "notes",
+            Self::SearchNotes | Self::SaveNote | Self::SuggestNote => "notes",
             Self::ListSkills | Self::UseSkill | Self::SaveSkill => "skills",
             Self::Todos => "todos",
             Self::Subagent => "subagent",
@@ -213,6 +214,18 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
             "save_note",
             ToolKind::SaveNote,
             "Save a memory note for later chats, when the user asks you to remember something. The user approves each note.",
+            object(
+                json!({
+                    "title": {"type": "string", "description": "A short title."},
+                    "content": {"type": "string", "description": "The note, in markdown."}
+                }),
+                &["title", "content"],
+            ),
+        ));
+        specs.push(builtin(
+            "suggest_note",
+            ToolKind::SuggestNote,
+            "Offer to remember a fact for later chats: the suggestion lands in a review queue on the Memory screen, where the user accepts or dismisses it. Use it freely when you learn something durable about the user, their projects or their preferences; use save_note instead only when the user asks you to remember something right now.",
             object(
                 json!({
                     "title": {"type": "string", "description": "A short title."},
@@ -460,6 +473,7 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadPage => "Read a page".to_string(),
         ToolKind::SearchNotes => "Searched your notes".to_string(),
         ToolKind::SaveNote => "Save a note".to_string(),
+        ToolKind::SuggestNote => "Suggested a note".to_string(),
         ToolKind::ListSkills => "Looked at your skills".to_string(),
         ToolKind::UseSkill => "Used a skill".to_string(),
         ToolKind::ListFiles => "Listed workspace files".to_string(),
@@ -479,7 +493,7 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
     let detail = match spec.kind {
         ToolKind::WebSearch | ToolKind::SearchNotes | ToolKind::SearchFiles => text("query"),
         ToolKind::ReadPage => text("url"),
-        ToolKind::SaveNote => text("title"),
+        ToolKind::SaveNote | ToolKind::SuggestNote => text("title"),
         ToolKind::UseSkill => text("name"),
         ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile => text("path"),
         ToolKind::ListSkills => String::new(),
@@ -685,6 +699,7 @@ pub fn run(
         ToolKind::ReadPage => read_page(state, &text("url"), max_chars, next_citation),
         ToolKind::SearchNotes => search_notes(state, &text("query"), next_citation),
         ToolKind::SaveNote => save_note(state, &text("title"), &text("content")),
+        ToolKind::SuggestNote => suggest_note(state, &text("title"), &text("content")),
         ToolKind::ListSkills => list_skills(state),
         ToolKind::UseSkill => use_skill(state, &text("name"), max_chars),
         ToolKind::ListFiles => workspace(
@@ -970,6 +985,27 @@ fn save_note(state: &AppState, title: &str, content: &str) -> ToolOutcome {
             citations: Vec::new(),
         },
         Err(e) => failed(format!("The note could not be saved: {}", e.message)),
+    }
+}
+
+/// Offers a note for the review queue: nothing is saved until the user
+/// accepts it on the Memory screen, so this needs no approval.
+fn suggest_note(state: &AppState, title: &str, content: &str) -> ToolOutcome {
+    if title.trim().is_empty() || content.trim().is_empty() {
+        return failed("A note needs a title and some text.");
+    }
+    match state.memory.suggest_note(title.trim(), content.trim()) {
+        Ok(_) => ToolOutcome {
+            ok: true,
+            for_model: format!(
+                "The note \"{}\" is now waiting in the user's review queue on the Memory screen. Say in one short sentence that you suggested it for their notes.",
+                title.trim()
+            ),
+            summary: "Suggested".into(),
+            for_user: format!("Suggested a note: \"{}\". Review it in Memory.", title.trim()),
+            citations: Vec::new(),
+        },
+        Err(e) => failed(format!("The suggestion could not be saved: {}", e.message)),
     }
 }
 

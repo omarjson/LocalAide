@@ -13,5 +13,6 @@ pub mod opencode;
 pub mod share;
 pub mod skills;
 pub mod tools;
+pub mod usage;
 pub mod voice;
 pub mod websearch;

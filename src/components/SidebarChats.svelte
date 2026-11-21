@@ -18,6 +18,7 @@
   let closed = $state<Record<string, boolean>>({});
   let more = $state<Record<string, boolean>>({});
   let pendingDelete = $state<ChatThread | null>(null);
+  let pendingProjectDelete = $state<{ name: string; path: string; threads: ChatThread[] } | null>(null);
 
   const groups = $derived(groupChats(chats.threads, chats.folders, query));
   const LIMIT = 6;
@@ -55,6 +56,19 @@
       showToast(`That chat could not be deleted: ${errorMessage(e)}`, "error");
     }
   };
+  const confirmProjectDelete = async () => {
+    const project = pendingProjectDelete;
+    pendingProjectDelete = null;
+    if (!project) return;
+    try {
+      for (const t of project.threads) {
+        await deleteChat(t.id);
+      }
+      forgetFolder(project.path);
+    } catch (e: unknown) {
+      showToast(`The project could not be deleted: ${errorMessage(e)}`, "error");
+    }
+  };
 </script>
 
 {#snippet row(t: ChatThread)}
@@ -86,7 +100,9 @@
         </button>
         <button type="button" class="chat-row-del" aria-label={`New chat in ${g.name}`} title={`New chat in ${g.name}`} onclick={() => start(g.path)}><Icon name="plus" class="h-3.5 w-3.5" /></button>
         <button type="button" class="chat-row-del" aria-label={`Show ${g.name} in ${fileManagerName()}`} title={`Show in ${fileManagerName()}`} onclick={() => void api.revealFile("", g.path).catch((e: unknown) => showToast(errorMessage(e), "error"))}><Icon name="external" class="h-3.5 w-3.5" /></button>
-        {#if g.threads.length === 0}
+        {#if g.threads.length > 0}
+          <button type="button" class="chat-row-del" aria-label={`Delete project ${g.name}`} title="Delete project" onclick={() => (pendingProjectDelete = { name: g.name, path: g.path, threads: g.threads })}><Icon name="trash" class="h-3.5 w-3.5" /></button>
+        {:else}
           <button type="button" class="chat-row-del" aria-label={`Remove ${g.name} from the list`} title="Remove from the list" onclick={() => forgetFolder(g.path)}><Icon name="close" class="h-3.5 w-3.5" /></button>
         {/if}
       </div>
@@ -103,11 +119,23 @@
   {/each}
 
   {#if groups.folders.length > 0 && groups.plain.length > 0}
-    <div class="px-2 pb-0.5 pt-2 text-xs font-semibold text-ink-600">Plain chats</div>
+    <button
+      type="button"
+      class="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-2 text-left text-xs font-semibold text-ink-600 hover:text-ink-400"
+      aria-expanded={!closed["__plain__"]}
+      onclick={() => (closed["__plain__"] = !closed["__plain__"])}
+      title={closed["__plain__"] ? "Show plain chats" : "Hide plain chats"}
+    >
+      <Icon name="chevron-down" class={`h-3 w-3 shrink-0 transition-transform duration-200 ${closed["__plain__"] ? "-rotate-90" : ""}`} />
+      Plain chats
+      <span class="tabular-nums">{groups.plain.length}</span>
+    </button>
   {/if}
-  {#each groups.plain.slice(0, more[""] ? undefined : 12) as t (t.id)}{@render row(t)}{/each}
-  {#if groups.plain.length > 12 && !more[""]}
-    <button type="button" class="px-2 py-1 text-xs text-ink-500 hover:text-ink-200" onclick={() => (more[""] = true)}>Show {groups.plain.length - 12} more</button>
+  {#if !closed["__plain__"]}
+    {#each groups.plain.slice(0, more[""] ? undefined : 12) as t (t.id)}{@render row(t)}{/each}
+    {#if groups.plain.length > 12 && !more[""]}
+      <button type="button" class="px-2 py-1 text-xs text-ink-500 hover:text-ink-200" onclick={() => (more[""] = true)}>Show {groups.plain.length - 12} more</button>
+    {/if}
   {/if}
   {#if chats.threads.length === 0 && groups.folders.length === 0}
     <p class="px-2 py-1 text-xs leading-5 text-ink-600">Chats save themselves after the first answer.</p>
@@ -126,6 +154,17 @@
       confirmLabel="Delete chat"
       onConfirm={() => void confirmDelete()}
       onCancel={() => (pendingDelete = null)}
+    />
+  </div>
+{/if}
+{#if pendingProjectDelete}
+  <div use:portal>
+    <ConfirmDialog
+      title={`Delete project “${pendingProjectDelete.name}”?`}
+      message={`This deletes its ${pendingProjectDelete.threads.length} ${pendingProjectDelete.threads.length === 1 ? "chat" : "chats"} and removes the project from the list. The folder and its files stay on disk. You cannot undo it.`}
+      confirmLabel="Delete project"
+      onConfirm={() => void confirmProjectDelete()}
+      onCancel={() => (pendingProjectDelete = null)}
     />
   </div>
 {/if}

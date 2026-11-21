@@ -21,6 +21,7 @@ pub mod skills;
 pub mod system;
 pub mod tools;
 pub mod updates;
+pub mod usage;
 pub mod voice;
 pub mod web;
 
@@ -47,5 +48,6 @@ pub use skills::*;
 pub use system::*;
 pub use tools::*;
 pub use updates::*;
+pub use usage::*;
 pub use voice::*;
 pub use web::*;

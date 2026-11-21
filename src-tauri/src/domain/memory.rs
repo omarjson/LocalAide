@@ -9,6 +9,9 @@ pub struct MemoryNote {
     pub tags: Vec<String>,
     pub size: u64,
     pub modified: u64,
+    /// Pinned notes ride in every chat's context while recall is on.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

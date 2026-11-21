@@ -52,6 +52,7 @@ import type {
   MemoryCreateRequest,
   MemoryCreateResponse,
   MemoryNote,
+  MemorySuggestion,
   MemoryUpdateRequest,
   HfCustomAddResult,
   HfFileInfo,
@@ -79,6 +80,7 @@ import type {
   SummarizeResponse,
   SystemProbeResult,
   ThreadExportRequest,
+  UsageSummary,
   ToolAuditEntry,
   ToolExecutionRequest,
   ToolExecutionResponse,
@@ -374,6 +376,11 @@ export class ApiClient {
     return invoke<IndexerStatsResponse>("indexer_stats");
   }
 
+  /** Aggregated answer usage over the last `days` days (default 30). */
+  async usageSummary(days?: number): Promise<UsageSummary> {
+    return invoke<UsageSummary>("usage_summary", { days: days ?? null });
+  }
+
   // Library status, folder presets and indexing with progress
 
   async libraryStatus(): Promise<LibraryStatus> {
@@ -532,6 +539,26 @@ export class ApiClient {
 
   async deleteMemory(path: string): Promise<void> {
     return invoke<void>("memory_delete", { path });
+  }
+
+  /** Pins or unpins a note; pinned notes ride in every chat with recall on. */
+  async setMemoryPinned(path: string, pinned: boolean): Promise<MemoryNote> {
+    return invoke<MemoryNote>("memory_pinned_set", { path, pinned });
+  }
+
+  /** The model's suggested notes, waiting for review. */
+  async pendingSuggestions(): Promise<MemorySuggestion[]> {
+    return invoke<MemorySuggestion[]>("memory_pending_list");
+  }
+
+  /** Accepts a suggestion: it becomes a real note. */
+  async acceptSuggestion(file: string, tags?: string[]): Promise<MemoryNote> {
+    return invoke<MemoryNote>("memory_pending_accept", { file, tags: tags ?? null });
+  }
+
+  /** Dismisses a suggestion without saving it. */
+  async dismissSuggestion(file: string): Promise<boolean> {
+    return invoke<boolean>("memory_pending_dismiss", { file });
   }
 
   async forgetAllMemories(): Promise<ForgetAllResponse> {

@@ -216,6 +216,7 @@ mod tests {
             library.db(),
             library.clone(),
             memory_dir(),
+            app_dir().join("note_suggestions"),
         ));
         let model_service = A::new(
             crate::services::models::ModelService::new(

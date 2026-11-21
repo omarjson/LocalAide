@@ -21,6 +21,8 @@ pub enum ChatStreamEvent {
     Done {
         finish_reason: String,
         total_tokens: usize,
+        /// The server's own prompt count for the last round, when reported.
+        prompt_tokens: Option<usize>,
     },
     Error {
         error: String,

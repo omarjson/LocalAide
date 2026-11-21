@@ -181,6 +181,8 @@ pub struct StreamOutcome {
     pub finish_reason: Option<String>,
     /// From the usage block, when the server sends one.
     pub completion_tokens: Option<usize>,
+    /// Prompt size the server reported, the context meter's ground truth.
+    pub prompt_tokens: Option<usize>,
     /// Content and reasoning pieces received, a fallback token count.
     pub pieces: usize,
     pub cancelled: bool,
@@ -583,6 +585,147 @@ fn empty_call() -> ToolCall {
     }
 }
 
+/// Some models write their tool calls as plain text instead of using the
+/// server's tool-call channel: `<tool_call>` blocks holding a function
+/// name and parameters (Kimi, Qwen templates), or Hermes-style JSON. The
+/// guard keeps that text out of the answer and turns it back into real
+/// tool calls, so they run like any other call.
+#[derive(Default)]
+struct ToolCallGuard {
+    /// Text held back because it may be the start of an open tag.
+    held: String,
+    /// The text of the block being captured, open tag already removed.
+    block: Option<String>,
+    /// Calls recovered from finished blocks, in order.
+    calls: Vec<ToolCall>,
+}
+
+const TOOL_CALL_OPEN: &str = "<tool_call>";
+const TOOL_CALL_CLOSE: &str = "</tool_call>";
+
+impl ToolCallGuard {
+    /// Returns the text that is safe to show right now.
+    fn push(&mut self, text: &str) -> String {
+        if let Some(block) = &mut self.block {
+            block.push_str(text);
+            if let Some(end) = block.find(TOOL_CALL_CLOSE) {
+                let body = block[..end].to_string();
+                let rest = block[end + TOOL_CALL_CLOSE.len()..].to_string();
+                self.block = None;
+                self.parse_block(&body);
+                // Whatever follows the block streams on, and may open the
+                // next one.
+                return self.push(&rest);
+            }
+            return String::new();
+        }
+        let mut pending = std::mem::take(&mut self.held);
+        pending.push_str(text);
+        if let Some(start) = pending.find(TOOL_CALL_OPEN) {
+            let visible = pending[..start].to_string();
+            self.block = Some(pending[start + TOOL_CALL_OPEN.len()..].to_string());
+            // The same chunk may already close the block again.
+            return visible + &self.push("");
+        }
+        // Hold back a tail that could still grow into the open tag.
+        let keep = (1..TOOL_CALL_OPEN.len())
+            .rev()
+            .find(|n| pending.ends_with(&TOOL_CALL_OPEN[..*n]));
+        match keep {
+            Some(n) => {
+                self.held = pending[pending.len() - n..].to_string();
+                pending.truncate(pending.len() - n);
+                pending
+            }
+            None => pending,
+        }
+    }
+
+    /// Held-back text that turned out not to be a tool call.
+    fn finish_text(&mut self) -> String {
+        std::mem::take(&mut self.held)
+    }
+
+    /// Returns the text still held (an open tag never completed) and the
+    /// calls recovered; a block the model never closed still counts.
+    fn finish(mut self) -> (String, Vec<ToolCall>) {
+        let leftover = self.finish_text();
+        if let Some(block) = self.block.take() {
+            self.parse_block(&block);
+        }
+        (leftover, self.calls)
+    }
+
+    fn next_id(&self) -> String {
+        format!("textcall_{}", self.calls.len() + 1)
+    }
+
+    fn parse_block(&mut self, body: &str) {
+        let trimmed = body.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        // Hermes-style JSON: {"name": ..., "arguments": {...}}, or the
+        // same shape wrapped in a "function" object.
+        if trimmed.starts_with('{') {
+            if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+                let named = value.get("function").unwrap_or(&value);
+                let name = named
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if !name.is_empty() {
+                    let arguments = match named.get("arguments") {
+                        Some(Value::String(s)) => s.clone(),
+                        Some(other) => other.to_string(),
+                        None => "{}".to_string(),
+                    };
+                    self.calls.push(ToolCall {
+                        id: self.next_id(),
+                        name,
+                        arguments,
+                    });
+                }
+                return;
+            }
+        }
+        // Tagged form: <function=name> with <parameter=key> value </parameter>
+        // pairs inside. One block can hold several functions.
+        for part in trimmed.split("<function=") {
+            let Some((name, rest)) = part.split_once('>') else {
+                continue;
+            };
+            let name = name.trim().to_string();
+            if name.is_empty() || name.contains('<') {
+                continue;
+            }
+            let mut arguments = serde_json::Map::new();
+            let mut scan = rest;
+            while let Some(pos) = scan.find("<parameter=") {
+                let after_key = &scan[pos + "<parameter=".len()..];
+                let Some(key_end) = after_key.find('>') else {
+                    break;
+                };
+                let key = after_key[..key_end].trim().to_string();
+                let after_tag = &after_key[key_end + 1..];
+                let Some(value_end) = after_tag.find("</parameter>") else {
+                    break;
+                };
+                if !key.is_empty() {
+                    arguments.insert(key, Value::String(after_tag[..value_end].trim().to_string()));
+                }
+                scan = &after_tag[value_end + "</parameter>".len()..];
+            }
+            self.calls.push(ToolCall {
+                id: self.next_id(),
+                name,
+                arguments: Value::Object(arguments).to_string(),
+            });
+        }
+    }
+}
+
 /// Apply one parsed SSE event. Returns the text pieces it carried, or the
 /// error message when the provider streamed an error.
 pub fn apply_event(
@@ -590,6 +733,7 @@ pub fn apply_event(
     splitter: &mut ThinkSplitter,
     calls: &mut ToolCallAccumulator,
     outcome: &mut StreamOutcome,
+    toolguard: &mut ToolCallGuard,
 ) -> Result<Vec<Delta>, String> {
     if let Some(err) = event.get("error").filter(|e| !e.is_null()) {
         let message = err
@@ -599,12 +743,13 @@ pub fn apply_event(
             .unwrap_or_else(|| err.to_string());
         return Err(message);
     }
-    if let Some(tokens) = event
-        .get("usage")
-        .and_then(|u| u.get("completion_tokens"))
-        .and_then(Value::as_u64)
-    {
-        outcome.completion_tokens = Some(tokens as usize);
+    if let Some(usage) = event.get("usage") {
+        if let Some(tokens) = usage.get("completion_tokens").and_then(Value::as_u64) {
+            outcome.completion_tokens = Some(tokens as usize);
+        }
+        if let Some(tokens) = usage.get("prompt_tokens").and_then(Value::as_u64) {
+            outcome.prompt_tokens = Some(tokens as usize);
+        }
     }
     let Some(choice) = event.get("choices").and_then(|c| c.get(0)) else {
         return Ok(Vec::new());
@@ -628,7 +773,7 @@ pub fn apply_event(
     if let Some(text) = delta.get("content").and_then(Value::as_str)
         && !text.is_empty()
     {
-        out.extend(splitter.push(text));
+        out.extend(splitter.push(&toolguard.push(text)));
     }
     if let Some(pieces) = delta.get("tool_calls").and_then(Value::as_array) {
         calls.push(pieces);
@@ -639,7 +784,7 @@ pub fn apply_event(
 /// A refused request, before any text arrived.
 #[derive(Debug)]
 pub enum StreamError {
-    Http { status: u16, body: String },
+    Http { status: u16, body: String, retry_after: Option<Duration> },
     Other(AppError),
 }
 
@@ -661,6 +806,33 @@ pub fn http_error_message(label: &str, status: u16, body: &str, has_key: bool) -
     };
     let body: String = body.chars().take(ERROR_BODY_CHARS).collect();
     format!("{label} returned {status}:{hint} {}", body.trim())
+}
+
+/// Providers say how long to wait after a rate limit, in a header or in
+/// the error body. Only whole seconds are handled; a date header is left
+/// alone as too fussy to parse.
+fn retry_after_from(response: &reqwest::blocking::Response, body: &str) -> Option<Duration> {
+    if let Some(value) = response.headers().get(reqwest::header::RETRY_AFTER) {
+        if let Ok(text) = value.to_str()
+            && let Ok(secs) = text.trim().parse::<u64>()
+        {
+            return Some(Duration::from_secs(secs));
+        }
+    }
+    let lower = body.to_ascii_lowercase();
+    for key in [""retry_after"", ""retryafter"", ""retry-after""] {
+        if let Some(pos) = lower.find(key) {
+            let digits: String = lower[pos + key.len()..]
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(secs) = digits.parse::<u64>() {
+                return Some(Duration::from_secs(secs));
+            }
+        }
+    }
+    None
 }
 
 /// Send one request and stream the reply. Text pieces go to `on_delta` as
@@ -718,7 +890,11 @@ pub fn stream_once(
             a.finish(false, &format!("HTTP {status}"));
         }
         let body = response.text().unwrap_or_default();
-        return Err(StreamError::Http { status, body });
+        return Err(StreamError::Http {
+            status,
+            retry_after: retry_after_from(&response, &body),
+            body,
+        });
     }
     if let Some(a) = audit {
         a.finish(true, &format!("HTTP {}", response.status().as_u16()));
@@ -740,6 +916,7 @@ pub fn stream_once(
     let mut outcome = StreamOutcome::default();
     let mut splitter = ThinkSplitter::default();
     let mut calls = ToolCallAccumulator::default();
+    let mut toolguard = ToolCallGuard::default();
     let mut last_activity = Instant::now();
     let mut deliver = |pieces: Vec<Delta>, outcome: &mut StreamOutcome| {
         for piece in pieces {
@@ -791,7 +968,7 @@ pub fn stream_once(
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             continue;
         };
-        match apply_event(&event, &mut splitter, &mut calls, &mut outcome) {
+        match apply_event(&event, &mut splitter, &mut calls, &mut outcome, &mut toolguard) {
             Ok(pieces) => deliver(pieces, &mut outcome),
             Err(message) => {
                 return Err(StreamError::Other(AppError::internal(format!(
@@ -804,6 +981,11 @@ pub fn stream_once(
     let rest = splitter.finish();
     deliver(rest, &mut outcome);
     outcome.tool_calls = calls.finish();
+    let (held, text_calls) = toolguard.finish();
+    if !held.is_empty() {
+        deliver(vec![Delta::Content(held)], &mut outcome);
+    }
+    outcome.tool_calls.extend(text_calls);
     if endpoint.require_done
         && !outcome.cancelled
         && !outcome.saw_done
@@ -827,13 +1009,15 @@ pub fn stream_with_retries(
     opts: &mut CallOptions,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
+    on_status: &mut dyn FnMut(String),
 ) -> Result<(StreamOutcome, Vec<Adjustment>), AppError> {
     let mut adjustments = Vec::new();
+    let mut tries = 0u32;
     loop {
         let body = build_body(endpoint, turns, opts);
         match stream_once(client, endpoint, &body, cancel, on_delta) {
             Ok(outcome) => return Ok((outcome, adjustments)),
-            Err(StreamError::Http { status, body }) => {
+            Err(StreamError::Http { status, body, retry_after }) => {
                 let retryable = matches!(status, 400 | 422 | 500) && adjustments.len() < 4;
                 // A local server answers 500 when its template cannot render
                 // tools; other providers use 400 and 422.
@@ -853,6 +1037,28 @@ pub fn stream_with_retries(
                         ));
                     }
                     adjustments.push(adjustment);
+                    continue;
+                }
+                // Rate limits and server hiccups: wait and try again, up
+                // to ten tries. The provider's own wait time wins; other-
+                // wise each try waits longer than the one before.
+                if matches!(status, 429 | 408 | 502 | 503 | 504) && tries < 10 {
+                    tries += 1;
+                    let wait = retry_after
+                        .unwrap_or_else(|| Duration::from_secs(2u64.saturating_pow(tries).min(60)))
+                        .clamp(Duration::from_secs(1), Duration::from_secs(300));
+                    on_status(format!(
+                        "{} returned {status}; trying again in {} s (try {tries} of 10).",
+                        endpoint.label,
+                        wait.as_secs()
+                    ));
+                    let deadline = Instant::now() + wait;
+                    while Instant::now() < deadline {
+                        if cancel.load(Ordering::Relaxed) {
+                            return Err(AppError::internal("Stopped."));
+                        }
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
                     continue;
                 }
                 let has_key = endpoint
@@ -921,6 +1127,7 @@ mod tests {
         let mut s = ThinkSplitter::default();
         let mut calls = ToolCallAccumulator::default();
         let mut out = StreamOutcome::default();
+        let mut g = ToolCallGuard::default();
         let events = [
             json!({"choices":[{"delta":{"reasoning_content":"Let me look"}}]}),
             json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"web_search","arguments":"{\"qu"}}]}}]}),
@@ -930,7 +1137,7 @@ mod tests {
         ];
         let mut pieces = Vec::new();
         for e in &events {
-            pieces.extend(apply_event(e, &mut s, &mut calls, &mut out).unwrap());
+            pieces.extend(apply_event(e, &mut s, &mut calls, &mut out, &mut g).unwrap());
         }
         assert_eq!(pieces, vec![Delta::Reasoning("Let me look".into())]);
         let calls = calls.finish();
@@ -947,11 +1154,12 @@ mod tests {
         let mut s = ThinkSplitter::default();
         let mut calls = ToolCallAccumulator::default();
         let mut out = StreamOutcome::default();
+        let mut g = ToolCallGuard::default();
         let e = json!({"choices":[{"delta":{"reasoning":"hmm","tool_calls":[
             {"id":"a","function":{"name":"one","arguments":"{}"}},
             {"id":"b","function":{"name":"two","arguments":{"x":1}}}
         ]}}]});
-        let pieces = apply_event(&e, &mut s, &mut calls, &mut out).unwrap();
+        let pieces = apply_event(&e, &mut s, &mut calls, &mut out, &mut g).unwrap();
         assert_eq!(pieces, vec![Delta::Reasoning("hmm".into())]);
         let calls = calls.finish();
         assert_eq!(calls.len(), 2);
@@ -964,11 +1172,51 @@ mod tests {
         let mut s = ThinkSplitter::default();
         let mut calls = ToolCallAccumulator::default();
         let mut out = StreamOutcome::default();
+        let mut g = ToolCallGuard::default();
         let e = json!({"error":{"message":"overloaded"}});
         assert_eq!(
-            apply_event(&e, &mut s, &mut calls, &mut out).unwrap_err(),
+            apply_event(&e, &mut s, &mut calls, &mut out, &mut g).unwrap_err(),
             "overloaded"
         );
+    }
+
+    #[test]
+    fn text_tool_call_blocks_become_real_calls() {
+        // Kimi/Qwen templates: the model writes <tool_call> blocks as text.
+        // They must not show in the answer and must run as tool calls.
+        let mut g = ToolCallGuard::default();
+        let shown = g.push("Let me check the sources: <tool_call>");
+        assert_eq!(shown, "Let me check the sources: ");
+        assert_eq!(g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"), "");
+        assert_eq!(g.push("</function></tool_call>And here is what I found."), "And here is what I found.");
+        let calls = g.finish();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "list_files");
+        let args: Value = serde_json::from_str(&calls[0].arguments).unwrap();
+        assert_eq!(args["path"], "packages/types/src");
+    }
+
+    #[test]
+    fn json_tool_call_blocks_and_split_tags_recover() {
+        // Hermes-style JSON, with the open tag split across two chunks.
+        let mut g = ToolCallGuard::default();
+        assert_eq!(g.push("Reading the file <tool"), "");
+        assert_eq!(g.push("_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.txt\"}}</tool_call> done"), "Reading the file  done");
+        let calls = g.finish();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read_file");
+        let args: Value = serde_json::from_str(&calls[0].arguments).unwrap();
+        assert_eq!(args["path"], "a.txt");
+    }
+
+    #[test]
+    fn plain_text_with_lt_signs_streams_through() {
+        // Ordinary angle brackets must not be swallowed.
+        let mut g = ToolCallGuard::default();
+        let mut shown = g.push("Use x < y and <em>tags</em> freely");
+        shown.push_str(&g.finish_text());
+        assert!(shown.contains("x < y"));
+        assert!(shown.contains("<em>tags</em>"));
     }
 
     fn endpoint(flavor: Flavor) -> Endpoint {
@@ -1191,6 +1439,7 @@ mod tests {
             &mut opts,
             &cancel,
             &mut |d| deltas.push(d),
+            &mut |_| {},
         )
         .unwrap();
         assert_eq!(adjustments, vec![Adjustment::DroppedEffort]);
@@ -1234,6 +1483,7 @@ mod tests {
             &mut opts,
             &cancel,
             &mut |_| {},
+            &mut |_| {},
         )
         .unwrap_err();
         assert_eq!(err.code, TOOLS_UNSUPPORTED);
@@ -1263,6 +1513,7 @@ mod tests {
             &mut turns,
             &mut opts,
             &cancel,
+            &mut |_| {},
             &mut |_| {},
         )
         .unwrap_err();

@@ -125,6 +125,8 @@
   // What this computer holds, for the empty chat's quiet stats row.
   let localDocs = $state<number | null>(null);
   let localNotes = $state<number | null>(null);
+  // Titles of pinned notes, shown as chips above the composer while Recall is on.
+  let pinnedTitles = $state<string[]>([]);
   let localBudgetGb = $state<number | null>(null);
   const loadLocalStats = async () => {
     try {
@@ -139,7 +141,9 @@
     }
     if (moduleOn("memory")) {
       try {
-        localNotes = (await api.listMemories()).length;
+        const memories = await api.listMemories();
+        localNotes = memories.length;
+        pinnedTitles = memories.filter((n) => n.pinned === true).map((n) => n.title);
       } catch {
         localNotes = null;
       }
@@ -581,9 +585,16 @@
   let compactedBefore = $state(0);
   const historyFrom = $derived(Math.min(compactedBefore, messages.length));
   const answerReserve = $derived(maxTokens + (activeChoice?.reasoning && effort !== "off" ? 4096 : 0));
-  const usage = $derived(
-    contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve }),
-  );
+  // The server's own prompt count from the last answer beats the chars/4
+  // estimate whenever it reports one.
+  let realPromptTokens = $state<number | null>(null);
+  const usage = $derived.by(() => {
+    const estimate = contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve });
+    if (realPromptTokens !== null && activeChoice?.context) {
+      return { ...estimate, used: realPromptTokens, percent: Math.min(100, (realPromptTokens / activeChoice.context) * 100) };
+    }
+    return estimate;
+  });
 
   /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
   const compactConversation = (threshold = autoCompactAt, draft = "") => {
@@ -747,14 +758,21 @@
     document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   };
 
-  const send = async () => {
-    const files = $state.snapshot(pendingFiles).filter((f) => !f.error);
-    if ((!input.trim() && pendingImages.length === 0 && files.length === 0) || streaming) return;
-    const userMsg = input.trim();
-    input = "";
+  const send = async (resend = false) => {
+    const lastUser = resend ? messages.at(-1) : undefined;
+    const files = resend
+      ? (lastUser?.attachments ?? []).filter((f) => !f.error)
+      : $state.snapshot(pendingFiles).filter((f) => !f.error);
+    const userMsg = resend ? (lastUser?.content ?? "") : input.trim();
+    const resendImages = resend ? (lastUser?.images ?? []) : [];
+    if ((!userMsg && (resend ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) || streaming) return;
+    if (!resend) {
+      input = "";
+    }
     suggestion = null;
     previousDraft = null;
     planReady = false;
+    realPromptTokens = null;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
     for (const m of messages) {
@@ -768,8 +786,10 @@
 
     // Earlier turns only. The new message is sent separately as `message`.
     // Failed answers are left out, so the model does not repeat them.
+    // A resend keeps the question in the transcript, so it is excluded here.
+    const priorMessages = resend ? messages.slice(0, -1) : messages;
     const history = $state
-      .snapshot(messages)
+      .snapshot(priorMessages)
       .slice(historyFrom)
       .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
       .map((m) => ({
@@ -778,10 +798,12 @@
         attachments: m.attachments?.filter((a) => a.kind === "text").map((a) => ({ ...a, data_url: null })),
       }));
 
-    const images = $state.snapshot(pendingImages);
-    pendingImages = [];
-    pendingFiles = [];
-    messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
+    const images = resend ? resendImages : $state.snapshot(pendingImages);
+    if (!resend) {
+      pendingImages = [];
+      pendingFiles = [];
+      messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
+    }
     streaming = true;
     runStartedAt = Date.now();
     sendFailed = false;
@@ -887,9 +909,11 @@
             if (!cur.some((c) => c.index === event.payload.index)) answer().citations = [...cur, event.payload];
           } else if (event.type === "done") {
             settleParts(parts(), now);
+            realPromptTokens = event.payload.prompt_tokens ?? null;
             answer().stats = {
               tokens: event.payload.total_tokens,
-              inputTokens: contextUsage(messages.slice(0, assistantIdx), null, { from: historyFrom, systemPrompt }).used,
+              inputTokens: event.payload.prompt_tokens
+                ?? contextUsage(messages.slice(0, assistantIdx), null, { from: historyFrom, systemPrompt }).used,
               outputTokens: event.payload.total_tokens,
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
@@ -933,21 +957,18 @@
     persistCurrentThread();
   };
 
-  // Ask the last question again. The old question and answer are removed
-  // first, so the question does not appear twice.
+  // Answer the last question again, in place: the question stays in the
+  // transcript with its attachments and only the old answer is replaced,
+  // so the chat continues instead of starting over.
   const retryLast = () => {
     if (streaming) return;
     let userIdx = messages.length - 1;
     while (userIdx >= 0 && messages[userIdx].role !== "user") userIdx -= 1;
     if (userIdx < 0) return;
-    const lastUser = messages[userIdx];
     chatError = null;
     sendFailed = false;
-    messages = messages.slice(0, userIdx);
-    input = lastUser.content;
-    pendingImages = [...(lastUser.images ?? [])];
-    pendingFiles = [...(lastUser.attachments ?? [])];
-    void send();
+    messages = messages.slice(0, userIdx + 1);
+    void send(true);
   };
 
   const editTurn = (newText: string, index: number) => {
@@ -1662,6 +1683,13 @@
           <button type="button" onclick={buildPlan} class="rounded-lg bg-ember-500 px-3 py-1 font-semibold text-on-ember hover:bg-ember-400">Build</button>
         </div>
       {/if}
+      {#if useRecall && pinnedTitles.length > 0}
+        <div class="mb-2 flex flex-wrap items-center gap-1.5" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+          {#each pinnedTitles as title (title)}
+            <span class="pinned-chip" title="Pinned note — always in context while Recall is on"><Icon name="pin" class="h-3 w-3 shrink-0 text-ember-300" /><span class="max-w-48 truncate">{title}</span></span>
+          {/each}
+        </div>
+      {/if}
       {#if suggestion && !input.trim() && !streaming}
         <div class="mb-2 flex items-center gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
           <button type="button" class="suggest-chip" onclick={() => { input = suggestion ?? ""; focusComposer(); }} title="Use this prompt (Tab)"><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="truncate">{suggestion}</span></button>
@@ -1811,6 +1839,19 @@
     border-color: var(--color-edge);
     background: color-mix(in oklab, var(--color-veil) 4%, transparent);
     color: var(--color-ink-50);
+  }
+  .pinned-chip {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--color-ember-500) 40%, transparent);
+    background: color-mix(in oklab, var(--color-ember-500) 8%, transparent);
+    padding: 0.25rem 0.65rem;
+    font-size: 0.75rem;
+    color: var(--color-ink-300);
   }
   .sheet-switch {
     position: relative;

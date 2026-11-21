@@ -12,6 +12,8 @@ type Handler = (args: Record<string, unknown>) => unknown;
 
 const now = Date.now();
 const ago = (minutes: number) => now - minutes * 60_000;
+// Memory timestamps cross the bridge in seconds, like the Rust backend.
+const sec = (minutes: number) => Math.floor(ago(minutes) / 1000);
 
 const MODEL_QWEN = {
   id: "qwen3.5-9b",
@@ -156,6 +158,44 @@ const chatModelsFixture = (): ModelChoicesFixture => ({
   online_allowed: true,
 });
 
+// A month of plausible answer history, anchored to "today" so the Usage
+// screen always shows fresh-looking bars in the preview harness.
+const usageSummaryFixture = (args: Record<string, unknown>) => {
+  const days = Math.max(1, Math.min(3650, Number(args.days ?? 30)));
+  const pattern = [3, 5, 0, 8, 6, 2, 9];
+  let answers = 0;
+  let input = 0;
+  let output = 0;
+  let ms = 0;
+  const per_day: { date: string; answers: number; input: number; output: number }[] = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const a = i % 6 === 4 ? 0 : pattern[i % pattern.length];
+    per_day.push({ date, answers: a, input: a * 2400, output: a * 900 });
+    answers += a;
+    input += a * 2400;
+    output += a * 900;
+    ms += a * 9000;
+  }
+  return {
+    days,
+    answers,
+    cancelled: 2,
+    input_tokens: input,
+    output_tokens: output,
+    ms,
+    tool_calls: Math.round(answers * 1.4),
+    per_day,
+    per_model: [
+      { model: "Qwen3.5 9B", provider: "This computer", answers: Math.round(answers * 0.55), input: Math.round(input * 0.6), output: Math.round(output * 0.5), avg_ms: 11000, avg_tok_s: 28.4, avg_ttft_ms: 780 },
+      { model: "kimi-k2.5", provider: "Kilo Code (free)", answers: Math.round(answers * 0.3), input: Math.round(input * 0.25), output: Math.round(output * 0.32), avg_ms: 6000, avg_tok_s: 62.5, avg_ttft_ms: 410 },
+      { model: "gpt-5-mini", provider: "OpenRouter", answers: Math.round(answers * 0.15), input: Math.round(input * 0.15), output: Math.round(output * 0.18), avg_ms: 5200, avg_tok_s: 88.1, avg_ttft_ms: 320 },
+    ],
+  };
+};
+
 const fixtures: Record<string, Handler> = {
   config_load: () => ({ selected_models: ["qwen3.5-9b"] }),
   settings_theme: () => "dark",
@@ -225,6 +265,7 @@ const fixtures: Record<string, Handler> = {
   chat_models: () => chatModelsFixture(),
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
   chat_prefs_set: () => null,
+  usage_summary: (args) => usageSummaryFixture(args as Record<string, unknown>),
   chat_target_set: (args) => {
     // Flip the active model, so the picker's active row and the effort
     // ladder follow the choice like the real backend does.
@@ -294,9 +335,12 @@ const fixtures: Record<string, Handler> = {
   list_index: () => [],
   search_index: () => [],
 
+  // Memory timestamps cross the bridge in seconds, like the Rust backend.
   memory_list: () => [
-    { id: "n1", path: "C:\\Users\\Omar\\.aiassistant\\memory\\team.md", title: "Team roster", size: 812, modified: ago(300), tags: ["work"] },
-    { id: "n2", path: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", title: "Invoice policy", size: 1240, modified: ago(60 * 30), tags: ["finance"] },
+    { id: "n1", path: "C:\\Users\\Omar\\.aiassistant\\memory\\team.md", title: "Team roster", size: 812, modified: sec(300), tags: ["work"], pinned: true },
+    { id: "n2", path: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", title: "Invoice policy", size: 1240, modified: sec(60 * 30), tags: ["finance"], pinned: false },
+    { id: "n3", path: "C:\\Users\\Omar\\.aiassistant\\memory\\standup-notes.md", title: "Standup notes", size: 940, modified: sec(60 * 24 * 34), tags: ["work"], pinned: false },
+    { id: "n4", path: "C:\\Users\\Omar\\.aiassistant\\memory\\trip-plan.md", title: "Trip plan", size: 660, modified: sec(60 * 24 * 65), tags: [], pinned: false },
   ],
   memory_read: () => "# Team roster\n\nAna owns the design review. Ben handles releases.",
   memory_search: () => [],
@@ -304,6 +348,16 @@ const fixtures: Record<string, Handler> = {
   memory_update: () => null,
   memory_delete: () => null,
   memory_forget_all: () => {},
+  memory_pinned_set: (args) => {
+    const req = (args ?? {}) as Record<string, unknown>;
+    return { id: "n2", path: String(req.path ?? ""), title: "Invoice policy", size: 1240, modified: sec(1), tags: ["finance"], pinned: req.pinned !== false };
+  },
+  memory_pending_list: () => [
+    { file: "prefers-short-answers.md", title: "Prefers short answers", content: "The user asked twice for two-sentence answers instead of long explanations.", modified: sec(12) },
+    { file: "launch-date.md", title: "Launch date is December 5", content: "The team's launch deadline is December 5; weekly reviews happen Fridays.", modified: sec(65) },
+  ],
+  memory_pending_accept: (args) => ({ id: "n5", path: `C:\\Users\\Omar\\.aiassistant\\memory\\${(args as Record<string, unknown>).file ?? "note"}.md`, title: "Accepted suggestion", size: 300, modified: ago(0), tags: [], pinned: false }),
+  memory_pending_dismiss: () => true,
 
   skills_list: () => [
     { name: "review-pr", description: "Review a pull request for bugs and missing tests.", tags: ["code"], body: "Review the diff...", path: "review-pr.md" },
@@ -417,7 +471,7 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
         push({ type: "token", payload: { token: chunks[c++] } });
         setTimeout(tokenTick, 24);
       } else {
-        push({ type: "done", payload: { finish_reason: "stop", total_tokens: 180 } });
+        push({ type: "done", payload: { finish_reason: "stop", total_tokens: 180, prompt_tokens: 960 } });
       }
     };
     tokenTick();

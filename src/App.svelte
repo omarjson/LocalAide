@@ -25,13 +25,14 @@
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
   import SettingsScreen from "./screens/SettingsScreen.svelte";
   import SearchScreen from "./screens/SearchScreen.svelte";
+  import UsageScreen from "./screens/UsageScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
   import { chats, loadThreads, newChat } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
   import type { EngineDownloadEvent } from "./lib/api/bindings";
 
-  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search";
-  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings";
+  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage";
+  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage";
 
   // Null until startup decides: returning users with a downloaded model go
   // straight to chat; first-run users see the setup wizard.
@@ -220,7 +221,7 @@
     document.getElementById(`cmd-${cmdIndex}`)?.scrollIntoView({ block: "nearest" });
   });
 
-  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "settings"];
+  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "usage", "settings"];
 
   const refreshProbe = async () => {
     try {
@@ -383,6 +384,7 @@
       {#if navVisible("memory")}{@render navItem("memory", "Memory")}{/if}
       {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
       {@render navItem("models", "Models")}
+      {@render navItem("usage", "Usage")}
       {#if showLabels && screen !== "setup"}
         <div class="mt-2 border-t border-ink-800">
           <SidebarChats onOpen={() => navigate("chat")} />
@@ -446,6 +448,8 @@
         <SkillsScreen />
       {:else if screen === "models"}
         <ModelManagerScreen />
+      {:else if screen === "usage"}
+        <UsageScreen />
       {:else if screen === "settings"}
         <SettingsScreen />
       {/if}
@@ -550,7 +554,7 @@
         <div class="space-y-2.5 text-sm">
           <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="kbd">{mod}K</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="kbd">{mod}N</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, … 6: Settings)</span><kbd class="kbd">{mod}1 – {mod}6</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, … 7: Settings)</span><kbd class="kbd">{mod}1 – {mod}7</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="kbd">{mod},</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Show or hide the sidebar</span><kbd class="kbd">{mod}B</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Search this chat (in Chat)</span><kbd class="kbd">{mod}F</kbd></div>

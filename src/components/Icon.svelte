@@ -8,6 +8,8 @@
     | "skills"
     | "models"
     | "settings"
+    | "usage"
+    | "pin"
     | "close"
     | "menu"
     | "alert"
@@ -110,6 +112,11 @@
   {:else if name === "models"}
     <rect x="6" y="6" width="12" height="12" rx="2" />
     <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+  {:else if name === "usage"}
+    <path d="M3 13h3l2.5-8 5 15 2.5-8H21" />
+  {:else if name === "pin"}
+    <path d="M12 16v6" />
+    <path d="M8.5 3h7l-1 6 3 3.5a1 1 0 0 1-.8 1.5H7.3a1 1 0 0 1-.8-1.5l3-3.5z" />
   {:else if name === "settings"}
     <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" />
     <circle cx="15" cy="6" r="2" />

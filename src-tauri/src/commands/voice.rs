@@ -471,6 +471,7 @@ pub async fn voice_cleanup(state: State<'_, AppState>, text: String) -> Result<C
                         cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                 },
+                &mut |_| {},
             )?;
             Ok::<_, AppError>(out)
         })();

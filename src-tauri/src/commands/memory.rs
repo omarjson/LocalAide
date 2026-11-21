@@ -3,6 +3,7 @@ use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::document::SearchResultDoc;
 use crate::domain::memory::{ForgetAllResponse, MemoryCreateResponse, MemoryNote};
+use crate::services::memory::suggest::Suggestion;
 use tauri::State;
 
 // Note writes re-index the note and searches may embed the query, so the
@@ -73,4 +74,44 @@ pub async fn memory_forget_all(state: State<'_, AppState>) -> Result<ForgetAllRe
         Ok(ForgetAllResponse { deleted_count })
     })
     .await
+}
+
+/// Pins or unpins a note: pinned notes ride in every chat with recall on.
+#[tauri::command]
+pub async fn memory_pinned_set(
+    state: State<'_, AppState>,
+    path: String,
+    pinned: bool,
+) -> Result<MemoryNote, AppError> {
+    with_app_state(&state, move |state| state.memory.set_pinned(&path, pinned)).await
+}
+
+/// The model's suggested notes, waiting for review on the Memory screen.
+#[tauri::command]
+pub async fn memory_pending_list(state: State<'_, AppState>) -> Result<Vec<Suggestion>, AppError> {
+    with_app_state(&state, |state| state.memory.pending_suggestions()).await
+}
+
+/// Accepts a suggestion: it becomes a real note and leaves the queue.
+#[tauri::command]
+pub async fn memory_pending_accept(
+    state: State<'_, AppState>,
+    file: String,
+    tags: Option<Vec<String>>,
+) -> Result<MemoryNote, AppError> {
+    with_app_state(&state, move |state| {
+        state
+            .memory
+            .accept_suggestion(&file, tags.unwrap_or_default())
+    })
+    .await
+}
+
+/// Dismisses a suggestion without saving it.
+#[tauri::command]
+pub async fn memory_pending_dismiss(
+    state: State<'_, AppState>,
+    file: String,
+) -> Result<bool, AppError> {
+    with_app_state(&state, move |state| state.memory.dismiss_suggestion(&file)).await
 }

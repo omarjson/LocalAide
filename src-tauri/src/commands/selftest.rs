@@ -336,6 +336,7 @@ pub async fn run_selftest(
                         cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                 },
+                &mut |_| {},
             )?;
             Ok::<_, AppError>((text, outcome.reasoning, outcome.cancelled))
         })();

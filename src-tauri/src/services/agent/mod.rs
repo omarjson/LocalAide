@@ -16,6 +16,7 @@ pub mod tools;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
@@ -23,11 +24,13 @@ use crate::app::error::AppError;
 use crate::app::events::{ChatStreamEvent, QuestionItem, QuestionOption, TodoItem};
 use crate::app::state::AppState;
 use crate::domain::memory::Citation;
+use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{
     Adjustment, ChatTurn, Delta, Effort, TOOLS_UNSUPPORTED, ToolCall, initial_options,
     stream_with_retries,
 };
 use crate::services::inference::router::ChatTarget;
+use crate::services::usage;
 use crate::services::tools::sandbox::WorkspaceJail;
 use approval::{APPROVAL_TIMEOUT, ApprovalHub, Decision};
 use tools::{Permissions, ToolSpec};
@@ -151,6 +154,10 @@ pub struct RunResult {
     pub cancelled: bool,
     pub finish_reason: String,
     pub tool_calls: usize,
+    /// Time to the first token of the first round, when known.
+    pub ttft_ms: Option<u64>,
+    /// Prompt size the server reported for the last round, when known.
+    pub prompt_tokens: Option<usize>,
 }
 
 fn estimate_tokens(turns: &[ChatTurn]) -> usize {
@@ -239,7 +246,67 @@ fn status(sink: &dyn Sink, label: impl Into<String>) {
 }
 
 /// Run the chat loop until the model answers without asking for a tool.
+/// Runs one answer and records its usage. The real work lives in
+/// `run_inner`; subagent runs call that directly, so only whole answers
+/// (app chat and shared links) land in the usage log.
 pub fn run(
+    state: &AppState,
+    run: AgentRun,
+    cancel: &AtomicBool,
+    sink: &dyn Sink,
+) -> Result<RunResult, AppError> {
+    let started = Instant::now();
+    let input_tokens = estimate_tokens(&run.turns);
+    let source = run.source;
+    // Owned copies taken before `run` moves into `run_inner`.
+    let (model, provider, local) = match &run.target {
+        ChatTarget::Local => (
+            state
+                .inference_engine
+                .status()
+                .active_model
+                .unwrap_or_else(|| "local model".to_string()),
+            "This computer".to_string(),
+            true,
+        ),
+        ChatTarget::Remote(remote) => (remote.model.clone(), remote.label.clone(), false),
+    };
+    let result = run_inner(state, run, cancel, sink);
+    if let Ok(done) = &result {
+        if source == "chat" || source == "share" {
+            let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let tok_s = if done.tokens > 0 && ms > 0 {
+                Some(done.tokens as f64 / (ms as f64 / 1000.0))
+            } else {
+                None
+            };
+            usage::record(&usage::UsageRecord {
+                ts: now_secs(),
+                model,
+                provider,
+                local,
+                input_tokens: done.prompt_tokens.unwrap_or(input_tokens),
+                output_tokens: done.tokens,
+                ms,
+                ttft_ms: done.ttft_ms,
+                tok_s,
+                cancelled: done.cancelled,
+                tool_calls: done.tool_calls,
+                source: source.to_string(),
+            });
+        }
+    }
+    result
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn run_inner(
     state: &AppState,
     mut run: AgentRun,
     cancel: &AtomicBool,
@@ -247,6 +314,13 @@ pub fn run(
 ) -> Result<RunResult, AppError> {
     let engine = state.inference_engine.clone();
     let endpoint = engine.endpoint_for(&run.target)?;
+    // Notes the user pinned ride in every chat while recall is on.
+    if run.perms.notes
+        && let Ok(pinned) = state.memory.pinned_context()
+        && !pinned.is_empty()
+    {
+        run.turns.insert(1, ChatTurn::System(pinned));
+    }
     let key = format!("{}|{}", endpoint.url, endpoint.model);
 
     let mut specs: Vec<ToolSpec> = Vec::new();
@@ -279,6 +353,8 @@ pub fn run(
     let mut total_tokens = 0usize;
     let mut finish_reason = "stop".to_string();
     let mut tool_calls_run = 0usize;
+    let mut ttft_ms: Option<u64> = None;
+    let mut prompt_tokens: Option<usize> = None;
     let mut seen_ids: HashSet<String> = HashSet::new();
     let client = engine.chat_client();
 
@@ -290,6 +366,8 @@ pub fn run(
                 cancelled: true,
                 finish_reason: "cancelled".into(),
                 tool_calls: tool_calls_run,
+                ttft_ms,
+                prompt_tokens,
             });
         }
         let last_round = round + 1 == run.max_rounds;
@@ -310,6 +388,7 @@ pub fn run(
                 Delta::Content(token) => sink.emit(ChatStreamEvent::Token { token }),
                 Delta::Reasoning(text) => sink.emit(ChatStreamEvent::Reasoning { text }),
             },
+            &mut |label| status(sink, label),
         );
         let (outcome, adjustments) = match result {
             Ok(v) => v,
@@ -338,6 +417,14 @@ pub fn run(
                 _ => {}
             }
         }
+        if ttft_ms.is_none() {
+            if let Some(first) = outcome.first_token_after {
+                ttft_ms = Some(u64::try_from(first.as_millis()).unwrap_or(u64::MAX));
+            }
+        }
+        if outcome.prompt_tokens.is_some() {
+            prompt_tokens = outcome.prompt_tokens;
+        }
         total_tokens += outcome.completion_tokens.unwrap_or(outcome.pieces);
         if outcome.cancelled {
             return Ok(RunResult {
@@ -345,6 +432,8 @@ pub fn run(
                 cancelled: true,
                 finish_reason: "cancelled".into(),
                 tool_calls: tool_calls_run,
+                ttft_ms,
+                prompt_tokens,
             });
         }
         let wants_tools = !outcome.tool_calls.is_empty() && !specs.is_empty() && !opts.forbid_tools;
@@ -475,6 +564,8 @@ pub fn run(
         cancelled: cancel.load(Ordering::Relaxed),
         finish_reason,
         tool_calls: tool_calls_run,
+        ttft_ms,
+        prompt_tokens,
     })
 }
 
@@ -829,7 +920,7 @@ fn run_subagents(
                         id: id.clone(),
                         step: "Starting".into(),
                     });
-                    let result = run(state, child, cancel, &sub);
+                    let result = run_inner(state, child, cancel, &sub);
                     let text = sub.text.into_inner().unwrap_or_else(|e| e.into_inner());
                     let result = match result {
                         Ok(done) if done.cancelled => Err("Stopped".to_string()),

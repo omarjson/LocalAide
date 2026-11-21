@@ -9,6 +9,7 @@
   import PageHeader from "../components/PageHeader.svelte";
   import TextField from "../components/TextField.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { showToast } from "../lib/toast.svelte";
   import { formatBytes } from "../lib/format";
   import type { MemoryNote } from "../lib/api/bindings";
 
@@ -20,6 +21,14 @@
     updated: string;
     preview: string;
     size: number;
+    modified: number;
+    pinned: boolean;
+  };
+
+  type SuggestionView = {
+    file: string;
+    title: string;
+    content: string;
   };
 
   let notes = $state<NoteView[]>([]);
@@ -40,6 +49,8 @@
   let pendingDeletePath = $state<string | null>(null);
   let showForgetAllConfirm = $state(false);
   let notesDirty = $state(false);
+  let suggestions = $state<SuggestionView[]>([]);
+  let exporting = $state(false);
 
   const fmtDate = (mod?: number) => {
     if (!mod) return "—";
@@ -66,8 +77,16 @@
           updated: fmtDate(note.modified),
           preview: content.slice(0, 160) || "A saved note.",
           size: note.size,
+          modified: note.modified,
+          pinned: note.pinned === true,
         };
       });
+      const waiting = await api.pendingSuggestions().catch(() => []);
+      suggestions = waiting.map((suggestion) => ({
+        file: suggestion.file,
+        title: suggestion.title,
+        content: suggestion.content,
+      }));
     } catch (e: unknown) {
       errorMsg = errorMessage(e);
       notes = [];
@@ -136,6 +155,55 @@
     pendingDeletePath = path;
   };
 
+  const togglePin = async (note: NoteView) => {
+    errorMsg = null;
+    try {
+      const updated = await api.setMemoryPinned(note.path, !note.pinned);
+      notes = notes.map((n) => (n.path === note.path ? { ...n, pinned: updated.pinned === true } : n));
+    } catch (e: unknown) {
+      errorMsg = errorMessage(e);
+    }
+  };
+
+  const acceptSuggestion = async (file: string) => {
+    errorMsg = null;
+    try {
+      await api.acceptSuggestion(file);
+      suggestions = suggestions.filter((s) => s.file !== file);
+      await load();
+      showToast("Note saved.");
+    } catch (e: unknown) {
+      errorMsg = errorMessage(e);
+    }
+  };
+
+  const dismissSuggestion = async (file: string) => {
+    errorMsg = null;
+    try {
+      await api.dismissSuggestion(file);
+      suggestions = suggestions.filter((s) => s.file !== file);
+    } catch (e: unknown) {
+      errorMsg = errorMessage(e);
+    }
+  };
+
+  const exportAll = async () => {
+    if (notes.length === 0 || exporting) return;
+    exporting = true;
+    try {
+      const body = notes
+        .map((note) => `# ${note.title}\n\n${note.preview}${note.preview.length >= 160 ? "…" : ""}\n`)
+        .join("\n---\n\n");
+      const header = `# LocalAide notes\n\nExported ${new Date().toLocaleString()} · ${notes.length} notes\n\n`;
+      const saved = await api.saveChatMarkdown("localaide-notes.md", header + body);
+      if (saved) showToast("Notes exported.");
+    } catch (e: unknown) {
+      errorMsg = errorMessage(e);
+    } finally {
+      exporting = false;
+    }
+  };
+
   const confirmDelete = async () => {
     const path = pendingDeletePath;
     pendingDeletePath = null;
@@ -183,6 +251,8 @@
             updated: fmtDate(result.modified || 0),
             preview: result.snippet || "",
             size: result.size,
+            modified: result.modified || 0,
+            pinned: false,
           };
         });
         notesDirty = true;
@@ -220,11 +290,28 @@
     }
     return result;
   });
+
+  const pinnedNotes = $derived(filteredNotes.filter((note) => note.pinned));
+  const unpinnedNotes = $derived(filteredNotes.filter((note) => !note.pinned));
+
+  // The timeline: unpinned notes grouped by month, newest first.
+  const timeline = $derived.by<{ label: string; notes: NoteView[] }[]>(() => {
+    const months = new Map<string, NoteView[]>();
+    for (const note of unpinnedNotes) {
+      const date = new Date(note.modified * 1000);
+      const label = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      const bucket = months.get(label);
+      if (bucket) bucket.push(note);
+      else months.set(label, [note]);
+    }
+    return Array.from(months, ([label, list]) => ({ label, notes: list }));
+  });
 </script>
 
 <div class="mx-auto max-w-5xl pb-10">
   <PageHeader title="Memory" description="Save notes that LocalAide can recall during future chats.">
     {#snippet actions()}
+      <Button variant="secondary" disabled={notes.length === 0 || exporting} onclick={() => void exportAll()}>Export all</Button>
       <Button variant="danger" disabled={notes.length === 0} onclick={() => showForgetAllConfirm = true}>Forget all</Button>
       <Button variant="primary" onclick={() => showNew = !showNew}><Icon name="plus" class="h-[18px] w-[18px]" />New note</Button>
     {/snippet}
@@ -232,6 +319,34 @@
 
   {#if errorMsg}
     <div class="mb-4"><ErrorBanner message={errorMsg} onRetry={() => void load()} onDismiss={() => errorMsg = null} /></div>
+  {/if}
+
+  {#if suggestions.length > 0}
+    <div class="mb-5 rounded-lg border border-ember-500/40 bg-ember-500/5 p-4" transition:slide={{ duration: 150 }}>
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 font-semibold text-ink-50">
+          Review suggestions
+          <span class="rounded-full border border-ember-500/40 bg-ember-500/10 px-2 py-0.5 text-sm text-ember-200">{suggestions.length}</span>
+        </h2>
+        <p class="text-sm text-ink-400">The model noticed these while chatting.</p>
+      </div>
+      <div class="mt-3 space-y-2">
+        {#each suggestions as suggestion (suggestion.file)}
+          <div class="rounded-md border border-ink-700 bg-ink-900 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate font-medium text-ink-100">{suggestion.title}</p>
+                <p class="mt-1 line-clamp-2 text-sm leading-6 text-ink-400">{suggestion.content}</p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <Button variant="primary" onclick={() => void acceptSuggestion(suggestion.file)}>Save</Button>
+                <Button variant="subtle" onclick={() => void dismissSuggestion(suggestion.file)}>Dismiss</Button>
+              </div>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
   {/if}
 
   {#if showNew}
@@ -305,16 +420,56 @@
     </EmptyState>
   {:else}
     <div class="space-y-3">
-      {#each filteredNotes as note (note.path)}
-        <div class="flex items-start justify-between gap-4 rounded-lg border border-ink-700 bg-ink-900 p-4 transition-colors hover:bg-veil/5">
-          <div class="min-w-0 flex-1 space-y-2">
-            <div class="flex flex-wrap items-center gap-2"><button type="button" onclick={() => void openNote(note)} class="truncate text-left font-semibold text-ink-50 hover:text-ember-300">{note.title}</button><span class="text-sm text-ink-400">{note.updated}</span></div>
-            <p class="line-clamp-2 text-sm leading-6 text-ink-400">{note.preview}</p>
-            {#if note.tags.length > 0}<div class="flex flex-wrap gap-2">{#each note.tags as tag}<button type="button" onclick={() => selectedTag = tag} class="rounded-full bg-ink-800 px-2 py-0.5 text-sm text-ember-300 hover:bg-ink-700">#{tag}</button>{/each}</div>{/if}
+      {#if pinnedNotes.length > 0}
+        <div class="rounded-lg border border-ember-500/40 bg-ember-500/5 p-4">
+          <h2 class="flex items-center gap-2 text-sm font-semibold text-ember-200"><Icon name="pin" class="h-4 w-4" />Pinned — always in context while Recall is on</h2>
+          <div class="mt-3 space-y-3">
+            {#each pinnedNotes as note (note.path)}
+              {#snippet pinnedRow()}
+                <div class="flex items-start justify-between gap-4 rounded-md border border-ink-700 bg-ink-900 p-3">
+                  <div class="min-w-0 flex-1 space-y-1.5">
+                    <div class="flex flex-wrap items-center gap-2"><button type="button" onclick={() => void openNote(note)} class="truncate text-left font-semibold text-ink-50 hover:text-ember-300">{note.title}</button><span class="text-sm text-ink-400">{note.updated}</span></div>
+                    <p class="line-clamp-2 text-sm leading-6 text-ink-400">{note.preview}</p>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <Button variant="subtle" class="h-8 w-8 px-0" ariaLabel={`Unpin ${note.title}`} onclick={() => void togglePin(note)}><Icon name="pin" class="h-4 w-4 text-ember-300" /></Button>
+                    <Button variant="danger" class="h-8 w-8 px-0" ariaLabel={`Delete ${note.title}`} onclick={() => askDelete(note.path)}><Icon name="trash" class="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              {/snippet}
+              {@render pinnedRow()}
+            {/each}
           </div>
-          <div class="flex shrink-0 items-center gap-2"><Button variant="secondary" onclick={() => void openNote(note)}>Open</Button><Button variant="danger" class="h-8 w-8 px-0" ariaLabel={`Delete ${note.title}`} onclick={() => askDelete(note.path)}><Icon name="trash" class="h-4 w-4" /></Button></div>
+        </div>
+      {/if}
+      {#if pinnedNotes.length > 0 && unpinnedNotes.length > 0}
+        <p class="px-1 pt-2 text-sm font-medium text-ink-500">All notes</p>
+      {/if}
+      {#each timeline as month (month.label)}
+        <div class="pt-1">
+          <p class="px-1 pb-2 text-sm font-medium text-ink-500">{month.label}</p>
+          <div class="space-y-3 border-l border-ink-800 pl-4">
+            {#each month.notes as note (note.path)}
+              <div class="relative flex items-start justify-between gap-4 rounded-lg border border-ink-700 bg-ink-900 p-4 transition-colors hover:bg-veil/5">
+                <span class="absolute -left-[21px] top-6 h-2 w-2 rounded-full bg-ink-600" aria-hidden="true"></span>
+                <div class="min-w-0 flex-1 space-y-2">
+                  <div class="flex flex-wrap items-center gap-2"><button type="button" onclick={() => void openNote(note)} class="truncate text-left font-semibold text-ink-50 hover:text-ember-300">{note.title}</button><span class="text-sm text-ink-400">{note.updated}</span></div>
+                  <p class="line-clamp-2 text-sm leading-6 text-ink-400">{note.preview}</p>
+                  {#if note.tags.length > 0}<div class="flex flex-wrap gap-2">{#each note.tags as tag}<button type="button" onclick={() => selectedTag = tag} class="rounded-full bg-ink-800 px-2 py-0.5 text-sm text-ember-300 hover:bg-ink-700">#{tag}</button>{/each}</div>{/if}
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <Button variant="subtle" class="h-8 w-8 px-0" ariaLabel={`Pin ${note.title}`} onclick={() => void togglePin(note)}><Icon name="pin" class="h-4 w-4" /></Button>
+                  <Button variant="secondary" onclick={() => void openNote(note)}>Open</Button>
+                  <Button variant="danger" class="h-8 w-8 px-0" ariaLabel={`Delete ${note.title}`} onclick={() => askDelete(note.path)}><Icon name="trash" class="h-4 w-4" /></Button>
+                </div>
+              </div>
+            {/each}
+          </div>
         </div>
       {/each}
+      {#if timeline.length === 0 && pinnedNotes.length === 0}
+        <div class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-8 text-center text-sm text-ink-400">No notes match the current filter.</div>
+      {/if}
     </div>
   {/if}
 </div>

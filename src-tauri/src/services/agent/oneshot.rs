@@ -42,6 +42,7 @@ pub fn complete(
             Delta::Content(t) => text.push_str(&t),
             Delta::Reasoning(t) => thinking.push_str(&t),
         },
+        &mut |_| {},
     )?;
     let reply = if text.trim().is_empty() {
         outcome.content

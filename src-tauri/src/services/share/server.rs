@@ -403,6 +403,7 @@ fn chat(state: &AppState, shared: &Shared, body: Value) -> Result<Receiver<Strin
                         done.finish_reason
                     },
                     total_tokens: done.tokens,
+                    prompt_tokens: done.prompt_tokens,
                 }
             }
             Err(e) => {
