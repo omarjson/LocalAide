@@ -471,8 +471,29 @@ const fixtures: Record<string, Handler> = {
     engine: { installed: true, path: null, version: "1.10.30", download_bytes: null, available: true },
   }),
 
-  share_status: () => ({ on: false, url: null, started_at: null, requests: 0, refused: 0, last_seen: null, cloudflared: { installed: false, path: null, version: null, download_bytes: 17_000_000, available: true } }),
-  share_pair: () => ({ pair_code: "K7M3-XT2Q", on: false, qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3z" fill="#14100c"/></svg>' }),
+  share_status: () => {
+    const on = (globalThis as { __shimShareOn?: boolean }).__shimShareOn === true;
+    return { on, url: on ? "https://quiet-lake-8f2a.trycloudflare.com" : null, started_at: on ? sec(12) : null, requests: on ? 3 : 0, refused: 0, last_seen: on ? sec(2) : null, cloudflared: { installed: true, path: "C:\tools\cloudflared.exe", version: "2025.11.1", download_bytes: null, available: true } };
+  },
+  share_start: (args) => {
+    (globalThis as { __shimShareOn?: boolean }).__shimShareOn = args?.tunnel !== false;
+    const on = (globalThis as { __shimShareOn?: boolean }).__shimShareOn === true;
+    return {
+      status: { on, url: on ? "https://quiet-lake-8f2a.trycloudflare.com" : null, started_at: on ? sec(12) : null, requests: 0, refused: 0, last_seen: null, cloudflared: { installed: true, path: "C:\tools\cloudflared.exe", version: "2025.11.1", download_bytes: null, available: true } },
+      viewer_link: "https://quiet-lake-8f2a.trycloudflare.com/#k=viewer0123456789abcdef0123456789abcdef0123456789ab",
+      remote_link: "https://quiet-lake-8f2a.trycloudflare.com/#k=remote0123456789abcdef0123456789abcdef0123456789ab",
+      pair_code: "K7M3-XT2Q",
+      qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3zM6,6h1v1h-1z" fill="#14100c"/></svg>',
+    };
+  },
+  share_stop: () => {
+    (globalThis as { __shimShareOn?: boolean }).__shimShareOn = false;
+    return null;
+  },
+  share_pair: () => {
+    const on = (globalThis as { __shimShareOn?: boolean }).__shimShareOn === true;
+    return { pair_code: "K7M3-XT2Q", on, qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3z" fill="#14100c"/></svg>' };
+  },
   web_providers: () => [
     { id: "duckduckgo", label: "DuckDuckGo", needs_key: false, takes_key: true, supports: "search", note: "Works without a key.", key_set: false, is_default: true },
     { id: "wikipedia", label: "Wikipedia", needs_key: false, takes_key: false, supports: "search", note: "Works without a key.", key_set: false, is_default: false },
