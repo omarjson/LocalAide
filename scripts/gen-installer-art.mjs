@@ -2,7 +2,7 @@
 //
 //   src-tauri/installer/nsis-header.bmp    150x57   Windows installer header
 //   src-tauri/installer/nsis-sidebar.bmp   164x314  Windows welcome/finish pages
-//   src-tauri/installer/dmg-background.png 660x400  macOS disk image window
+//   src-tauri/installer/dmg-background.png 660x400  macOS disk image window (2x, 144 dpi)
 //   src-tauri/installer/icon-macos.svg     macOS icon source (Apple grid padding)
 //
 // Run it after changing the logo:
@@ -108,22 +108,60 @@ const sidebar = `<svg xmlns="http://www.w3.org/2000/svg" width="164" height="314
 </svg>`;
 
 // macOS DMG: light, so Finder's dark icon labels stay readable. The app icon
-// sits at (180, 190) and the Applications link at (480, 190) (tauri.conf.json).
+// sits at (180, 190) and the Applications link at (480, 190) (tauri.conf.json);
+// a soft well marks each spot and a curved arrow joins them. Drawn in points
+// (660x400) and rendered at 2x with 144 dpi, so Retina screens get it sharp.
+const well = (cx, cy) => `
+  <circle cx="${cx}" cy="${cy + 3}" r="78" fill="${INK}" fill-opacity="0.05" filter="url(#blur)"/>
+  <circle cx="${cx}" cy="${cy}" r="76" fill="#fffdf8" stroke="#e7dcc8" stroke-width="1"/>
+  <circle cx="${cx}" cy="${cy}" r="68" fill="none" stroke="#efe6d6" stroke-width="1"/>`;
 const dmg = `<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fbf6ec"/>
-      <stop offset="1" stop-color="${BONE}"/>
+      <stop offset="0" stop-color="#fffaf2"/>
+      <stop offset="1" stop-color="#f1e7d4"/>
     </linearGradient>
+    <radialGradient id="glow" cx="0.86" cy="0.02" r="0.7">
+      <stop offset="0" stop-color="${EMBER}" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="${EMBER}" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${EMBER}" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="${EMBER}"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
   </defs>
   <rect width="660" height="400" fill="url(#bg)"/>
-  ${ghostAt(24, 22, 34, true)}
-  <text x="68" y="45" font-family="${FONT}" font-size="17" font-weight="600" fill="${INK}">LocalAide</text>
-  <text x="330" y="88" text-anchor="middle" font-family="${FONT}" font-size="15" fill="${INK}" fill-opacity="0.75">Drag LocalAide into Applications to install or update</text>
-  <path d="M262 190 H392" stroke="${EMBER}" stroke-width="4" stroke-dasharray="10 9" stroke-linecap="round"/>
-  <path d="M388 176 L408 190 L388 204" fill="none" stroke="${EMBER}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="330" y="360" text-anchor="middle" font-family="${FONT}" font-size="12" fill="${INK}" fill-opacity="0.55">Your chats, notes and models stay in ~/.aiassistant when you update.</text>
+  <rect width="660" height="400" fill="url(#glow)"/>
+  ${ghostAt(28, 24, 30, true)}
+  <text x="68" y="38" font-family="${FONT}" font-size="15" font-weight="700" fill="${INK}">LocalAide</text>
+  <text x="68" y="53" font-family="${FONT}" font-size="10.5" fill="${INK}" fill-opacity="0.55">Private AI that runs on your Mac</text>
+  ${well(180, 190)}
+  ${well(480, 190)}
+  <path d="M276 178 Q330 140 384 178" fill="none" stroke="url(#arrow)" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M371 166 L386 180 L367 184" fill="none" stroke="${EMBER}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="318" text-anchor="middle" font-family="${FONT}" font-size="16" font-weight="600" fill="${INK}">Drag LocalAide to Applications</text>
+  <text x="330" y="340" text-anchor="middle" font-family="${FONT}" font-size="11.5" fill="${INK}" fill-opacity="0.6">Updating? Drop it on the old copy. Your chats, notes and models stay in ~/.aiassistant.</text>
+  <text x="330" y="380" text-anchor="middle" font-family="${FONT}" font-size="10" fill="${INK}" fill-opacity="0.4">Open source · Runs offline · github.com/omarjson/LocalAide</text>
 </svg>`;
+
+/** Mark a PNG as 144 dpi, so Finder shows a 2x render at its point size. */
+function retinaPng(png) {
+  const { crc32 } = require("node:zlib");
+  const data = Buffer.alloc(9);
+  data.writeUInt32BE(5669, 0); // 144 dpi in pixels per metre
+  data.writeUInt32BE(5669, 4);
+  data.writeUInt8(1, 8);
+  const type = Buffer.from("pHYs", "ascii");
+  const chunk = Buffer.alloc(12 + 9);
+  chunk.writeUInt32BE(9, 0);
+  type.copy(chunk, 4);
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(Buffer.concat([type, data])) >>> 0, 17);
+  // After the signature (8 bytes) and IHDR (8 + 13 + 4 bytes).
+  const at = 8 + 25;
+  return Buffer.concat([png.subarray(0, at), chunk, png.subarray(at)]);
+}
 
 // macOS icons sit on an 824px rounded square inside a 1024px canvas.
 const macIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
@@ -135,6 +173,6 @@ const macIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="10
 
 writeFileSync(join(out, "nsis-header.bmp"), toBmp(render(header, 150)));
 writeFileSync(join(out, "nsis-sidebar.bmp"), toBmp(render(sidebar, 164)));
-writeFileSync(join(out, "dmg-background.png"), render(dmg, 660).asPng());
+writeFileSync(join(out, "dmg-background.png"), retinaPng(render(dmg, 1320).asPng()));
 writeFileSync(join(out, "icon-macos.svg"), macIcon);
 console.log(`Wrote installer art to ${out}`);

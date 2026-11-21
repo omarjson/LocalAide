@@ -424,7 +424,7 @@
       <p class="mt-4 text-xs text-ink-400">Installing needs an internet connection. If you are offline, choose Set up later and download a model from the Models screen when you are back online.</p>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
-      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-all duration-300" style="width:{progress}%"></div></div>
+      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-[width] duration-300" style="width:{progress}%"></div></div>
       <div class="text-sm text-ink-400 mb-4">{progress}%</div>
       <button
         onclick={communityModelId ? cancelCommunity : cancelInstall}

@@ -208,7 +208,7 @@
             <div class="flex items-center gap-2 text-sm">
               <span class="text-ink-400">Effort</span>
               <span class="font-semibold text-ink-50">{effortLabel(levels[level])}</span>
-              <kbd class="ml-auto rounded bg-ink-800 px-1.5 py-0.5 text-[11px] text-ink-400">Ctrl+T</kbd>
+              <kbd class="ml-auto rounded bg-ink-800 px-1.5 py-0.5 text-xs text-ink-400">Ctrl+T</kbd>
             </div>
             <div class="effort mt-2" style={`--fill:${fill}%`}>
               <input type="range" min="0" max={levels.length - 1} step="1" value={level} aria-label="Thinking effort" aria-valuetext={effortLabel(levels[level])} oninput={(e) => onEffort?.(levels[Number((e.currentTarget as HTMLInputElement).value)])} />
@@ -293,7 +293,7 @@
     border-radius: 0.3rem;
     background: var(--color-ink-800);
     padding: 0.05rem 0.35rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: var(--color-ink-300);
   }

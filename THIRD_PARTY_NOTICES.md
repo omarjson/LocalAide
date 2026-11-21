@@ -15,6 +15,7 @@ LocalAide is MIT licensed (see `LICENSE`). It includes open-source software made
 
 - **Rust packages.** Release builds include `THIRD_PARTY_LICENSES.html`, made by `cargo about` from `src-tauri/Cargo.lock`. It holds the full license text of every Rust package in the app.
 - **Web packages.** The app window bundles [Svelte](https://svelte.dev) (MIT), [`@tauri-apps/api`](https://github.com/tauri-apps/tauri) (Apache-2.0 or MIT) and styles built with [Tailwind CSS](https://tailwindcss.com) (MIT).
+- **Diagrams.** Diagrams in chat answers are drawn with [Mermaid](https://github.com/mermaid-js/mermaid) (MIT), which loads only when an answer has one. Mermaid brings [D3](https://d3js.org) (ISC), [Cytoscape.js](https://github.com/cytoscape/cytoscape.js) (MIT), [KaTeX](https://github.com/KaTeX/KaTeX) (MIT), [DOMPurify](https://github.com/cure53/DOMPurify) (MPL-2.0 or Apache-2.0, used here under Apache-2.0), [khroma](https://github.com/fabiospampinato/khroma) (MIT) and [elkjs](https://github.com/kieler/elkjs) (EPL-2.0 or GPL-3.0-or-later, used here under EPL-2.0; its source is at github.com/kieler/elkjs, and the app does not change it).
 - **Every package.** Each GitHub release has an SPDX software bill of materials (`localaide-sbom.spdx.json`) that names every Rust and npm package, its version and its license.
 
 ## Models

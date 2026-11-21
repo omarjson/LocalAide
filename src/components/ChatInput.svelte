@@ -401,7 +401,7 @@
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
-          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-[11px] leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
+          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
         </button>
         {#if toolsMenuOpen}
           <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>

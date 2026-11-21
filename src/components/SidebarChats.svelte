@@ -81,7 +81,7 @@
         <button type="button" class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1.5 text-left" aria-expanded={!closed[g.path]} onclick={() => (closed[g.path] = !closed[g.path])} title={g.path}>
           <Icon name={closed[g.path] ? "folder" : "folder-open"} class="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <span class="truncate font-medium">{g.name}</span>
-          <span class="text-[11px] tabular-nums text-ink-600">{g.threads.length || ""}</span>
+          <span class="text-xs tabular-nums text-ink-600">{g.threads.length || ""}</span>
         </button>
         <button type="button" class="chat-row-del" aria-label={`New chat in ${g.name}`} title={`New chat in ${g.name}`} onclick={() => start(g.path)}><Icon name="plus" class="h-3.5 w-3.5" /></button>
         <button type="button" class="chat-row-del" aria-label={`Show ${g.name} in ${fileManagerName()}`} title={`Show in ${fileManagerName()}`} onclick={() => void api.revealFile("", g.path).catch((e: unknown) => showToast(errorMessage(e), "error"))}><Icon name="external" class="h-3.5 w-3.5" /></button>
@@ -102,7 +102,7 @@
   {/each}
 
   {#if groups.folders.length > 0 && groups.plain.length > 0}
-    <div class="px-2 pb-0.5 pt-2 text-[11px] font-semibold text-ink-600">Plain chats</div>
+    <div class="px-2 pb-0.5 pt-2 text-xs font-semibold text-ink-600">Plain chats</div>
   {/if}
   {#each groups.plain.slice(0, more[""] ? undefined : 12) as t (t.id)}{@render row(t)}{/each}
   {#if groups.plain.length > 12 && !more[""]}

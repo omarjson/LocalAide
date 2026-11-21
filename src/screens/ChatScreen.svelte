@@ -1311,7 +1311,7 @@
               {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={() => requestSettings("online")}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
             </div>
           {:else}
-            <h1 class="text-[28px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
+            <h1 class="text-balance text-[28px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
             {#if onlineChoice}
               <p class="text-[15px] text-ink-400">Answers come from {onlineChoice.name} via {onlineChoice.provider_label}. Messages are sent to that provider.</p>
             {:else if engineLoading || pickerBusy}

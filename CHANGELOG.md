@@ -5,6 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-21
+
+Models load on every processor now, chats live in the sidebar, and the chat box has plan and build modes, a new model menu, better questions, subagents, charts and mockups. Windows on ARM gets its own installer. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
+
+### Fixed
+- **"The model did not start … exit code: 0xc000001d".** The installers no longer carry a llama-server built for AVX2 processors. The first time a model loads, LocalAide downloads the official llama.cpp build (b12359) for this computer's processor, about 13 to 25 MB from github.com, with a checked checksum. The x64 Windows and Linux builds pick the fastest instructions the processor has, so processors without AVX2 work too. An x64 copy of the app on Windows on ARM, or under Rosetta on a Mac, still gets the ARM64 engine. Settings → General shows the engine, and Check my setup has a step for it.
+- Going to Settings and back no longer starts a new chat: the open chat, its scroll position and an answer that is still coming stay as they were. Settings comes back on the section you left, and other screens keep their scroll position.
+
+### Added
+- **Windows on ARM** installer (`_arm64-setup.exe`), with its own update package.
+- **Chats in the sidebar**, under Chat. Start a chat in a project folder (the folder button next to Chats) and its file tools and commands work in that folder; chats are grouped by folder, plain chats come after. The whole disk, the home folder itself and LocalAide's own data folder cannot be picked. Hover a chat to delete it.
+- **Permission mode as one icon in the chat box:** Plan mode (looks around with read-only tools and writes a plan; **Build** then carries it out), Ask before changes, Autonomous (asks only when there is risk: deleting or moving files, anything outside the folder, publishing, system installs, replacing an existing file, MCP tools) and Full access. Blocked commands never run in any mode.
+- **New model menu:** the provider at the top (tap it to switch, add a provider or manage models), that provider's models with a search, and the thinking effort as a slider. Ctrl+T steps through the effort.
+- **Questions** come as a card: several questions with Back and Next, options with a short description, Other with your own answer, Dismiss and Submit. If you send a message instead of answering, the card stays and says that Submit sends the answer as a new message.
+- **Subagents.** The assistant can hand parts of a task to helpers that only search and read, several at once. Each one shows its current step under its name, and the work status above the chat box lists them all with their steps and reports.
+- **Work status** above the chat box: the assistant's plan for longer tasks ("Completed 2/4") and its subagents.
+- **Learned skills.** When you show the assistant how you want a kind of task done, it saves or improves a skill on its own and says so in the chat, with **Undo**. Switch it off in Chat settings.
+- **Charts, diagrams and mockups** in answers: bar, line and pie charts, Mermaid diagrams, and interface mockups. Mockups run in a sandbox with no internet and no access to your files, and the assistant can let you pick an option on them.
+- **Suggested next prompt** after each answer; Tab takes it. **Improve prompt** (the wand next to Send) rewrites your draft with the chat's model, with Undo.
+- **Starter prompts learned from your chats.** The empty chat offers the ways your chats most often begin, read on this computer only; the old examples fill the rest.
+- **Open the files a chat made:** Open, Open with (your editors, or the system's app chooser) and Show in Finder / File Explorer. Programs and scripts are never opened with their default app. The ⋯ menu opens the chat's folder.
+- **Interface scale** from 70% to 250% (Settings → General → Appearance). Ctrl + and Ctrl − change it anywhere; Ctrl 0 resets it.
+
+### Changed
+- "How LocalAide answers" moved out of the chat box; it is in Chat settings.
+- The macOS disk image has a new background, sharp on Retina screens.
+- Shorter screen transitions, hover motion only with a mouse, and a quieter focus ring on the chat box.
+
 ## [0.1.6] - 2026-11-21
 
 The assistant can now run commands, search your own folders by meaning, ask you questions with buttons, listen to you, and be shared through a link. Settings shows every call that left your computer. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
