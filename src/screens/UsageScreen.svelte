@@ -6,10 +6,20 @@
   import Icon from "../components/Icon.svelte";
   import PageHeader from "../components/PageHeader.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { folderName } from "../lib/chats.svelte";
   import type { SystemProbeResult, UsageSummary } from "../lib/api/bindings";
   import { answerStreak, compactTokens, formatAnswerMs, windowDays } from "../lib/usage";
 
+  // days 1 = today, 0 = all time, anything else the rolling window.
+  const RANGES: { label: string; days: number }[] = [
+    { label: "Today", days: 1 },
+    { label: "7 days", days: 7 },
+    { label: "30 days", days: 30 },
+    { label: "90 days", days: 90 },
+    { label: "All time", days: 0 },
+  ];
   let days = $state(30);
+  let folder = $state<string | null>(null);
   let summary = $state<UsageSummary | null>(null);
   let loading = $state(true);
   let errorMsg = $state<string | null>(null);
@@ -19,7 +29,7 @@
     loading = true;
     errorMsg = null;
     try {
-      summary = await api.usageSummary(days);
+      summary = await api.usageSummary(days, folder);
     } catch (e: unknown) {
       errorMsg = errorMessage(e);
       summary = null;
@@ -33,6 +43,14 @@
     days = value;
     void load();
   };
+
+  const setFolder = (value: string | null) => {
+    if (folder === value) return;
+    folder = value;
+    void load();
+  };
+
+  const rangeLabel = $derived(RANGES.find((r) => r.days === days)?.label ?? `${days} days`);
 
   const loadProbe = async () => {
     try {
@@ -57,6 +75,9 @@
   const maxModel = $derived(
     Math.max(1, ...(summary?.per_model ?? []).map((m) => m.output)),
   );
+  const maxProject = $derived(
+    Math.max(1, ...(summary?.per_folder ?? []).map((p) => p.output)),
+  );
   const localSpeed = $derived.by(() => {
     const rows = summary?.per_model.filter((m) => m.provider === "This computer") ?? [];
     const totalMs = rows.reduce((sum, m) => sum + m.avg_ms * m.answers, 0);
@@ -78,15 +99,33 @@
 <div class="mx-auto max-w-5xl pb-10">
   <PageHeader title="Usage" description="What LocalAide has answered, and how fast.">
     {#snippet actions()}
-      <div class="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1">
-        {#each [7, 30, 90] as range (range)}
-          <button
-            type="button"
-            onclick={() => setRange(range)}
-            aria-pressed={days === range}
-            class={`rounded-md px-3 py-1.5 text-sm transition-colors ${days === range ? "bg-ember-600 font-semibold text-on-ember" : "text-ink-400 hover:text-ink-50"}`}
-          >{range}d</button>
-        {/each}
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <div class="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1">
+          {#each RANGES as range (range.days)}
+            <button
+              type="button"
+              onclick={() => setRange(range.days)}
+              aria-pressed={days === range.days}
+              class={`rounded-md px-3 py-1.5 text-sm transition-colors ${days === range.days ? "bg-ember-600 font-semibold text-on-ember" : "text-ink-400 hover:text-ink-50"}`}
+            >{range.label}</button>
+          {/each}
+        </div>
+        {#if summary && summary.per_folder.length > 0}
+          <label class="flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-2 py-1.5 text-sm text-ink-400">
+            <Icon name="folder-open" class="h-4 w-4 shrink-0" />
+            <span class="sr-only">Project</span>
+            <select
+              class="cursor-pointer bg-transparent text-sm text-ink-100 outline-none"
+              onchange={(e) => setFolder((e.currentTarget as HTMLSelectElement).value || null)}
+              aria-label="Filter usage by project"
+            >
+              <option value="" class="bg-ink-900">All projects</option>
+              {#each summary.per_folder as project (project.folder)}
+                <option value={project.folder} selected={folder === project.folder} class="bg-ink-900">{folderName(project.folder)}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
       </div>
     {/snippet}
   </PageHeader>
@@ -101,7 +140,7 @@
     <EmptyState
       icon="chart"
       title="No answers yet"
-      description={`Every answer LocalAide gives lands here — totals, speed and which models you use. Try the next ${days} days.`}
+      description={`Every answer LocalAide gives lands here — totals, speed and which models you use. ${folder ? "Nothing from this project in the window." : `Try the next ${rangeLabel.toLowerCase()}.`}`}
     />
   {:else if summary}
     <div class="space-y-5">
@@ -194,6 +233,46 @@
           {/each}
         </div>
       </div>
+
+      <!-- Per-project breakdown -->
+      {#if summary.per_folder.length > 0}
+        <div class="rounded-lg border border-ink-700 bg-ink-900 p-5">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-ink-50">Projects</h2>
+            {#if folder}
+              <button type="button" class="rounded-md border border-ink-700 px-2 py-1 text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100" onclick={() => setFolder(null)}>Showing {folderName(folder)} — show all</button>
+            {/if}
+          </div>
+          <div class="mt-4 space-y-4">
+            {#each summary.per_folder as project (project.folder)}
+              <button
+                type="button"
+                class="block w-full text-left"
+                onclick={() => setFolder(folder === project.folder ? null : project.folder)}
+                aria-pressed={folder === project.folder}
+                title="Show only this project"
+              >
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p class="truncate font-medium text-ink-100">{folderName(project.folder)}</p>
+                  <p class="shrink-0 text-sm text-ink-400">
+                    {project.answers} {project.answers === 1 ? "answer" : "answers"} · {compactTokens(project.output)} out
+                    <span class="text-ink-500"> · {formatAnswerMs(project.ms)}</span>
+                  </p>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-ink-800">
+                    <div
+                      class="h-full rounded-full bg-gradient-to-r from-ember-600 to-ember-400 transition-[width] duration-500"
+                      style={`width:${Math.max(2, (project.output / maxProject) * 100)}%`}
+                    ></div>
+                  </div>
+                  <span class={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition-colors ${folder === project.folder ? "border-ember-500/40 bg-ember-500/10 text-ember-200" : "border-ink-700 text-ink-400"}`}>{project.answers} answers</span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       <!-- This machine -->
       {#if probe}

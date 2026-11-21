@@ -38,6 +38,9 @@ pub struct UsageRecord {
     pub tool_calls: usize,
     /// "chat" or "share".
     pub source: String,
+    /// Project folder the chat worked in, when one was picked.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 /// Answers and tokens on one UTC day.
@@ -81,6 +84,22 @@ pub struct UsageSummary {
     pub per_day: Vec<UsageDay>,
     /// Busiest models first.
     pub per_model: Vec<UsageModel>,
+    /// Per-project rollup over the window, busiest first. Always the whole
+    /// window, even when the summary is filtered to one project, so the
+    /// picker keeps every project listed.
+    pub per_folder: Vec<UsageProject>,
+}
+
+/// Per-project rollup over the window.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct UsageProject {
+    /// The project folder path, as the chat worked in it.
+    pub folder: String,
+    pub answers: usize,
+    pub input: usize,
+    pub output: usize,
+    /// Total wall time, milliseconds.
+    pub ms: u64,
 }
 
 pub fn log_path() -> PathBuf {
@@ -106,18 +125,25 @@ pub fn record(rec: &UsageRecord) {
     }
 }
 
-/// Aggregates the last `days` days from the log.
-pub fn summary(days: u32) -> Result<UsageSummary, AppError> {
+/// Aggregates the log over a window and, when set, only the records of one
+/// project folder. Windows: `1` is today (the current UTC day), `0` is all
+/// time, anything else the rolling last `days` days.
+pub fn summary(days: u32, folder: Option<&str>) -> Result<UsageSummary, AppError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    summary_at(&log_path(), days, now)
+    summary_at(&log_path(), days, now, folder)
 }
 
 /// Testable core: aggregates the file as if "now" were `now_secs`.
-fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, AppError> {
-    let cutoff = now_secs.saturating_sub(days as u64 * 86400);
+fn summary_at(path: &Path, days: u32, now_secs: u64, folder: Option<&str>) -> Result<UsageSummary, AppError> {
+    let cutoff = match days {
+        0 => 0,
+        // Today runs from midnight UTC, not a rolling 24 hours.
+        1 => now_secs.saturating_sub(now_secs % 86400),
+        d => now_secs.saturating_sub(d as u64 * 86400),
+    };
     let mut answers = 0usize;
     let mut cancelled = 0usize;
     let mut input = 0usize;
@@ -126,6 +152,7 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
     let mut tool_calls = 0usize;
     let mut per_day: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
     let mut per_model: BTreeMap<(String, String), ModelAcc> = BTreeMap::new();
+    let mut per_folder: BTreeMap<String, UsageProject> = BTreeMap::new();
 
     if let Ok(file) = File::open(path) {
         for line in BufReader::new(file).lines() {
@@ -135,6 +162,26 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
             };
             if rec.ts < cutoff {
                 continue;
+            }
+            // Projects count in their own rollup even while the summary is
+            // filtered to another project, so the picker stays complete.
+            if let Some(f) = &rec.folder {
+                let proj = per_folder.entry(f.clone()).or_insert(UsageProject {
+                    folder: f.clone(),
+                    answers: 0,
+                    input: 0,
+                    output: 0,
+                    ms: 0,
+                });
+                proj.answers += 1;
+                proj.input += rec.input_tokens;
+                proj.output += rec.output_tokens;
+                proj.ms += rec.ms;
+            }
+            if let Some(wanted) = folder {
+                if rec.folder.as_deref() != Some(wanted) {
+                    continue;
+                }
             }
             answers += 1;
             if rec.cancelled {
@@ -200,6 +247,8 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
         })
         .collect();
     per_model.sort_by(|a, b| b.output.cmp(&a.output).then(b.answers.cmp(&a.answers)));
+    let mut per_folder: Vec<UsageProject> = per_folder.into_values().collect();
+    per_folder.sort_by(|a, b| b.output.cmp(&a.output).then(b.answers.cmp(&a.answers)));
 
     Ok(UsageSummary {
         days,
@@ -211,6 +260,7 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
         tool_calls,
         per_day,
         per_model,
+        per_folder,
     })
 }
 
@@ -265,7 +315,14 @@ mod tests {
             cancelled: false,
             tool_calls: 1,
             source: "chat".to_string(),
+            folder: None,
         }
+    }
+
+    fn rec_in(ts: u64, output: usize, folder: Option<&str>) -> UsageRecord {
+        let mut r = rec(ts, "local-model", output);
+        r.folder = folder.map(|f| f.to_string());
+        r
     }
 
     fn write_log(path: &PathBuf, records: &[UsageRecord]) {
@@ -300,12 +357,12 @@ mod tests {
             writeln!(file, "{{oops").unwrap();
         }
 
-        let one = summary_at(&path, 1, now).unwrap();
+        let one = summary_at(&path, 1, now, None).unwrap();
         assert_eq!(one.answers, 2);
         assert_eq!(one.output_tokens, 300);
         assert_eq!(one.per_day.len(), 1);
 
-        let week = summary_at(&path, 7, now).unwrap();
+        let week = summary_at(&path, 7, now, None).unwrap();
         assert_eq!(week.answers, 4);
         assert_eq!(week.output_tokens, 1050);
         assert_eq!(week.per_day.len(), 3);
@@ -317,9 +374,69 @@ mod tests {
         assert_eq!(week.per_model[0].avg_tok_s, Some(24.0));
         assert_eq!(week.per_model[0].avg_ttft_ms, Some(600));
 
-        let empty = summary_at(&dir.join("missing.jsonl"), 30, now).unwrap();
+        let empty = summary_at(&dir.join("missing.jsonl"), 30, now, None).unwrap();
         assert_eq!(empty.answers, 0);
         assert!(empty.per_model.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn today_starts_at_utc_midnight() {
+        let dir = std::env::temp_dir().join(format!("localaide-usage-today-{}", std::process::id()));
+        let path = dir.join("usage.jsonl");
+        // 12:30 UTC today, and 23:00 yesterday: "today" sees only the first.
+        let now = 86_400 + 45_000; // day 2, 12:30
+        write_log(
+            &path,
+            &[rec(now, "local-model", 100), rec(now - 49_800, "local-model", 500)],
+        );
+        let today = summary_at(&path, 1, now, None).unwrap();
+        assert_eq!(today.answers, 1);
+        assert_eq!(today.output_tokens, 100);
+        // The rolling 24-hour window still sees both.
+        let rolling = summary_at(&path, 1, now + 86_400, None).unwrap();
+        assert_eq!(rolling.answers, 2);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn all_time_skips_no_records() {
+        let dir = std::env::temp_dir().join(format!("localaide-usage-all-{}", std::process::id()));
+        let path = dir.join("usage.jsonl");
+        write_log(&path, &[rec(1, "old", 10), rec(2_000_000_000, "new", 20)]);
+        let all = summary_at(&path, 0, 2_000_000_000, None).unwrap();
+        assert_eq!(all.answers, 2);
+        assert_eq!(all.output_tokens, 30);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn folder_filter_and_projects_rollup() {
+        let dir = std::env::temp_dir().join(format!("localaide-usage-folder-{}", std::process::id()));
+        let path = dir.join("usage.jsonl");
+        let now = 1_900_000_000;
+        write_log(
+            &path,
+            &[
+                rec_in(now, 300, Some("C:\\code\\finance")),
+                rec_in(now - 60, 200, Some("C:\\code\\finance")),
+                rec_in(now - 120, 500, Some("C:\\code\\site")),
+                rec_in(now - 180, 50, None),
+            ],
+        );
+        // One project's totals only.
+        let finance = summary_at(&path, 7, now, Some("C:\\code\\finance")).unwrap();
+        assert_eq!(finance.answers, 2);
+        assert_eq!(finance.output_tokens, 500);
+        // The project rollup always covers the whole window.
+        assert_eq!(finance.per_folder.len(), 2);
+        assert_eq!(finance.per_folder[0].folder, "C:\\code\\site");
+        assert_eq!(finance.per_folder[0].output, 500);
+        assert_eq!(finance.per_folder[1].folder, "C:\\code\\finance");
+        assert_eq!(finance.per_folder[1].answers, 2);
+        // Plain chats (no folder) count in the totals but not in projects.
+        let all = summary_at(&path, 7, now, None).unwrap();
+        assert_eq!(all.answers, 4);
         let _ = fs::remove_dir_all(&dir);
     }
 

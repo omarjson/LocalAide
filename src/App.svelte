@@ -396,19 +396,20 @@
         onclick={() => { if (navigate("chat")) newChat(chats.activeFolder); }}
         aria-label="New chat"
         title="New chat (Ctrl+N)"
-        class="mx-1 mb-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ember-500/25 bg-ember-500/10 text-ember-200 transition-colors hover:bg-ember-500/15"
+        class="mx-1 mb-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ember-500/25 bg-ember-500/10 text-ember-200 transition-[background-color,transform] duration-200 hover:scale-110 hover:bg-ember-500/15 active:scale-95"
       ><Icon name="plus" class="h-4 w-4" /></button>
     {/if}
     {#snippet navItem(id: NavId, label: string)}
       <button
         onclick={() => navigate(id)}
+        data-nav={id}
         aria-current={screen === id ? "page" : undefined}
         aria-label={showLabels ? undefined : label}
         title={showLabels ? undefined : label}
-        class={`group relative w-full flex items-center h-10 rounded-lg text-sm text-left transition-[background-color,color] duration-150 ${showLabels ? 'gap-3.5 px-3' : 'justify-center px-0'} ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold shadow-sm' : 'text-ink-300 hover:bg-veil/5 hover:text-ink-50'}`}
+        class={`nav-item group relative w-full flex items-center h-10 rounded-lg text-sm text-left transition-[background-color,color] duration-150 ${showLabels ? 'gap-3.5 px-3' : 'justify-center px-0'} ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold shadow-sm' : 'text-ink-300 hover:bg-veil/5 hover:text-ink-50'}`}
       >
         <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${screen === id ? 'h-4 opacity-100' : 'h-0 opacity-0'}`} aria-hidden="true"></span>
-        <Icon name={id} class={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 ease-out ${screen === id ? 'text-ember-300' : 'group-hover:scale-110'}`} />
+        <span class={`nav-ico ${screen === id ? 'text-ember-300' : ''}`}><Icon name={id} class="w-[18px] h-[18px] shrink-0" /></span>
         {#if showLabels}<span class="truncate">{label}</span>{/if}
       </button>
     {/snippet}

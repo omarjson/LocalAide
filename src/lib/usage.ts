@@ -11,7 +11,9 @@ import type { UsageDay, UsageSummary } from "./api/bindings";
 export function windowDays(summary: UsageSummary, today = new Date()): UsageDay[] {
   const byDate = new Map(summary.per_day.map((day) => [day.date, day]));
   const out: UsageDay[] = [];
-  for (let i = summary.days - 1; i >= 0; i--) {
+  // All time (days 0) still needs a chart: the last 30 calendar days of it.
+  const span = summary.days === 0 ? 30 : summary.days;
+  for (let i = span - 1; i >= 0; i--) {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     out.push(byDate.get(date) ?? { date, answers: 0, input: 0, output: 0 });

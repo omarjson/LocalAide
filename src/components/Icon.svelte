@@ -100,6 +100,7 @@
 >
   {#if name === "chat"}
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="M8 9.5h.01M12 9.5h.01M16 9.5h.01" />
   {:else if name === "search"}
     <circle cx="11" cy="11" r="7" />
     <path d="m20 20-3.5-3.5" />
@@ -246,7 +247,9 @@
     <circle cx="12" cy="12" r="5" />
     <circle cx="12" cy="12" r="1" />
   {:else if name === "sparkle"}
-    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
+    <!-- The classic AI sparkle: one big four-point star and a small one. -->
+    <path d="M11 5l1.6 6.4L19 13l-6.4 1.6L11 21l-1.6-6.4L3 13l6.4-1.6z" />
+    <path d="m18.5 3 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7z" />
   {:else if name === "brain"}
     <path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.1A3 3 0 0 0 4.5 10a3 3 0 0 0 .9 2.1A3 3 0 0 0 6 17.5 2.5 2.5 0 0 0 9.5 20 2.5 2.5 0 0 0 12 17.5v-11A2.5 2.5 0 0 0 9.5 4z" />
     <path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.1a3 3 0 0 1 2.5 3.4 3 3 0 0 1-.9 2.1 3 3 0 0 1-.6 5.4A2.5 2.5 0 0 1 14.5 20 2.5 2.5 0 0 1 12 17.5" />
@@ -298,8 +301,10 @@
     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1" />
     <path d="M3 7v11a2 2 0 0 0 2 2h12.5a2 2 0 0 0 1.9-1.4l1.9-6A1.5 1.5 0 0 0 19.9 11H7.4a2 2 0 0 0-1.9 1.4L3 20" />
   {:else if name === "wand"}
-    <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2ZM19 13l.6 1.4L21 15l-1.4.6L19 17l-.6-1.4L17 15l1.4-.6L19 13Z" />
-    <path d="M4 20 14 10" />
+    <!-- A proper magic wand: the stick and two sparkle crosses at its tip. -->
+    <path d="m4 20 10-10" />
+    <path d="M16.5 3.5v6M13.5 6.5h6" />
+    <path d="M19.2 12.6v3.6M17.4 14.4h3.6" />
   {:else if name === "volume"}
     <path d="M11 5 6 9H3v6h3l5 4V5Z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />

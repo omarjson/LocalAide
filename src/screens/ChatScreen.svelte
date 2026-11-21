@@ -1848,11 +1848,11 @@
         </div>
       {/if}
       {#if suggestions.length > 0 && !input.trim() && !streaming}
-        <div class="mb-2 flex flex-wrap items-center gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+        <div class="mb-2 flex flex-wrap items-stretch gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
           {#each suggestions as option, i (option)}
-            <button type="button" class="suggest-chip" onclick={() => { input = option; focusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="max-w-72 truncate">{option}</span></button>
+            <button type="button" class="suggest-chip min-w-0 flex-1 basis-0" onclick={() => { input = option; focusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="min-w-0 flex-1 truncate">{option}</span></button>
           {/each}
-          <button type="button" aria-label="Hide the suggestions" class="grid h-6 w-6 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestions = [])}><Icon name="close" class="h-3.5 w-3.5" /></button>
+          <button type="button" aria-label="Hide the suggestions" class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestions = [])}><Icon name="close" class="h-3.5 w-3.5" /></button>
         </div>
       {/if}
       {#if previousDraft && input.trim() && !streaming}

@@ -457,8 +457,8 @@
           onclick={onCancel}
           aria-label="Stop the answer"
           title="Stop (Esc)"
-          class="ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950 transition-transform hover:scale-105 active:scale-95"
-        ><Icon name="stop" class="h-3.5 w-3.5" /></button>
+          class="stop-btn ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950"
+        ><Icon name="stop" class="h-5 w-5" /></button>
       {:else}
         <button
           type="button"
@@ -466,8 +466,8 @@
           disabled={!canSend}
           aria-label="Send"
           title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}
-          class={`ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-[var(--shadow-glow)] hover:scale-105 hover:bg-ember-400" : "bg-ink-700 text-ink-500"}`}
-        ><Icon name="arrow-up" class="h-4 w-4" /></button>
+          class={`ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-[var(--shadow-glow)] hover:scale-105 hover:bg-ember-400" : "bg-ink-700 text-ink-500"}`}
+        ><Icon name="arrow-up" class="h-5 w-5" /></button>
       {/if}
     </div>
   </div>
@@ -522,6 +522,30 @@
     background: var(--color-ink-950);
     padding: 0.375rem;
     box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55);
+  }
+  /* The stop button announces itself: a soft ring breathes out while the
+     answer runs, so "make it stop" is always the obvious click. */
+  .stop-btn {
+    transition: transform 150ms ease-out;
+    animation: stop-breathe 1.8s ease-out infinite;
+  }
+  .stop-btn:hover {
+    transform: scale(1.06);
+  }
+  .stop-btn:active {
+    transform: scale(0.94);
+    animation: none;
+  }
+  @keyframes stop-breathe {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-ink-100) 45%, transparent);
+    }
+    70% {
+      box-shadow: 0 0 0 9px transparent;
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
   }
   .menu-row {
     display: flex;

@@ -147,6 +147,9 @@ pub struct AgentRun {
     /// The folder the file tools and commands work in: the workspace, or
     /// the project folder the user picked for this chat.
     pub jail: Arc<WorkspaceJail>,
+    /// The project folder the chat works in, when one was picked —
+    /// remembered so usage can be counted per project.
+    pub folder: Option<String>,
 }
 
 pub struct RunResult {
@@ -259,6 +262,7 @@ pub fn run(
     let input_tokens = estimate_tokens(&run.turns);
     let source = run.source;
     // Owned copies taken before `run` moves into `run_inner`.
+    let folder = run.folder.clone();
     let (model, provider, local) = match &run.target {
         ChatTarget::Local => (
             state
@@ -294,6 +298,7 @@ pub fn run(
             cancelled: done.cancelled,
             tool_calls: done.tool_calls,
             source: source.to_string(),
+            folder,
         });
     }
     result
@@ -909,6 +914,9 @@ fn run_subagents(
                         user_message: task,
                         read_top_page: false,
                         jail: parent.jail.clone(),
+                        // Subagent answers don't land in the usage log
+                        // (run_inner skips them), so the folder is moot.
+                        folder: None,
                     };
                     let sub = SubSink {
                         parent: sink,

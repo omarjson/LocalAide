@@ -467,6 +467,7 @@ pub(crate) fn prepare_run(
         user_message: req.message.clone(),
         read_top_page: mode.gathers_web(),
         jail,
+        folder: req.folder.clone(),
     };
     Ok((run, model_label, job_id, cancel_flag))
 }

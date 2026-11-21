@@ -182,7 +182,9 @@ const chatModelsFixture = (): ModelChoicesFixture => ({
 // A month of plausible answer history, anchored to "today" so the Usage
 // screen always shows fresh-looking bars in the preview harness.
 const usageSummaryFixture = (args: Record<string, unknown>) => {
-  const days = Math.max(1, Math.min(3650, Number(args.days ?? 30)));
+  // days 1 = today, 0 = all time: both render as a span of days of data.
+  const days = Number(args.days ?? 30);
+  const span = days === 0 ? 30 : Math.max(1, Math.min(3650, days));
   const pattern = [3, 5, 0, 8, 6, 2, 9];
   let answers = 0;
   let input = 0;
@@ -190,7 +192,7 @@ const usageSummaryFixture = (args: Record<string, unknown>) => {
   let ms = 0;
   const per_day: { date: string; answers: number; input: number; output: number }[] = [];
   const today = new Date();
-  for (let i = days - 1; i >= 0; i--) {
+  for (let i = span - 1; i >= 0; i--) {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const a = i % 6 === 4 ? 0 : pattern[i % pattern.length];
@@ -200,19 +202,27 @@ const usageSummaryFixture = (args: Record<string, unknown>) => {
     output += a * 900;
     ms += a * 9000;
   }
+  // Like the backend: a folder filter keeps only that project's records.
+  const wanted = typeof args.folder === 'string' ? args.folder : null;
+  const scale = wanted ? (wanted.includes('finance') ? 0.5 : 0.3) : 1;
   return {
     days,
-    answers,
+    answers: Math.max(1, Math.round(answers * scale)),
+
     cancelled: 2,
-    input_tokens: input,
-    output_tokens: output,
-    ms,
+    input_tokens: Math.round(input * scale),
+    output_tokens: Math.round(output * scale),
+    ms: Math.round(ms * scale),
     tool_calls: Math.round(answers * 1.4),
     per_day,
     per_model: [
       { model: "Qwen3.5 9B", provider: "This computer", answers: Math.round(answers * 0.55), input: Math.round(input * 0.6), output: Math.round(output * 0.5), avg_ms: 11000, avg_tok_s: 28.4, avg_ttft_ms: 780 },
       { model: "kimi-k2.5", provider: "Kilo Code (free)", answers: Math.round(answers * 0.3), input: Math.round(input * 0.25), output: Math.round(output * 0.32), avg_ms: 6000, avg_tok_s: 62.5, avg_ttft_ms: 410 },
       { model: "gpt-5-mini", provider: "OpenRouter", answers: Math.round(answers * 0.15), input: Math.round(input * 0.15), output: Math.round(output * 0.18), avg_ms: 5200, avg_tok_s: 88.1, avg_ttft_ms: 320 },
+    ],
+    per_folder: [
+      { folder: "C:\\Users\\Omar\\Documents\\finance", answers: Math.round(answers * 0.5), input: Math.round(input * 0.55), output: Math.round(output * 0.45), ms: Math.round(ms * 0.45) },
+      { folder: "C:\\Users\\Omar\\Documents\\site", answers: Math.round(answers * 0.3), input: Math.round(input * 0.3), output: Math.round(output * 0.3), ms: Math.round(ms * 0.3) },
     ],
   };
 };
@@ -502,6 +512,11 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
       payload: { id: "call-1", name: "search_notes", title: "Searching your notes", detail: "invoice policy", group: "notes", arguments: "{}" },
     },
     { type: "tool_result", payload: { id: "call-1", ok: true, summary: "1 note matched", output: "Invoice policy: net 30 days." } },
+    { type: "todos", payload: { items: [
+      { text: "Check the invoice terms in your notes", status: "done" },
+      { text: "Work out the due date for INV-1042", status: "in_progress" },
+      { text: "Draft the payment reminder", status: "pending" },
+    ] } },
     { type: "reasoning", payload: { text: "The user wants the payment window. The note says net 30 days, so the answer is 30 days after the invoice date." } },
     { type: "citation", payload: { index: 1, title: "Invoice policy", source: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", snippet: "Payment is due net 30 days after the invoice date.", score: 0.42 } },
     { type: "token", payload: { token: "" } },

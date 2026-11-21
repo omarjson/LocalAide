@@ -484,6 +484,14 @@ export interface UsageModel {
   avg_ttft_ms: number | null;
 }
 
+export interface UsageProject {
+  folder: string;
+  answers: number;
+  input: number;
+  output: number;
+  ms: number;
+}
+
 export interface UsageSummary {
   days: number;
   answers: number;
@@ -494,6 +502,7 @@ export interface UsageSummary {
   tool_calls: number;
   per_day: UsageDay[];
   per_model: UsageModel[];
+  per_folder: UsageProject[];
 }
 
 export interface WatchFolderResponse {

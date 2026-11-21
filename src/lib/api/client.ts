@@ -381,9 +381,9 @@ export class ApiClient {
     return invoke<IndexerStatsResponse>("indexer_stats");
   }
 
-  /** Aggregated answer usage over the last `days` days (default 30). */
-  async usageSummary(days?: number): Promise<UsageSummary> {
-    return invoke<UsageSummary>("usage_summary", { days: days ?? null });
+  /** Aggregated answer usage. days 1 = today, 0 = all time, else the rolling window. */
+  async usageSummary(days?: number, folder?: string | null): Promise<UsageSummary> {
+    return invoke<UsageSummary>("usage_summary", { days: days ?? null, folder: folder ?? null });
   }
 
   // Library status, folder presets and indexing with progress

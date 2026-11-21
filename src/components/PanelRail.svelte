@@ -50,6 +50,33 @@
       </section>
     {/if}
 
+    {#if todos && todos.length > 0}
+      <!-- The model's plan, item by item: done ticks ember, the step in
+           progress carries the spinner, the rest wait in line. -->
+      <section class="rounded-xl border border-ink-700 bg-ink-900 p-3" aria-label="Plan">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="flex items-center gap-1.5 text-sm font-semibold text-ink-100"><Icon name="list-check" class="h-3.5 w-3.5 text-ink-400" />Plan</h3>
+          <span class="text-xs tabular-nums text-ink-500">{todos.filter((t) => t.status === "done").length}/{todos.length}</span>
+        </div>
+        <ul class="space-y-1.5" aria-label="Todo list">
+          {#each todos as todo, i (i)}
+            <li class="flex items-start gap-2 text-sm" aria-label={`Todo ${i + 1}: ${todo.text}`}>
+              {#if todo.status === "done"}
+                <span class="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-ember-500/20 text-ember-300"><Icon name="check" class="h-2.5 w-2.5" /></span>
+              {:else if todo.status === "in_progress"}
+                <span class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ink-700 border-t-ember-400" aria-label="In progress"></span>
+              {:else}
+                <span class="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-ink-600" aria-label="Pending"></span>
+              {/if}
+              <span
+                class={`min-w-0 flex-1 ${todo.status === "done" ? "text-ink-500 line-through" : todo.status === "in_progress" ? "font-medium text-ink-50" : "text-ink-300"}`}
+              >{todo.text}</span>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
     <section class="rounded-xl border border-ink-700 bg-ink-900 p-3" aria-label="Context window">
       <div class="mb-2 flex items-center justify-between">
         <h3 class="flex items-center gap-1.5 text-sm font-semibold text-ink-100"><Icon name="database" class="h-3.5 w-3.5 text-ink-400" />Context</h3>
