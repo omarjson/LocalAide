@@ -16,6 +16,7 @@
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
+  import { branchCount as branchCountAt, saveBranch, swapBranch } from "../lib/branches.svelte";
   import Button from "../components/Button.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Slider from "../components/Slider.svelte";
@@ -1070,9 +1071,23 @@
 
   const editTurn = (newText: string, index: number) => {
     if (streaming) return;
+    // The discarded future is parked as a branch, not thrown away.
+    if (activeThreadId && messages.length > index + 1) {
+      saveBranch(activeThreadId, index, messages.slice(index + 1));
+    }
     messages = messages.slice(0, index);
     input = newText;
     send();
+  };
+
+  const restoreBranch = (index: number) => {
+    if (streaming || !activeThreadId) return;
+    const tail = swapBranch(activeThreadId, index, messages.slice(index + 1));
+    if (tail && tail.length > 0) {
+      messages = [...messages.slice(0, index + 1), ...tail];
+      void persistCurrentThread();
+      scrollToBottom(true);
+    }
   };
 
   const summarizeLast = async () => {
@@ -1761,6 +1776,8 @@
             stats={showStats ? msg.stats ?? null : null}
             allowRaw={flag("raw_messages")}
             isLast={idx === messages.length - 1}
+            branchCount={activeThreadId ? branchCountAt(activeThreadId, idx) : 0}
+            onRestoreBranch={() => restoreBranch(idx)}
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
             onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
             onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}

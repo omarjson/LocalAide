@@ -136,7 +136,11 @@ The assistant answered (end of it):
             .to_string();
         let count = title.chars().count();
         if (3..=60).contains(&count) {
-            return Ok(Some(title.trim_end_matches(['.', ',', ';', ':', '-']).to_string()));
+            return Ok(Some(
+                title
+                    .trim_end_matches(['.', ',', ';', ':', '-'])
+                    .to_string(),
+            ));
         }
         Ok(None)
     })

@@ -37,6 +37,10 @@
     onSendToOpenCode?: () => void;
     /** The newest message keeps its actions visible. */
     isLast?: boolean;
+    /** Later messages parked here as a branch when the chat was edited. */
+    branchCount?: number;
+    /** Swaps the parked branch back into the chat. */
+    onRestoreBranch?: () => void;
     /** The answer in order: thinking, tools, text. */
     parts?: MessagePart[];
     attachments?: ChatAttachment[];
@@ -75,6 +79,8 @@
     allowRaw = false,
     onSendToOpenCode,
     isLast = false,
+    branchCount = 0,
+    onRestoreBranch,
     parts = [],
     attachments = [],
     model = "",
@@ -176,6 +182,14 @@
 
 {#if role === "user"}
   <div class="group flex justify-end" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+    {#if branchCount > 0}
+      <div class="mb-1 flex w-full items-center justify-end gap-2 text-xs text-ink-500">
+        <span class="flex items-center gap-1"><Icon name="undo" class="h-3 w-3" />{branchCount} later {branchCount === 1 ? "message" : "messages"} branched here</span>
+        {#if onRestoreBranch}
+          <button type="button" class="rounded-md border border-ink-700 px-2 py-0.5 text-ink-300 transition-colors hover:bg-veil/5 hover:text-ink-50" onclick={onRestoreBranch}>Restore</button>
+        {/if}
+      </div>
+    {/if}
     <div class="flex max-w-[82%] flex-col items-end">
       {#if isEditing}
         <div class="w-[min(36rem,80vw)] rounded-2xl border border-edge bg-ink-950 p-3">
