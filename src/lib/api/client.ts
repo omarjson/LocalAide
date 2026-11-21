@@ -266,6 +266,11 @@ export class ApiClient {
     return invoke<string[]>("chat_suggest_next", { question, answer, target: target ?? null });
   }
 
+  /** A short AI title for the chat, or null when the model declined. */
+  async chatTitle(question: string, answer: string, target?: ChatTarget): Promise<string | null> {
+    return invoke<string | null>("chat_title", { question, answer, target: target ?? null });
+  }
+
   /** Starter prompts learned from how the user's saved chats begin. */
   async chatStarters(): Promise<Starter[]> {
     return invoke<Starter[]>("chat_starters");

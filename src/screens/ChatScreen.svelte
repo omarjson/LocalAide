@@ -170,6 +170,51 @@
   let localNotes = $state<number | null>(null);
   // Titles of pinned notes, shown as chips above the composer while Recall is on.
   let pinnedTitles = $state<string[]>([]);
+  // The chat's title can come from the model, be regenerated, or be edited
+  // by hand; the first-line fallback only applies before any of those.
+  let aiTitle = $state(false);
+  let titleBusy = $state(false);
+  let editingTitle = $state(false);
+  let titleDraft = $state("");
+
+  const generateTitle = async () => {
+    if (streaming || titleBusy || messages.length < 2) return;
+    const question = messages.find((m) => m.role === "user")?.content ?? "";
+    const answer = [...messages].reverse().find((m) => m.role === "assistant" && !m.error)?.content ?? "";
+    if (!question.trim()) return;
+    titleBusy = true;
+    try {
+      const title = await api.chatTitle(
+        question.slice(0, 400),
+        answer.slice(-1200),
+        activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined,
+      );
+      if (title && title !== activeThreadTitle) {
+        activeThreadTitle = title;
+        aiTitle = true;
+        void persistCurrentThread();
+      }
+    } catch {
+      // Titles are a nicety; the first-line fallback stays.
+    } finally {
+      titleBusy = false;
+    }
+  };
+
+  const startTitleEdit = () => {
+    titleDraft = activeThreadTitle === "New Conversation" ? "" : activeThreadTitle;
+    editingTitle = true;
+  };
+  const saveTitleEdit = () => {
+    if (!editingTitle) return;
+    editingTitle = false;
+    const next = titleDraft.trim();
+    if (next && next !== activeThreadTitle) {
+      activeThreadTitle = next;
+      aiTitle = true;
+      void persistCurrentThread();
+    }
+  };
   // The side rail with the live cards. Remembered for the next chats.
   let railOpen = $state((() => {
     try {
@@ -507,6 +552,8 @@
     if (streaming) return;
     activeThreadId = `t_${Date.now()}`;
     activeThreadTitle = "New Conversation";
+    aiTitle = false;
+    editingTitle = false;
     activeFolder = folder;
     messages = [];
     pendingFiles = [];
@@ -552,6 +599,8 @@
     if (streaming) return;
     activeThreadId = t.id;
     activeThreadTitle = t.title;
+    aiTitle = true;
+    editingTitle = false;
     activeFolder = t.folder ?? null;
     suggestions = [];
     allowedTools = [];
@@ -573,7 +622,7 @@
     }
     if (messages.length === 0) return;
 
-    if (activeThreadTitle === "New Conversation" && messages[0]) {
+    if (!aiTitle && activeThreadTitle === "New Conversation" && messages[0]) {
       const firstLine = messages[0].content.slice(0, 35);
       activeThreadTitle = firstLine.length < messages[0].content.length ? `${firstLine}…` : firstLine;
     }
@@ -969,6 +1018,7 @@
             activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
+            if (!aiTitle) void generateTitle();
             void persistCurrentThread().then(() => {
               if (messages.length <= 2) void loadStarters();
             });
@@ -1414,7 +1464,29 @@
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
   <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
     <div class="flex min-w-0 items-center gap-2 px-1">
-      <h2 class="max-w-[18rem] truncate text-sm font-semibold text-ink-100">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</h2>
+      {#if editingTitle}
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          bind:value={titleDraft}
+          onkeydown={(e) => {
+            if (e.key === "Enter") saveTitleEdit();
+            if (e.key === "Escape") editingTitle = false;
+          }}
+          onblur={saveTitleEdit}
+          aria-label="Chat title"
+          placeholder="Name this chat"
+          class="h-7 w-56 rounded-md border border-ember-500/50 bg-ink-950 px-2 text-sm text-ink-50 outline-none"
+          autofocus
+        />
+      {:else}
+        <div class="group/title flex min-w-0 items-center gap-1">
+          <h2 class="max-w-[18rem] truncate text-sm font-semibold text-ink-100">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</h2>
+          {#if messages.length > 0 && !streaming}
+            <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Rename this chat" title="Rename" onclick={startTitleEdit}><Icon name="pencil" class="h-3.5 w-3.5" /></button>
+            <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Generate a title with the model" title="Generate title with the model" disabled={titleBusy} onclick={() => void generateTitle()}><Icon name="refresh" class={`h-3.5 w-3.5 ${titleBusy ? "animate-spin" : ""}`} /></button>
+          {/if}
+        </div>
+      {/if}
       {#if activeFolder}
         <button type="button" onclick={() => void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error"))} class="folder-chip" title={`This chat works in ${activeFolder}. Show it in ${fileManagerName()}.`}>
           <Icon name="folder" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">{folderName(activeFolder)}</span>

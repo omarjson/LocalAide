@@ -97,6 +97,52 @@ pub async fn chat_suggest_next(
     .await
 }
 
+const TITLE_PROMPT: &str = "Write a short title for this conversation: 3 to 6 words, no quotes, no period, in the language of the conversation. Reply with the title only.";
+
+/// A compact title for the chat, from its first question and answer.
+#[tauri::command]
+pub async fn chat_title(
+    state: State<'_, AppState>,
+    question: String,
+    answer: String,
+    target: Option<ChatTargetRequest>,
+) -> Result<Option<String>, AppError> {
+    let q: String = question.chars().take(1200).collect();
+    let tail: String = {
+        let chars: Vec<char> = answer.chars().collect();
+        chars[chars.len().saturating_sub(1500)..].iter().collect()
+    };
+    if q.trim().is_empty() {
+        return Ok(None);
+    }
+    let owned: AppState = (*state).clone();
+    run_blocking(move || {
+        let target = target_for(&owned, target.as_ref())?;
+        let text = format!(
+            "The conversation starts with this question:
+{q}
+
+The assistant answered (end of it):
+{tail}"
+        );
+        let title = oneshot::complete(&owned, &target, TITLE_PROMPT, &text, 32)?;
+        let title = title
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .trim()
+            .to_string();
+        let count = title.chars().count();
+        if (3..=60).contains(&count) {
+            return Ok(Some(title.trim_end_matches(['.', ',', ';', ':', '-']).to_string()));
+        }
+        Ok(None)
+    })
+    .await
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Starter {
     pub title: String,

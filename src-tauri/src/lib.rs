@@ -206,6 +206,7 @@ pub fn run() {
             commands::chat_thread_export_save,
             commands::chat_export_text_save,
             commands::usage_summary,
+            commands::chat_title,
             commands::pick_folder,
             commands::pick_document,
             commands::open_link,
