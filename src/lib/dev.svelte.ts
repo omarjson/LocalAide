@@ -26,7 +26,19 @@ function apply(settings: DeveloperSettings): void {
   requestLog.enabled = flag("request_log");
   const root = document.documentElement;
   root.dataset.motion = flag("no_motion") ? "off" : "on";
-  root.dataset.density = flag("compact") ? "compact" : "normal";
+  // The developer flag forces compact; otherwise the Appearance → Density
+  // setting decides, so re-apply what it saved.
+  if (flag("compact")) {
+    root.dataset.density = "compact";
+  } else {
+    try {
+      const saved = localStorage.getItem("localaide-density");
+      if (saved === "compact") root.dataset.density = "compact";
+      else delete root.dataset.density;
+    } catch {
+      delete root.dataset.density;
+    }
+  }
 }
 
 export async function loadDev(): Promise<void> {

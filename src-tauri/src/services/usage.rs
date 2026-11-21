@@ -206,10 +206,10 @@ fn summary_at(
                 proj.output += rec.output_tokens;
                 proj.ms += rec.ms;
             }
-            if let Some(wanted) = folder {
-                if rec.folder.as_deref() != Some(wanted) {
-                    continue;
-                }
+            if let Some(wanted) = folder
+                && rec.folder.as_deref() != Some(wanted)
+            {
+                continue;
             }
             answers += 1;
             if rec.cancelled {
@@ -548,15 +548,13 @@ mod tests {
         let sessionless = rec(now - 30, "local-model", 10);
         write_log(&path, &[a, b, c, d, sessionless]);
         let sum = summary_at(&path, 7, now, None).unwrap();
-        // t1 twice, t2 across two days.
-        assert_eq!(sum.sessions, 2);
+        // t1 twice, t2 across two days, plus one record with no session id,
+        // which counts as its own session.
+        assert_eq!(sum.sessions, 3);
         assert_eq!(sum.active_days, 2);
         // Both days active and consecutive: streak 2.
         assert_eq!(sum.longest_streak, 2);
         let _ = (yesterday, today);
-        // A record with no session id is its own session.
-        let with_none = summary_at(&path, 7, now, None).unwrap();
-        assert_eq!(with_none.sessions, 3);
         let _ = fs::remove_dir_all(&dir);
     }
 

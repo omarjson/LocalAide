@@ -31,7 +31,7 @@
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
-  import { applyTheme, currentTheme } from "../lib/theme";
+  import { applyAccent, applyDensity, applyFont, applyTheme, currentAccent, currentDensity, currentFont, currentTheme, type Accent, type AppFont, type Density } from "../lib/theme";
   import type {
     BackupConfigDto,
     BackupEntry,
@@ -197,6 +197,27 @@
   let activeTab = $state<SettingsSection>(settingsView.section as SettingsSection);
   let engine = $state<EngineInfo | null>(null);
   let scalePct = $state(Math.round(scale.value * 100));
+  let accent = $state<Accent>(currentAccent());
+  let font = $state<AppFont>(currentFont());
+  let density = $state<Density>(currentDensity());
+
+  const accentSwatches: { id: Accent; label: string; fill: string }[] = [
+    { id: "ember", label: "Deep Ember", fill: "#ff7a1a" },
+    { id: "ocean", label: "Ocean", fill: "oklch(73% 0.17 245)" },
+    { id: "violet", label: "Violet", fill: "oklch(73% 0.17 305)" },
+    { id: "forest", label: "Forest", fill: "oklch(73% 0.17 155)" },
+    { id: "rose", label: "Rose", fill: "oklch(73% 0.17 15)" },
+    { id: "gold", label: "Gold", fill: "oklch(73% 0.17 95)" },
+  ];
+  const fontTabs = [
+    { value: "system", label: "System" },
+    { value: "serif", label: "Serif" },
+    { value: "mono", label: "Mono" },
+  ];
+  const densityTabs = [
+    { value: "comfortable", label: "Comfortable" },
+    { value: "compact", label: "Compact" },
+  ];
 
   // Model prices (Settings → General → Model costs): USD per 1M tokens,
   // what the Usage screen's cost cards compute from.
@@ -827,6 +848,36 @@
             <SettingsRow icon="sun" title="Theme" description="Dark is the default. Your choice is kept when you restart.">
               {#snippet control()}
                 <Tabs items={themeTabs} value={theme} onChange={(value) => { if (value === "dark" || value === "light") void setTheme(value); }} ariaLabel="Theme" />
+              {/snippet}
+            </SettingsRow>
+            <SettingsRow icon="sparkle" title="Accent" description="The color behind every highlight, fill and glow. Contrast is kept for each one." class="border-t border-ink-800">
+              {#snippet control()}
+                <div class="flex items-center gap-1.5" role="radiogroup" aria-label="Accent">
+                  {#each accentSwatches as swatch (swatch.id)}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={accent === swatch.id}
+                      aria-label={swatch.label}
+                      title={swatch.label}
+                      class={`grid h-7 w-7 place-items-center rounded-full border-2 transition-transform hover:scale-110 ${accent === swatch.id ? "border-ink-100" : "border-transparent"}`}
+                      style={`background:${swatch.fill}`}
+                      onclick={() => { accent = swatch.id; applyAccent(swatch.id); }}
+                    >
+                      {#if accent === swatch.id}<Icon name="check" class="h-3.5 w-3.5 text-white drop-shadow" />{/if}
+                    </button>
+                  {/each}
+                </div>
+              {/snippet}
+            </SettingsRow>
+            <SettingsRow icon="file" title="Font" description="The face the whole app speaks in." class="border-t border-ink-800">
+              {#snippet control()}
+                <Tabs items={fontTabs} value={font} onChange={(value) => { if (value === "system" || value === "serif" || value === "mono") { font = value; applyFont(value); } }} ariaLabel="Font" />
+              {/snippet}
+            </SettingsRow>
+            <SettingsRow icon="scale" title="Density" description="Compact tightens the spacing between everything." class="border-t border-ink-800">
+              {#snippet control()}
+                <Tabs items={densityTabs} value={density} onChange={(value) => { if (value === "comfortable" || value === "compact") { density = value; applyDensity(value); } }} ariaLabel="Density" />
               {/snippet}
             </SettingsRow>
             <SettingsRow icon="scale" title="Interface scale" description="Makes everything bigger or smaller, from 70% to 250%. Ctrl + and Ctrl − change it anywhere; Ctrl 0 resets it." class="border-t border-ink-800">

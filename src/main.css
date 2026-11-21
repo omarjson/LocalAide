@@ -420,9 +420,61 @@ aside nav:focus-within::-webkit-scrollbar-thumb {
   }
 }
 
-/* Developer → "Compact layout". */
+/* Appearance → Accent. The Deep Ember ramp stays hex and exact; choosing
+   another accent rebuilds the same lightness-and-chroma ramp around the new
+   hue, so contrast stays where the audit put it while the color turns. */
+:root[data-accent="ocean"] {
+  --accent-h: 245;
+}
+:root[data-accent="violet"] {
+  --accent-h: 305;
+}
+:root[data-accent="forest"] {
+  --accent-h: 155;
+}
+:root[data-accent="rose"] {
+  --accent-h: 15;
+}
+:root[data-accent="gold"] {
+  --accent-h: 95;
+}
+:root[data-accent] {
+  --color-ember-200: oklch(88.5% 0.11 var(--accent-h));
+  --color-ember-300: oklch(81.5% 0.14 var(--accent-h));
+  --color-ember-400: oklch(77.5% 0.165 var(--accent-h));
+  --color-ember-500: oklch(73% 0.17 var(--accent-h));
+  --color-ember-600: oklch(68% 0.16 var(--accent-h));
+  --color-ember-700: oklch(57% 0.13 var(--accent-h));
+  --color-ember-800: oklch(45% 0.1 var(--accent-h));
+  --color-ember-900: oklch(35% 0.08 var(--accent-h));
+  --color-ember-950: oklch(22% 0.05 var(--accent-h));
+}
+/* The light theme's fills sit darker so their text keeps its ratio. */
+:root[data-accent][data-theme="light"] {
+  --color-ember-200: oklch(50% 0.12 var(--accent-h));
+  --color-ember-300: oklch(50% 0.12 var(--accent-h));
+  --color-ember-400: oklch(52% 0.14 var(--accent-h));
+  --color-ember-500: oklch(55% 0.15 var(--accent-h));
+  --color-ember-600: oklch(52% 0.14 var(--accent-h));
+}
+
+/* Appearance → Font: the whole app follows the choice. */
+:root[data-font="serif"] {
+  --font-sans: Georgia, "Iowan Old Style", "Times New Roman", serif;
+}
+:root[data-font="mono"] {
+  --font-sans: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", monospace;
+}
+
+/* Appearance → Density: compact tightens the vertical rhythm. */
 :root[data-density="compact"] .space-y-3 > :not(:last-child) {
   margin-bottom: 0.5rem;
+}
+:root[data-density="compact"] .space-y-5 > :not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+:root[data-density="compact"] .space-y-1\.5 > :not(:last-child) {
+  margin-bottom: 0.25rem;
 }
 
 /* One slider look for the whole app, in both themes. The filled part of the
