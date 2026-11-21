@@ -53,31 +53,46 @@ pub async fn chat_enhance_prompt(
     .await
 }
 
-const NEXT_PROMPT: &str = "Suggest the single most useful next message the user could send in this conversation, written as the user would write it, in their language. At most 12 words. Reply with the message only.";
+const NEXT_PROMPT: &str = "Suggest the 3 most useful next messages the user could send in this conversation, written as the user would write it, in their language, each with a different idea. At most 12 words each. Reply with exactly 3 lines, one message per line, no numbering.";
 
-/// One suggested next message, from the last question and answer.
+/// Up to three suggested next messages, from the last question and answer.
 #[tauri::command]
 pub async fn chat_suggest_next(
     state: State<'_, AppState>,
     question: String,
     answer: String,
     target: Option<ChatTargetRequest>,
-) -> Result<Option<String>, AppError> {
+) -> Result<Vec<String>, AppError> {
     let q: String = question.chars().take(1500).collect();
     let tail: String = {
         let chars: Vec<char> = answer.chars().collect();
         chars[chars.len().saturating_sub(2500)..].iter().collect()
     };
     if q.trim().is_empty() && tail.trim().is_empty() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let owned: AppState = (*state).clone();
     run_blocking(move || {
         let target = target_for(&owned, target.as_ref())?;
         let text = format!("The user asked:\n{q}\n\nThe assistant answered (end of it):\n{tail}");
-        let next = oneshot::complete(&owned, &target, NEXT_PROMPT, &text, 60)?;
-        let next = next.lines().next().unwrap_or("").trim().to_string();
-        Ok((next.chars().count() >= 3 && next.chars().count() <= 160).then_some(next))
+        let next = oneshot::complete(&owned, &target, NEXT_PROMPT, &text, 160)?;
+        let nexts: Vec<String> = next
+            .lines()
+            .map(|line| {
+                let mut line = line.trim();
+                // The model may number its lines despite being told not to.
+                for prefix in ["- ", "* ", "1. ", "2. ", "3. ", "1) ", "2) ", "3) "] {
+                    if let Some(rest) = line.strip_prefix(prefix) {
+                        line = rest;
+                        break;
+                    }
+                }
+                line.trim().to_string()
+            })
+            .filter(|line| (3..=160).contains(&line.chars().count()))
+            .take(3)
+            .collect();
+        Ok(nexts)
     })
     .await
 }

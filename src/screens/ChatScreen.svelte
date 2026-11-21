@@ -513,7 +513,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
-    suggestion = null;
+    suggestions = [];
     void loadStarters();
   };
 
@@ -553,7 +553,7 @@
     activeThreadId = t.id;
     activeThreadTitle = t.title;
     activeFolder = t.folder ?? null;
-    suggestion = null;
+    suggestions = [];
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
@@ -759,14 +759,14 @@
     }
   };
 
-  // The suggested next message, after an answer (Settings: chat settings).
-  let suggestion = $state<string | null>(null);
+  // Suggested next messages, after an answer (Settings: chat settings).
+  let suggestions = $state<string[]>([]);
   let suggestTicket = 0;
   const askSuggestion = async (question: string, answer: string) => {
     const ticket = ++suggestTicket;
     try {
       const next = await api.suggestNext(question, answer, activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
-      if (ticket === suggestTicket && !streaming && !input.trim()) suggestion = next;
+      if (ticket === suggestTicket && !streaming && !input.trim()) suggestions = next;
     } catch {
       // A suggestion is a nicety; nothing to report.
     }
@@ -816,7 +816,7 @@
     if (!resend) {
       input = "";
     }
-    suggestion = null;
+    suggestions = [];
     previousDraft = null;
     planReady = false;
     realPromptTokens = null;
@@ -1758,10 +1758,12 @@
           {/each}
         </div>
       {/if}
-      {#if suggestion && !input.trim() && !streaming}
-        <div class="mb-2 flex items-center gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
-          <button type="button" class="suggest-chip" onclick={() => { input = suggestion ?? ""; focusComposer(); }} title="Use this prompt (Tab)"><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="truncate">{suggestion}</span></button>
-          <button type="button" aria-label="Hide the suggestion" class="grid h-6 w-6 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestion = null)}><Icon name="close" class="h-3.5 w-3.5" /></button>
+      {#if suggestions.length > 0 && !input.trim() && !streaming}
+        <div class="mb-2 flex flex-wrap items-center gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+          {#each suggestions as option, i (option)}
+            <button type="button" class="suggest-chip" onclick={() => { input = option; focusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="max-w-72 truncate">{option}</span></button>
+          {/each}
+          <button type="button" aria-label="Hide the suggestions" class="grid h-6 w-6 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestions = [])}><Icon name="close" class="h-3.5 w-3.5" /></button>
         </div>
       {/if}
       {#if previousDraft && input.trim() && !streaming}
@@ -1788,7 +1790,7 @@
         onSlashCommand={handleSlashCommand}
         onEnhance={() => void enhancePrompt()}
         {enhancing}
-        {suggestion}
+        {suggestions}
         {useWeb}
         {webAvailable}
         onToggleWeb={() => useWeb = !useWeb}

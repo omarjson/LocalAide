@@ -1228,8 +1228,11 @@ mod tests {
     fn json_tool_call_blocks_and_split_tags_recover() {
         // Hermes-style JSON, with the open tag split across two chunks.
         let mut g = ToolCallGuard::default();
-        assert_eq!(g.push("Reading the file <tool"), "");
-        assert_eq!(g.push("_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.txt\"}}</tool_call> done"), "Reading the file  done");
+        assert_eq!(g.push("Reading the file <tool"), "Reading the file ");
+        assert_eq!(
+            g.push("_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.txt\"}}</tool_call> done"),
+            " done"
+        );
         let (_, calls) = g.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");

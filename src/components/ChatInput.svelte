@@ -64,7 +64,7 @@
     onEnhance?: () => void;
     enhancing?: boolean;
     /** A suggested next message: shown in the empty box, Tab takes it. */
-    suggestion?: string | null;
+    suggestions?: string[];
   }
 
   let {
@@ -109,8 +109,10 @@
     leading,
     onEnhance,
     enhancing = false,
-    suggestion = null,
+    suggestions = [],
   }: Props = $props();
+
+  const firstSuggestion = $derived(suggestions[0] ?? null);
 
   let textareaEl = $state<HTMLTextAreaElement>();
   let fileInputEl = $state<HTMLInputElement>();
@@ -194,9 +196,9 @@
       }
     }
     // Tab takes the suggested next message into the empty box.
-    if (e.key === "Tab" && !e.shiftKey && suggestion && !input.trim()) {
+    if (e.key === "Tab" && !e.shiftKey && firstSuggestion && !input.trim()) {
       e.preventDefault();
-      input = suggestion;
+      input = firstSuggestion;
       return;
     }
     // With "Send with Ctrl+Enter" on, plain Enter adds a new line instead.
@@ -343,7 +345,7 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Answering… press Esc to stop" : suggestion ? `Tab to use: ${suggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
+      placeholder={streaming ? "Answering… press Esc to stop" : firstSuggestion ? `Tab to use: ${firstSuggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
       readonly={streaming}
       aria-busy={streaming}
       rows={1}

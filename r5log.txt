@@ -1,0 +1,945 @@
+﻿2026-11-21T20:47:28.3410252Z Current runner version: '2.338.2'
+2026-11-21T20:47:28.3592273Z ##[group]Runner Image Provisioner
+2026-11-21T20:47:28.3592950Z Hosted Compute Agent
+2026-11-21T20:47:28.3593309Z Version: 20261111.635
+2026-11-21T20:47:28.3593670Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-21T20:47:28.3594195Z Build Date: 2026-11-11T01:49:01Z
+2026-11-21T20:47:28.3594745Z Worker ID: {2fc9e471-238a-44ff-ad98-a8aa869cb576}
+2026-11-21T20:47:28.3595162Z Region: westus2
+2026-11-21T20:47:28.3595576Z Cloud: Azure
+2026-11-21T20:47:28.3595932Z ##[endgroup]
+2026-11-21T20:47:28.3596827Z ##[group]Operating System
+2026-11-21T20:47:28.3597252Z Microsoft Windows Server 2025
+2026-11-21T20:47:28.3597647Z 10.0.26100
+2026-11-21T20:47:28.3597988Z Datacenter
+2026-11-21T20:47:28.3598292Z ##[endgroup]
+2026-11-21T20:47:28.3598590Z ##[group]Runner Image
+2026-11-21T20:47:28.3599026Z Image: windows-2025-vs2026
+2026-11-21T20:47:28.3599401Z Version: 20261116.315.1
+2026-11-21T20:47:28.3600608Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20261116.315/images/windows/Windows2025-VS2026-Readme.md
+2026-11-21T20:47:28.3601548Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20261116.315
+2026-11-21T20:47:28.3602192Z ##[endgroup]
+2026-11-21T20:47:28.3602915Z ##[group]GITHUB_TOKEN Permissions
+2026-11-21T20:47:28.3604183Z Contents: read
+2026-11-21T20:47:28.3604538Z Metadata: read
+2026-11-21T20:47:28.3604857Z ##[endgroup]
+2026-11-21T20:47:28.3606348Z Secret source: Actions
+2026-11-21T20:47:28.3606915Z Cache mode: write
+2026-11-21T20:47:28.3607396Z Prepare workflow directory
+2026-11-21T20:47:28.4440813Z Prepare all required actions
+2026-11-21T20:47:28.4477433Z Getting action download info
+2026-11-21T20:47:28.7381824Z Download action repository 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-11-21T20:47:28.8529046Z Download action repository 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8' (SHA:683b588c487a69d01f6c6ddf40f036ff682cc2c8)
+2026-11-21T20:47:29.0492936Z Download action repository 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' (SHA:949feb2413d6458794dcd2491c4babbbce0c15c1)
+2026-11-21T20:47:29.1951711Z Download action repository 'Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0' (SHA:d1527c8f67ef9af357290475d4af4b0fab8f12e0)
+2026-11-21T20:47:29.8604527Z Complete job name: Rust on Windows (Clippy, Test)
+2026-11-21T20:47:30.7567502Z ##[group]Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+2026-11-21T20:47:30.7568414Z with:
+2026-11-21T20:47:30.7568651Z   repository: omarjson/LocalAide
+2026-11-21T20:47:30.7571185Z   token: ***
+2026-11-21T20:47:30.7571401Z   ssh-strict: true
+2026-11-21T20:47:30.7571622Z   ssh-user: git
+2026-11-21T20:47:30.7571851Z   persist-credentials: true
+2026-11-21T20:47:30.7572098Z   clean: true
+2026-11-21T20:47:30.7572462Z   sparse-checkout-cone-mode: true
+2026-11-21T20:47:30.7572729Z   fetch-depth: 1
+2026-11-21T20:47:30.7572976Z   fetch-tags: false
+2026-11-21T20:47:30.7573202Z   show-progress: true
+2026-11-21T20:47:30.7573430Z   lfs: false
+2026-11-21T20:47:30.7573637Z   submodules: false
+2026-11-21T20:47:30.7573874Z   set-safe-directory: true
+2026-11-21T20:47:30.7574138Z   allow-unsafe-pr-checkout: false
+2026-11-21T20:47:30.7574518Z env:
+2026-11-21T20:47:30.7574727Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:30.7574975Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:30.7575251Z ##[endgroup]
+2026-11-21T20:47:30.9695736Z Syncing repository: omarjson/LocalAide
+2026-11-21T20:47:30.9702442Z ##[group]Getting Git version info
+2026-11-21T20:47:30.9702879Z Working directory is 'D:\a\LocalAide\LocalAide'
+2026-11-21T20:47:31.5723259Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-21T20:47:32.9142145Z git version 2.56.1.windows.1
+2026-11-21T20:47:32.9180054Z ##[endgroup]
+2026-11-21T20:47:32.9209926Z Temporarily overriding HOME='D:\a\_temp\a5bc298f-8d0c-46e2-abbe-45f0f4fa8444' before making global git config changes
+2026-11-21T20:47:32.9294101Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-21T20:47:32.9294483Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\LocalAide\LocalAide
+2026-11-21T20:47:32.9758677Z Deleting the contents of 'D:\a\LocalAide\LocalAide'
+2026-11-21T20:47:32.9762698Z ##[group]Determining repository object format
+2026-11-21T20:47:32.9764454Z ##[endgroup]
+2026-11-21T20:47:32.9764726Z ##[group]Initializing the repository
+2026-11-21T20:47:32.9771695Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\LocalAide\LocalAide
+2026-11-21T20:47:33.0805149Z Initialized empty Git repository in D:/a/LocalAide/LocalAide/.git/
+2026-11-21T20:47:33.0844786Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/omarjson/LocalAide
+2026-11-21T20:47:33.1376251Z ##[endgroup]
+2026-11-21T20:47:33.1376630Z ##[group]Disabling automatic garbage collection
+2026-11-21T20:47:33.1383536Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-21T20:47:33.1659533Z ##[endgroup]
+2026-11-21T20:47:33.1660276Z ##[group]Setting up auth
+2026-11-21T20:47:33.1660639Z Removing SSH command configuration
+2026-11-21T20:47:33.1668389Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-21T20:47:33.1939936Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-21T20:47:34.4435361Z Removing HTTP extra header
+2026-11-21T20:47:34.4442662Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-21T20:47:34.4714679Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-21T20:47:34.8854759Z Removing includeIf entries pointing to credentials config files
+2026-11-21T20:47:34.8862251Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-21T20:47:34.9185567Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-21T20:47:35.3643263Z [command]"C:\Program Files\Git\bin\git.exe" config --file D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-21T20:47:35.3946167Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:D:/a/LocalAide/LocalAide/.git.path D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:47:35.4236424Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:D:/a/LocalAide/LocalAide/.git/worktrees/*.path D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:47:35.4630493Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:47:35.4861615Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:47:35.5139972Z ##[endgroup]
+2026-11-21T20:47:35.5140315Z ##[group]Fetching the repository
+2026-11-21T20:47:35.5149406Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +076f5082aed88d4d4b397d82a9fc68ffcec20027:refs/remotes/origin/main
+2026-11-21T20:47:37.1420759Z From https://github.com/omarjson/LocalAide
+2026-11-21T20:47:37.1421616Z  * [new ref]         076f5082aed88d4d4b397d82a9fc68ffcec20027 -> origin/main
+2026-11-21T20:47:37.1457911Z [command]"C:\Program Files\Git\bin\git.exe" branch --list --remote origin/main
+2026-11-21T20:47:37.1757468Z   origin/main
+2026-11-21T20:47:37.1790767Z [command]"C:\Program Files\Git\bin\git.exe" rev-parse refs/remotes/origin/main
+2026-11-21T20:47:37.2075703Z 076f5082aed88d4d4b397d82a9fc68ffcec20027
+2026-11-21T20:47:37.2101060Z ##[endgroup]
+2026-11-21T20:47:37.2101391Z ##[group]Determining the checkout info
+2026-11-21T20:47:37.2102665Z ##[endgroup]
+2026-11-21T20:47:37.2109289Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-21T20:47:37.2487335Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-21T20:47:37.2751626Z ##[group]Checking out the ref
+2026-11-21T20:47:37.2759169Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force -B main refs/remotes/origin/main
+2026-11-21T20:47:37.5886227Z Switched to a new branch 'main'
+2026-11-21T20:47:37.5900954Z branch 'main' set up to track 'origin/main'.
+2026-11-21T20:47:37.5953737Z ##[endgroup]
+2026-11-21T20:47:37.6313921Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-21T20:47:37.6579465Z 076f5082aed88d4d4b397d82a9fc68ffcec20027
+2026-11-21T20:47:37.9206510Z ##[group]Run dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+2026-11-21T20:47:37.9206810Z with:
+2026-11-21T20:47:37.9206936Z   toolchain: 1.100.0
+2026-11-21T20:47:37.9207055Z   components: clippy
+2026-11-21T20:47:37.9207170Z env:
+2026-11-21T20:47:37.9207274Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:37.9207405Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:37.9207533Z ##[endgroup]
+2026-11-21T20:47:37.9302171Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-11-21T20:47:38.0652171Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-11-21T20:47:38.0652525Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-11-21T20:47:38.0652860Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-11-21T20:47:38.0653239Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-11-21T20:47:38.0653404Z [36;1m  exit 1[0m
+2026-11-21T20:47:38.0653644Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-11-21T20:47:38.0653889Z [36;1m  if [[ Windows == macOS ]]; then[0m
+2026-11-21T20:47:38.0654205Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:38.0654488Z [36;1m  else[0m
+2026-11-21T20:47:38.0654714Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:38.0654966Z [36;1m  fi[0m
+2026-11-21T20:47:38.0655134Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-11-21T20:47:38.0655432Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:38.0655695Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-11-21T20:47:38.0655991Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:38.0656272Z [36;1melse[0m
+2026-11-21T20:47:38.0656378Z [36;1m  delimiter=EOF[0m
+2026-11-21T20:47:38.0656551Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-11-21T20:47:38.0656832Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:38.0657058Z [36;1mfi[0m
+2026-11-21T20:47:38.0717230Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:38.0717485Z env:
+2026-11-21T20:47:38.0717624Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:38.0717760Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:38.0717961Z   toolchain: 1.100.0
+2026-11-21T20:47:38.0744122Z ##[endgroup]
+2026-11-21T20:47:38.2873435Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=357]
+2026-11-21T20:47:38.2924137Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-11-21T20:47:38.4318297Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV
+2026-11-21T20:47:38.4318613Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV[0m
+2026-11-21T20:47:38.4375796Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:38.4376020Z env:
+2026-11-21T20:47:38.4376128Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:38.4376254Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:38.4376376Z ##[endgroup]
+2026-11-21T20:47:38.5250360Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=232]
+2026-11-21T20:47:38.5295746Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-11-21T20:47:38.5393804Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-21T20:47:38.5494690Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-11-21T20:47:38.6989507Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-11-21T20:47:38.6989766Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-11-21T20:47:38.6990179Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://win.rustup.rs/x86_64 --output 'D:\a\_temp\rustup-init.exe'[0m
+2026-11-21T20:47:38.6990637Z [36;1m  'D:\a\_temp\rustup-init.exe' --default-toolchain none --no-modify-path -y[0m
+2026-11-21T20:47:38.6990874Z [36;1m  echo "$CARGO_HOME\bin" >> $GITHUB_PATH[0m
+2026-11-21T20:47:38.6991019Z [36;1mfi[0m
+2026-11-21T20:47:38.7046911Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:38.7047146Z env:
+2026-11-21T20:47:38.7047255Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:38.7047377Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:38.7047508Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:38.7047646Z ##[endgroup]
+2026-11-21T20:47:38.7975866Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=success;conclusion=success;duration_ms=248]
+2026-11-21T20:47:38.8035646Z ##[start-action display=rustup toolchain install 1.100.0;id=__dtolnay_rust-toolchain.__run_4]
+2026-11-21T20:47:38.9238357Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-11-21T20:47:38.9238781Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-11-21T20:47:38.9239021Z [36;1mflags=()[0m
+2026-11-21T20:47:38.9239178Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-11-21T20:47:38.9239407Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-11-21T20:47:38.9239705Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-11-21T20:47:38.9239932Z [36;1mlog=$(mktemp)[0m
+2026-11-21T20:47:38.9240060Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-11-21T20:47:38.9240216Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-11-21T20:47:38.9240532Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-11-21T20:47:38.9240836Z [36;1m    break[0m
+2026-11-21T20:47:38.9240940Z [36;1m  else[0m
+2026-11-21T20:47:38.9241041Z [36;1m    status=$?[0m
+2026-11-21T20:47:38.9241147Z [36;1m  fi[0m
+2026-11-21T20:47:38.9241304Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-11-21T20:47:38.9241607Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-11-21T20:47:38.9241861Z [36;1m    exit "$status"[0m
+2026-11-21T20:47:38.9263490Z [36;1m  fi[0m
+2026-11-21T20:47:38.9263695Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-11-21T20:47:38.9263930Z [36;1m  sleep 30[0m
+2026-11-21T20:47:38.9264042Z [36;1mdone[0m
+2026-11-21T20:47:38.9338658Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:38.9338881Z env:
+2026-11-21T20:47:38.9338995Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:38.9339122Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:38.9339259Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:38.9339405Z   toolchain: 1.100.0
+2026-11-21T20:47:38.9339513Z   targets: 
+2026-11-21T20:47:38.9339613Z   components: clippy
+2026-11-21T20:47:38.9339732Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-11-21T20:47:38.9339858Z ##[endgroup]
+2026-11-21T20:47:39.8685896Z info: syncing channel updates for 1.100.0-x86_64-pc-windows-msvc
+2026-11-21T20:47:40.7292964Z info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-21T20:47:40.7446791Z info: downloading 4 components
+2026-11-21T20:47:48.8236099Z 
+2026-11-21T20:47:48.8395097Z   1.100.0-x86_64-pc-windows-msvc installed - rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-21T20:47:48.8395845Z 
+2026-11-21T20:47:48.8952339Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=10091]
+2026-11-21T20:47:48.8960313Z ##[start-action display=rustup default 1.100.0;id=__dtolnay_rust-toolchain.__run_5]
+2026-11-21T20:47:48.9077396Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-11-21T20:47:48.9077645Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-11-21T20:47:48.9085609Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:48.9085829Z env:
+2026-11-21T20:47:48.9085934Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:48.9086059Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:48.9086197Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:48.9086354Z   toolchain: 1.100.0
+2026-11-21T20:47:48.9086466Z ##[endgroup]
+2026-11-21T20:47:48.9561973Z info: using existing install for 1.100.0-x86_64-pc-windows-msvc
+2026-11-21T20:47:48.9607033Z info: default toolchain set to 1.100.0-x86_64-pc-windows-msvc
+2026-11-21T20:47:48.9607304Z 
+2026-11-21T20:47:48.9762602Z   1.100.0-x86_64-pc-windows-msvc unchanged - rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-21T20:47:48.9762828Z 
+2026-11-21T20:47:48.9766209Z info: note that the toolchain '1.100.0-x86_64-pc-windows-msvc' is currently in use (overridden by 'D:\a\LocalAide\LocalAide\rust-toolchain.toml')
+2026-11-21T20:47:48.9821649Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=86]
+2026-11-21T20:47:48.9825791Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-11-21T20:47:48.9910007Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-11-21T20:47:48.9910527Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-11-21T20:47:48.9910908Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-11-21T20:47:48.9911197Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-11-21T20:47:48.9918913Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:48.9919133Z env:
+2026-11-21T20:47:48.9919243Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:48.9919370Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:48.9919507Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:48.9919650Z   toolchain: 1.100.0
+2026-11-21T20:47:48.9919772Z ##[endgroup]
+2026-11-21T20:47:49.6316774Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=649]
+2026-11-21T20:47:49.6318811Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-11-21T20:47:49.6413682Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-11-21T20:47:49.6414012Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-11-21T20:47:49.6414318Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-11-21T20:47:49.6414566Z [36;1mfi[0m
+2026-11-21T20:47:49.6426729Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:49.6427075Z env:
+2026-11-21T20:47:49.6427225Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:49.6427415Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:49.6427624Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:49.6427858Z ##[endgroup]
+2026-11-21T20:47:49.6739509Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=41]
+2026-11-21T20:47:49.6742040Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-11-21T20:47:49.6865237Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-11-21T20:47:49.6865469Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-11-21T20:47:49.6865657Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-11-21T20:47:49.6865815Z [36;1mfi[0m
+2026-11-21T20:47:49.6874012Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:49.6874253Z env:
+2026-11-21T20:47:49.6874369Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:49.6874532Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:49.6874707Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:49.6874870Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:49.6874991Z ##[endgroup]
+2026-11-21T20:47:49.7164946Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=42]
+2026-11-21T20:47:49.7168250Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-11-21T20:47:49.7258709Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-11-21T20:47:49.7259041Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-11-21T20:47:49.7259415Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-11-21T20:47:49.7259791Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-11-21T20:47:49.7260085Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-21T20:47:49.7260352Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-11-21T20:47:49.7260629Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-11-21T20:47:49.7260913Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-21T20:47:49.7261167Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-11-21T20:47:49.7261346Z [36;1m  fi[0m
+2026-11-21T20:47:49.7261448Z [36;1mfi[0m
+2026-11-21T20:47:49.7269234Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:49.7269452Z env:
+2026-11-21T20:47:49.7269559Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:49.7269693Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:49.7269827Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:49.7269971Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:49.7270084Z   CARGO_TERM_COLOR: always
+2026-11-21T20:47:49.7270209Z   toolchain: 1.100.0
+2026-11-21T20:47:49.7270318Z ##[endgroup]
+2026-11-21T20:47:49.8687068Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=151]
+2026-11-21T20:47:49.8690227Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-11-21T20:47:49.8777943Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-11-21T20:47:49.8778517Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-11-21T20:47:49.8778875Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-11-21T20:47:49.8779145Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-11-21T20:47:49.8779313Z [36;1mfi[0m
+2026-11-21T20:47:49.8786472Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:49.8786687Z env:
+2026-11-21T20:47:49.8786793Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:49.8786920Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:49.8787053Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:49.8787197Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:49.8787309Z   CARGO_TERM_COLOR: always
+2026-11-21T20:47:49.8787421Z   toolchain: 1.100.0
+2026-11-21T20:47:49.8787536Z ##[endgroup]
+2026-11-21T20:47:49.9498770Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=80]
+2026-11-21T20:47:49.9502574Z ##[start-action display=rustc +1.100.0 --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-11-21T20:47:49.9593927Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-11-21T20:47:49.9594297Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-11-21T20:47:49.9602726Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-21T20:47:49.9602949Z env:
+2026-11-21T20:47:49.9603059Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:49.9603188Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:49.9603327Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:49.9603475Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:49.9603593Z   CARGO_TERM_COLOR: always
+2026-11-21T20:47:49.9603716Z   toolchain: 1.100.0
+2026-11-21T20:47:49.9603834Z ##[endgroup]
+2026-11-21T20:47:50.0180845Z rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-21T20:47:50.0181056Z binary: rustc
+2026-11-21T20:47:50.0181208Z commit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-21T20:47:50.0181489Z commit-date: 2026-11-09
+2026-11-21T20:47:50.0181691Z host: x86_64-pc-windows-msvc
+2026-11-21T20:47:50.0181888Z release: 1.100.0
+2026-11-21T20:47:50.0182772Z LLVM version: 23.1.5
+2026-11-21T20:47:50.0273911Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=77]
+2026-11-21T20:47:50.0487831Z ##[group]Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+2026-11-21T20:47:50.0488076Z with:
+2026-11-21T20:47:50.0488187Z   node-version: 24
+2026-11-21T20:47:50.0488295Z   cache: npm
+2026-11-21T20:47:50.0488401Z   check-latest: false
+2026-11-21T20:47:50.0490015Z   token: ***
+2026-11-21T20:47:50.0490130Z   package-manager-cache: true
+2026-11-21T20:47:50.0490260Z env:
+2026-11-21T20:47:50.0490362Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:50.0490493Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:50.0490628Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:50.0490775Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:50.0490903Z   CARGO_TERM_COLOR: always
+2026-11-21T20:47:50.0491025Z ##[endgroup]
+2026-11-21T20:47:50.1650849Z Found in cache @ C:\hostedtoolcache\windows\node\24.22.3\x64
+2026-11-21T20:47:50.9954660Z ##[group]Environment details
+2026-11-21T20:47:54.3577173Z node: v24.22.3
+2026-11-21T20:47:54.3577360Z npm: 11.19.1
+2026-11-21T20:47:54.3577571Z yarn: 1.22.22
+2026-11-21T20:47:54.3577897Z ##[endgroup]
+2026-11-21T20:47:54.3871530Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\24.22.3\x64\npm.cmd config get cache"
+2026-11-21T20:47:54.7666226Z C:\npm\cache
+2026-11-21T20:47:55.1080066Z Cache hit for: node-cache-Windows-x64-npm-7213a65307f77926ecffdfe3ddee105a9c9a98e8913793d5c1f0d1db9837a3a0
+2026-11-21T20:47:56.3775817Z Received 50331648 of 76489890 (65.8%), 48.0 MBs/sec
+2026-11-21T20:47:56.7409329Z Received 76489890 of 76489890 (100.0%), 53.5 MBs/sec
+2026-11-21T20:47:56.7412164Z Cache Size: ~73 MB (76489890 B)
+2026-11-21T20:47:56.7435696Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/35aeabdb-728b-4fdd-a415-fb73651140bb/cache.tzst -P -C D:/a/LocalAide/LocalAide --force-local --use-compress-program "zstd -d"
+2026-11-21T20:47:57.2988320Z Cache restored successfully
+2026-11-21T20:47:57.3057447Z Cache restored from key: node-cache-Windows-x64-npm-7213a65307f77926ecffdfe3ddee105a9c9a98e8913793d5c1f0d1db9837a3a0
+2026-11-21T20:47:57.3345227Z ##[group]Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+2026-11-21T20:47:57.3345513Z with:
+2026-11-21T20:47:57.3345638Z   workspaces: src-tauri -> target
+2026-11-21T20:47:57.3345781Z   cache-on-failure: true
+2026-11-21T20:47:57.3345911Z   prefix-key: v0-rust
+2026-11-21T20:47:57.3346031Z   add-job-id-key: true
+2026-11-21T20:47:57.3346161Z   add-rust-environment-hash-key: true
+2026-11-21T20:47:57.3346306Z   cache-targets: true
+2026-11-21T20:47:57.3346424Z   cache-all-crates: false
+2026-11-21T20:47:57.3346562Z   cache-workspace-crates: false
+2026-11-21T20:47:57.3346695Z   save-if: true
+2026-11-21T20:47:57.3346821Z   cache-provider: github
+2026-11-21T20:47:57.3346943Z   cache-bin: true
+2026-11-21T20:47:57.3347056Z   lookup-only: false
+2026-11-21T20:47:57.3347166Z   cmd-format: {0}
+2026-11-21T20:47:57.3347265Z env:
+2026-11-21T20:47:57.3347368Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:47:57.3347497Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:47:57.3347662Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:47:57.3347819Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:47:57.3347936Z   CARGO_TERM_COLOR: always
+2026-11-21T20:47:57.3348054Z ##[endgroup]
+2026-11-21T20:48:02.8153466Z ##[group]Cache Configuration
+2026-11-21T20:48:02.8159680Z Cache Provider:
+2026-11-21T20:48:02.8159927Z     github
+2026-11-21T20:48:02.8160059Z Workspaces:
+2026-11-21T20:48:02.8160294Z     D:\a\LocalAide\LocalAide\src-tauri
+2026-11-21T20:48:02.8160552Z Cache Paths:
+2026-11-21T20:48:02.8160892Z     C:\Users\runneradmin\.cargo\bin
+2026-11-21T20:48:02.8161196Z     C:\Users\runneradmin\.cargo\.crates.toml
+2026-11-21T20:48:02.8161530Z     C:\Users\runneradmin\.cargo\.crates2.json
+2026-11-21T20:48:02.8161802Z     C:\Users\runneradmin\.cargo\registry
+2026-11-21T20:48:02.8161980Z     C:\Users\runneradmin\.cargo\git
+2026-11-21T20:48:02.8162159Z     D:\a\LocalAide\LocalAide\src-tauri\target
+2026-11-21T20:48:02.8162327Z Restore Key:
+2026-11-21T20:48:02.8162504Z     v0-rust-windows-check-Windows_NT-x64-a83de979
+2026-11-21T20:48:02.8162686Z Cache Key:
+2026-11-21T20:48:02.8162867Z     v0-rust-windows-check-Windows_NT-x64-a83de979-c22403db
+2026-11-21T20:48:02.8163061Z .. Prefix:
+2026-11-21T20:48:02.8163204Z   - v0-rust-windows-check-Windows_NT-x64
+2026-11-21T20:48:02.8163416Z .. Environment considered:
+2026-11-21T20:48:02.8163570Z   - Rust Versions:
+2026-11-21T20:48:02.8163794Z     - 1.100.0 x86_64-pc-windows-msvc 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-21T20:48:02.8164031Z   - CARGO_ABOUT_VERSION
+2026-11-21T20:48:02.8164165Z   - CARGO_HOME
+2026-11-21T20:48:02.8164285Z   - CARGO_INCREMENTAL
+2026-11-21T20:48:02.8164418Z   - CARGO_TERM_COLOR
+2026-11-21T20:48:02.8164548Z   - RUST_TOOLCHAIN
+2026-11-21T20:48:02.8164678Z .. Lockfiles considered:
+2026-11-21T20:48:02.8164885Z   - D:\a\LocalAide\LocalAide\rust-toolchain.toml
+2026-11-21T20:48:02.8165096Z   - D:\a\LocalAide\LocalAide\src-tauri\Cargo.lock
+2026-11-21T20:48:02.8165294Z   - D:\a\LocalAide\LocalAide\src-tauri\Cargo.toml
+2026-11-21T20:48:02.8165616Z ##[endgroup]
+2026-11-21T20:48:02.8165687Z 
+2026-11-21T20:48:02.8165773Z ... Restoring cache ...
+2026-11-21T20:48:03.0786556Z Cache hit for: v0-rust-windows-check-Windows_NT-x64-a83de979-c22403db
+2026-11-21T20:48:04.3546498Z Received 50331648 of 1092559136 (4.6%), 47.9 MBs/sec
+2026-11-21T20:48:05.3549800Z Received 138412032 of 1092559136 (12.7%), 65.9 MBs/sec
+2026-11-21T20:48:06.6010447Z Received 268435456 of 1092559136 (24.6%), 78.8 MBs/sec
+2026-11-21T20:48:07.8712397Z Received 402653184 of 1092559136 (36.9%), 85.0 MBs/sec
+2026-11-21T20:48:09.1901182Z Received 536870912 of 1092559136 (49.1%), 87.7 MBs/sec
+2026-11-21T20:48:10.4173351Z Received 671088640 of 1092559136 (61.4%), 90.6 MBs/sec
+2026-11-21T20:48:11.6422666Z Received 805306368 of 1092559136 (73.7%), 92.6 MBs/sec
+2026-11-21T20:48:12.8182028Z Received 939524096 of 1092559136 (86.0%), 94.7 MBs/sec
+2026-11-21T20:48:14.0414437Z Received 1073741824 of 1092559136 (98.3%), 95.8 MBs/sec
+2026-11-21T20:48:14.2713311Z Received 1092559136 of 1092559136 (100.0%), 95.4 MBs/sec
+2026-11-21T20:48:14.2713999Z Cache Size: ~1042 MB (1092559136 B)
+2026-11-21T20:48:14.2766395Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/6dd9f876-fd5f-4844-9448-d68112a461ca/cache.tzst -P -C D:/a/LocalAide/LocalAide --force-local --use-compress-program "zstd -d"
+2026-11-21T20:48:35.0022490Z Cache restored successfully
+2026-11-21T20:48:35.0680172Z Restored from cache key "v0-rust-windows-check-Windows_NT-x64-a83de979-c22403db" full match: true.
+2026-11-21T20:48:35.0912620Z ##[group]Run npm ci
+2026-11-21T20:48:35.0912856Z [36;1mnpm ci[0m
+2026-11-21T20:48:35.1452427Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-21T20:48:35.1452673Z env:
+2026-11-21T20:48:35.1452817Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:48:35.1452978Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:48:35.1453150Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:48:35.1453328Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:48:35.1453466Z   CARGO_TERM_COLOR: always
+2026-11-21T20:48:35.1453608Z   CACHE_ON_FAILURE: true
+2026-11-21T20:48:35.1453760Z ##[endgroup]
+2026-11-21T20:48:43.4190415Z 
+2026-11-21T20:48:43.4191306Z added 183 packages, and audited 190 packages in 8s
+2026-11-21T20:48:43.4191585Z 
+2026-11-21T20:48:43.4191718Z 20 packages are looking for funding
+2026-11-21T20:48:43.4191980Z   run `npm fund` for details
+2026-11-21T20:48:43.4197980Z 
+2026-11-21T20:48:43.4198140Z found 0 vulnerabilities
+2026-11-21T20:48:44.3847452Z ##[group]Run npm run build
+2026-11-21T20:48:44.3847689Z [36;1mnpm run build[0m
+2026-11-21T20:48:44.3897650Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-21T20:48:44.3897873Z env:
+2026-11-21T20:48:44.3898008Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:48:44.3898150Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:48:44.3898302Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:48:44.3898466Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:48:44.3898601Z   CARGO_TERM_COLOR: always
+2026-11-21T20:48:44.3898733Z   CACHE_ON_FAILURE: true
+2026-11-21T20:48:44.3898867Z ##[endgroup]
+2026-11-21T20:48:44.8749843Z 
+2026-11-21T20:48:44.8750404Z > localaide@0.1.10 build
+2026-11-21T20:48:44.8750652Z > tsc --noEmit && vite build
+2026-11-21T20:48:44.8750753Z 
+2026-11-21T20:48:46.8843311Z [36mvite v8.3.8 [32mbuilding client environment for production...[36m[39m
+2026-11-21T20:48:46.9016355Z transforming...
+2026-11-21T20:48:49.3690723Z ✓ 1798 modules transformed.
+2026-11-21T20:48:49.5662880Z rendering chunks...
+2026-11-21T20:48:50.0027744Z computing gzip size...
+2026-11-21T20:48:50.0233313Z dist/index.html                                           0.51 kB │ gzip:   0.32 kB
+2026-11-21T20:48:50.0234112Z dist/assets/index-CRblzJZ3.css                          134.30 kB │ gzip:  22.34 kB
+2026-11-21T20:48:50.0234714Z dist/assets/pie-XZMESJXO-CMlR5LUH.js                      0.10 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0235478Z dist/assets/info-OHQRW6UA-Dvyc9-Yo.js                     0.10 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0236063Z dist/assets/radar-ABXABTNO-pTLwTT-V.js                    0.10 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0236679Z dist/assets/packet-JDAUHWVQ-CbTjDGL6.js                   0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0237233Z dist/assets/cynefin-EF2NZ3EQ-BbGE1g5S.js                  0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0237792Z dist/assets/treemap-SAJKECNS-BEgFEe9A.js                  0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0238429Z dist/assets/wardley-7MLQ67FV-BWcBxnfd.js                  0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0239069Z dist/assets/gitGraph-VSP46ZUC-Htv0np2B.js                 0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0240926Z dist/assets/railroad-I3PHUGI6-0XM0IqQW.js                 0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0241565Z dist/assets/treeView-D4JQ5SDB-C1BI81MV.js                 0.11 kB │ gzip:   0.12 kB
+2026-11-21T20:48:50.0242214Z dist/assets/railroad-peg-JR7BVNR7-D6Z8Jacb.js             0.11 kB │ gzip:   0.13 kB
+2026-11-21T20:48:50.0242945Z dist/assets/architecture-WOLXFQ4H-t45DitvY.js             0.11 kB │ gzip:   0.13 kB
+2026-11-21T20:48:50.0243616Z dist/assets/railroad-abnf-LNEFI6M7-znAqvvCT.js            0.11 kB │ gzip:   0.13 kB
+2026-11-21T20:48:50.0244314Z dist/assets/railroad-ebnf-DWYD2UWJ-D7heIyWq.js            0.11 kB │ gzip:   0.13 kB
+2026-11-21T20:48:50.0244803Z dist/assets/eventmodeling-K75KTNOO-l_tw-lC-.js            0.11 kB │ gzip:   0.13 kB
+2026-11-21T20:48:50.0245245Z dist/assets/chunk-Y2CYZVJY-DsF7k-Jl.js                    0.15 kB │ gzip:   0.14 kB
+2026-11-21T20:48:50.0245656Z dist/assets/chunk-2Q5K7J3B-C1jixKkw.js                    0.19 kB │ gzip:   0.16 kB
+2026-11-21T20:48:50.0246226Z dist/assets/chunk-JWPE2WC7-DVXcaiue.js                    0.22 kB │ gzip:   0.17 kB
+2026-11-21T20:48:50.0246790Z dist/assets/chunk-XXDRQBXY-CYzxhml0.js                    0.26 kB │ gzip:   0.22 kB
+2026-11-21T20:48:50.0247419Z dist/assets/chunk-5VM5RSS4-ZNzvKenW.js                    0.36 kB │ gzip:   0.27 kB
+2026-11-21T20:48:50.0248068Z dist/assets/flowDiagram-MALGAFMO-CoE0VAzo.js              0.53 kB │ gzip:   0.30 kB
+2026-11-21T20:48:50.0248729Z dist/assets/chunk-TU62E6Q5-mySf5c-g.js                    0.57 kB │ gzip:   0.40 kB
+2026-11-21T20:48:50.0249378Z dist/assets/chunk-J5ZVWO5B-oDCd-gWO.js                    0.63 kB │ gzip:   0.43 kB
+2026-11-21T20:48:50.0250083Z dist/assets/infoDiagram-KBXO4MBG-DuL_3J0C.js              0.65 kB │ gzip:   0.42 kB
+2026-11-21T20:48:50.0253610Z dist/assets/swimlanesDiagram-OMPLPG4O-kMGNlo0v.js         0.79 kB │ gzip:   0.46 kB
+2026-11-21T20:48:50.0254584Z dist/assets/sizeCapture-INFHLROL-3uHXrFqA.js              0.87 kB │ gzip:   0.51 kB
+2026-11-21T20:48:50.0255299Z dist/assets/chunk-DUW6YSOI-Dgx8z5s3.js                    0.89 kB │ gzip:   0.46 kB
+2026-11-21T20:48:50.0255977Z dist/assets/rolldown-runtime-pP25SEvz.js                  0.98 kB │ gzip:   0.56 kB
+2026-11-21T20:48:50.0256620Z dist/assets/chunk-LEVMRMFU-DKkjbIYr.js                    1.42 kB │ gzip:   0.78 kB
+2026-11-21T20:48:50.0257304Z dist/assets/railroadDiagram-MRQ6NCDL-CswY1ELj.js          1.67 kB │ gzip:   0.77 kB
+2026-11-21T20:48:50.0258293Z dist/assets/abnfDiagram-S7VZAUFO-B_PNqdgb.js              1.86 kB │ gzip:   0.90 kB
+2026-11-21T20:48:50.0258969Z dist/assets/chunk-X4PVCEUW-2YM98Ec4.js                    1.95 kB │ gzip:   0.95 kB
+2026-11-21T20:48:50.0259599Z dist/assets/chunk-HFQBQIA3-DjnSt8w0.js                    1.98 kB │ gzip:   0.90 kB
+2026-11-21T20:48:50.0260263Z dist/assets/pegDiagram-FD4XPPHP-v8dGt7y-.js               2.02 kB │ gzip:   0.94 kB
+2026-11-21T20:48:50.0260946Z dist/assets/ebnfDiagram-UZSYDL2S-Dk6fP0X-.js              2.07 kB │ gzip:   0.89 kB
+2026-11-21T20:48:50.0261583Z dist/assets/diagram-DNEMPZML-BizWicXI.js                  4.35 kB │ gzip:   1.90 kB
+2026-11-21T20:48:50.0262215Z dist/assets/pieDiagram-J4AKIIQI-CDWkRwZk.js               5.00 kB │ gzip:   2.11 kB
+2026-11-21T20:48:50.0262854Z dist/assets/bpmnIcons-APHXDYXF-C0jbCElo.js                5.21 kB │ gzip:   1.15 kB
+2026-11-21T20:48:50.0263447Z dist/assets/chunk-KS47KZWR-DfSLPtWM.js                    5.43 kB │ gzip:   2.49 kB
+2026-11-21T20:48:50.0264141Z dist/assets/chunk-R3KSYZAL-DYMKytAy.js                    5.89 kB │ gzip:   2.71 kB
+2026-11-21T20:48:50.0264763Z dist/assets/diagram-L3MUGCDN-3JgIC947.js                  6.08 kB │ gzip:   2.57 kB
+2026-11-21T20:48:50.0265430Z dist/assets/diagram-XPFHEONP-BsAmAz8Y.js                  8.12 kB │ gzip:   3.63 kB
+2026-11-21T20:48:50.0266137Z dist/assets/cynefinDiagram-L36ESFBY-BIkq6tG-.js           9.95 kB │ gzip:   3.51 kB
+2026-11-21T20:48:50.0266813Z dist/assets/chunk-KQLB2F66-CYrpGTr7.js                   10.39 kB │ gzip:   4.31 kB
+2026-11-21T20:48:50.0267687Z dist/assets/diagram-MHCOC4E2-YUqlJXZ0.js                 10.93 kB │ gzip:   4.25 kB
+2026-11-21T20:48:50.0268335Z dist/assets/chunk-M57EVK23-zcGV9QCU.js                   14.97 kB │ gzip:   4.53 kB
+2026-11-21T20:48:50.0269002Z dist/assets/chunk-6MUBBAK2-DaDAlrt1.js                   15.38 kB │ gzip:   6.10 kB
+2026-11-21T20:48:50.0269583Z dist/assets/chunk-OY52VR5R-3px-7hc_.js                   15.65 kB │ gzip:   4.35 kB
+2026-11-21T20:48:50.0270189Z dist/assets/diagram-LA4NIPWU-CFlY2biO.js                 16.13 kB │ gzip:   5.64 kB
+2026-11-21T20:48:50.0270767Z dist/assets/mermaid-parser.core-D4HGtjyg.js              16.44 kB │ gzip:   3.93 kB
+2026-11-21T20:48:50.0271560Z dist/assets/ishikawaDiagram-M35NCXHK-ByJsAsT_.js         17.31 kB │ gzip:   6.53 kB
+2026-11-21T20:48:50.0272152Z dist/assets/kanban-definition-BZKZHSQY-B3-RkhRm.js       20.26 kB │ gzip:   7.17 kB
+2026-11-21T20:48:50.0272736Z dist/assets/d3-selection-BD4snsQe.js                     20.94 kB │ gzip:   7.36 kB
+2026-11-21T20:48:50.0273301Z dist/assets/mindmap-definition-I2QAS2VK-BupViJGe.js      22.88 kB │ gzip:   7.67 kB
+2026-11-21T20:48:50.0273912Z dist/assets/journeyDiagram-OPLOXDXO-DKm0t-in.js          23.16 kB │ gzip:   8.14 kB
+2026-11-21T20:48:50.0274466Z dist/assets/graphlib-DS17s2tU.js                         23.90 kB │ gzip:   8.31 kB
+2026-11-21T20:48:50.0275017Z dist/assets/wardleyDiagram-S7YFUSEH-zvlsXYec.js          25.21 kB │ gzip:   6.55 kB
+2026-11-21T20:48:50.0275588Z dist/assets/dist-qy0yl2Mi.js                             25.62 kB │ gzip:   6.43 kB
+2026-11-21T20:48:50.0276097Z dist/assets/rough.esm-Dy-Kn_BL.js                        27.10 kB │ gzip:   8.85 kB
+2026-11-21T20:48:50.0277232Z dist/assets/gitGraphDiagram-STJD7YCW-BIfjeQTj.js         29.00 kB │ gzip:   8.53 kB
+2026-11-21T20:48:50.0277838Z dist/assets/timeline-definition-SEUHKTQE-Dd1h5lUO.js     30.46 kB │ gzip:  10.02 kB
+2026-11-21T20:48:50.0278457Z dist/assets/erDiagram-EYBAPDEH-BooiYGaw.js               30.62 kB │ gzip:  10.57 kB
+2026-11-21T20:48:50.0279664Z dist/assets/requirementDiagram-Y7LWUY3S-Dd5isWMV.js      31.06 kB │ gzip:   9.84 kB
+2026-11-21T20:48:50.0280388Z dist/assets/quadrantDiagram-XTYBLID2-BIYqnX0W.js         33.52 kB │ gzip:   9.74 kB
+2026-11-21T20:48:50.0281088Z dist/assets/sankeyDiagram-WGJFYUXA-8YUhGI5o.js           38.82 kB │ gzip:  14.66 kB
+2026-11-21T20:48:50.0281721Z dist/assets/d3-scale-CElPUUud.js                         40.67 kB │ gzip:  14.78 kB
+2026-11-21T20:48:50.0282369Z dist/assets/vennDiagram-NNMJR3RB-0_e5U6Le.js             41.19 kB │ gzip:  15.12 kB
+2026-11-21T20:48:50.0283035Z dist/assets/stateDiagram-v2-FJ4FJNEA-Cjn2Z-Bk.js         41.54 kB │ gzip:  13.87 kB
+2026-11-21T20:48:50.0283713Z dist/assets/blockDiagram-APKKGZFW-D7VlTy0D.js            42.40 kB │ gzip:  13.87 kB
+2026-11-21T20:48:50.0284675Z dist/assets/xychartDiagram-GGNKY7IX-DRpfJAU2.js          43.21 kB │ gzip:  11.87 kB
+2026-11-21T20:48:50.0285755Z dist/assets/dagre-SPEB5RXH-BhhBmR6d.js                   47.85 kB │ gzip:  17.09 kB
+2026-11-21T20:48:50.0286672Z dist/assets/chunk-DQASFODM-D4rXnFoQ.js                   48.65 kB │ gzip:  11.84 kB
+2026-11-21T20:48:50.0287608Z dist/assets/classDiagram-v2-L25IHNXF-BuwF476n.js         49.71 kB │ gzip:  16.15 kB
+2026-11-21T20:48:50.0288371Z dist/assets/chunk-STOXU5M4-BLSB8yUB.js                   51.23 kB │ gzip:  16.63 kB
+2026-11-21T20:48:50.0288765Z dist/assets/ganttDiagram-23REXITY-C9j_T_vL.js            53.01 kB │ gzip:  17.63 kB
+2026-11-21T20:48:50.0289483Z dist/assets/chunk-QB3YPZ4I-CRKbVn8v.js                   64.40 kB │ gzip:  20.89 kB
+2026-11-21T20:48:50.0290088Z dist/assets/c4Diagram-KJ2TOQU5-DqPO7A17.js               65.09 kB │ gzip:  18.63 kB
+2026-11-21T20:48:50.0290734Z dist/assets/diagram-3B7GL73J-DEvfzyTl.js                 80.46 kB │ gzip:  25.16 kB
+2026-11-21T20:48:50.0291554Z dist/assets/cose-bilkent-JH36ORCC-CD8QUQZn.js            81.23 kB │ gzip:  21.53 kB
+2026-11-21T20:48:50.0291978Z dist/assets/mermaid.core-DoPGACu1.js                     84.64 kB │ gzip:  29.19 kB
+2026-11-21T20:48:50.0292552Z dist/assets/sequenceDiagram-5NDRBG5M-CDrJ1d1b.js        117.68 kB │ gzip:  31.28 kB
+2026-11-21T20:48:50.0292966Z dist/assets/swimlanes-UMQ2AFYF-D6cF8-f-.js              117.84 kB │ gzip:  40.50 kB
+2026-11-21T20:48:50.0293312Z dist/assets/chunk-AXFCVDMN-Dnn0uwa-.js                  122.75 kB │ gzip:  31.44 kB
+2026-11-21T20:48:50.0293695Z [33m[plugin builtin:vite-reporter] 
+2026-11-21T20:48:50.0293998Z (!) Some chunks are larger than 500 kB after minification. Consider:
+2026-11-21T20:48:50.0294322Z - Using dynamic import() to code-split the application
+2026-11-21T20:48:50.0294784Z - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+2026-11-21T20:48:50.0295305Z - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+2026-11-21T20:48:50.0295713Z dist/assets/architectureDiagram-YGSQEFNW-Bj6iM_Dr.js    148.88 kB │ gzip:  41.11 kB
+2026-11-21T20:48:50.0296114Z dist/assets/usecaseDiagram-AFA6YXN4-DyOEaRe8.js         187.90 kB │ gzip:  49.27 kB
+2026-11-21T20:48:50.0296512Z dist/assets/chunk-BG4553SI-BuqPmXRd.js                  240.88 kB │ gzip:  40.38 kB
+2026-11-21T20:48:50.0296886Z dist/assets/katex-MEuSR36T.js                           258.78 kB │ gzip:  77.66 kB
+2026-11-21T20:48:50.0297286Z dist/assets/cytoscape.esm-nTrd5EVq.js                   441.71 kB │ gzip: 139.68 kB
+2026-11-21T20:48:50.0297664Z dist/assets/index-CSCXX85Q.js                           580.88 kB │ gzip: 172.54 kB
+2026-11-21T20:48:50.0298038Z dist/assets/chunk-NGNAAXSQ-DI_UYJZ4.js                  629.04 kB │ gzip: 127.32 kB
+2026-11-21T20:48:50.0298425Z dist/assets/elk-XV6XMXQE-BPvfLP3u.js                  1,498.94 kB │ gzip: 465.90 kB
+2026-11-21T20:48:50.0298638Z 
+2026-11-21T20:48:50.0299509Z [32m✓ built in 3.14s[39m
+2026-11-21T20:48:51.4807760Z ##[group]Run node scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings
+2026-11-21T20:48:51.4808517Z [36;1mnode scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings[0m
+2026-11-21T20:48:51.4856610Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-21T20:48:51.4856826Z env:
+2026-11-21T20:48:51.4856954Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:48:51.4857093Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:48:51.4857238Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:48:51.4857398Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:48:51.4857526Z   CARGO_TERM_COLOR: always
+2026-11-21T20:48:51.4857660Z   CACHE_ON_FAILURE: true
+2026-11-21T20:48:51.4857788Z ##[endgroup]
+2026-11-21T20:48:52.2706346Z [1m[92m    Updating[0m crates.io index
+2026-11-21T20:49:06.5533073Z [1m[92m   Compiling[0m ai-desktop-assistant v0.1.10 (D:\a\LocalAide\LocalAide\src-tauri)
+2026-11-21T20:49:16.8029485Z [1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 24.58s
+2026-11-21T20:49:16.9499728Z ##[group]Run node scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast
+2026-11-21T20:49:16.9500310Z [36;1mnode scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast[0m
+2026-11-21T20:49:16.9552323Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-21T20:49:16.9552529Z env:
+2026-11-21T20:49:16.9552654Z   RUST_TOOLCHAIN: 1.100.0
+2026-11-21T20:49:16.9552790Z   CARGO_ABOUT_VERSION: 0.9.3
+2026-11-21T20:49:16.9552936Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-21T20:49:16.9553091Z   CARGO_INCREMENTAL: 0
+2026-11-21T20:49:16.9553219Z   CARGO_TERM_COLOR: always
+2026-11-21T20:49:16.9553351Z   CACHE_ON_FAILURE: true
+2026-11-21T20:49:16.9553479Z ##[endgroup]
+2026-11-21T20:49:17.6481180Z [1m[92m   Compiling[0m ai-desktop-assistant v0.1.10 (D:\a\LocalAide\LocalAide\src-tauri)
+2026-11-21T20:50:03.0397654Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 45.84s
+2026-11-21T20:50:03.0795143Z [1m[92m     Running[0m unittests src\lib.rs (src-tauri\target\debug\build\ai-desktop-assistant/5deca7a921a82ada\out\app_lib-5deca7a921a82ada.exe)
+2026-11-21T20:50:03.0953959Z 
+2026-11-21T20:50:03.0955786Z running 210 tests
+2026-11-21T20:50:03.0957719Z test app::jobs::tests::a_final_state_is_never_replaced ... ok
+2026-11-21T20:50:03.0960195Z test app::jobs::tests::finished_jobs_expire_and_running_jobs_stay ... ok
+2026-11-21T20:50:03.0964058Z test app::jobs::tests::cancel_kind_reaches_jobs_by_their_kind ... ok
+2026-11-21T20:50:03.0964724Z test app::blocking::tests::run_blocking_returns_the_work_result ... ok
+2026-11-21T20:50:03.0965293Z test app::jobs::tests::pause_kind_preserves_the_partial_download_state ... ok
+2026-11-21T20:50:03.0965917Z test commands::assist::tests::scripts_are_not_opened_by_default ... ok
+2026-11-21T20:50:03.0969378Z test commands::attach::tests::base64_matches_the_standard ... ok
+2026-11-21T20:50:03.0975535Z test commands::chat::tests::attached_files_are_written_out_for_the_model ... ok
+2026-11-21T20:50:03.0980685Z test commands::chat::tests::export_file_names_are_safe_everywhere ... ok
+2026-11-21T20:50:03.0983957Z test commands::chat::tests::thread_ids_must_be_plain_tokens ... ok
+2026-11-21T20:50:03.0988989Z test commands::cloud::tests::a_key_stays_with_its_site ... ok
+2026-11-21T20:50:03.0990731Z test commands::cloud::tests::provider_ids_are_random ... ok
+2026-11-21T20:50:03.0993682Z test commands::desktop::tests::only_plain_web_links_open ... ok
+2026-11-21T20:50:03.0997860Z test commands::developer::tests::every_toggle_id_is_unique ... ok
+2026-11-21T20:50:03.0998514Z test commands::attach::tests::text_files_are_read_and_binaries_refused ... ok
+2026-11-21T20:50:03.1001632Z test commands::hf::tests::detects_quant_labels ... ok
+2026-11-21T20:50:03.1004153Z test commands::developer::tests::updates_merge_and_unknown_ids_are_refused ... ok
+2026-11-21T20:50:03.1006743Z test commands::mcp::tests::stored_values_are_kept_unless_replaced ... ok
+2026-11-21T20:50:03.1007871Z test commands::picker::tests::provider_metadata_beats_the_name ... ok
+2026-11-21T20:50:03.1011099Z test commands::picker::tests::the_default_and_chosen_models_are_always_listed ... ok
+2026-11-21T20:50:03.1011970Z test commands::settings::tests::slider_max_follows_the_model_inside_the_range ... ok
+2026-11-21T20:50:03.1015671Z test commands::updates::tests::detects_newer_versions ... ok
+2026-11-21T20:50:03.1016243Z test commands::assist::tests::starters_come_from_how_chats_begin ... ok
+2026-11-21T20:50:03.1016915Z test commands::updates::tests::notes_are_trimmed_and_capped ... ok
+2026-11-21T20:50:03.1019649Z test commands::voice::tests::local_only_blocks_and_resets_online_models ... ok
+2026-11-21T20:50:03.1020287Z test config::tests::config_from_older_version_defaults_new_fields ... ok
+2026-11-21T20:50:03.1022602Z test config::tests::https_urls_are_accepted ... ok
+2026-11-21T20:50:03.1027754Z test config::tests::config_round_trips_cloud_providers ... ok
+2026-11-21T20:50:03.1028438Z test config::tests::loopback_check_uses_the_parsed_host ... ok
+2026-11-21T20:50:03.1029046Z test config::tests::memory_share_stays_in_range ... ok
+2026-11-21T20:50:03.1029454Z test config::tests::plain_http_is_loopback_only ... ok
+2026-11-21T20:50:03.1033359Z test config::tests::userinfo_in_urls_is_rejected ... ok
+2026-11-21T20:50:03.1034849Z test domain::chat::tests::fractional_times_from_the_window_still_save ... ok
+2026-11-21T20:50:03.1039391Z test domain::chat::tests::questions_save_and_load ... ok
+2026-11-21T20:50:03.1052535Z test config::tests::save_replaces_the_file_and_leaves_no_temp_file ... ok
+2026-11-21T20:50:03.1057016Z test model_manager::tests::activate_records_the_choice_and_clear_active_forgets_it ... ok
+2026-11-21T20:50:03.1060261Z test model_manager::tests::an_older_state_file_still_loads ... ok
+2026-11-21T20:50:03.1070823Z test model_manager::tests::remove_refuses_ids_that_leave_the_models_folder ... ok
+2026-11-21T20:50:03.1072931Z test services::agent::oneshot::tests::wrappers_are_removed ... ok
+2026-11-21T20:50:03.1074833Z test services::agent::tests::each_mode_asks_as_its_menu_says ... ok
+2026-11-21T20:50:03.1076913Z test services::agent::tests::old_tool_results_go_first_then_old_turns ... ok
+2026-11-21T20:50:03.1078945Z test services::agent::tests::questions_come_in_both_forms ... ok
+2026-11-21T20:50:03.1081628Z test services::agent::tools::tests::arguments_from_small_models_are_forgiven ... ok
+2026-11-21T20:50:03.1083970Z test app::jobs::tests::job_ids_made_back_to_back_differ ... ok
+2026-11-21T20:50:03.1084903Z test services::agent::tools::tests::mcp_names_are_safe_for_every_provider ... ok
+2026-11-21T20:50:03.1086459Z test services::backup::restore_path_tests::restore_accepts_only_memory_and_conversation_files ... ok
+2026-11-21T20:50:03.1089349Z test services::backup::restore_path_tests::restored_config_keeps_current_keys_and_drops_bad_addresses ... ok
+2026-11-21T20:50:03.1093777Z test services::agent::tools::tests::permissions_pick_the_tools ... ok
+2026-11-21T20:50:03.1099450Z test services::backup::tests::a_header_asking_for_huge_memory_is_refused ... ok
+2026-11-21T20:50:03.1109764Z test services::backup::tests::api_keys_stripped_unless_included ... ok
+2026-11-21T20:50:03.1111818Z test services::backup::tests::timestamp_roundtrip ... ok
+2026-11-21T20:50:03.1513264Z test services::backup::tests::version_1_archives_still_open ... ok
+2026-11-21T20:50:03.1567060Z test services::agent::approval::tests::answers_reach_the_waiting_question ... ok
+2026-11-21T20:50:03.1568816Z test services::cloud_audit::tests::finds_the_last_user_message ... ok
+2026-11-21T20:50:03.1572800Z test services::cloud_audit::tests::keys_never_reach_the_preview ... ok
+2026-11-21T20:50:03.1575754Z test services::cloud_audit::tests::local_calls_are_not_logged ... ok
+2026-11-21T20:50:03.1579497Z test services::cloud_audit::tests::previews_are_short_and_flat ... ok
+2026-11-21T20:50:03.1580660Z test services::externals::tests::every_desktop_gets_a_model_engine ... ok
+2026-11-21T20:50:03.1583253Z test services::externals::tests::pins_are_well_formed ... ok
+2026-11-21T20:50:03.1583719Z test services::externals::tests::real_fetch ... ignored
+2026-11-21T20:50:03.1584186Z test services::externals::tests::real_llama_fetch ... ignored
+2026-11-21T20:50:03.1590047Z test services::frames::tests::pages_are_served_with_a_strict_policy ... ok
+2026-11-21T20:50:03.1592225Z test services::inference::capabilities::tests::effort_levels_by_family ... ok
+2026-11-21T20:50:03.1594865Z test services::inference::capabilities::tests::local_props_override_the_guess ... ok
+2026-11-21T20:50:03.1598158Z test services::inference::capabilities::tests::names_reveal_thinking_and_vision ... ok
+2026-11-21T20:50:03.1601322Z test services::inference::modes::tests::modes_parse_and_fall_back_to_standard ... ok
+2026-11-21T20:50:03.1604315Z test services::inference::modes::tests::strict_caps_temperature ... ok
+2026-11-21T20:50:03.1609225Z test services::inference::modes::tests::system_prompt_joins_the_parts_in_order ... ok
+2026-11-21T20:50:03.1673843Z test services::inference::openai_stream::tests::a_cut_stream_from_a_provider_is_an_error ... ok
+2026-11-21T20:50:03.1708778Z test services::inference::openai_stream::tests::a_refused_field_is_dropped_and_the_stream_is_read ... ok
+2026-11-21T20:50:03.1709694Z test services::inference::openai_stream::tests::a_stray_close_tag_marks_earlier_text_as_thinking ... ok
+2026-11-21T20:50:03.1711550Z test services::inference::openai_stream::tests::assistant_tool_calls_and_results_round_trip_to_the_wire ... ok
+2026-11-21T20:50:03.1714022Z test services::inference::openai_stream::tests::bodies_follow_each_flavor ... ok
+2026-11-21T20:50:03.1716893Z test services::inference::openai_stream::tests::flavors_follow_the_host ... ok
+2026-11-21T20:50:03.1722036Z test services::inference::openai_stream::tests::json_tool_call_blocks_and_split_tags_recover ... FAILED
+2026-11-21T20:50:03.1724104Z test services::inference::openai_stream::tests::multibyte_text_near_a_tag_boundary_is_safe ... ok
+2026-11-21T20:50:03.1725563Z test services::inference::openai_stream::tests::plain_text_with_lt_signs_streams_through ... ok
+2026-11-21T20:50:03.1728020Z test services::inference::openai_stream::tests::reasoning_fields_and_tool_calls_are_read ... ok
+2026-11-21T20:50:03.1730154Z test services::inference::openai_stream::tests::refused_fields_are_dropped_one_at_a_time ... ok
+2026-11-21T20:50:03.1755526Z test services::inference::openai_stream::tests::refused_tools_are_reported_to_the_caller ... ok
+2026-11-21T20:50:03.1756302Z test services::inference::openai_stream::tests::streamed_errors_are_reported ... ok
+2026-11-21T20:50:03.1758742Z test services::inference::openai_stream::tests::text_tool_call_blocks_become_real_calls ... ok
+2026-11-21T20:50:03.1760746Z test services::inference::openai_stream::tests::think_tags_split_across_pieces ... ok
+2026-11-21T20:50:03.1763587Z test services::inference::openai_stream::tests::whole_calls_without_index_and_openrouter_reasoning ... ok
+2026-11-21T20:50:03.1766144Z test services::inference::provider_models::tests::free_names_are_recognised ... ok
+2026-11-21T20:50:03.1768161Z test services::inference::provider_models::tests::gemini_prefixes_and_bare_arrays ... ok
+2026-11-21T20:50:03.1770108Z test services::inference::provider_models::tests::model_list_addresses ... ok
+2026-11-21T20:50:03.1772740Z test services::inference::provider_models::tests::openrouter_capabilities_are_read ... ok
+2026-11-21T20:50:03.1774752Z test services::inference::provider_models::tests::openrouter_zero_pricing_is_free ... ok
+2026-11-21T20:50:03.1776470Z test services::inference::provider_models::tests::parses_the_openai_shape ... ok
+2026-11-21T20:50:03.1819058Z test services::library::db::audit_and_folder_tests::cloud_calls_and_folders_round_trip ... ok
+2026-11-21T20:50:03.1835220Z test services::library::ingest::tests::identical_files_get_their_own_document_ids ... ok
+2026-11-21T20:50:03.1838220Z test services::library::ingest::tests::text_in_common_encodings_decodes ... ok
+2026-11-21T20:50:03.1840303Z test services::library::ingest::tests::truncation_keeps_whole_characters ... ok
+2026-11-21T20:50:03.1850045Z test services::library::ingest::tests::utf16_files_are_text_not_binary ... ok
+2026-11-21T20:50:03.1852199Z test services::library::rerank::tests::parses_rerank_response ... ok
+2026-11-21T20:50:03.1854346Z test services::library::rerank::tests::rejects_invalid_rerank_response ... ok
+2026-11-21T20:50:03.1856241Z test services::library::rerank::tests::reorder_drops_out_of_range_and_duplicate_indices ... ok
+2026-11-21T20:50:03.1858049Z test services::library::rerank::tests::reorder_puts_scored_first_and_keeps_unscored_order ... ok
+2026-11-21T20:50:03.1859368Z test services::library::rerank::tests::reorder_with_no_hits_is_identity ... ok
+2026-11-21T20:50:03.1861151Z test services::library::search::tests::keep_best_holds_the_top_scores_in_order ... ok
+2026-11-21T20:50:03.1905732Z test services::library::tests::an_unchanged_file_is_not_read_again ... ok
+2026-11-21T20:50:03.1963083Z test services::library::tests::removing_a_folder_removes_its_documents ... ok
+2026-11-21T20:50:03.2006562Z test services::library::tests::replacing_and_removing_a_document_updates_search ... ok
+2026-11-21T20:50:03.2008624Z test services::mcp::import::tests::claude_desktop_format ... ok
+2026-11-21T20:50:03.2011496Z test services::mcp::import::tests::opencode_and_crush_formats ... ok
+2026-11-21T20:50:03.2013610Z test services::mcp::import::tests::single_servers_and_junk ... ok
+2026-11-21T20:50:03.2016481Z test services::mcp::tests::entries_are_checked ... ok
+2026-11-21T20:50:03.2019161Z test services::mcp::tests::tool_lists_and_results_parse ... ok
+2026-11-21T20:50:03.2021353Z test services::mcp::transport::tests::answers_are_found_in_every_body_shape ... ok
+2026-11-21T20:50:03.2024384Z test services::mcp::transport::tests::server_requests_get_answers ... ok
+2026-11-21T20:50:03.2055806Z test services::memory::notes::tests::note_paths_must_be_markdown_files_in_the_notes_folder ... ok
+2026-11-21T20:50:03.2100896Z test services::memory::notes::tests::notes_with_the_same_title_are_both_kept ... ok
+2026-11-21T20:50:03.2101950Z test services::memory::notes::tests::reserved_windows_names_get_a_suffix ... ok
+2026-11-21T20:50:03.2119533Z test services::memory::suggest::tests::duplicate_titles_get_numbered_files ... ok
+2026-11-21T20:50:03.2122167Z test services::memory::suggest::tests::file_names_from_outside_are_refused ... ok
+2026-11-21T20:50:03.2137642Z test services::memory::suggest::tests::suggest_list_read_dismiss_roundtrip ... ok
+2026-11-21T20:50:03.2168579Z test services::models::catalog::tests::catalog_json_matches_embedded_manifest ... ok
+2026-11-21T20:50:03.2187206Z test services::models::catalog::tests::embedded_manifest_passes_validation ... ok
+2026-11-21T20:50:03.2190595Z test services::models::catalog::tests::unsafe_ids_and_file_names_are_rejected ... ok
+2026-11-21T20:50:03.2196407Z test services::models::catalog::tests::validation_rejects_bad_entries ... ok
+2026-11-21T20:50:03.2201351Z test services::models::catalog::tests::validation_rejects_catalog_rollback ... ok
+2026-11-21T20:50:03.2216781Z test services::models::custom::tests::duplicate_ids_rejected ... ok
+2026-11-21T20:50:03.2218571Z test services::models::custom::tests::ids_are_slugged_and_unique ... ok
+2026-11-21T20:50:03.2225915Z test services::models::custom::tests::invalid_entries_rejected ... ok
+2026-11-21T20:50:03.2241346Z test services::models::custom::tests::persists_and_roundtrips ... ok
+2026-11-21T20:50:03.2247114Z test services::models::custom::tests::remove_unknown_is_an_error ... ok
+2026-11-21T20:50:03.2307835Z test services::models::download::tests::a_complete_part_file_is_checked_on_416 ... ok
+2026-11-21T20:50:03.2319011Z test services::models::download::tests::a_damaged_part_file_is_removed ... ok
+2026-11-21T20:50:03.2358465Z test services::models::download::tests::a_partial_download_resumes_with_range ... ok
+2026-11-21T20:50:03.2394181Z test services::models::download::tests::a_server_that_ignores_range_restarts_cleanly ... ok
+2026-11-21T20:50:03.2406433Z test services::models::download::tests::a_verified_part_file_becomes_the_model ... ok
+2026-11-21T20:50:03.3073427Z test services::agent::approval::tests::stop_and_timeout_mean_no ... ok
+2026-11-21T20:50:03.3075283Z test services::models::hf::tests::marks_uncensored_repos_and_reads_dates ... ok
+2026-11-21T20:50:03.3079192Z test services::models::hf::tests::parses_search_results ... ok
+2026-11-21T20:50:03.3082315Z test services::models::hf::tests::parses_tree_and_detects_mmproj ... ok
+2026-11-21T20:50:03.3084492Z test services::models::hf::tests::repos_are_validated ... ok
+2026-11-21T20:50:03.3087159Z test services::models::hf::tests::search_paths_carry_sort_and_tag ... ok
+2026-11-21T20:50:03.3089111Z test services::models::hf::tests::urlencode_encodes_spaces ... ok
+2026-11-21T20:50:03.3157564Z test services::models::tests::custom_entries_resolve_through_the_standard_accessors ... ok
+2026-11-21T20:50:03.3163229Z test services::opencode::tests::addresses_follow_the_local_rules ... ok
+2026-11-21T20:50:03.3197259Z test services::opencode::tests::hand_off_creates_a_session_and_sends_the_task ... ok
+2026-11-21T20:50:03.3197860Z test services::opencode::tests::health_and_session_answers_parse ... ok
+2026-11-21T20:50:03.3200421Z test services::opencode::tests::titles_come_from_the_task_when_empty ... ok
+2026-11-21T20:50:03.3203131Z test services::share::auth::tests::tokens_grant_their_role_and_nothing_else ... ok
+2026-11-21T20:50:03.3203995Z test services::share::tests::real_share_server_enforces_tokens_and_roles ... ignored
+2026-11-21T20:50:03.3205128Z test services::share::tunnel::tests::reads_the_link_from_the_log ... ok
+2026-11-21T20:50:03.3208041Z test services::skills::discover::tests::listings_keep_folders_only ... ok
+2026-11-21T20:50:03.3210809Z test services::skills::discover::tests::prompts_csv_handles_quotes_and_newlines ... ok
+2026-11-21T20:50:03.3212310Z test services::skills::discover::tests::repo_references_are_validated ... ok
+2026-11-21T20:50:03.3215433Z test services::skills::discover::tests::skill_md_frontmatter_is_read ... ok
+2026-11-21T20:50:03.3217072Z test services::skills::discover::tests::unknown_sources_are_refused ... ok
+2026-11-21T20:50:03.3218475Z test services::skills::tests::frontmatter_and_body_split ... ok
+2026-11-21T20:50:03.3249154Z test services::skills::tests::imported_skills_keep_their_origin ... ok
+2026-11-21T20:50:03.3286221Z test services::skills::tests::learned_skills_can_be_undone ... ok
+2026-11-21T20:50:03.3287577Z test services::skills::tests::no_frontmatter_returns_raw_body ... ok
+2026-11-21T20:50:03.3288075Z test services::skills::tests::slug_is_filename_safe ... ok
+2026-11-21T20:50:03.3290778Z test services::tools::approval::tests::a_folder_approval_covers_that_folder_only_and_expires ... ok
+2026-11-21T20:50:03.3292167Z test services::tools::approval::tests::reads_need_no_approval ... ok
+2026-11-21T20:50:03.3298090Z test services::tools::shell::tests::autonomous_mode_asks_only_about_risky_commands ... ok
+2026-11-21T20:50:03.3303148Z test services::tools::shell::tests::changes_ask_first ... ok
+2026-11-21T20:50:03.3307718Z test services::tools::shell::tests::destructive_commands_are_blocked ... ok
+2026-11-21T20:50:03.3309170Z test services::tools::shell::tests::output_is_capped ... ok
+2026-11-21T20:50:03.3312247Z test services::tools::shell::tests::quotes_hide_operators ... ok
+2026-11-21T20:50:03.3317433Z test services::tools::shell::tests::read_only_commands_run_without_asking ... ok
+2026-11-21T20:50:03.3849068Z test services::tools::shell::tests::runs_with_timeout_and_cancel ... ok
+2026-11-21T20:50:03.3887312Z test services::tools::tests::a_refused_action_is_still_recorded ... ok
+2026-11-21T20:50:03.3921930Z test services::tools::tests::clearing_the_log_leaves_a_note ... ok
+2026-11-21T20:50:03.3922607Z test services::usage::tests::dates_come_out_as_utc_days ... ok
+2026-11-21T20:50:03.3956218Z test services::usage::tests::summary_aggregates_days_and_models ... ok
+2026-11-21T20:50:03.3957692Z test services::voice::live::tests::joins_pieces_with_one_space ... ok
+2026-11-21T20:50:03.3960983Z test services::voice::live::tests::parses_each_provider ... ok
+2026-11-21T20:50:03.3963430Z test services::voice::local::tests::families_and_args ... ok
+2026-11-21T20:50:03.3965704Z test services::voice::local::tests::reads_engine_output ... ok
+2026-11-21T20:50:03.3966170Z test services::voice::local::tests::real_local_transcription ... ignored
+2026-11-21T20:50:03.3967788Z test services::voice::online::tests::a_missing_key_is_refused_before_any_call ... ok
+2026-11-21T20:50:03.3969860Z test services::voice::online::tests::reads_gemini_replies ... ok
+2026-11-21T20:50:03.3971754Z test services::voice::tests::choices_parse_and_reject_unknown_ids ... ok
+2026-11-21T20:50:03.3974455Z test services::voice::tests::wav_checks ... ok
+2026-11-21T20:50:03.3978712Z test services::websearch::tests::addresses_inside_the_users_network_are_not_sent_out ... ok
+2026-11-21T20:50:03.3981651Z test services::websearch::tests::attribute_reader_handles_quotes_and_order ... ok
+2026-11-21T20:50:03.4036403Z test services::websearch::tests::automatic_search_falls_back_when_duckduckgo_finds_nothing ... ok
+2026-11-21T20:50:03.4037473Z test services::websearch::tests::blank_keys_count_as_missing ... ok
+2026-11-21T20:50:03.4038913Z test services::websearch::tests::crawl_urls_are_validated ... ok
+2026-11-21T20:50:03.4040922Z test services::websearch::tests::ddg_anomaly_page_is_reported ... ok
+2026-11-21T20:50:03.4043295Z test services::websearch::tests::ddg_legacy_markup_still_parses ... ok
+2026-11-21T20:50:03.4045909Z test services::websearch::tests::ddg_limit_is_respected ... ok
+2026-11-21T20:50:03.4047240Z test services::websearch::tests::ddg_page_without_results_is_empty_not_error ... ok
+2026-11-21T20:50:03.4066359Z test services::websearch::tests::ddg_search_end_to_end_over_http ... ok
+2026-11-21T20:50:03.4069546Z test services::websearch::tests::exa_mcp_results_parse_in_both_forms ... ok
+2026-11-21T20:50:03.4088021Z test services::websearch::tests::exa_search_end_to_end_with_key ... ok
+2026-11-21T20:50:03.4123307Z test services::websearch::tests::exa_searches_without_a_key_over_mcp ... ok
+2026-11-21T20:50:03.4138654Z test services::websearch::tests::firecrawl_scrape_end_to_end ... ok
+2026-11-21T20:50:03.4155805Z test services::websearch::tests::firecrawl_sends_no_key_when_none_is_set ... ok
+2026-11-21T20:50:03.4172608Z test services::websearch::tests::http_401_maps_to_auth_failed ... ok
+2026-11-21T20:50:03.4189423Z test services::websearch::tests::http_429_maps_to_rate_limited ... ok
+2026-11-21T20:50:03.4207923Z test services::websearch::tests::jina_read_end_to_end_json ... ok
+2026-11-21T20:50:03.4223463Z test services::websearch::tests::jina_read_falls_back_to_plain_text ... ok
+2026-11-21T20:50:03.4225994Z test services::websearch::tests::mcp_answers_parse_as_json_or_events ... ok
+2026-11-21T20:50:03.4274316Z test services::websearch::tests::oversized_response_is_refused ... ok
+2026-11-21T20:50:03.4277544Z test services::websearch::tests::parses_ddg_results_and_resolves_redirects ... ok
+2026-11-21T20:50:03.4278628Z test services::websearch::tests::parses_exa_results_and_truncates_text ... ok
+2026-11-21T20:50:03.4280762Z test services::websearch::tests::parses_firecrawl_scrape ... ok
+2026-11-21T20:50:03.4282690Z test services::websearch::tests::parses_firecrawl_search ... ok
+2026-11-21T20:50:03.4285298Z test services::websearch::tests::parses_the_real_lite_layout ... ok
+2026-11-21T20:50:03.4287691Z test services::websearch::tests::parses_wikipedia_search ... ok
+2026-11-21T20:50:03.4294388Z test services::websearch::tests::unknown_providers_are_rejected ... ok
+2026-11-21T20:50:03.4660507Z test services::backup::tests::write_list_and_restore ... ok
+2026-11-21T20:50:03.4869782Z test services::backup::tests::archive_roundtrip ... ok
+2026-11-21T20:50:03.8567185Z test services::models::download::tests::pause_works_while_the_server_is_silent_and_keeps_the_part ... ok
+2026-11-21T20:50:03.8567674Z 
+2026-11-21T20:50:03.8567779Z failures:
+2026-11-21T20:50:03.8567880Z 
+2026-11-21T20:50:03.8568253Z ---- services::inference::openai_stream::tests::json_tool_call_blocks_and_split_tags_recover stdout ----
+2026-11-21T20:50:03.8568576Z 
+2026-11-21T20:50:03.8569157Z thread 'services::inference::openai_stream::tests::json_tool_call_blocks_and_split_tags_recover' (2036) panicked at src\services\inference\openai_stream.rs:1231:9:
+2026-11-21T20:50:03.8569775Z assertion `left == right` failed
+2026-11-21T20:50:03.8570016Z   left: "Reading the file "
+2026-11-21T20:50:03.8570239Z  right: ""
+2026-11-21T20:50:03.8570792Z note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-11-21T20:50:03.8571288Z 
+2026-11-21T20:50:03.8571295Z 
+2026-11-21T20:50:03.8571390Z failures:
+2026-11-21T20:50:03.8572263Z     services::inference::openai_stream::tests::json_tool_call_blocks_and_split_tags_recover
+2026-11-21T20:50:03.8572599Z 
+2026-11-21T20:50:03.8573081Z test result: FAILED. 205 passed; 1 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.76s
+2026-11-21T20:50:03.8573296Z 
+2026-11-21T20:50:03.8635838Z [1m[91merror[0m: test failed, to rerun pass `--lib`
+2026-11-21T20:50:03.8638772Z [1m[92m     Running[0m unittests src\main.rs (src-tauri\target\debug\build\ai-desktop-assistant/4f14daf7d44908b5\out\ai_desktop_assistant-4f14daf7d44908b5.exe)
+2026-11-21T20:50:03.8739512Z 
+2026-11-21T20:50:03.8739732Z running 0 tests
+2026-11-21T20:50:03.8739962Z 
+2026-11-21T20:50:03.8740378Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-21T20:50:03.8740583Z 
+2026-11-21T20:50:03.8754354Z [1m[92m     Running[0m tests\contract_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/b42498f736de3eef\out\contract_test-b42498f736de3eef.exe)
+2026-11-21T20:50:03.8828713Z 
+2026-11-21T20:50:03.8828881Z running 7 tests
+2026-11-21T20:50:03.8834974Z test test_chat_stream_event_serialization ... ok
+2026-11-21T20:50:03.8835695Z test test_chat_thread_serialization ... ok
+2026-11-21T20:50:03.8837077Z test test_app_error_serialization ... ok
+2026-11-21T20:50:03.8837522Z test test_document_and_preset_serialization ... ok
+2026-11-21T20:50:03.8837819Z test test_job_registry_cancellation_and_progress ... ok
+2026-11-21T20:50:03.8838063Z test test_model_info_serialization ... ok
+2026-11-21T20:50:03.8839171Z test test_system_probe_serialization ... ok
+2026-11-21T20:50:03.8839340Z 
+2026-11-21T20:50:03.8839591Z test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-21T20:50:03.8839787Z 
+2026-11-21T20:50:03.8854653Z [1m[92m     Running[0m tests\fault_injection_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/aeadb0ae349f6ed4\out\fault_injection_test-aeadb0ae349f6ed4.exe)
+2026-11-21T20:50:03.8943569Z 
+2026-11-21T20:50:03.8943960Z running 5 tests
+2026-11-21T20:50:03.8949784Z test test_benchmark_bounded_memory_and_turn_budget ... ok
+2026-11-21T20:50:03.8964900Z test test_fault_simulated_killed_download_part_resumes ... ok
+2026-11-21T20:50:03.8967853Z test test_fault_corrupt_gguf_fails_cleanly ... ok
+2026-11-21T20:50:03.8968297Z test test_fault_read_only_jail_write_returns_storage_error ... ok
+2026-11-21T20:50:03.8972222Z test test_fault_corrupt_sqlite_db_recovery ... ok
+2026-11-21T20:50:03.8972477Z 
+2026-11-21T20:50:03.8972752Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-21T20:50:03.8972962Z 
+2026-11-21T20:50:03.8989083Z [1m[92m     Running[0m tests\inference_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/d596d753af72f14a\out\inference_test-d596d753af72f14a.exe)
+2026-11-21T20:50:03.9064089Z 
+2026-11-21T20:50:03.9064346Z running 2 tests
+2026-11-21T20:50:03.9067689Z test test_context_budget_within_limits ... ok
+2026-11-21T20:50:03.9068079Z test test_context_budget_truncates_oldest_turns ... ok
+2026-11-21T20:50:03.9068294Z 
+2026-11-21T20:50:03.9068627Z test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-21T20:50:03.9068940Z 
+2026-11-21T20:50:03.9081546Z [1m[92m     Running[0m tests\library_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/32032367a254e5d3\out\library_test-32032367a254e5d3.exe)
+2026-11-21T20:50:03.9158146Z 
+2026-11-21T20:50:03.9158548Z running 5 tests
+2026-11-21T20:50:03.9181169Z test test_robustness_against_empty_and_binary_files ... ok
+2026-11-21T20:50:03.9185209Z test test_text_chunking_with_overlap_and_boundaries ... ok
+2026-11-21T20:50:03.9230383Z test test_hybrid_search_reciprocal_rank_fusion ... ok
+2026-11-21T20:50:03.9230783Z test test_sqlite_library_db_crud_and_fts ... ok
+2026-11-21T20:50:03.9239744Z test test_folder_recursive_crawler_and_ignore_patterns ... ok
+2026-11-21T20:50:03.9240930Z 
+2026-11-21T20:50:03.9241438Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-11-21T20:50:03.9241897Z 
+2026-11-21T20:50:03.9264158Z [1m[92m     Running[0m tests\memory_rag_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/b37ac0dffa1fd7b2\out\memory_rag_test-b37ac0dffa1fd7b2.exe)
+2026-11-21T20:50:03.9348489Z 
+2026-11-21T20:50:03.9348817Z running 4 tests
+2026-11-21T20:50:03.9474334Z test test_rag_relevance_gate_and_citation_generation ... ok
+2026-11-21T20:50:03.9481684Z test test_memory_crud_and_disk_sync ... ok
+2026-11-21T20:50:03.9490861Z test test_memory_forget_all_cleans_disk_and_sqlite ... ok
+2026-11-21T20:50:03.9493854Z test test_rag_strictly_respects_token_budget ... ok
+2026-11-21T20:50:03.9494071Z 
+2026-11-21T20:50:03.9494371Z test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-11-21T20:50:03.9494638Z 
+2026-11-21T20:50:03.9515382Z [1m[92m     Running[0m tests\tools_sandbox_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/fa0f2092b0cd2cef\out\tools_sandbox_test-fa0f2092b0cd2cef.exe)
+2026-11-21T20:50:03.9598614Z 
+2026-11-21T20:50:03.9598835Z running 5 tests
+2026-11-21T20:50:03.9620097Z test test_workspace_jail_blocks_traversal_escapes ... ok
+2026-11-21T20:50:03.9620767Z test test_workspace_jail_blocks_absolute_paths_outside_root ... ok
+2026-11-21T20:50:03.9637157Z test test_model_catalog_signature_and_checksum_verification ... ok
+2026-11-21T20:50:03.9644027Z test test_workspace_jail_permits_valid_read_and_atomic_write ... ok
+2026-11-21T20:50:03.9657570Z test test_tool_execution_approval_workflow_and_audit_logging ... ok
+2026-11-21T20:50:03.9657897Z 
+2026-11-21T20:50:03.9658235Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-11-21T20:50:03.9658527Z 
+2026-11-21T20:50:03.9692297Z [1m[91merror[0m: 1 target failed:
+2026-11-21T20:50:03.9692480Z     `--lib`
+2026-11-21T20:50:03.9832716Z ##[error]thread 'services::inference::openai_stream::tests::json_tool_call_blocks_and_split_tags_recover' (2036) panicked at src\services\inference\openai_stream.rs:1231:9:
+assertion `left == right` failed
+  left: "Reading the file "
+ right: ""
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-11-21T20:50:03.9849654Z ##[error][1m[92m   Compiling[0m ai-desktop-assistant v0.1.10 (D:\a\LocalAide\LocalAide\src-tauri)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 45.84s
+[1m[92m     Running[0m unittests src\lib.rs (src-tauri\target\debug\build\ai-desktop-assistant/5deca7a921a82ada\out\app_lib-5deca7a921a82ada.exe)
+[1m[91merror[0m: test failed, to rerun pass `--lib`
+[1m[92m     Running[0m unittests src\main.rs (src-tauri\target\debug\build\ai-desktop-assistant/4f14daf7d44908b5\out\ai_desktop_assistant-4f14daf7d44908b5.exe)
+[1m[92m     Running[0m tests\contract_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/b42498f736de3eef\out\contract_test-b42498f736de3eef.exe)
+[1m[92m     Running[0m tests\fault_injection_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/aeadb0ae349f6ed4\out\fault_injection_test-aeadb0ae349f6ed4.exe)
+[1m[92m     Running[0m tests\inference_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/d596d753af72f14a\out\inference_test-d596d753af72f14a.exe)
+[1m[92m     Running[0m tests\library_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/32032367a254e5d3\out\library_test-32032367a254e5d3.exe)
+[1m[92m     Running[0m tests\memory_rag_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/b37ac0dffa1fd7b2\out\memory_rag_test-b37ac0dffa1fd7b2.exe)
+[1m[92m     Running[0m tests\tools_sandbox_test.rs (src-tauri\target\debug\build\ai-desktop-assistant/fa0f2092b0cd2cef\out\tools_sandbox_test-fa0f2092b0cd2cef.exe)
+[1m[91merror[0m: 1 target failed:
+    `--lib`
+2026-11-21T20:50:04.0541295Z ##[error]Process completed with exit code 1.
+2026-11-21T20:50:04.4740376Z Post job cleanup.
+2026-11-21T20:50:04.9693029Z Cache up-to-date.
+2026-11-21T20:50:04.9979149Z Post job cleanup.
+2026-11-21T20:50:05.1153566Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-21T20:50:05.1432145Z git version 2.56.1.windows.1
+2026-11-21T20:50:05.1493135Z Temporarily overriding HOME='D:\a\_temp\b1c8c8f5-9dd0-4f10-b96d-e4cb09f012ca' before making global git config changes
+2026-11-21T20:50:05.1493681Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-21T20:50:05.1500517Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\LocalAide\LocalAide
+2026-11-21T20:50:05.1832790Z Removing SSH command configuration
+2026-11-21T20:50:05.1841863Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-21T20:50:05.2133871Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-21T20:50:05.6906351Z Removing HTTP extra header
+2026-11-21T20:50:05.6914489Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-21T20:50:05.7192483Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-21T20:50:06.1507607Z Removing includeIf entries pointing to credentials config files
+2026-11-21T20:50:06.1516744Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-21T20:50:06.1762146Z includeif.gitdir:D:/a/LocalAide/LocalAide/.git.path
+2026-11-21T20:50:06.1762475Z includeif.gitdir:D:/a/LocalAide/LocalAide/.git/worktrees/*.path
+2026-11-21T20:50:06.1762733Z includeif.gitdir:/github/workspace/.git.path
+2026-11-21T20:50:06.1763009Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-21T20:50:06.1796042Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:D:/a/LocalAide/LocalAide/.git.path
+2026-11-21T20:50:06.2033381Z D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:50:06.2073702Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:D:/a/LocalAide/LocalAide/.git.path D\:\\a\\_temp\\git\-credentials\-0abebfe6\-b363\-4d52\-9f07\-ca1dd913a5d3\.config
+2026-11-21T20:50:06.2343776Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:D:/a/LocalAide/LocalAide/.git/worktrees/*.path
+2026-11-21T20:50:06.2574344Z D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:50:06.2605803Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:D:/a/LocalAide/LocalAide/.git/worktrees/*.path D\:\\a\\_temp\\git\-credentials\-0abebfe6\-b363\-4d52\-9f07\-ca1dd913a5d3\.config
+2026-11-21T20:50:06.2875238Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-21T20:50:06.3110153Z /github/runner_temp/git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:50:06.3143273Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-0abebfe6\-b363\-4d52\-9f07\-ca1dd913a5d3\.config
+2026-11-21T20:50:06.3426014Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-21T20:50:06.3670258Z /github/runner_temp/git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config
+2026-11-21T20:50:06.3704046Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-0abebfe6\-b363\-4d52\-9f07\-ca1dd913a5d3\.config
+2026-11-21T20:50:06.3996173Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-21T20:50:06.7979212Z Removing credentials config 'D:\a\_temp\git-credentials-0abebfe6-b363-4d52-9f07-ca1dd913a5d3.config'
+2026-11-21T20:50:06.8164995Z Cleaning up orphan processes

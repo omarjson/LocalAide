@@ -261,9 +261,9 @@ export class ApiClient {
     return invoke<string>("chat_enhance_prompt", { text, target: target ?? null });
   }
 
-  /** One suggested next message, or null. */
-  async suggestNext(question: string, answer: string, target?: ChatTarget): Promise<string | null> {
-    return invoke<string | null>("chat_suggest_next", { question, answer, target: target ?? null });
+  /** Up to three suggested next messages. */
+  async suggestNext(question: string, answer: string, target?: ChatTarget): Promise<string[]> {
+    return invoke<string[]>("chat_suggest_next", { question, answer, target: target ?? null });
   }
 
   /** Starter prompts learned from how the user's saved chats begin. */
