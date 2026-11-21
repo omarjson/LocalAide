@@ -7,7 +7,7 @@
 *Local by default. Zero telemetry. Opt-in cloud, including free providers that need no key.*
 
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg)](https://github.com/omarjson/LocalAide/releases)
+[![Version](https://img.shields.io/badge/version-v0.1.8-blue.svg)](https://github.com/omarjson/LocalAide/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Rust: 2024](https://img.shields.io/badge/Rust-2024%20Edition-orange.svg)](https://www.rust-lang.org/)
 [![Tauri: v2](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app/)

@@ -30,19 +30,20 @@
   --radius-2xl: 1rem;
   --radius-3xl: 1.25rem;
 
-  /* Dark: Windows dark Mica. Contrast on ink-950 (#202020) / ink-900 (#2b2b2b):
-     ink-100 14.7 / 12.8, ink-400 7.1 / 6.2, ink-600 5.3 / 4.6, edge 3.8 / 3.3. */
-  --color-ink-50: #ffffff;
-  --color-ink-100: #f3f3f3;
-  --color-ink-200: #dcdcdc;
-  --color-ink-300: #c4c4c4;
-  --color-ink-400: #ababab;
-  --color-ink-500: #9c9c9c;
-  --color-ink-600: #969696;
-  --color-ink-700: #454545;
-  --color-ink-800: #383838;
-  --color-ink-900: #2b2b2b;
-  --color-ink-950: #202020;
+  /* Dark: "Deep Ember" — warm near-black layers, measured 2026-11-21.
+     Contrast on ink-950 (#14100c) / ink-900 (#1e1914): ink-100 16.3 / 15.0,
+     ink-400 7.9 / 7.3, ink-500 6.3 / 5.8, ink-600 5.2 / 4.8, edge 3.9 / 3.6. */
+  --color-ink-50: #fbf7f0;
+  --color-ink-100: #f3ede3;
+  --color-ink-200: #e2dacc;
+  --color-ink-300: #cbc0b1;
+  --color-ink-400: #b3a696;
+  --color-ink-500: #a2937f;
+  --color-ink-600: #93836f;
+  --color-ink-700: #3d342a;
+  --color-ink-800: #2e261e;
+  --color-ink-900: #1e1914;
+  --color-ink-950: #14100c;
 
   --color-ember-50: #fff5ec;
   --color-ember-100: #ffe7d1;
@@ -56,27 +57,33 @@
   --color-ember-900: #5e2a0a;
   --color-ember-950: #331505;
 
-  --color-on-ember: #1b1b1f;
-  --color-edge: #7a7a7a;
+  --color-on-ember: #22150a;
+  --color-edge: #7c6f5e;
   --color-veil: #ffffff;
 }
 
-/* Light: Windows light Mica. The ink ramp inverts. Contrast on ink-950
- * (#eef0f3) / ink-900 (#fbfbfc): ink-100 15.0 / 16.6, ink-400 5.6 / 6.2,
- * ink-600 4.9 / 5.4, edge 3.3 / 3.6. White on ember-600 5.3, on ember-500 4.6.
- * Ember fills darken so white text on them clears 4.5:1. */
+/* Elevation for the raised chat surfaces (composer, cards, popovers). */
+:root {
+  --shadow-elev: 0 18px 44px -20px rgb(0 0 0 / 0.75);
+  --shadow-glow: 0 6px 16px -6px color-mix(in oklab, var(--color-ember-500) 60%, transparent);
+}
+
+/* Light: warm bone paper, the same Deep Ember hue family. Contrast on
+ * ink-950 (#ece9e3) / ink-900 (#f7f5f0): ink-100 14.1 / 15.7, ink-400 6.1 / 6.8,
+ * ink-500 4.6 / 5.1, ink-600 4.6 / 5.0, edge 4.1 / 4.6. Ember fills darken so
+ * white text on them clears 4.5:1. */
 :root[data-theme="light"] {
-  --color-ink-50: #111114;
-  --color-ink-100: #1b1b1f;
-  --color-ink-200: #2e3036;
-  --color-ink-300: #44474e;
-  --color-ink-400: #5b5f66;
-  --color-ink-500: #5f636a;
-  --color-ink-600: #64686f;
-  --color-ink-700: #d2d6dc;
-  --color-ink-800: #e3e6ea;
-  --color-ink-900: #fbfbfc;
-  --color-ink-950: #eef0f3;
+  --color-ink-50: #17130e;
+  --color-ink-100: #201b15;
+  --color-ink-200: #302b25;
+  --color-ink-300: #45403a;
+  --color-ink-400: #5c554b;
+  --color-ink-500: #6d675d;
+  --color-ink-600: #6e675c;
+  --color-ink-700: #d3cec4;
+  --color-ink-800: #e3dfd7;
+  --color-ink-900: #f7f5f0;
+  --color-ink-950: #ece9e3;
 
   --color-ember-200: #9a3f00;
   --color-ember-300: #9a3f00;
@@ -97,8 +104,13 @@
   --color-amber-600: #b54a00;
 
   --color-on-ember: #ffffff;
-  --color-edge: #80858d;
+  --color-edge: #767066;
   --color-veil: #000000;
+}
+
+:root[data-theme="light"] {
+  --shadow-elev: 0 18px 44px -24px rgb(30 20 10 / 0.35);
+  --shadow-glow: 0 6px 16px -8px color-mix(in oklab, var(--color-ember-500) 45%, transparent);
 }
 
 html {
@@ -163,7 +175,7 @@ input {
 /* The chat box: a quieter focus than other fields, it is focused most of the time. */
 .composer.field-shell:focus-within {
   border-color: color-mix(in oklab, var(--color-ember-500) 45%, var(--color-ink-700)) !important;
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ember-500) 9%, transparent), 0 12px 32px -16px rgb(0 0 0 / 0.5);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ember-500) 10%, transparent), var(--shadow-elev);
 }
 
 /* Easing for CSS transitions (the same curves as lib/motion.ts). */
@@ -306,8 +318,16 @@ select option {
  * look flat. Pure decoration; it never sits under text at full strength. */
 .app-canvas {
   background-image:
-    radial-gradient(1200px 500px at 85% -10%, color-mix(in oklab, var(--color-ember-500) 6%, transparent), transparent 60%),
-    radial-gradient(900px 400px at -10% 110%, color-mix(in oklab, var(--color-ember-500) 3%, transparent), transparent 60%);
+    radial-gradient(1100px 460px at 82% -12%, color-mix(in oklab, var(--color-ember-500) 7%, transparent), transparent 62%),
+    radial-gradient(900px 420px at -8% 112%, color-mix(in oklab, var(--color-ember-500) 4%, transparent), transparent 60%);
+}
+
+/* Raised chat surfaces: the composer, message cards and popovers sit one
+ * layer above the content canvas, with a hairline that reads on it. */
+.surface-raised {
+  background: color-mix(in oklab, var(--color-ink-800) 82%, var(--color-ink-900));
+  border: 1px solid var(--color-ink-700);
+  box-shadow: var(--shadow-elev);
 }
 
 /* Thin scrollbars that appear on hover, like modern chat apps. */

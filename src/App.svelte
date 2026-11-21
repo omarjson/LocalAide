@@ -344,6 +344,26 @@
       {#if showLabels}<span class="text-sm font-semibold tracking-tight text-ink-50" in:fade={{ duration: dur(motion.fast) }}>LocalAide</span>{/if}
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
+    {#if showLabels}
+      <button
+        type="button"
+        onclick={() => { if (navigate("chat")) newChat(chats.activeFolder); }}
+        class="mx-1 mb-2 flex h-9 shrink-0 items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/10 px-3 text-[13px] font-semibold text-ember-200 transition-colors hover:bg-ember-500/15"
+        title="New chat (Ctrl+N)"
+      >
+        <Icon name="plus" class="h-4 w-4" />
+        New chat
+        <kbd class="ml-auto rounded bg-veil/5 px-1.5 py-0.5 font-mono text-[11px] font-normal text-ink-400">{mod}N</kbd>
+      </button>
+    {:else}
+      <button
+        type="button"
+        onclick={() => { if (navigate("chat")) newChat(chats.activeFolder); }}
+        aria-label="New chat"
+        title="New chat (Ctrl+N)"
+        class="mx-1 mb-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ember-500/25 bg-ember-500/10 text-ember-200 transition-colors hover:bg-ember-500/15"
+      ><Icon name="plus" class="h-4 w-4" /></button>
+    {/if}
     {#snippet navItem(id: NavId, label: string)}
       <button
         onclick={() => navigate(id)}
@@ -435,17 +455,17 @@
   </section>
   </div>
 
-  <footer class="h-8 shrink-0 flex items-center gap-6 px-4 text-xs text-ink-400 bg-ink-950" aria-label="Status">
+  <footer class="h-8 shrink-0 flex items-center gap-5 px-4 text-xs text-ink-500 bg-ink-950" aria-label="Status">
     {#if ramTotal > 0}
-      <span>Computer memory: {formatBytes(ramUsable)} free of {formatBytes(ramTotal)}</span>
-      <span>Models can use up to {formatBytes(budget)}</span>
+      <span class="flex items-center gap-2.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400/80" aria-hidden="true"></span>{formatBytes(ramUsable)} free of {formatBytes(ramTotal)}</span>
+      <span class="hidden md:inline">Models can use up to {formatBytes(budget)}</span>
     {/if}
     {#if share.status?.on}
       <button type="button" onclick={() => { if (navigate("settings")) requestSettings("share"); }} class="sharing-on" title={`Anyone with a link can reach this assistant: ${share.status.url ?? ""}`}>
         <span class="sharing-dot" aria-hidden="true"></span>Sharing is on · {share.status.requests} {share.status.requests === 1 ? "request" : "requests"}
       </button>
     {/if}
-    <span class="ml-auto hidden sm:inline">Press ? for keyboard shortcuts</span>
+    <span class="ml-auto hidden sm:flex items-center gap-2">Keyboard shortcuts <kbd class="rounded border border-ink-700 bg-veil/5 px-1.5 py-0.5 font-mono text-[11px] text-ink-400">?</kbd></span>
   </footer>
 
   {#if cmdOpen}

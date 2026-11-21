@@ -84,6 +84,30 @@
   let showMoreActions = $state(false);
   let modelsChecked = $state(false);
 
+  // What this computer holds, for the empty chat's quiet stats row.
+  let localDocs = $state<number | null>(null);
+  let localNotes = $state<number | null>(null);
+  let localBudgetGb = $state<number | null>(null);
+  const loadLocalStats = async () => {
+    try {
+      localBudgetGb = Math.round((await api.systemProbe()).budget_gb);
+    } catch {
+      localBudgetGb = null;
+    }
+    try {
+      localDocs = (await api.getIndexerStats()).doc_count;
+    } catch {
+      localDocs = null;
+    }
+    if (moduleOn("memory")) {
+      try {
+        localNotes = (await api.listMemories()).length;
+      } catch {
+        localNotes = null;
+      }
+    }
+  };
+
   // Files waiting to go with the next message.
   let pendingFiles = $state<ChatAttachment[]>([]);
   let attaching = $state(false);
@@ -252,6 +276,7 @@
     } catch (e: unknown) {
       chatError = `Saved skills could not load: ${errorMessage(e)}`;
     }
+    void loadLocalStats();
   });
 
   // Persist the chosen chat preferences for the next session. The backend
@@ -272,6 +297,25 @@
   let temperature = $state(0.7);
   let maxTokens = $state(2048);
   let persona = $state("General");
+  // Answer statistics for everyone: tokens, time and speed under each
+  // answer. A normal switch in Chat settings; developer mode forces it on.
+  const STATS_KEY = "localaide-answer-stats";
+  let answerStats = $state((() => {
+    try {
+      return localStorage.getItem(STATS_KEY) === "on";
+    } catch {
+      return false;
+    }
+  })());
+  const toggleAnswerStats = () => {
+    answerStats = !answerStats;
+    try {
+      localStorage.setItem(STATS_KEY, answerStats ? "on" : "off");
+    } catch {
+      // Storage can be unavailable; the choice still applies now.
+    }
+  };
+  const showStats = $derived(answerStats || flag("answer_stats"));
   let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
   let showTools = $state(false);
@@ -677,6 +721,7 @@
     pendingFiles = [];
     messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
     streaming = true;
+    runStartedAt = Date.now();
     sendFailed = false;
     liveStatus = "LocalAide is answering.";
     userScrolledUp = false;
@@ -1027,6 +1072,81 @@
     return t?.type === "todos" ? t.items : null;
   });
   const workAgents = $derived(messages.flatMap((m) => (m.parts ?? []).filter((p): p is ToolPart => p.type === "tool" && p.group === "subagent")));
+  // The run timeline above the chat box: when this answer started and how
+  // many tool rounds it has used, so an autonomous run shows its pace.
+  let runStartedAt = $state<number | null>(null);
+  const runToolRounds = $derived.by(() => {
+    const last = messages.at(-1);
+    return last?.role === "assistant" ? (last.parts ?? []).filter((p) => p.type === "tool").length : 0;
+  });
+
+  // In-chat search (Ctrl+F): find a message, jump between the matches.
+  let chatSearchOpen = $state(false);
+  let chatSearchQuery = $state("");
+  let chatSearchIndex = $state(0);
+  let chatSearchInput = $state<HTMLInputElement>();
+  const chatMatches = $derived.by(() => {
+    const q = chatSearchQuery.trim().toLowerCase();
+    if (!q) return [] as number[];
+    const hits: number[] = [];
+    messages.forEach((m, idx) => {
+      const hay = [m.content, ...(m.parts ?? []).map((p) => {
+        if (p.type === "text" || p.type === "reasoning") return p.text;
+        if (p.type === "tool") return `${p.title} ${p.detail} ${p.output}`;
+        return "";
+      })].join("\n").toLowerCase();
+      if (hay.includes(q)) hits.push(idx);
+    });
+    return hits;
+  });
+  const openChatSearch = () => {
+    chatSearchOpen = true;
+    void tick().then(() => chatSearchInput?.focus());
+  };
+  const closeChatSearch = () => {
+    chatSearchOpen = false;
+    chatSearchQuery = "";
+    chatSearchIndex = 0;
+  };
+  const jumpToMatch = (idx: number) => {
+    const container = scrollEl?.firstElementChild;
+    const target = container?.children[idx] as HTMLElement | undefined;
+    if (!target) return;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    target.style.transition = "outline-color 200ms ease-out";
+    target.style.outline = "2px solid color-mix(in oklab, var(--color-ember-500) 65%, transparent)";
+    target.style.outlineOffset = "6px";
+    target.style.borderRadius = "12px";
+    setTimeout(() => {
+      target.style.outline = "none";
+    }, 1400);
+  };
+  const searchKeydown = (e: KeyboardEvent) => {
+    const count = chatMatches.length;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeChatSearch();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (count === 0) return;
+      chatSearchIndex = e.shiftKey
+        ? (chatSearchIndex - 1 + count) % count
+        : (chatSearchIndex + 1) % count;
+      jumpToMatch(chatMatches[chatSearchIndex]);
+    }
+  };
+  // Ctrl+F (Cmd+F on a Mac) opens the search while the chat screen is up.
+  $effect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        openChatSearch();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const toggleMcp = (id: string) => {
     mcpOff = mcpOff.includes(id) ? mcpOff.filter((x) => x !== id) : [...mcpOff, id];
@@ -1171,20 +1291,21 @@
 
     <div class="ml-auto flex items-center gap-1.5">
       {#if onlineChoice}
-        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/35 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineChoice.provider_label}.`}>
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineChoice.provider_label}.`}>
           <Icon name="cloud" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">Online · {onlineChoice.provider_label}</span>
         </span>
       {:else}
-        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/5 px-2.5 py-1 text-xs font-medium text-ember-200" title="Messages stay on this computer.">
-          <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
+        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-2 rounded-full border border-ink-700 bg-veil/5 px-2.5 py-1 text-xs font-medium text-ink-300" title="Messages stay on this computer.">
+          <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500 shadow-[0_0_0_3px_rgba(255,122,26,0.18)]" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
         </span>
       {/if}
 
       <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
+      <button type="button" onclick={() => (chatSearchOpen = true)} aria-label="Search in this chat" title="Search in this chat (Ctrl+F)" class="chat-icon-btn"><Icon name="search" class="h-[18px] w-[18px]" /></button>
       <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
         {#if showMoreActions}
-          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-edge bg-ink-950 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
+          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-ink-700 bg-ink-900 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Export conversation as Markdown</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void copyCurrentThread(); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
             <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("json"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
@@ -1194,7 +1315,7 @@
           </div>
         {/if}
       </div>
-      <button type="button" onclick={() => newChat(activeFolder)} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-sm shadow-ember-900/40 transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
+      <button type="button" onclick={() => newChat(activeFolder)} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
     </div>
   </header>
 
@@ -1228,6 +1349,7 @@
             {#each [
               { label: "Learn skills from chats", hint: "Saves and improves skills on its own, with a note and Undo.", on: learnSkills, toggle: () => (learnSkills = !learnSkills), show: moduleOn("skills") },
               { label: "Suggest a next prompt", hint: "One short suggestion after each answer. Tab takes it.", on: suggestNext, toggle: () => (suggestNext = !suggestNext), show: true },
+              { label: "Answer statistics", hint: "Tokens, time and speed under each answer.", on: answerStats, toggle: toggleAnswerStats, show: true },
               { label: "Charts, diagrams and mockups", hint: "Draws them in the chat, sandboxed from your files.", on: visuals, toggle: () => (visuals = !visuals), show: true },
               { label: "Subagents", hint: "Hands parts of a task to helpers that only read.", on: useSubagents, toggle: () => (useSubagents = !useSubagents), show: true },
             ].filter((o) => o.show) as o (o.label)}
@@ -1311,7 +1433,7 @@
               {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={() => requestSettings("online")}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
             </div>
           {:else}
-            <h1 class="text-balance text-[28px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
+            <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
             {#if onlineChoice}
               <p class="text-[15px] text-ink-400">Answers come from {onlineChoice.name} via {onlineChoice.provider_label}. Messages are sent to that provider.</p>
             {:else if engineLoading || pickerBusy}
@@ -1319,7 +1441,7 @@
             {:else if !engineLoaded}
               <p class="text-[15px] text-ink-400">{activeChoice.name} is not loaded yet. Choose it in the model menu under the message box.</p>
             {:else}
-              <p class="text-[15px] text-ink-400">Running {activeChoice.name} on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches the model makes" : ""}.</p>
+              <p class="text-[15px] text-ink-400">Running <span class="font-semibold text-ink-200">{activeChoice.name}</span> on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches the model makes" : ""}.</p>
             {/if}
             {#if mode !== "standard" && currentModeInfo}
               <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-ember-500/40 bg-ember-500/10 px-3 py-1 text-xs font-medium text-ember-200"><Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />{currentModeInfo.label} mode</span>
@@ -1327,23 +1449,33 @@
           {/if}
         </div>
 
+        {#if activeChoice && (localDocs !== null || localNotes !== null || localBudgetGb !== null)}
+          <div class="flex max-w-lg flex-wrap items-center justify-center gap-x-3.5 gap-y-1 text-xs text-ink-500" in:fade={{ duration: dur(300), delay: dur(120) }}>
+            {#if localDocs !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localDocs}</span> documents indexed</span>{/if}
+            {#if localDocs !== null && localNotes !== null}<span class="h-3 w-px bg-ink-700" aria-hidden="true"></span>{/if}
+            {#if localNotes !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localNotes}</span> memory notes</span>{/if}
+            {#if (localDocs !== null || localNotes !== null) && localBudgetGb !== null}<span class="h-3 w-px bg-ink-700" aria-hidden="true"></span>{/if}
+            {#if localBudgetGb !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localBudgetGb} GB</span> of model memory</span>{/if}
+          </div>
+        {/if}
+
         {#if activeChoice}
           <div class="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
             {#each starterPrompts as sp, i (sp.prompt)}
-              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} title={sp.learned ? "You often start chats like this" : undefined} class="lift group flex items-start gap-3 rounded-xl border border-ink-700 bg-ink-900/80 p-3.5 text-left hover:border-edge hover:bg-ink-900">
-                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-300 transition-colors group-hover:bg-ember-500/15 group-hover:text-ember-300"><Icon name={sp.icon} class="h-[18px] w-[18px]" /></span>
+              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} title={sp.learned ? "You often start chats like this" : undefined} class="lift group flex items-start gap-3 rounded-2xl border border-ink-700 bg-veil/5 p-3.5 text-left hover:border-ink-700 hover:bg-ink-800/60">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-ember-500/12 text-ember-300 transition-colors group-hover:bg-ember-500/20"><Icon name={sp.icon} class="h-[17px] w-[17px]" /></span>
                 <span class="min-w-0">
-                  <span class="block text-sm font-semibold text-ink-100">{sp.title}</span>
-                  <span class="line-clamp-2 block text-sm text-ink-400">{sp.prompt}</span>
+                  <span class="flex items-center gap-1.5 text-sm font-semibold text-ink-100">{sp.title}{#if sp.learned}<span title="You often start chats like this"><Icon name="sparkle" class="h-3 w-3 shrink-0 text-ember-400" /></span>{/if}</span>
+                  <span class="line-clamp-2 block text-[13px] leading-5 text-ink-400">{sp.prompt}</span>
                 </span>
               </button>
             {/each}
           </div>
           {#if skills.length > 0 && moduleOn("skills")}
             <div class="flex max-w-2xl flex-wrap items-center justify-center gap-2" in:fade={{ duration: dur(300), delay: dur(200) }}>
-              <span class="text-xs text-ink-500">Your skills:</span>
+              <span class="text-xs text-ink-500">Your skills</span>
               {#each skills.slice(0, 6) as skill (skill.path)}
-                <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 px-3 py-1 text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
+                <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 bg-veil/5 px-3 py-1 font-mono text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
               {/each}
             </div>
           {/if}
@@ -1379,7 +1511,7 @@
             onUndoSkill={(id) => void undoSkill(id)}
             folder={activeFolder}
             onOther={focusComposer}
-            stats={flag("answer_stats") ? msg.stats ?? null : null}
+            stats={showStats ? msg.stats ?? null : null}
             allowRaw={flag("raw_messages")}
             isLast={idx === messages.length - 1}
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
@@ -1390,6 +1522,32 @@
       </div>
     {/if}
   </div>
+
+  {#if chatSearchOpen}
+    <div
+      class="absolute left-1/2 top-3 z-30 flex w-[min(30rem,90%)] -translate-x-1/2 items-center gap-1 rounded-xl border border-ink-700 bg-ink-900 px-2 py-1.5 shadow-[var(--shadow-elev)]"
+      role="search"
+      in:fly={{ y: -6, duration: dur(motion.base), easing: motion.enter }}
+    >
+      <Icon name="search" class="h-4 w-4 shrink-0 text-ink-400" />
+      <input
+        bind:this={chatSearchInput}
+        bind:value={chatSearchQuery}
+        onkeydown={searchKeydown}
+        aria-label="Search in this chat"
+        placeholder="Search in this chat"
+        class="field-bare h-7 min-w-0 flex-1 bg-transparent text-sm text-ink-50 placeholder:text-ink-500"
+      />
+      {#if chatSearchQuery.trim()}
+        <span class="shrink-0 text-xs tabular-nums text-ink-500" aria-live="polite">
+          {chatMatches.length === 0 ? "No matches" : `${chatSearchIndex + 1} of ${chatMatches.length}`}
+        </span>
+      {/if}
+      <button type="button" aria-label="Previous match" disabled={chatMatches.length === 0} onclick={() => { if (chatMatches.length) { chatSearchIndex = (chatSearchIndex - 1 + chatMatches.length) % chatMatches.length; jumpToMatch(chatMatches[chatSearchIndex]); } }} class="chat-icon-btn h-7 w-7 disabled:opacity-40"><Icon name="chevron-down" class="h-4 w-4 rotate-180" /></button>
+      <button type="button" aria-label="Next match" disabled={chatMatches.length === 0} onclick={() => { if (chatMatches.length) { chatSearchIndex = (chatSearchIndex + 1) % chatMatches.length; jumpToMatch(chatMatches[chatSearchIndex]); } }} class="chat-icon-btn h-7 w-7 disabled:opacity-40"><Icon name="chevron-down" class="h-4 w-4" /></button>
+      <button type="button" aria-label="Close search" onclick={closeChatSearch} class="chat-icon-btn h-7 w-7"><Icon name="close" class="h-4 w-4" /></button>
+    </div>
+  {/if}
 
 
 
@@ -1408,7 +1566,7 @@
       {#if chatError}
         <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
       {/if}
-      <WorkStatus todos={workTodos} subagents={workAgents} />
+      <WorkStatus todos={workTodos} subagents={workAgents} startedAt={runStartedAt} toolRounds={runToolRounds} live={streaming} />
       {#if planReady && !streaming}
         <div class="mb-2 flex items-center gap-3 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
           <Icon name="lightbulb" class="h-4 w-4 shrink-0 text-sky-300" />

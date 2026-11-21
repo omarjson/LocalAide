@@ -5,6 +5,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-21
+
+The "Deep Ember" design pass: warm near-black layers instead of flat Windows grey, a cleaner chat, a live run timeline for autonomous work, search inside a chat, and answer statistics for everyone. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.
+
+### Added
+- **Search inside a chat.** The magnifier in the chat header (or Ctrl+F / ⌘F) opens a bar above the conversation: type to count the messages that match, Enter jumps through them with a brief highlight. Esc closes it.
+- **Answer statistics for everyone.** A switch in Chat settings shows tokens, time and speed under each answer (it used to be hidden behind developer mode).
+- **The run timeline shows pace.** While the assistant works a plan or runs subagents, the status above the chat box shows how long the run has taken and how many tool rounds it has used, and the plan panel shows a progress bar.
+- **The empty chat shows what this computer holds**: how many documents are indexed, how many memory notes exist, and how much memory models may use.
+- **A browser preview harness** for development (`preview.html` + `npm run dev`): the whole UI runs in a normal browser against a fake backend, so design passes no longer need a compiled app window.
+
+### Changed
+- **New look, "Deep Ember".** The palette moves from flat Windows grey to warm near-black layers: a darker sidebar, a raised content layer, cards and popovers one step above, and the ember accent unchanged. Contrast was re-measured for both themes (body text ≥ 15:1 on dark, muted ≥ 7:1, meaningful borders ≥ 3.5:1; the light theme is warm bone paper with the same guarantees).
+- **The chat reads lighter**: slimmer header with a quiet offline badge, the sidebar carries a **New chat** button with its shortcut, the composer is one raised card with a soft focus glow and an ember send button, user messages sit in a tinted bubble, the model name shows as a small tag beside the answer, completed steps get a check, sources fold into a compact **Sources [1]** row, and tool cards quietly show their result on the right.
+- Starters use ember-tinted icon tiles and hover motion; learned starters carry a small sparkle.
+- Buttons that glow, do so through one shared shadow token in both themes.
+
+### Fixed
+- The Search screen's library status loads its full shape again in the browser preview (a fixture gap, not an app bug).
+
 ## [0.1.7] - 2026-11-21
 
 Models load on every processor now, chats live in the sidebar, and the chat box has plan and build modes, a new model menu, better questions, subagents, charts and mockups. Windows on ARM gets its own installer. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.

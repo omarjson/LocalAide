@@ -224,10 +224,13 @@
 <style>
   .tool {
     overflow: hidden;
-    border-radius: 0.6rem;
+    border-radius: 0.7rem;
     border: 1px solid var(--color-ink-800);
-    background: color-mix(in oklab, var(--color-ink-950) 70%, transparent);
-    transition: border-color 150ms ease-out;
+    background: color-mix(in oklab, var(--color-veil) 3%, transparent);
+    transition: border-color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .tool:not(.tool-waiting):hover {
+    background: color-mix(in oklab, var(--color-veil) 5%, transparent);
   }
   .tool-waiting {
     border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent);

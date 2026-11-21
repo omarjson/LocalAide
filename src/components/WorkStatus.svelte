@@ -1,7 +1,9 @@
 <script lang="ts">
   // Work status above the chat box: the model's to-do list ("Completed
-  // 2/4") and the subagents of this chat, each with its current step, so
-  // one that stalled or went the wrong way shows without opening its chat.
+  // 2/4"), the subagents of this chat, each with its current step, and the
+  // run's elapsed time and tool rounds, so an autonomous run reads like a
+  // timeline and one that stalled or went the wrong way shows without
+  // opening its chat.
   import { fly } from "svelte/transition";
   import Icon from "./Icon.svelte";
   import TodoList from "./TodoList.svelte";
@@ -11,18 +13,47 @@
 
   type ToolPart = Extract<MessagePart, { type: "tool" }>;
 
-  let { todos = null, subagents = [] }: { todos?: TodoItem[] | null; subagents?: ToolPart[] } = $props();
+  let {
+    todos = null,
+    subagents = [],
+    /** Epoch ms the answer started; shows elapsed time while set. */
+    startedAt = null,
+    /** How many tool rounds this run has used so far. */
+    toolRounds = 0,
+    /** The answer is still streaming. */
+    live = false,
+  }: {
+    todos?: TodoItem[] | null;
+    subagents?: ToolPart[];
+    startedAt?: number | null;
+    toolRounds?: number;
+    live?: boolean;
+  } = $props();
 
   let openPanel = $state<"todos" | "agents" | null>(null);
   let expanded = $state<string | null>(null);
+  // Ticks once a second while a run is live, so the elapsed label moves.
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    if (!live || startedAt === null) return;
+    const id = setInterval(() => (nowTick = Date.now()), 1000);
+    return () => clearInterval(id);
+  });
 
   const done = $derived(todos ? todos.filter((t) => t.status === "done").length : 0);
   const running = $derived(subagents.filter((s) => s.status === "running").length);
   const failed = $derived(subagents.filter((s) => s.status === "failed").length);
   const stepOf = (s: ToolPart) => s.steps?.at(-1) ?? (s.status === "running" ? "Starting" : "");
+  const elapsedLabel = $derived.by(() => {
+    if (startedAt === null) return "";
+    const ms = Math.max(0, nowTick - startedAt);
+    const s = Math.floor(ms / 1000);
+    return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60}s`;
+  });
+  const planPercent = $derived(todos && todos.length > 0 ? Math.round((done / todos.length) * 100) : null);
 </script>
 
-{#if (todos && todos.length > 0) || subagents.length > 0}
+{#if (todos && todos.length > 0) || subagents.length > 0 || (live && toolRounds > 0)}
   <div class="relative mb-2 flex flex-wrap items-center justify-center gap-2" use:popover={{ open: openPanel !== null, onClose: () => (openPanel = null) }}>
     {#if todos && todos.length > 0}
       <button type="button" class="ws-chip" aria-expanded={openPanel === "todos"} onclick={() => (openPanel = openPanel === "todos" ? null : "todos")}>
@@ -46,11 +77,23 @@
         {#if failed > 0}<span class="text-rose-300">· {failed} failed</span>{/if}
       </button>
     {/if}
+    {#if live && startedAt !== null && elapsedLabel}
+      <span class="ws-chip cursor-default" role="timer" aria-label={`Run time: ${elapsedLabel}`}>
+        <Icon name="clock" class="h-3.5 w-3.5 text-ink-500" />
+        <span class="tabular-nums text-ink-400">{elapsedLabel}</span>
+        {#if toolRounds > 0}<span class="text-ink-500" title="Tool rounds used">· {toolRounds} {toolRounds === 1 ? "round" : "rounds"}</span>{/if}
+      </span>
+    {/if}
 
     {#if openPanel}
       <div class="ws-panel" role="dialog" aria-label={openPanel === "todos" ? "Plan" : "Subagents"} in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
         {#if openPanel === "todos" && todos}
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="list-check" class="h-4 w-4 text-ink-400" />Plan<span class="text-xs font-normal tabular-nums text-ink-500">{done} of {todos.length} done</span></div>
+          {#if planPercent !== null}
+            <div class="mb-2.5 h-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuenow={planPercent} aria-valuemin={0} aria-valuemax={100} aria-label="Plan progress">
+              <div class="h-full rounded-full bg-ember-500 transition-[width] duration-300" style={`width:${planPercent}%`}></div>
+            </div>
+          {/if}
           <TodoList items={todos} compact />
         {:else}
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="users" class="h-4 w-4 text-ink-400" />Subagents<span class="text-xs font-normal text-ink-500">They search and read; they cannot change anything.</span></div>

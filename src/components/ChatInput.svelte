@@ -275,7 +275,7 @@
     </div>
   {/if}
 
-  <div class="composer field-shell rounded-2xl border border-ink-700 bg-ink-950 shadow-[0_8px_30px_-12px_rgb(0_0_0/0.45)]">
+  <div class="composer field-shell rounded-[18px] border border-ink-700 bg-ink-800/75 shadow-[var(--shadow-elev)]">
     {#if showTools}
       <div class="space-y-2 border-b border-ink-800 p-3" in:fly={{ y: -4, duration: dur(motion.base) }}>
         <div class="flex items-center justify-between text-xs text-ink-400">
@@ -464,7 +464,7 @@
           disabled={!canSend}
           aria-label="Send"
           title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}
-          class={`ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-md shadow-ember-900/40 hover:scale-105 hover:bg-ember-400" : "bg-ink-800 text-ink-500"}`}
+          class={`ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-[var(--shadow-glow)] hover:scale-105 hover:bg-ember-400" : "bg-ink-700 text-ink-500"}`}
         ><Icon name="arrow-up" class="h-4 w-4" /></button>
       {/if}
     </div>

@@ -1,13 +1,13 @@
 # LocalAide design
 
-Status: direction "At Home on Windows" applied on 2026-11-14 (mockup: `docs/design/mockups/e-native.html`). The built frontend has been checked in a headless browser preview, with a fake backend, in both themes on the Chat, Search, Memory, Skills, Models and Settings screens. The eight-step UI pass is complete. Not yet checked inside the real Tauri window.
+Status: direction "Deep Ember" applied on 2026-11-21 (mockup: `docs/design/mockups/f-deep-ember.html`). It supersedes "At Home on Windows" (`docs/design/mockups/e-native.html`, 2026-11-14). The redesigned frontend has been checked in the browser preview harness (`preview.html`, fake backend) in both themes on the Chat (empty and conversation, with the in-chat search bar), Search, Settings and Models screens. Verified with `svelte-check` (0 findings) and the production build; not yet checked inside the real Tauri window.
 
 ## Surface and mode
 
 - Surface: a desktop app for chat, search, memory, and model management.
 - Mode: Operate. Scanning, consistency, and clear controls come first.
-- Direction: the app runs on this computer, so it looks like part of it. Windows 11 manners: neutral Mica greys, the system UI font, small corners, a nav pane with a selection pill, a status bar. On macOS the same font stack falls back to the system font.
-- The brand lives in one place: the ghost's ember eye. Ember marks the selected nav item, the live dot, and the main action. Everything else stays quiet.
+- Direction: warm near-black layers. The window reads as one quiet, warm space in three depths — the darkest chrome (sidebar, status bar), the content layer, and raised cards (composer, popovers, tool cards) one step above with soft elevation shadows. The system UI font stays; corners stay small. On macOS the same font stack falls back to the system font.
+- The brand lives in one place: the ghost's ember eye. Ember marks the selected nav item, the live dot, the send button and the main action. Everything else stays quiet.
 
 ## Logo
 
@@ -16,10 +16,10 @@ Status: direction "At Home on Windows" applied on 2026-11-14 (mockup: `docs/desi
 
 ## Layout shell (`src/App.svelte`)
 
-- Nav pane, 256px, on the page colour. Items are an icon plus a label, 40px tall. The selected item gets a raised fill, semibold text, and a 3px ember pill on the left, plus `aria-current="page"`.
-- Settings sits at the bottom of the pane, Windows style. Update notices sit just above it.
-- Content sits on a raised layer (`ink-900`) with a hairline and an 8px top-left corner.
-- Status bar along the bottom: free computer memory, the model memory limit, and a pointer to the `?` shortcut help.
+- Nav pane, 248px, on the darkest chrome. Under the wordmark sits a **New chat** button in a soft ember tint with its shortcut. Items are an icon plus a label, 36-40px tall. The selected item gets a raised fill, semibold text, and a 3px ember pill on the left, plus `aria-current="page"`.
+- Settings sits at the bottom of the pane. Update notices sit just above it.
+- Content sits on the content layer (`ink-900`) with a hairline and an 8px top-left corner, warmed by a faint ember glow from the top (`.app-canvas`).
+- Status bar along the bottom: a green dot with free computer memory, the model memory limit, and a `?` kbd chip for the shortcut help.
 
 ## Palette
 
@@ -27,20 +27,20 @@ All tokens live in `src/main.css` under `@theme`; the light theme re-declares th
 
 | Role | Token | Dark | Light |
 |---|---|---|---|
-| Page (Mica) | `ink-950` | #202020 | #eef0f3 |
-| Content layer, inputs | `ink-900` | #2b2b2b | #fbfbfc |
-| Selected and raised fills | `ink-800` / `ink-700` | #383838 / #454545 | #e3e6ea / #d2d6dc |
-| Meaningful borders | `edge` | #7a7a7a (3.8:1) | #80858d (3.3:1) |
-| Muted text | `ink-400` | #ababab (7.1:1) | #5b5f66 (5.6:1) |
-| Placeholders | `ink-500` / `ink-600` | #9c9c9c / #969696 | #5f636a / #64686f |
-| Body text | `ink-100` | #f3f3f3 | #1b1b1f |
+| Chrome (sidebar, status bar) | `ink-950` | #14100c | #ece9e3 |
+| Content layer, inputs | `ink-900` | #1e1914 | #f7f5f0 |
+| Raised fills, hover | `ink-800` / `ink-700` | #2e261e / #3d342a | #e3dfd7 / #d3cec4 |
+| Meaningful borders | `edge` | #7c6f5e (3.9:1) | #767066 (4.1:1) |
+| Muted text | `ink-400` | #b3a696 (7.9:1) | #5c554b (6.1:1) |
+| Placeholders | `ink-500` / `ink-600` | #a2937f / #93836f | #6d675d / #6e675c |
+| Body text | `ink-100` | #f3ede3 | #201b15 |
 | Accent | `ember-500` | #ff7a1a | #c2540a |
 | Button fill | `ember-600` | #e8680c | #b54a00 |
 | Accent text | `ember-200/300` | #ffd0a3 / #ffb173 | #9a3f00 |
 | Overlay tint | `veil` | white | black |
-| Focus ring | `ink-50` | white | near-black |
+| Focus ring | `ink-50` | warm white | near-black |
 
-Contrast figures are WCAG 2.x ratios against the page colour.
+Contrast figures are WCAG 2.x ratios against the page colour, re-measured 2026-11-21 (script checked: body ≥ 15:1 dark / ≥ 14:1 light, muted ≥ 7.3:1 dark / ≥ 6.1:1 light, placeholders ≥ 4.75:1 both themes, `edge` ≥ 3.5:1).
 
 Rules:
 
@@ -66,7 +66,7 @@ Rules:
 
 ## Known gaps
 
-- The built frontend has not been checked inside the real Tauri window yet.
+- The Deep Ember pass has not been checked inside the real Tauri window yet (it was verified in the browser preview harness, both themes).
 - The Search screen cannot show a folder count because the backend only returns document count and storage size.
 - The Settings screen estimates words from the token limit; the model's real tokenizer can differ.
 - The Dev Config screen is gone (2026-11-15). Memory for models is set in Settings → General, and the Models screen and setup flag models that may not fit.

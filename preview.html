@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- Development-only preview entry: run `npm run dev` and open /preview.html
+     in a normal browser. It installs a fake Tauri IPC backend (src/preview/shim.ts)
+     so the whole UI can be styled and screenshotted without building the Rust
+     backend. The production entry is index.html; this file never ships. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocalAide preview</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/preview/main.ts"></script>
+  </body>
+</html>
