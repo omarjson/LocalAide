@@ -9,6 +9,7 @@
   import PageHeader from "../components/PageHeader.svelte";
   import TextField from "../components/TextField.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { formatBytes } from "../lib/format";
   import type { MemoryNote } from "../lib/api/bindings";
 
   type NoteView = {
@@ -204,6 +205,13 @@
     return ["All", ...Array.from(tagSet)];
   });
 
+  // One glance: how many notes there are and how much room they take.
+  const totals = $derived.by(() => {
+    const count = searching ? notes.length : filteredNotes.length;
+    const bytes = (searching ? notes : filteredNotes).reduce((sum, note) => sum + (note.size || 0), 0);
+    return { count, bytes };
+  });
+
   const filteredNotes = $derived.by<NoteView[]>(() => {
     let result = notes;
     if (selectedTag !== "All") result = result.filter((note) => note.tags.includes(selectedTag));
@@ -270,6 +278,17 @@
 
   <div class="mb-5 space-y-3">
     <TextField bind:value={query} type="search" icon="search" ariaLabel="Search notes" placeholder="Search notes" />
+    {#if !loading && notes.length > 0}
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="rounded-full border border-ink-700 bg-ink-900 px-2.5 py-1 text-sm text-ink-300">{totals.count} {totals.count === 1 ? "note" : "notes"}</span>
+        {#if totals.bytes > 0}
+          <span class="rounded-full border border-ink-700 bg-ink-900 px-2.5 py-1 text-sm text-ink-300">{formatBytes(totals.bytes)}</span>
+        {/if}
+        {#if searching}
+          <span class="rounded-full border border-ember-500/40 bg-ember-500/10 px-2.5 py-1 text-sm text-ember-200" role="status">Searching…</span>
+        {/if}
+      </div>
+    {/if}
     {#if query}<Button variant="subtle" onclick={() => { query = ""; void load(); }}>Clear search</Button>{/if}
     {#if allTags.length > 1}
       <div class="flex flex-wrap items-center gap-2">{#each allTags as tag}<button type="button" onclick={() => selectedTag = tag} class={`rounded-full px-3 py-1 text-sm transition-colors ${selectedTag === tag ? "bg-ember-600 font-semibold text-on-ember" : "border border-ink-700 bg-ink-900 text-ink-400 hover:text-ink-50"}`}>{tag === "All" ? "All notes" : `#${tag}`}</button>{/each}</div>

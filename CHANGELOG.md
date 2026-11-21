@@ -5,6 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-11-21
+
+Reading controls found in the reference apps, redrawn for LocalAide: the chat bends to how you read, Settings answers a search box, and the Memory screen shows its size at a glance. Everything here works without new backend commands, so it is complete on all platforms. Your chats, notes, models and settings are kept.
+
+### Added
+- **Reading settings** in the Chat settings sheet:
+  - **Chat width** — Comfortable, Wider or Full, kept across restarts (the old experimental wide-chat flag becomes Full).
+  - **Follow answers while streaming** — the app already kept the newest text in view; now you can turn that off and steer the scroll yourself. The jump-to-newest button still works.
+  - **Collapse long questions** — a long prompt shows its first lines with a **Show full question** button until you expand it.
+
+### Changed
+- **Settings has a search box.** Type a word ("voice", "theme", "logs") and the section list narrows to what matches, with a match count. Enter opens the first match, Esc clears it. Sections also answer to related words, not just their titles.
+- **The Memory screen shows totals**: how many notes exist and how much room they take, next to the search field.
+
 ## [0.1.8] - 2026-11-21
 
 The "Deep Ember" design pass: warm near-black layers instead of flat Windows grey, a cleaner chat, a live run timeline for autonomous work, search inside a chat, and answer statistics for everyone. If you have 0.1.2 or later and the update key is set up, Settings → About → Check for updates installs this version; otherwise download it below. Your chats, notes, models and settings are kept.

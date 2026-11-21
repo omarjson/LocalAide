@@ -2,6 +2,8 @@
 
 Status: direction "Deep Ember" applied on 2026-11-21 (mockup: `docs/design/mockups/f-deep-ember.html`). It supersedes "At Home on Windows" (`docs/design/mockups/e-native.html`, 2026-11-14). The redesigned frontend has been checked in the browser preview harness (`preview.html`, fake backend) in both themes on the Chat (empty and conversation, with the in-chat search bar), Search, Settings and Models screens. Verified with `svelte-check` (0 findings) and the production build; not yet checked inside the real Tauri window.
 
+The 0.1.9 batch (mockup: `docs/design/mockups/g-discovery-batch.html`) adds Reading settings to the Chat settings sheet (chat width Comfortable/Wider/Full, follow-while-streaming, collapse long questions), a search box over the Settings section list, and totals on the Memory screen — all verified in the preview harness. The Usage dashboard and Automations screens from that mockup are **planned, not built**: they need new Rust-side stats and scheduling commands (no Rust toolchain on the dev machine), and were not shipped as dead UI.
+
 ## Surface and mode
 
 - Surface: a desktop app for chat, search, memory, and model management.

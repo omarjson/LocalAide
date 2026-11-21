@@ -57,6 +57,8 @@
     folder?: string | null;
     /** An earlier question the user moved past can still be answered. */
     onAnswerDeferred?: (text: string, questionId: string) => void;
+    /** Chat setting: questions longer than a few lines start collapsed. */
+    collapseLong?: boolean;
   }
 
   let {
@@ -84,7 +86,17 @@
     onUndoSkill,
     folder = null,
     onAnswerDeferred,
+    collapseLong = false,
   }: Props = $props();
+
+  // A long question starts collapsed when the reading setting is on and
+  // expands in place; editing always sees the full text.
+  const LONG_QUESTION = 240;
+  let questionExpanded = $state(false);
+  const longQuestion = $derived(role === "user" && collapseLong && content.length > LONG_QUESTION);
+  const shownContent = $derived(
+    longQuestion && !questionExpanded ? content.slice(0, LONG_QUESTION).trimEnd() + "…" : content,
+  );
 
   // A question at the end of a plain answer gets buttons too, when the
   // model did not use ask_user.
@@ -200,7 +212,10 @@
           </div>
         {/if}
         {#if content}
-          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ink-800 bg-veil/6 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{content}</div>
+          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ink-800 bg-veil/6 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}</div>
+          {#if longQuestion && !questionExpanded}
+            <button type="button" onclick={() => (questionExpanded = true)} class="mt-0.5 text-xs font-medium text-ember-300 transition-colors hover:text-ember-200">Show full question</button>
+          {/if}
         {/if}
         <div class="mt-1 flex items-center gap-0.5 text-ink-500 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100">
           {#if timeLabel}<span class="px-1.5 text-xs">{timeLabel}</span>{/if}

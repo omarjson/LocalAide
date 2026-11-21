@@ -67,8 +67,46 @@
   // The model picker: local models and the models of every online provider
   // the user switched on. The active one answers.
   let choices = $state<ModelChoices | null>(null);
-  // Experimental "Wide chat column": messages and the chat box fill the window.
-  const chatWidth = $derived(flag("wide_chat") ? "max-w-none" : "max-w-3xl");
+  // Reading width: Comfortable (default), Wider, or Full. Kept across restarts.
+  // The old experimental "wide_chat" flag migrates to Full.
+  const WIDTH_KEY = "localaide-chat-width";
+  let chatWidthChoice = $state<"cozy" | "wide" | "full">((() => {
+    try {
+      const saved = localStorage.getItem(WIDTH_KEY);
+      if (saved === "cozy" || saved === "wide" || saved === "full") return saved;
+      if (flag("wide_chat")) return "full";
+    } catch { /* storage unavailable */ }
+    return "cozy";
+  })());
+  const setChatWidth = (choice: "cozy" | "wide" | "full") => {
+    chatWidthChoice = choice;
+    try { localStorage.setItem(WIDTH_KEY, choice); } catch { /* storage unavailable */ }
+  };
+  const chatWidth = $derived(
+    chatWidthChoice === "cozy" ? "max-w-3xl" : chatWidthChoice === "wide" ? "max-w-5xl" : "max-w-none",
+  );
+
+  // Follow answers while streaming: keep the newest text in view unless you
+  // scrolled up to read. A switch in Chat settings turns it off.
+  const FOLLOW_KEY = "localaide-follow-stream";
+  let followStreaming = $state((() => {
+    try { return localStorage.getItem(FOLLOW_KEY) !== "off"; } catch { return true; }
+  })());
+  const toggleFollowStreaming = () => {
+    followStreaming = !followStreaming;
+    try { localStorage.setItem(FOLLOW_KEY, followStreaming ? "on" : "off"); } catch { /* storage unavailable */ }
+    if (followStreaming) void scrollToBottom(true);
+  };
+
+  // Collapse questions longer than a few lines until you expand them.
+  const COLLAPSE_KEY = "localaide-collapse-questions";
+  let collapseQuestions = $state((() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === "on"; } catch { return false; }
+  })());
+  const toggleCollapseQuestions = () => {
+    collapseQuestions = !collapseQuestions;
+    try { localStorage.setItem(COLLAPSE_KEY, collapseQuestions ? "on" : "off"); } catch { /* storage unavailable */ }
+  };
   let pickerOpen = $state(false);
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
@@ -380,8 +418,10 @@
   };
 
   // Follow the answer while it streams: the last message grows without the
-  // message count changing, so its length is tracked too.
+  // message count changing, so its length is tracked too. Off means you steer
+  // the scroll yourself; the pill below still jumps to the end.
   $effect(() => {
+    if (!followStreaming) return;
     const lastLength = messages.at(-1)?.content.length ?? 0;
     if (messages.length > 0 && lastLength >= 0) {
       scrollToBottom();
@@ -1335,6 +1375,29 @@
       </div>
       <div class="flex-1 space-y-6 overflow-y-auto p-4">
         <section>
+          <h3 class="mb-2 text-[13px] font-semibold text-ink-300">Reading</h3>
+          <div class="mb-3">
+            <span class="mb-1.5 block text-sm text-ink-100">Chat width</span>
+            <div class="grid grid-cols-3 gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1" role="group" aria-label="Chat width">
+              {#each [["cozy", "Comfortable"], ["wide", "Wider"], ["full", "Full"]] as [value, label] (value)}
+                <button type="button" onclick={() => setChatWidth(value as "cozy" | "wide" | "full")} aria-pressed={chatWidthChoice === value} class={`rounded-md px-2 py-1.5 text-[13px] transition-colors ${chatWidthChoice === value ? "bg-ember-500/15 font-semibold text-ember-200" : "text-ink-300 hover:bg-veil/5"}`}>{label}</button>
+              {/each}
+            </div>
+          </div>
+          <div class="space-y-1">
+            {#each [
+              { label: "Follow answers while streaming", hint: "Keep the newest text in view instead of fighting the scrollbar.", on: followStreaming, toggle: toggleFollowStreaming },
+              { label: "Collapse long questions", hint: "Show the first lines of a long prompt; click to expand.", on: collapseQuestions, toggle: toggleCollapseQuestions },
+            ] as o (o.label)}
+              <button type="button" role="switch" aria-checked={o.on} onclick={o.toggle} class="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-veil/5">
+                <span class="min-w-0 flex-1"><span class="block text-sm text-ink-100">{o.label}</span><span class="block text-xs leading-5 text-ink-400">{o.hint}</span></span>
+                <span class={`sheet-switch ${o.on ? "sheet-switch-on" : ""}`} aria-hidden="true"><span></span></span>
+              </button>
+            {/each}
+          </div>
+        </section>
+
+        <section>
           <h3 class="mb-2 text-[13px] font-semibold text-ink-300">Response style</h3>
           <div class="grid grid-cols-2 gap-2">
             {#each systemPresets as p (p.label)}
@@ -1517,6 +1580,7 @@
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
             onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
             onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
+            collapseLong={collapseQuestions}
           />
         {/each}
       </div>

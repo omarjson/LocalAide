@@ -69,6 +69,50 @@
   ];
   const sections = $derived(allSections.filter((sec) => (sec.id !== "online" || moduleOn("online")) && (sec.id !== "integrations" || moduleOn("opencode"))));
 
+  // Search across sections: type a word ("theme", "voice", "logs") and the
+  // section list narrows to what matches. Words a section answers to, beyond
+  // its title, live in SECTION_KEYWORDS.
+  const SECTION_KEYWORDS: Record<SettingsSection, string> = {
+    general: "theme dark light appearance scale font size engine memory ram model context startup language",
+    online: "provider cloud api key openai kilo remote internet service",
+    tools: "mcp tools servers commands allow deny permissions integrations opencode",
+    web: "web search internet duckduckgo brave results",
+    voice: "voice speech microphone dictation speak talk listen tts stt whisper",
+    share: "share link token invite friend publish assistant",
+    integrations: "opencode bridge connect ide agent",
+    privacy: "privacy files folders index storage data delete forget local disk",
+    backups: "backup restore export import snapshot history",
+    activity: "activity log logs diagnostics requests engine output debug",
+    developer: "developer flags experimental sampling system prompt raw features",
+    about: "about version update check release license credits changelog",
+  };
+
+  let settingsQuery = $state("");
+
+  const searchHit = (section: { id: SettingsSection; label: string }) => {
+    const q = settingsQuery.trim().toLowerCase();
+    if (!q) return false;
+    return (
+      section.label.toLowerCase().includes(q) ||
+      (SECTION_KEYWORDS[section.id] ?? "").includes(q)
+    );
+  };
+
+  const visibleSections = $derived(
+    settingsQuery.trim() ? sections.filter(searchHit) : sections,
+  );
+
+  const searchKeydown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      settingsQuery = "";
+      return;
+    }
+    if (e.key === "Enter" && settingsQuery.trim()) {
+      const first = visibleSections[0];
+      if (first) selectSection(first.id);
+    }
+  };
+
   // Integrations: OpenCode
   let opencode = $state<OpenCodeSettings | null>(null);
   let opencodeUrl = $state("");
@@ -679,8 +723,24 @@
   <PageHeader title="Settings" description="Change how LocalAide looks, stores files and uses the internet." />
   <div class="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
     <nav class="flex flex-col gap-1" aria-label="Settings sections">
+      <div class="relative mb-2">
+        <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
+        <input
+          type="search"
+          bind:value={settingsQuery}
+          onkeydown={searchKeydown}
+          aria-label="Search settings"
+          placeholder="Search settings"
+          class="h-9 w-full rounded-md border border-ink-700 bg-ink-900 pl-9 pr-3 text-sm text-ink-100 outline-none transition-colors placeholder:text-ink-500 focus:border-edge"
+        />
+      </div>
       <span class="sr-only">Settings sections</span>
-      {#each sections as section (section.id)}
+      {#if settingsQuery.trim()}
+        <p class="px-3 pb-1 text-xs text-ink-500" role="status">
+          {visibleSections.length === 0 ? "No section matches" : `${visibleSections.length} ${visibleSections.length === 1 ? "section matches" : "sections match"}`}
+        </p>
+      {/if}
+      {#each visibleSections as section (section.id)}
         <button
           type="button"
           aria-current={activeTab === section.id ? "page" : undefined}
@@ -691,7 +751,7 @@
         >
           <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${activeTab === section.id ? "h-4 opacity-100" : "h-0 opacity-0"}`} aria-hidden="true"></span>
           <Icon name={section.icon} class="h-[18px] w-[18px]" />
-          {section.label}
+          <span class="truncate">{section.label}</span>
         </button>
       {/each}
     </nav>

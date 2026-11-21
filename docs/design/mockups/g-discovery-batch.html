@@ -1,0 +1,642 @@
+<!doctype html>
+<!-- 0.1.9 design mockup: "Discovery batch" — Usage, Automations, Memory, Settings search, Chat reading.
+     Static HTML, no build, for review only. Uses the approved Deep Ember tokens from f-deep-ember.html. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalAide 0.1.9 — Discovery batch mockup</title>
+<style>
+  :root {
+    --side: #12100d;
+    --page: #171310;
+    --content: #1e1915;
+    --raised: #28211a;
+    --raised-2: #332a21;
+    --hairline: rgba(255, 244, 230, 0.07);
+    --hairline-strong: rgba(255, 244, 230, 0.12);
+    --text: #f2ece3;
+    --text-2: #b9ada0;
+    --text-3: #8a7f72;
+    --ember: #ff7a1a;
+    --ember-soft: rgba(255, 122, 26, 0.14);
+    --on-ember: #22150a;
+    --ok: #34d399;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5; color: var(--text);
+    background: #0c0a08; display: flex; flex-direction: column; align-items: center;
+    padding: 20px; overflow: auto; width: 100%;
+  }
+  .frame {
+    width: 100%; max-width: 1280px; height: min(800px, calc(100vh - 130px));
+    min-height: 560px; border-radius: 12px; overflow: hidden;
+    display: flex; flex-direction: column;
+    background: var(--page);
+    box-shadow: 0 40px 120px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,244,230,0.06);
+    position: relative;
+  }
+  .view-toggle { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  .view-toggle button {
+    background: #1a1713; color: #b9ada0; border: 1px solid rgba(255,244,230,0.1);
+    padding: 4px 14px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .view-toggle button.on { background: var(--ember); color: var(--on-ember); border-color: transparent; font-weight: 600; }
+  .why {
+    font-size: 12.5px; color: #8a7f72; max-width: 1100px; margin: 0 0 14px;
+  }
+  .why b { color: #d8cfc2; font-weight: 600; }
+  .view { display: none; flex: 1; min-height: 0; }
+  .view.on { display: flex; }
+
+  /* ---------- shell (same as f-deep-ember) ---------- */
+  .shell { display: flex; flex: 1; min-height: 0; width: 100%; }
+  aside {
+    width: 248px; flex-shrink: 0; background: var(--side);
+    display: flex; flex-direction: column; padding: 10px 10px 8px;
+  }
+  .logo-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px 14px; }
+  .logo-tile {
+    width: 28px; height: 28px; border-radius: 8px; background: #2a2118;
+    display: grid; place-items: center; font-size: 15px;
+    box-shadow: inset 0 0 0 1px rgba(255,244,230,0.08);
+  }
+  .wordmark { font-weight: 650; font-size: 13.5px; }
+  .new-chat {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    background: var(--ember-soft); color: #ffc999; border: 1px solid rgba(255,122,26,0.22);
+    border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13.5px; font-weight: 600;
+    cursor: pointer; margin-bottom: 14px;
+  }
+  nav { flex: 1; overflow: auto; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px; height: 36px; padding: 0 10px;
+    border-radius: 8px; color: var(--text-2); font-size: 13.5px; cursor: pointer;
+    position: relative; margin-bottom: 1px;
+  }
+  .nav-item:hover { background: rgba(255,244,230,0.05); color: var(--text); }
+  .nav-item.on { background: var(--raised); color: var(--text); font-weight: 600; }
+  .nav-item.on::before {
+    content: ""; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px;
+    background: var(--ember); border-radius: 0 3px 3px 0;
+  }
+  .nav-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .nav-item.on svg { color: var(--ember); }
+  .ico { display: block; }
+  .nav-new {
+    margin-left: auto; font-size: 10px; font-weight: 650; letter-spacing: 0.06em;
+    color: var(--ember); background: var(--ember-soft); border-radius: 999px; padding: 1px 7px;
+  }
+  .side-foot { display: flex; align-items: center; gap: 2px; padding-top: 8px; border-top: 1px solid var(--hairline); margin-top: 8px; }
+  .side-foot .nav-item { flex: 1; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--content); }
+  header.bar {
+    height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+    padding: 0 14px; border-bottom: 1px solid var(--hairline);
+  }
+  .title { font-weight: 650; font-size: 14px; }
+  .statusbar {
+    height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 14px;
+    padding: 0 14px; border-top: 1px solid var(--hairline); background: var(--side);
+    color: var(--text-3); font-size: 12px;
+  }
+  .dot-ok { width: 7px; height: 7px; border-radius: 99px; background: var(--ok); box-shadow: 0 0 0 3px rgba(52,211,153,0.15); }
+  kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text-2);
+    background: rgba(255,244,230,0.06); border: 1px solid var(--hairline-strong);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+  }
+
+  /* ---------- shared bits ---------- */
+  .page { flex: 1; overflow: auto; padding: 22px 28px 28px; }
+  .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .page-head h1 { font-size: 19px; font-weight: 650; }
+  .page-sub { color: var(--text-3); font-size: 13px; margin-bottom: 18px; }
+  .seg { display: inline-flex; background: rgba(255,244,230,0.05); border: 1px solid var(--hairline); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button {
+    border: 0; background: none; color: var(--text-2); font: inherit; font-size: 12.5px;
+    padding: 4px 12px; border-radius: 7px; cursor: pointer;
+  }
+  .seg button.on { background: var(--raised-2); color: var(--text); font-weight: 600; }
+  .card {
+    background: var(--raised); border: 1px solid var(--hairline); border-radius: 12px;
+    box-shadow: 0 18px 44px -24px rgba(0,0,0,0.75);
+  }
+  .togglerow {
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  }
+  .togglerow .txt b { display: block; font-weight: 600; font-size: 13.5px; }
+  .togglerow .txt span { color: var(--text-3); font-size: 12.5px; }
+  .togglerow .spacer { flex: 1; }
+  .switch {
+    width: 38px; height: 22px; border-radius: 999px; background: rgba(255,244,230,0.12);
+    position: relative; cursor: pointer; flex-shrink: 0; transition: background 140ms;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+    border-radius: 99px; background: #f2ece3; transition: left 140ms;
+  }
+  .switch.on { background: var(--ember); }
+  .switch.on::after { left: 19px; background: var(--on-ember); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2);
+    background: rgba(255,244,230,0.05); border: 1px solid var(--hairline); border-radius: 999px; padding: 2px 9px;
+  }
+  .chip.ember { color: #ffc999; background: var(--ember-soft); border-color: rgba(255,122,26,0.25); }
+  .chip.ok { color: #6ee7b7; background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.2); }
+
+  /* ---------- Usage ---------- */
+  .usage-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .usage-toolbar .spacer { flex: 1; }
+  .updated { color: var(--text-3); font-size: 12px; }
+  .iconbtn {
+    width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+    background: rgba(255,244,230,0.05); border: 1px solid var(--hairline); color: var(--text-2); cursor: pointer;
+  }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .kpi { padding: 13px 16px; }
+  .kpi .label { color: var(--text-2); font-size: 12px; }
+  .kpi .value { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .kpi .note { color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .h2 { font-size: 13.5px; font-weight: 650; margin: 20px 0 10px; }
+  .chart-card { padding: 14px 16px 10px; }
+  .bars { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding: 4px 2px 0; }
+  .barcol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+  .bar { width: 100%; max-width: 34px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--ember), rgba(255,122,26,0.55)); }
+  .bar.muted { background: rgba(255,244,230,0.10); }
+  .barlabel { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .stackbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin: 6px 0 10px; }
+  .stackbar i { height: 100%; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }
+  .legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 6px; }
+  .legend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .eff-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .model-row {
+    display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--hairline);
+    font-size: 13px;
+  }
+  .model-row:first-child { border-top: 0; }
+  .model-row .name { width: 220px; font-weight: 600; }
+  .model-row .bar-track { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,244,230,0.08); overflow: hidden; }
+  .model-row .bar-fill { height: 100%; border-radius: 999px; background: var(--ember); }
+  .model-row .num { width: 130px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .footnote { margin-top: 16px; color: var(--text-3); font-size: 12px; display: flex; align-items: center; gap: 7px; }
+
+  /* ---------- Automations ---------- */
+  .awake { margin-bottom: 16px; }
+  .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .tpl { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .tpl .head { display: flex; align-items: center; gap: 10px; }
+  .tpl .icon {
+    width: 30px; height: 30px; border-radius: 8px; background: var(--ember-soft);
+    color: #ffc999; display: grid; place-items: center; flex-shrink: 0;
+  }
+  .tpl .icon svg { width: 16px; height: 16px; }
+  .tpl b { font-size: 13.5px; font-weight: 650; }
+  .tpl p { color: var(--text-3); font-size: 12.5px; }
+  .tpl .foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .tpl .foot .spacer { flex: 1; }
+  .usebtn {
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--on-ember);
+    background: var(--ember); border: 0; border-radius: 8px; padding: 5px 12px; cursor: pointer;
+  }
+  .auto-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--hairline);
+  }
+  .auto-row:first-child { border-top: 0; }
+  .auto-row .what { flex: 1; min-width: 0; }
+  .auto-row .what b { font-size: 13.5px; font-weight: 600; display: block; }
+  .auto-row .what span { color: var(--text-3); font-size: 12px; }
+
+  /* ---------- Memory ---------- */
+  .mem-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .searchfield {
+    flex: 1; display: flex; align-items: center; gap: 9px; background: rgba(255,244,230,0.05);
+    border: 1px solid var(--hairline); border-radius: 10px; padding: 7px 12px; color: var(--text-3); font-size: 13px;
+  }
+  .searchfield svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .mem-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--hairline); }
+  .mem-row:first-child { border-top: 0; }
+  .mem-file { width: 26px; height: 26px; border-radius: 7px; background: rgba(255,244,230,0.06); display: grid; place-items: center; color: var(--text-2); flex-shrink: 0; }
+  .mem-file svg { width: 14px; height: 14px; }
+  .mem-row .what { flex: 1; min-width: 0; }
+  .mem-row .what b { font-family: var(--mono); font-size: 12.5px; font-weight: 600; display: block; }
+  .mem-row .what span { color: var(--text-3); font-size: 12px; }
+  .ghostbtn {
+    font: inherit; font-size: 12px; color: var(--text-2); background: none;
+    border: 1px solid var(--hairline); border-radius: 7px; padding: 4px 10px; cursor: pointer;
+  }
+  .ghostbtn:hover { color: var(--text); background: rgba(255,244,230,0.05); }
+  .ghostbtn.danger:hover { color: #fca5a5; border-color: rgba(248,113,113,0.3); }
+  .pin-chip { font-size: 11.5px; color: #ffc999; background: var(--ember-soft); border: 1px solid rgba(255,122,26,0.25); border-radius: 999px; padding: 2px 9px; }
+
+  /* ---------- Settings ---------- */
+  .set-grid { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: start; }
+  .set-nav { display: flex; flex-direction: column; gap: 2px; }
+  .set-nav .nav-item { height: 32px; font-size: 13px; }
+  .group { margin-bottom: 14px; }
+  .group > b { display: block; padding: 12px 16px 4px; font-size: 13px; font-weight: 650; color: var(--text-2); }
+  .group .togglerow + .togglerow { border-top: 1px solid var(--hairline); }
+  .hit { box-shadow: inset 3px 0 0 var(--ember); }
+  .hit b em, .hit span em { font-style: normal; color: #ffc999; }
+  .setsearch { margin-bottom: 16px; }
+
+  /* ---------- Chat reading ---------- */
+  .chat-demo { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .sticky-q {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+    display: flex; align-items: center; gap: 8px; max-width: 560px;
+    background: rgba(40, 33, 26, 0.92); backdrop-filter: blur(6px);
+    border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 6px 8px 6px 12px;
+    font-size: 12.5px; color: var(--text-2); box-shadow: 0 12px 30px -14px rgba(0,0,0,0.8);
+  }
+  .sticky-q b { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  .scroll { flex: 1; overflow: hidden; padding: 64px 0 12px; }
+  .convo { margin: 0 auto; display: flex; flex-direction: column; gap: 16px; width: 820px; }
+  .msg-user {
+    align-self: flex-end; max-width: 70%; background: rgba(255,244,230,0.06);
+    border: 1px solid var(--hairline); border-radius: 18px 18px 6px 18px; padding: 9px 14px;
+  }
+  .msg-ai { align-self: flex-start; max-width: 85%; }
+  .msg-ai p { color: #ddd4c8; }
+  .follow-pill {
+    position: absolute; right: 18px; bottom: 14px; display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px; color: #ffc999; background: var(--ember-soft);
+    border: 1px solid rgba(255,122,26,0.25); border-radius: 999px; padding: 4px 11px;
+  }
+  .composer-wrap { padding: 10px 0 14px; }
+  .composer {
+    margin: 0 auto; width: 820px; background: rgba(30, 25, 20, 0.85);
+    border: 1px solid rgba(255,244,230,0.12); border-radius: 18px; padding: 11px 14px;
+    box-shadow: 0 18px 44px -20px rgba(0,0,0,0.75);
+  }
+  .composer .ph { color: var(--text-3); font-size: 13.5px; }
+  .composer .row { display: flex; align-items: center; gap: 8px; margin-top: 26px; }
+  .composer .row .spacer { flex: 1; }
+  .send {
+    width: 30px; height: 30px; border-radius: 9px; background: var(--ember); color: var(--on-ember);
+    display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(255,122,26,0.6);
+  }
+  .send svg { width: 15px; height: 15px; }
+  .width-note {
+    position: absolute; top: 10px; right: 14px; font-size: 11.5px; color: var(--text-3);
+    background: rgba(255,244,230,0.05); border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 10px;
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="stroke" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></g>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m3 8 9 5 9-5M12 13v8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 9 18h3V4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 15 18h-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.8 13 5a7.2 7.2 0 0 1 2.4 1l2.3-.7 1.6 2.8-1.6 1.8c.2.8.2 1.7 0 2.5l1.6 1.8-1.6 2.8-2.3-.7a7.2 7.2 0 0 1-2.4 1L12 21.2 11 19a7.2 7.2 0 0 1-2.4-1l-2.3.7-1.6-2.8 1.6-1.8a7.3 7.3 0 0 1 0-2.5L4.7 10l1.6-2.8 2.3.7A7.2 7.2 0 0 1 11 5l1-2.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-broom" viewBox="0 0 24 24"><path d="m14 3 7 7M17 6l-8.5 8.5M9 13l-5 2c-1 3 0 5 1 6s3 2 6 1l2-5-4-4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m3 13 9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-6-7-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="m8 12 6.5-6.5a3.5 3.5 0 0 1 5 5L11 19a5 5 0 0 1-7-7l8-8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l1 7 2 2H6l2-2 1-7ZM12 13v7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+<div style="display:flex; flex-direction:column; align-items:center;">
+  <div class="why"><b>0.1.9 mockup — four screens found in OpenChamber &amp; ZCode, redrawn for LocalAide.</b>
+  Everything stays local. Tabs switch views; nothing here is implemented yet.</div>
+  <div class="view-toggle">
+    <button class="on" data-v="v-usage">1 · Usage</button>
+    <button data-v="v-auto">2 · Automations</button>
+    <button data-v="v-mem">3 · Memory</button>
+    <button data-v="v-set">4 · Settings search</button>
+    <button data-v="v-read">5 · Chat reading</button>
+  </div>
+
+  <div class="frame">
+
+    <!-- ================= USAGE ================= -->
+    <div class="view on" id="v-usage"><div class="shell">
+      <aside>
+        <div class="logo-row"><div class="logo-tile"><svg class="ico" style="width:16px;height:16px"><use href="#i-chat"/></svg></div><div class="wordmark">LocalAide</div></div>
+        <button class="new-chat">+ New chat</button>
+        <nav>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chat"/></svg> Chat</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-search"/></svg> Search</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-box"/></svg> Models</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-brain"/></svg> Memory<span class="nav-new">new</span></div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-clock"/></svg> Automations<span class="nav-new">new</span></div>
+          <div class="nav-item on"><svg class="ico" style="width:17px;height:17px"><use href="#i-chart"/></svg> Usage<span class="nav-new">new</span></div>
+        </nav>
+        <div class="side-foot"><div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-gear"/></svg> Settings</div></div>
+      </aside>
+      <div class="main">
+        <header class="bar"><div class="title">Usage</div></header>
+        <div class="page">
+          <div class="page-sub">What your local assistant did, measured on this computer. Nothing leaves it.</div>
+          <div class="usage-toolbar">
+            <div class="seg"><button>Today</button><button>7 days</button><button class="on">30 days</button><button>All time</button></div>
+            <div class="chip">All models ▾</div>
+            <div class="spacer"></div>
+            <div class="updated">Updated 3:04 PM</div>
+            <div class="iconbtn">↻</div>
+          </div>
+          <div class="kpis">
+            <div class="card kpi"><div class="label">Answers</div><div class="value">128</div><div class="note">41 questions asked</div></div>
+            <div class="card kpi"><div class="label">Tokens</div><div class="value">512.4K</div><div class="note">In 402K · Out 110K</div></div>
+            <div class="card kpi"><div class="label">Documents read</div><div class="value">236</div><div class="note">from 18.4K indexed</div></div>
+            <div class="card kpi"><div class="label">Disk still free</div><div class="value">21 GB</div><div class="note">models + index share 4.2 GB</div></div>
+          </div>
+          <div class="h2">Daily activity</div>
+          <div class="card chart-card">
+            <div class="bars">
+              <div class="barcol"><div class="bar muted" style="height:12%"></div><div class="barlabel">Nov 15</div></div>
+              <div class="barcol"><div class="bar" style="height:34%"></div><div class="barlabel">Nov 16</div></div>
+              <div class="barcol"><div class="bar" style="height:22%"></div><div class="barlabel">Nov 17</div></div>
+              <div class="barcol"><div class="bar muted" style="height:8%"></div><div class="barlabel">Nov 18</div></div>
+              <div class="barcol"><div class="bar" style="height:58%"></div><div class="barlabel">Nov 19</div></div>
+              <div class="barcol"><div class="bar" style="height:44%"></div><div class="barlabel">Nov 20</div></div>
+              <div class="barcol"><div class="bar" style="height:88%"></div><div class="barlabel">Nov 21</div></div>
+            </div>
+          </div>
+          <div class="h2">Where the tokens went</div>
+          <div class="card" style="padding: 14px 16px;">
+            <div class="stackbar">
+              <i style="width:55%; background:#ff7a1a;"></i>
+              <i style="width:18%; background:#e8680c;"></i>
+              <i style="width:20%; background:#b3a696;"></i>
+              <i style="width:7%; background:#3d342a;"></i>
+            </div>
+            <div class="legend">
+              <span><i style="background:#ff7a1a"></i>Answer <b>18%</b></span>
+              <span><i style="background:#e8680c"></i>Reasoning <b>7%</b></span>
+              <span><i style="background:#b3a696"></i>Re-read context <b>20%</b></span>
+              <span><i style="background:#3d342a"></i>Tool output <b>55%</b></span>
+            </div>
+          </div>
+          <div class="h2">Efficiency</div>
+          <div class="eff-grid">
+            <div class="card kpi"><div class="label">Cache hit rate</div><div class="value">82.7%</div><div class="note">re-used prompt context</div></div>
+            <div class="card kpi"><div class="label">First token</div><div class="value">0.9 s</div><div class="note">median wait</div></div>
+            <div class="card kpi"><div class="label">Tokens / answer</div><div class="value">4.0K</div><div class="note">30-day average</div></div>
+            <div class="card kpi"><div class="label">Answers / chat</div><div class="value">3.1</div><div class="note">follow-up friendly</div></div>
+          </div>
+          <div class="h2">Per model</div>
+          <div class="card">
+            <div class="model-row"><div class="name">Llama 3.2 3B</div><div class="bar-track"><div class="bar-fill" style="width:72%"></div></div><div class="num">369K tok · 82 answers</div></div>
+            <div class="model-row"><div class="name">Qwen2.5 1.5B</div><div class="bar-track"><div class="bar-fill" style="width:21%"></div></div><div class="num">107K tok · 31 answers</div></div>
+            <div class="model-row"><div class="name">TinyLLaMA 1.1B</div><div class="bar-track"><div class="bar-fill" style="width:7%"></div></div><div class="num">36K tok · 15 answers</div></div>
+          </div>
+          <div class="footnote"><svg class="ico" style="width:14px;height:14px"><use href="#i-lock"/></svg> Every number here is computed from LocalAide's own SQLite database on this computer.</div>
+        </div>
+        <div class="statusbar"><span class="dot-ok"></span> 21 GB free <span>·</span> 1.8 GB model memory <span>·</span> <kbd>?</kbd> shortcuts</div>
+      </div>
+    </div></div>
+
+    <!-- ================= AUTOMATIONS ================= -->
+    <div class="view" id="v-auto"><div class="shell">
+      <aside>
+        <div class="logo-row"><div class="logo-tile"><svg class="ico" style="width:16px;height:16px"><use href="#i-chat"/></svg></div><div class="wordmark">LocalAide</div></div>
+        <button class="new-chat">+ New chat</button>
+        <nav>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chat"/></svg> Chat</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-search"/></svg> Search</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-box"/></svg> Models</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-brain"/></svg> Memory<span class="nav-new">new</span></div>
+          <div class="nav-item on"><svg class="ico" style="width:17px;height:17px"><use href="#i-clock"/></svg> Automations<span class="nav-new">new</span></div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chart"/></svg> Usage</div>
+        </nav>
+        <div class="side-foot"><div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-gear"/></svg> Settings</div></div>
+      </aside>
+      <div class="main">
+        <header class="bar"><div class="title">Automations</div></header>
+        <div class="page">
+          <div class="page-sub">Schedule recurring tasks or queue work for when the computer is idle. Everything runs locally.</div>
+          <div class="card togglerow awake">
+            <div class="txt"><b>Keep the computer awake while an automation waits</b><span>Only while a run is actually pending — never overnight.</span></div>
+            <div class="spacer"></div><div class="switch on"></div>
+          </div>
+          <div class="h2">Starter templates</div>
+          <div class="tpl-grid">
+            <div class="card tpl">
+              <div class="head"><div class="icon"><svg class="ico" style="width:16px;height:16px"><use href="#i-sun"/></svg></div><b>Morning brief</b></div>
+              <p>Summarize new documents, chat activity and follow-ups since yesterday into one short note.</p>
+              <div class="foot"><span class="chip">Every weekday · 09:00</span><span class="spacer"></span><button class="usebtn">Use template</button></div>
+            </div>
+            <div class="card tpl">
+              <div class="head"><div class="icon"><svg class="ico" style="width:16px;height:16px"><use href="#i-folder"/></svg></div><b>Folder watch</b></div>
+              <p>When new files land in a watched folder, index them and post a one-line digest in Chat.</p>
+              <div class="foot"><span class="chip">When files change</span><span class="spacer"></span><button class="usebtn">Use template</button></div>
+            </div>
+            <div class="card tpl">
+              <div class="head"><div class="icon"><svg class="ico" style="width:16px;height:16px"><use href="#i-broom"/></svg></div><b>Weekly tidy-up</b></div>
+              <p>Archive stale chats, prune duplicate memories, and report reclaimed disk space.</p>
+              <div class="foot"><span class="chip">Sundays · 18:00</span><span class="spacer"></span><button class="usebtn">Use template</button></div>
+            </div>
+            <div class="card tpl">
+              <div class="head"><div class="icon"><svg class="ico" style="width:16px;height:16px"><use href="#i-pulse"/></svg></div><b>Model health check</b></div>
+              <p>Load each installed model once, measure first-token time, and flag ones that no longer fit in memory.</p>
+              <div class="foot"><span class="chip">Daily · 10:00</span><span class="spacer"></span><button class="usebtn">Use template</button></div>
+            </div>
+          </div>
+          <div class="h2">Your automations</div>
+          <div class="card">
+            <div class="auto-row">
+              <div class="switch on"></div>
+              <div class="what"><b>Morning brief</b><span>Next run: tomorrow 09:00 · Last run: today 09:00 — 12 new documents, 1 follow-up</span></div>
+              <span class="chip ok">ran 6 h ago</span>
+              <button class="ghostbtn">Edit</button>
+              <button class="ghostbtn danger">Delete</button>
+            </div>
+            <div class="auto-row">
+              <div class="switch"></div>
+              <div class="what"><b>Model health check</b><span>Paused — will not run until you turn it on</span></div>
+              <span class="chip">paused</span>
+              <button class="ghostbtn">Edit</button>
+              <button class="ghostbtn danger">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="dot-ok"></span> 21 GB free <span>·</span> 1 automation active <span>·</span> <kbd>?</kbd> shortcuts</div>
+      </div>
+    </div></div>
+
+    <!-- ================= MEMORY ================= -->
+    <div class="view" id="v-mem"><div class="shell">
+      <aside>
+        <div class="logo-row"><div class="logo-tile"><svg class="ico" style="width:16px;height:16px"><use href="#i-chat"/></svg></div><div class="wordmark">LocalAide</div></div>
+        <button class="new-chat">+ New chat</button>
+        <nav>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chat"/></svg> Chat</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-search"/></svg> Search</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-box"/></svg> Models</div>
+          <div class="nav-item on"><svg class="ico" style="width:17px;height:17px"><use href="#i-brain"/></svg> Memory<span class="nav-new">new</span></div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-clock"/></svg> Automations</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chart"/></svg> Usage</div>
+        </nav>
+        <div class="side-foot"><div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-gear"/></svg> Settings</div></div>
+      </aside>
+      <div class="main">
+        <header class="bar"><div class="title">Memory</div></header>
+        <div class="page">
+          <div class="page-sub">Small notes LocalAide reuses in new chats — your preferences, projects and standing facts. They stay in this folder.</div>
+          <div class="mem-toolbar">
+            <div class="searchfield"><svg class="ico" style="width:15px;height:15px"><use href="#i-search"/></svg> <span>Search memories…</span></div>
+            <span class="chip">7 memories · 3.1 KB</span>
+            <span class="chip ember">2 pinned</span>
+          </div>
+          <div class="card">
+            <div class="mem-row">
+              <div class="mem-file"><svg class="ico" style="width:14px;height:14px"><use href="#i-stack"/></svg></div>
+              <div class="what"><b>MEMORY.md</b><span>Index · rebuilt automatically</span></div>
+              <span class="pin-chip">always in context</span>
+              <button class="ghostbtn">Open</button>
+            </div>
+            <div class="mem-row">
+              <div class="mem-file"><svg class="ico" style="width:14px;height:14px"><use href="#i-doc"/></svg></div>
+              <div class="what"><b>prefers-short-answers.md</b><span>“Give compact answers with a short list; skip preamble.”</span></div>
+              <span class="pin-chip">pinned</span>
+              <button class="ghostbtn">Open</button><button class="ghostbtn">Unpin</button><button class="ghostbtn danger">Delete</button>
+            </div>
+            <div class="mem-row">
+              <div class="mem-file"><svg class="ico" style="width:14px;height:14px"><use href="#i-doc"/></svg></div>
+              <div class="what"><b>kiroween-demo-script.md</b><span>“Kiroween 2026 demo: show Deep Ember theme, then Ctrl+F…”</span></div>
+              <button class="ghostbtn">Open</button><button class="ghostbtn">Pin</button><button class="ghostbtn danger">Delete</button>
+            </div>
+            <div class="mem-row">
+              <div class="mem-file"><svg class="ico" style="width:14px;height:14px"><use href="#i-doc"/></svg></div>
+              <div class="what"><b>localaide-stack.md</b><span>“Tauri v2 + Rust + Svelte 5 + SQLite. No Rust toolchain on this PC — build via CI.”</span></div>
+              <button class="ghostbtn">Open</button><button class="ghostbtn">Pin</button><button class="ghostbtn danger">Delete</button>
+            </div>
+          </div>
+          <div class="footnote"><svg class="ico" style="width:14px;height:14px"><use href="#i-pin"/></svg> Pinned memories ride along in every chat, even after long conversations are compacted. Learned skills from chats appear here too.</div>
+        </div>
+        <div class="statusbar"><span class="dot-ok"></span> 21 GB free <span>·</span> 7 memories <span>·</span> <kbd>?</kbd> shortcuts</div>
+      </div>
+    </div></div>
+
+    <!-- ================= SETTINGS SEARCH ================= -->
+    <div class="view" id="v-set"><div class="shell">
+      <aside>
+        <div class="logo-row"><div class="logo-tile"><svg class="ico" style="width:16px;height:16px"><use href="#i-chat"/></svg></div><div class="wordmark">LocalAide</div></div>
+        <button class="new-chat">+ New chat</button>
+        <nav>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chat"/></svg> Chat</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-search"/></svg> Search</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-box"/></svg> Models</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-brain"/></svg> Memory</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-clock"/></svg> Automations</div>
+          <div class="nav-item"><svg class="ico" style="width:17px;height:17px"><use href="#i-chart"/></svg> Usage</div>
+        </nav>
+        <div class="side-foot"><div class="nav-item on"><svg class="ico" style="width:17px;height:17px"><use href="#i-gear"/></svg> Settings</div></div>
+      </aside>
+      <div class="main">
+        <header class="bar"><div class="title">Settings</div></header>
+        <div class="page">
+          <div class="set-grid">
+            <div class="set-nav">
+              <div class="searchfield setsearch"><svg class="ico" style="width:15px;height:15px"><use href="#i-search"/></svg> <span>readi</span></div>
+              <div class="nav-item">General</div>
+              <div class="nav-item on hit">Chat reading</div>
+              <div class="nav-item hit">Appearance</div>
+              <div class="nav-item">Models</div>
+              <div class="nav-item">Search &amp; index</div>
+              <div class="nav-item">Privacy</div>
+              <div class="nav-item">Shortcuts</div>
+            </div>
+            <div>
+              <div class="page-sub" style="margin-bottom:12px;">2 sections match “readi” — matched words are highlighted.</div>
+              <div class="group card hit">
+                <b>Chat reading</b>
+                <div class="togglerow">
+                  <div class="txt"><b>Chat width</b><span>How wide answers are. <em>Reading</em> long code is easier on Wider.</span></div>
+                  <div class="spacer"></div>
+                  <div class="seg"><button class="on">Comfortable</button><button>Wider</button><button>Full</button></div>
+                </div>
+                <div class="togglerow">
+                  <div class="txt"><b>Follow answers while streaming</b><span>Keep the newest text in view instead of fighting the scrollbar.</span></div>
+                  <div class="spacer"></div><div class="switch on"></div>
+                </div>
+                <div class="togglerow">
+                  <div class="txt"><b>Collapse long questions</b><span>Show the first two lines of a long prompt; click to expand.</span></div>
+                  <div class="spacer"></div><div class="switch on"></div>
+                </div>
+                <div class="togglerow">
+                  <div class="txt"><b>Sticky question header</b><span>Pin the question you are on to the top while you scroll the answer.</span></div>
+                  <div class="spacer"></div><div class="switch"></div>
+                </div>
+              </div>
+              <div class="group card hit">
+                <b>Appearance</b>
+                <div class="togglerow">
+                  <div class="txt"><b>Reading font size</b><span>Adjust answer text only — icons and layout stay put.</span></div>
+                  <div class="spacer"></div>
+                  <div class="seg"><button>13</button><button class="on">14</button><button>16</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="statusbar"><span class="dot-ok"></span> 21 GB free <span>·</span> <kbd>?</kbd> shortcuts</div>
+      </div>
+    </div></div>
+
+    <!-- ================= CHAT READING ================= -->
+    <div class="view" id="v-read">
+      <div class="chat-demo">
+        <div class="width-note">Chat width: Wider · question pinned while you scroll</div>
+        <div class="sticky-q">Asked: <b>Summarize the Kiroween judging criteria from my notes</b> <span class="chip">2 of 9</span></div>
+        <div class="scroll">
+          <div class="convo">
+            <div class="msg-ai"><p>The judges score four things equally: visual polish, working demo depth, originality, and the story. For LocalAide the strongest card is the story — a fully local assistant…</p></div>
+            <div class="msg-user">Can you compress that into three bullet points for the slide?</div>
+            <div class="msg-ai"><p>• Runs 100% on the laptop — no cloud, no keys.<br>• Reads your documents locally with on-device models.<br>• Memorizes your preferences between sessions.</p></div>
+            <div class="msg-user">Now draft the 30-second opening line for the demo.</div>
+            <div class="msg-ai"><p>“Everything you're about to see lives on this laptop — the model, the memory, even the search index. No servers, no accounts.”</p></div>
+          </div>
+        </div>
+        <div class="follow-pill">↓ Following</div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ph">Ask anything — answers stay on this computer</div>
+            <div class="row">
+              <span class="chip"><svg class="ico" style="width:13px;height:13px"><use href="#i-clip"/></svg></span><span class="chip"><svg class="ico" style="width:13px;height:13px"><use href="#i-shield"/></svg> Ask first</span>
+              <span class="spacer"></span>
+              <span class="chip">Llama 3.2 3B ▾</span>
+              <div class="send"><svg class="ico" style="width:14px;height:14px"><use href="#i-send"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script>
+  const btns = document.querySelectorAll(".view-toggle button");
+  const views = document.querySelectorAll(".view");
+  const notes = {
+    "v-usage": "<b>1 · Usage</b> — a home for the stats LocalAide already tracks (answers, tokens, disk). Time range + per-model rows, like OpenChamber's Stats page but fed by local SQLite.",
+    "v-auto": "<b>2 · Automations</b> — scheduled/idle work with <b>starter templates</b> (ZCode's pattern), a keep-awake toggle, and simple rows with next/last run.",
+    "v-mem": "<b>3 · Memory</b> — make existing memories visible: search, count, open, delete, and <b>pin</b> (pinned = always in context, survives compaction).",
+    "v-set": "<b>4 · Settings search</b> — type to filter; matched sections get an ember edge and highlighted words. Every toggle explains what it changes in one line.",
+    "v-read": "<b>5 · Chat reading</b> — wider chat width option, sticky question header while scrolling, and a 'Following' pill so auto-scroll never fights you."
+  };
+  btns.forEach(b => b.addEventListener("click", () => {
+    btns.forEach(x => x.classList.remove("on")); b.classList.add("on");
+    views.forEach(v => v.classList.toggle("on", v.id === b.dataset.v));
+    document.querySelector(".why").innerHTML = notes[b.dataset.v];
+  }));
+</script>
+</body>
+</html>
