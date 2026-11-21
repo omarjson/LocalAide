@@ -501,6 +501,11 @@ const fixtures: Record<string, Handler> = {
   ],
   mcp_servers_list: () => [],
   mcp_presets: () => [],
+  mcp_artcraft_presets: () => [
+    { id: "artcraft-documents", name: "Artcraft documents", description: "documents — Word decks and sheets the chat can open", version: "0.2.9", command: "node", args: ["C:/demo/documents/dist/server.mjs"], cwd: null, env: {}, ready: true, added: false },
+    { id: "artcraft-photocraft", name: "Artcraft photocraft", description: "photocraft — image editing in a panel", version: "0.5.1", command: "node", args: ["C:/demo/photocraft/dist/server.mjs"], cwd: null, env: {}, ready: true, added: false },
+  ],
+  mcp_server_save: () => [],
   opencode_get: () => ({}),
   opencode_check: () => ({}),
 

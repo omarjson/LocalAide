@@ -12,10 +12,13 @@
   import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
   import { moduleOn } from "../lib/dev.svelte";
-  import type { McpPreset, McpServer, McpTool } from "../lib/api/bindings";
+  import type { McpPreset,
+  ArtCraftPreset, McpServer, McpTool } from "../lib/api/bindings";
 
   let servers = $state<McpServer[]>([]);
   let presets = $state<McpPreset[]>([]);
+  let artcraft = $state<ArtCraftPreset[]>([]);
+  let artcraftBusy = $state<string | null>(null);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
   let busy = $state(false);
@@ -51,12 +54,35 @@
 
   const load = async () => {
     try {
-      [servers, presets] = await Promise.all([api.mcpServers(), api.mcpPresets()]);
+      [servers, presets, artcraft] = await Promise.all([api.mcpServers(), api.mcpPresets(), api.mcpArtcraftPresets().catch(() => [] as ArtCraftPreset[])]);
     } catch (e: unknown) {
       error = errorMessage(e);
     }
   };
   onMount(load);
+
+  const addArtcraft = async (preset: ArtCraftPreset) => {
+    artcraftBusy = preset.id;
+    try {
+      servers = await api.saveMcpServer({
+        name: preset.id.replace("artcraft-", "Artcraft "),
+        enabled: true,
+        auto_approve: false,
+        kind: "stdio",
+        command: preset.command,
+        args: preset.args,
+        cwd: preset.cwd,
+        url: "",
+        env: Object.entries(preset.env).map(([name, value]) => ({ name, value: String(value) })),
+        headers: [],
+      });
+      await load();
+    } catch (e: unknown) {
+      error = errorMessage(e);
+    } finally {
+      artcraftBusy = null;
+    }
+  };
 
   const openAdd = (preset?: McpPreset) => {
     editingId = null;
@@ -335,6 +361,33 @@
       </div>
     {/each}
   </SettingsGroup>
+
+  {#if artcraft.length > 0}
+    <h3 class="mb-2 mt-8 text-[15px] font-semibold text-ink-50">ArtCraft Connect</h3>
+    <p class="mb-2 text-sm text-ink-400">The ArtCraft panels already on this computer — documents, slides, sheets, images — can join the chat as tool servers. One click adds each.</p>
+    <SettingsGroup>
+      {#each artcraft as preset, i (preset.id)}
+        <div class={`flex items-center gap-4 px-[18px] py-3 ${i > 0 ? "border-t border-ink-800" : ""}`}>
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ember-300"><Icon name="code" class="h-[18px] w-[18px]" /></span>
+          <span class="min-w-0 flex-1">
+            <span class="flex flex-wrap items-center gap-2">
+              <span class="font-semibold text-ink-50">{preset.id.replace("artcraft-", "")}</span>
+              <span class="rounded-full border border-ink-700 px-2 py-0.5 text-xs text-ink-400">v{preset.version}</span>
+              {#if !preset.ready}
+                <span class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200">server file missing</span>
+              {/if}
+            </span>
+            <span class="block truncate text-sm text-ink-400">{preset.description}</span>
+          </span>
+          {#if preset.added}
+            <StatusBadge label="Added" tone="ok" />
+          {:else}
+            <Button variant="secondary" disabled={!preset.ready || artcraftBusy !== null} onclick={() => void addArtcraft(preset)}>{artcraftBusy === preset.id ? "Adding…" : "Add"}</Button>
+          {/if}
+        </div>
+      {/each}
+    </SettingsGroup>
+  {/if}
 </div>
 
 {#if pendingDelete}

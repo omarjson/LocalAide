@@ -287,6 +287,19 @@ export interface McpImportResult {
   servers: McpServer[];
 }
 
+export interface ArtCraftPreset {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  command: string;
+  args: string[];
+  cwd: string | null;
+  env: Record<string, string>;
+  ready: boolean;
+  added: boolean;
+}
+
 export interface McpPreset {
   id: string;
   name: string;

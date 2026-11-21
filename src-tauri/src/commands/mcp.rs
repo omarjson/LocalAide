@@ -230,7 +230,7 @@ pub struct ArtCraftPreset {
 /// Scan ZCode's plugin cache for plugins that ship MCP servers.
 #[tauri::command]
 pub fn mcp_artcraft_presets(state: State<'_, AppState>) -> Vec<ArtCraftPreset> {
-    let configured: std::collections::HashSet<String> = load_config(state)
+    let configured: std::collections::HashSet<String> = load_config(&state)
         .map(|cfg| cfg.mcp_servers.iter().map(|s| s.id.clone()).collect())
         .unwrap_or_default();
     scan_plugin_cache(&configured)

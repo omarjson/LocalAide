@@ -8,6 +8,7 @@ pub mod inference;
 pub mod library;
 pub mod mcp;
 pub mod memory;
+pub mod office;
 pub mod models;
 pub mod opencode;
 pub mod share;

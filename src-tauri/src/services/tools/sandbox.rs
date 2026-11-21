@@ -278,6 +278,70 @@ impl WorkspaceJail {
         Ok((content, is_truncated))
     }
 
+    /// Atomic binary write with the same size limit and temp-file dance
+    /// as `write_file`. Office Maker's documents are bytes, not text.
+    pub fn write_bytes(&self, rel_path: &str, content: &[u8]) -> Result<usize, AppError> {
+        if content.len() > MAX_WRITE_BYTES {
+            return Err(AppError::invalid_input(format!(
+                "Payload size ({} bytes) exceeds maximum allowed write size ({} bytes)",
+                content.len(),
+                MAX_WRITE_BYTES
+            )));
+        }
+
+        let target_path = self.resolve_path(rel_path)?;
+
+        if let Some(parent) = target_path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError::storage(format!(
+                    "Failed to create parent directory {}: {e}",
+                    parent.display()
+                ))
+            })?;
+        }
+
+        let temp_filename = format!(
+            ".tmp_write_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let temp_path = target_path
+            .parent()
+            .unwrap_or(&self.canonical_root)
+            .join(temp_filename);
+
+        {
+            let mut file = fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temp_path)
+                .map_err(|e| AppError::storage(format!("Failed to create temporary file: {e}")))?;
+
+            file.write_all(content).map_err(|e| {
+                let _ = fs::remove_file(&temp_path);
+                AppError::storage(format!("Failed to write content: {e}"))
+            })?;
+            file.flush().map_err(|e| {
+                let _ = fs::remove_file(&temp_path);
+                AppError::storage(format!("Failed to flush content: {e}"))
+            })?;
+        }
+
+        fs::rename(&temp_path, &target_path).map_err(|e| {
+            let _ = fs::remove_file(&temp_path);
+            AppError::storage(format!(
+                "Failed to rename temporary file to {}: {e}",
+                target_path.display()
+            ))
+        })?;
+        Ok(content.len())
+    }
+
     pub fn write_file(&self, rel_path: &str, content: &str) -> Result<usize, AppError> {
         if content.len() > MAX_WRITE_BYTES {
             return Err(AppError::invalid_input(format!(

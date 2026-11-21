@@ -93,6 +93,7 @@ import type {
   McpImportResult,
   McpPreset,
   McpServer,
+  ArtCraftPreset,
   McpServerSaveRequest,
   McpTool,
   LibraryStatus,
@@ -961,6 +962,10 @@ export class ApiClient {
 
   async mcpPresets(): Promise<McpPreset[]> {
     return invoke<McpPreset[]>("mcp_presets");
+  }
+
+  async mcpArtcraftPresets(): Promise<ArtCraftPreset[]> {
+    return invoke<ArtCraftPreset[]>("mcp_artcraft_presets");
   }
 
   async saveMcpServer(req: McpServerSaveRequest): Promise<McpServer[]> {

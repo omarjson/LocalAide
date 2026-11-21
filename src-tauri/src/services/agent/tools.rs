@@ -12,6 +12,7 @@ use crate::app::state::AppState;
 use crate::config::McpServerConfig;
 use crate::domain::memory::Citation;
 use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
+use crate::services::office;
 use crate::services::tools::shell;
 
 /// Which groups of tools this chat may use.
@@ -55,6 +56,7 @@ pub enum ToolKind {
     ReadFile,
     SearchFiles,
     WriteFile,
+    MakeDocument,
     RunCommand,
     AskUser,
     Todos,
@@ -72,7 +74,7 @@ impl ToolKind {
             Self::ListSkills | Self::UseSkill | Self::SaveSkill => "skills",
             Self::Todos => "todos",
             Self::Subagent => "subagent",
-            Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile => "files",
+            Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile | Self::MakeDocument => "files",
             Self::RunCommand => "shell",
             Self::AskUser => "question",
             Self::Mcp => "mcp",
@@ -81,7 +83,7 @@ impl ToolKind {
 
     /// Tools that change something wait for the user.
     pub fn changes_something(self) -> bool {
-        matches!(self, Self::SaveNote | Self::WriteFile | Self::Mcp)
+        matches!(self, Self::SaveNote | Self::WriteFile | Self::MakeDocument | Self::Mcp)
     }
 }
 
@@ -283,6 +285,22 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
                 &["path", "content"],
             ),
         ));
+        specs.push(builtin(
+            "make_document",
+            ToolKind::MakeDocument,
+            "Make a real Word, Excel or PowerPoint file in the folder this chat works in. Pick a kind: docx for reports (headings, paragraphs, bullets, tables), xlsx for spreadsheets (sheets of rows), pptx for a slide deck (slides with titles and bullets). The user approves the write first.",
+            object(
+                json!({
+                    "path": {"type": "string", "description": "File name ending in .docx, .xlsx or .pptx."},
+                    "kind": {"type": "string", "enum": ["docx", "xlsx", "pptx"], "description": "Which Office format to write. Defaults from the path ending when it is clear."},
+                    "title": {"type": "string", "description": "The document or deck title, shown at the top."},
+                    "blocks": {"type": "array", "description": "Word content, in order: {kind: heading|paragraph|bullet|table, text, items, rows, level}.", "items": {"type": "object"}},
+                    "sheets": {"type": "array", "description": "Excel sheets: {name, rows: [[cell, ...]]}.", "items": {"type": "object"}},
+                    "slides": {"type": "array", "description": "Deck slides: {title, bullets: []}.", "items": {"type": "object"}}
+                }),
+                &["path"],
+            ),
+        ));
     }
     if perms.shell {
         specs.push(builtin(
@@ -480,6 +498,7 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadFile => "Read a file".to_string(),
         ToolKind::SearchFiles => "Searched workspace files".to_string(),
         ToolKind::WriteFile => "Write a file".to_string(),
+        ToolKind::MakeDocument => "Make a document".to_string(),
         ToolKind::RunCommand => "Run a command".to_string(),
         ToolKind::AskUser => "Asked you".to_string(),
         ToolKind::Todos => "Updated the plan".to_string(),
@@ -529,6 +548,126 @@ pub struct RunContext<'a> {
     pub cancel: &'a std::sync::atomic::AtomicBool,
     /// The folder this chat works in.
     pub jail: &'a crate::services::tools::sandbox::WorkspaceJail,
+}
+
+/// Office Maker: builds a real .docx, .xlsx or .pptx from the blocks the
+/// model sends, and writes it inside the chat's folder.
+fn make_document(
+    state: &AppState,
+    args: &Value,
+    jail: &crate::services::tools::sandbox::WorkspaceJail,
+    max_chars: usize,
+) -> ToolOutcome {
+    let path = args
+        .get("path")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if path.is_empty() {
+        return failed("The document needs a file name.");
+    }
+    let lower = path.to_lowercase();
+    let kind = args
+        .get("kind")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if lower.ends_with(".xlsx") {
+                "xlsx".to_string()
+            } else if lower.ends_with(".pptx") {
+                "pptx".to_string()
+            } else {
+                "docx".to_string()
+            }
+        });
+    let title = args
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let blocks: Vec<office::DocBlock> = args
+        .get("blocks")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|b| serde_json::from_value(b.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let sheets: Vec<office::Sheet> = args
+        .get("sheets")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|b| serde_json::from_value(b.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let slides: Vec<office::Slide> = args
+        .get("slides")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|b| serde_json::from_value(b.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let built = match kind.as_str() {
+        "xlsx" => office::make_xlsx(&sheets),
+        "pptx" => office::make_pptx(&title, &slides),
+        _ => office::make_docx(&title, &blocks),
+    };
+    let bytes = match built {
+        Ok(bytes) => bytes,
+        Err(e) => return failed(e.message),
+    };
+    // The right ending beats whatever the model named it.
+    let wanted = match kind.as_str() {
+        "xlsx" => ".xlsx",
+        "pptx" => ".pptx",
+        _ => ".docx",
+    };
+    let path = if lower.ends_with(wanted) {
+        path
+    } else {
+        let trimmed = path
+            .trim_end_matches(".docx")
+            .trim_end_matches(".xlsx")
+            .trim_end_matches(".pptx");
+        format!("{trimmed}{wanted}")
+    };
+
+    let written = match jail.write_bytes(&path, &bytes) {
+        Ok(size) => size,
+        Err(e) => return failed(e.message),
+    };
+    state.tools.record_event(
+        "chat",
+        "make_document",
+        &path,
+        "written",
+        Some(&format!("{kind}, {written} bytes")),
+    );
+    let name = path
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(&path)
+        .to_string();
+    let (for_model, _truncated) = cut(
+        &format!(
+            "The document {name} is on disk: {kind}, {written} bytes, in the chat's folder. Tell the user the file name."
+        ),
+        max_chars,
+    );
+    ToolOutcome {
+        ok: true,
+        for_model,
+        summary: format!("Made {name}"),
+        for_user: format!("{name} — {kind}, {} KB", (written + 1023) / 1024),
+        citations: Vec::new(),
+    }
 }
 
 /// Run a terminal command and describe the result for the model and the
@@ -738,6 +877,7 @@ pub fn run(
             None,
             max_chars,
         ),
+        ToolKind::MakeDocument => make_document(state, args, ctx.jail, max_chars),
         ToolKind::RunCommand => run_command(state, args, max_chars, ctx),
         // Handled by the chat loop, which ends the answer with the question.
         ToolKind::AskUser => ToolOutcome {
