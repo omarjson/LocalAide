@@ -54,7 +54,7 @@
         </ul>
       </div>
     {:else}
-      <svg viewBox={`0 0 ${W} ${H}`} class="w-full" role="img" aria-label={chart.title || `${chart.type} chart`}>
+      <svg viewBox={`0 0 ${W} ${H}`} class="block max-h-64 w-full" role="img" aria-label={chart.title || `${chart.type} chart`}>
         {#each ticks as t, i (i)}
           <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--color-ink-800)" stroke-width="1" />
           <text x={PAD.l - 6} y={y(t) + 4} text-anchor="end" class="axis">{fmt(t)}</text>
@@ -63,11 +63,12 @@
           {@const n = chart.labels.length || 1}
           {@const band = (W - PAD.l - PAD.r) / n}
           {@const groups = chart.series.length}
-          {@const bw = Math.max(2, (band * 0.72) / groups)}
+          {@const bw = Math.min(48, Math.max(2, (band * 0.6) / groups))}
+          {@const offset = (band - bw * groups) / 2}
           {#each chart.labels as label, li (li)}
             {#each chart.series as s, si (si)}
               {@const v = s.values[li] ?? 0}
-              <rect x={PAD.l + band * li + band * 0.14 + bw * si} y={Math.min(y(v), y(0))} width={bw - 1} height={Math.abs(y(0) - y(v))} rx="2" fill={PALETTE[si % PALETTE.length]}><title>{s.name ? `${s.name}, ` : ""}{label}: {v}</title></rect>
+              <rect x={PAD.l + band * li + offset + bw * si} y={Math.min(y(v), y(0))} width={bw - 1} height={Math.abs(y(0) - y(v))} rx="2" fill={PALETTE[si % PALETTE.length]}><title>{s.name ? `${s.name}, ` : ""}{label}: {v}</title></rect>
             {/each}
             <text x={PAD.l + band * li + band / 2} y={H - PAD.b + 16} text-anchor="middle" class="axis">{label.length > 12 ? `${label.slice(0, 11)}…` : label}</text>
           {/each}

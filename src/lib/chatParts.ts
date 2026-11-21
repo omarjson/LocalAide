@@ -65,7 +65,8 @@ export function questionItems(part: Extract<MessagePart, { type: "question" }>):
 }
 
 /** The model's newest to-do list replaces the old one. */
-export function setTodos(parts: MessagePart[], items: TodoItem[]): void {
+export function setTodos(parts: MessagePart[], items: TodoItem[], now = performance.now()): void {
+  closeReasoning(parts, now);
   const existing = parts.find((p): p is Extract<MessagePart, { type: "todos" }> => p.type === "todos");
   if (existing) existing.items = items;
   else parts.push({ type: "todos", items });
@@ -109,6 +110,10 @@ export function finishTool(
 /** Tools still running when an answer stops count as stopped. */
 export function settleParts(parts: MessagePart[], now: number): void {
   closeReasoning(parts, now);
+  // A thinking block that something else followed is closed too.
+  for (const p of parts as ReasoningPart[]) {
+    if (p.type === "reasoning" && (p.ms === null || p.ms === undefined)) p.ms = p.started_at !== undefined ? Math.max(0, now - p.started_at) : 0;
+  }
   for (const p of parts) {
     if (p.type === "tool" && (p.status === "running" || p.status === "waiting")) {
       p.status = "failed";

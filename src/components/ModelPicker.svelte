@@ -2,7 +2,7 @@
   // The chat's model menu: the provider at the top (tap it to switch),
   // that provider's models with a search, and the thinking effort as a
   // slider for the active model (Ctrl+T steps through it).
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { fly } from "svelte/transition";
   import Icon from "./Icon.svelte";
   import { dur, motion } from "../lib/motion";
@@ -63,9 +63,11 @@
 
   $effect(() => {
     if (open) {
-      view = "models";
-      viewing = null;
-      cursor = Math.max(0, rows.findIndex((m) => m.active));
+      untrack(() => {
+        view = "models";
+        viewing = null;
+        cursor = Math.max(0, rows.findIndex((m) => m.active));
+      });
       void tick().then(() => searchEl?.focus());
     } else {
       query = "";

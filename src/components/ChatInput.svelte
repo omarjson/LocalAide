@@ -343,7 +343,7 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Answering… press Esc to stop" : suggestion ? `${suggestion}   ⇥ Tab` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
+      placeholder={streaming ? "Answering… press Esc to stop" : suggestion ? `Tab to use: ${suggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
       readonly={streaming}
       aria-busy={streaming}
       rows={1}

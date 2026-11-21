@@ -1021,12 +1021,10 @@
   // Work status: the newest to-do list, and every subagent in this chat.
   type ToolPart = Extract<MessagePart, { type: "tool" }>;
   const workTodos = $derived.by(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const t = messages[i].parts?.find((p) => p.type === "todos");
-      if (t?.type === "todos") return t.items;
-      if (messages[i].role === "user" && i < messages.length - 2) break;
-    }
-    return null;
+    // Only the newest answer's plan: a new question starts a new task.
+    const last = messages.at(-1);
+    const t = last?.role === "assistant" ? last.parts?.find((p) => p.type === "todos") : undefined;
+    return t?.type === "todos" ? t.items : null;
   });
   const workAgents = $derived(messages.flatMap((m) => (m.parts ?? []).filter((p): p is ToolPart => p.type === "tool" && p.group === "subagent")));
 
@@ -1393,6 +1391,10 @@
     {/if}
   </div>
 
+
+
+  <div class="shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 md:px-6">
+    <div class={`relative mx-auto ${chatWidth}`}>
   {#if userScrolledUp}
     <button
       type="button"
@@ -1400,12 +1402,9 @@
       aria-label="Scroll to the newest message"
       in:fly={{ y: 8, duration: dur(motion.base) }}
       out:fade={{ duration: dur(100) }}
-      class="absolute bottom-40 left-1/2 z-10 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-edge bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
+      class="absolute -top-12 right-2 z-10 grid h-9 w-9 place-items-center rounded-full border border-edge bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
     ><Icon name="arrow-down" class="h-4 w-4" /></button>
   {/if}
-
-  <div class="shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 md:px-6">
-    <div class={`mx-auto ${chatWidth}`}>
       {#if chatError}
         <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
       {/if}
