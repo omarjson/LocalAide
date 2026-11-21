@@ -1002,7 +1002,10 @@ fn suggest_note(state: &AppState, title: &str, content: &str) -> ToolOutcome {
                 title.trim()
             ),
             summary: "Suggested".into(),
-            for_user: format!("Suggested a note: \"{}\". Review it in Memory.", title.trim()),
+            for_user: format!(
+                "Suggested a note: \"{}\". Review it in Memory.",
+                title.trim()
+            ),
             citations: Vec::new(),
         },
         Err(e) => failed(format!("The suggestion could not be saved: {}", e.message)),
