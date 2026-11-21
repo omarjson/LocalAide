@@ -31,7 +31,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 # In-app updates (ADR-0005). Signed packages only; the user confirms each one.
 tauri-plugin-updater = "2"
-sysinfo = "0.32"
+sysinfo = "0.38"
 # reqwest 0.13 puts `.form()` behind the "form" feature (web search uses it).
 reqwest = { version = "0.13", features = ["json", "stream", "blocking", "form", "multipart"] }
 url = "2"
