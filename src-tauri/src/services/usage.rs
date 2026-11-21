@@ -267,7 +267,7 @@ fn summary_at(
         prev = Some(stamp);
     }
 
-    let per_day = per_day
+    let per_day: Vec<UsageDay> = per_day
         .into_iter()
         .map(|(date, (d_answers, d_input, d_output))| UsageDay {
             date,

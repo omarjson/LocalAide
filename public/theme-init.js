@@ -13,4 +13,17 @@
     theme = prefersLight ? "light" : "dark";
   }
   document.documentElement.dataset.theme = theme;
+  var accent = null;
+  var font = null;
+  var density = null;
+  try {
+    accent = window.localStorage.getItem("localaide-accent");
+    font = window.localStorage.getItem("localaide-font");
+    density = window.localStorage.getItem("localaide-density");
+  } catch (e) {
+    // Storage unavailable: defaults stay.
+  }
+  if (accent && accent !== "ember") document.documentElement.dataset.accent = accent;
+  if (font && font !== "system") document.documentElement.dataset.font = font;
+  if (density && density !== "comfortable") document.documentElement.dataset.density = density;
 })();
