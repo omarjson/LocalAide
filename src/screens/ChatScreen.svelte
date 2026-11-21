@@ -109,15 +109,51 @@
     try { localStorage.setItem(COLLAPSE_KEY, collapseQuestions ? "on" : "off"); } catch { /* storage unavailable */ }
   };
   let pickerOpen = $state(false);
+  // Mode and context switches, remembered between sessions.
+  const OPTIONS_KEY = "localaide-chat-options";
+  const savedOptions = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as {
+        mode?: unknown;
+        web?: unknown;
+        recall?: unknown;
+        files?: unknown;
+        skills?: unknown;
+        shell?: unknown;
+        approvals?: unknown;
+        mcpOff?: unknown;
+        efforts?: unknown;
+        autoCompactAt?: unknown;
+        learnSkills?: unknown;
+        suggestNext?: unknown;
+        visuals?: unknown;
+        subagents?: unknown;
+        buildMode?: unknown;
+        chatModels?: unknown;
+      };
+    } catch {
+      return {};
+    }
+  })();
+
+  // Each chat keeps its own model: switching mid-chat keeps the whole
+  // thread, and a new chat follows the app-wide default again. Crush-style.
+  let chatModels = $state<Record<string, string>>(
+    savedOptions.chatModels && typeof savedOptions.chatModels === "object"
+      ? (savedOptions.chatModels as Record<string, string>)
+      : {},
+  );
+
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
-  const activeChoice = $derived<ModelChoice | null>(
-    (activeThreadId && chatModels[activeThreadId]
-      ? choices?.models.find((m) => m.key === chatModels[activeThreadId])
-      : null) ??
+  const activeChoice = $derived.by(() => {
+    const key = activeThreadId ? chatModels[activeThreadId] : undefined;
+    return (
+      (key ? choices?.models.find((m) => m.key === key) : null) ??
       choices?.models.find((m) => m.active) ??
-      null,
-  );
+      null
+    );
+  });
   const onlineChoice = $derived(activeChoice && activeChoice.provider_id !== null ? activeChoice : null);
   // Whether a local model is loaded in the engine right now.
   let engineLoaded = $state(false);
@@ -198,32 +234,6 @@
 
   let { onOpenModels, newThreadTick = 0, active = true }: { onOpenModels?: () => void; newThreadTick?: number; active?: boolean } = $props();
 
-  // Mode and context switches, remembered between sessions.
-  const OPTIONS_KEY = "localaide-chat-options";
-  const savedOptions = (() => {
-    try {
-      return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as {
-        mode?: unknown;
-        web?: unknown;
-        recall?: unknown;
-        files?: unknown;
-        skills?: unknown;
-        shell?: unknown;
-        approvals?: unknown;
-        mcpOff?: unknown;
-        efforts?: unknown;
-        autoCompactAt?: unknown;
-        learnSkills?: unknown;
-        suggestNext?: unknown;
-        visuals?: unknown;
-        subagents?: unknown;
-        buildMode?: unknown;
-        chatModels?: unknown;
-      };
-    } catch {
-      return {};
-    }
-  })();
   let mode = $state<ChatModeId>(isChatMode(savedOptions.mode) ? savedOptions.mode : "standard");
   let useWeb = $state(savedOptions.web === true);
   let useRecall = $state(savedOptions.recall !== false);
@@ -260,13 +270,6 @@
     return activeChoice.efforts.includes("medium") ? "medium" : "auto";
   });
   let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
-  // Each chat keeps its own model: switching mid-chat keeps the whole
-  // thread, and a new chat follows the app-wide default again. Crush-style.
-  let chatModels = $state<Record<string, string>>(
-    savedOptions.chatModels && typeof savedOptions.chatModels === "object"
-      ? (savedOptions.chatModels as Record<string, string>)
-      : {},
-  );
   $effect(() => {
     try {
       localStorage.setItem(
