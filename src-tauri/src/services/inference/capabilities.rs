@@ -329,7 +329,10 @@ mod tests {
         );
         assert!(effort_levels("deepseek-reasoner", false).is_empty());
         assert_eq!(effort_levels("qwen3-4b", true), ["off", "on"]);
-        assert_eq!(effort_levels("grok-4", false), ["minimal", "low", "medium", "high", "xhigh"]);
+        assert_eq!(
+            effort_levels("grok-4", false),
+            ["minimal", "low", "medium", "high", "xhigh"]
+        );
         // Unknown online models get the whole ladder, medium in the middle.
         assert_eq!(
             effort_levels("some-router-model", false),
