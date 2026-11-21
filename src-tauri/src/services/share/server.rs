@@ -404,6 +404,7 @@ fn chat(state: &AppState, shared: &Shared, body: Value) -> Result<Receiver<Strin
                     },
                     total_tokens: done.tokens,
                     prompt_tokens: done.prompt_tokens,
+                    cache_tokens: done.cache_tokens,
                 }
             }
             Err(e) => {

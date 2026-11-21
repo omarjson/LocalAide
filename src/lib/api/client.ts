@@ -23,6 +23,7 @@ import type {
   CatalogStatus,
   ChatPrefs,
   ChatMessage,
+  ModelPrice,
   ChatStreamEvent,
   ChatStreamRequest,
   ChatThread,
@@ -384,6 +385,16 @@ export class ApiClient {
   /** Aggregated answer usage. days 1 = today, 0 = all time, else the rolling window. */
   async usageSummary(days?: number, folder?: string | null): Promise<UsageSummary> {
     return invoke<UsageSummary>("usage_summary", { days: days ?? null, folder: folder ?? null });
+  }
+
+  /** What each online model costs, USD per 1M tokens. */
+  async modelPrices(): Promise<Record<string, ModelPrice>> {
+    return invoke<Record<string, ModelPrice>>("settings_model_prices");
+  }
+
+  /** Replace the whole price table and return the saved one. */
+  async setModelPrices(prices: Record<string, ModelPrice>): Promise<Record<string, ModelPrice>> {
+    return invoke<Record<string, ModelPrice>>("settings_set_model_prices", { prices });
   }
 
   // Library status, folder presets and indexing with progress

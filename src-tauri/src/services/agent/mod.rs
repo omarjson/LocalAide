@@ -150,6 +150,8 @@ pub struct AgentRun {
     /// The project folder the chat works in, when one was picked —
     /// remembered so usage can be counted per project.
     pub folder: Option<String>,
+    /// The chat thread this run answers in, so usage groups into sessions.
+    pub session: Option<String>,
 }
 
 pub struct RunResult {
@@ -161,6 +163,8 @@ pub struct RunResult {
     pub ttft_ms: Option<u64>,
     /// Prompt size the server reported for the last round, when known.
     pub prompt_tokens: Option<usize>,
+    /// Cached prompt tokens the server reported for the last round.
+    pub cache_tokens: Option<usize>,
 }
 
 fn estimate_tokens(turns: &[ChatTurn]) -> usize {
@@ -263,6 +267,7 @@ pub fn run(
     let source = run.source;
     // Owned copies taken before `run` moves into `run_inner`.
     let folder = run.folder.clone();
+    let session = run.session.clone();
     let (model, provider, local) = match &run.target {
         ChatTarget::Local => (
             state
@@ -299,6 +304,8 @@ pub fn run(
             tool_calls: done.tool_calls,
             source: source.to_string(),
             folder,
+            session,
+            cache_tokens: done.cache_tokens,
         });
     }
     result
@@ -360,6 +367,8 @@ fn run_inner(
     let mut tool_calls_run = 0usize;
     let mut ttft_ms: Option<u64> = None;
     let mut prompt_tokens: Option<usize> = None;
+    let mut cache_tokens: Option<usize> = None;
+    let mut cache_tokens: Option<usize> = None;
     let mut seen_ids: HashSet<String> = HashSet::new();
     let client = engine.chat_client();
 
@@ -373,6 +382,7 @@ fn run_inner(
                 tool_calls: tool_calls_run,
                 ttft_ms,
                 prompt_tokens,
+                cache_tokens,
             });
         }
         let last_round = round + 1 == run.max_rounds;
@@ -430,6 +440,9 @@ fn run_inner(
         if outcome.prompt_tokens.is_some() {
             prompt_tokens = outcome.prompt_tokens;
         }
+        if outcome.cache_tokens.is_some() {
+            cache_tokens = outcome.cache_tokens;
+        }
         total_tokens += outcome.completion_tokens.unwrap_or(outcome.pieces);
         if outcome.cancelled {
             return Ok(RunResult {
@@ -439,6 +452,7 @@ fn run_inner(
                 tool_calls: tool_calls_run,
                 ttft_ms,
                 prompt_tokens,
+                cache_tokens,
             });
         }
         let wants_tools = !outcome.tool_calls.is_empty() && !specs.is_empty() && !opts.forbid_tools;
@@ -571,6 +585,7 @@ fn run_inner(
         tool_calls: tool_calls_run,
         ttft_ms,
         prompt_tokens,
+        cache_tokens,
     })
 }
 
@@ -917,6 +932,7 @@ fn run_subagents(
                         // Subagent answers don't land in the usage log
                         // (run_inner skips them), so the folder is moot.
                         folder: None,
+                        session: None,
                     };
                     let sub = SubSink {
                         parent: sink,

@@ -208,17 +208,20 @@ const usageSummaryFixture = (args: Record<string, unknown>) => {
   return {
     days,
     answers: Math.max(1, Math.round(answers * scale)),
-
     cancelled: 2,
     input_tokens: Math.round(input * scale),
     output_tokens: Math.round(output * scale),
+    cache_tokens: Math.round(input * scale * 0.72),
     ms: Math.round(ms * scale),
     tool_calls: Math.round(answers * 1.4),
+    sessions: Math.max(1, Math.round(answers * 0.25)),
+    active_days: per_day.filter((d) => d.answers > 0).length,
+    longest_streak: 5,
     per_day,
     per_model: [
-      { model: "Qwen3.5 9B", provider: "This computer", answers: Math.round(answers * 0.55), input: Math.round(input * 0.6), output: Math.round(output * 0.5), avg_ms: 11000, avg_tok_s: 28.4, avg_ttft_ms: 780 },
-      { model: "kimi-k2.5", provider: "Kilo Code (free)", answers: Math.round(answers * 0.3), input: Math.round(input * 0.25), output: Math.round(output * 0.32), avg_ms: 6000, avg_tok_s: 62.5, avg_ttft_ms: 410 },
-      { model: "gpt-5-mini", provider: "OpenRouter", answers: Math.round(answers * 0.15), input: Math.round(input * 0.15), output: Math.round(output * 0.18), avg_ms: 5200, avg_tok_s: 88.1, avg_ttft_ms: 320 },
+      { model: "Qwen3.5 9B", provider: "This computer", answers: Math.round(answers * 0.55), input: Math.round(input * 0.6), output: Math.round(output * 0.5), cache: 0, steps: Math.round(answers * 0.7), avg_ms: 11000, avg_tok_s: 28.4, avg_ttft_ms: 780 },
+      { model: "kimi-k2.5", provider: "Kilo Code (free)", answers: Math.round(answers * 0.3), input: Math.round(input * 0.25), output: Math.round(output * 0.32), cache: Math.round(input * 0.2), steps: Math.round(answers * 0.5), avg_ms: 6000, avg_tok_s: 62.5, avg_ttft_ms: 410 },
+      { model: "gpt-5-mini", provider: "OpenRouter", answers: Math.round(answers * 0.15), input: Math.round(input * 0.15), output: Math.round(output * 0.18), cache: Math.round(input * 0.08), steps: Math.round(answers * 0.2), avg_ms: 5200, avg_tok_s: 88.1, avg_ttft_ms: 320 },
     ],
     per_folder: [
       { folder: "C:\\Users\\Omar\\Documents\\finance", answers: Math.round(answers * 0.5), input: Math.round(input * 0.55), output: Math.round(output * 0.45), ms: Math.round(ms * 0.45) },
@@ -297,6 +300,11 @@ const fixtures: Record<string, Handler> = {
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
   chat_prefs_set: () => null,
   usage_summary: (args) => usageSummaryFixture(args as Record<string, unknown>),
+  settings_model_prices: () => ({
+    "kimi-k2.5": { input: 0.6, output: 2.5, cache_read: 0.1 },
+    "gpt-5-mini": { input: 0.25, output: 2.0, cache_read: 0.025 },
+  }),
+  settings_set_model_prices: (args) => args?.prices ?? {},
   chat_target_set: (args) => {
     // Flip the active model, so the picker's active row and the effort
     // ladder follow the choice like the real backend does.
@@ -541,7 +549,7 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
         push({ type: "token", payload: { token: chunks[c++] } });
         setTimeout(tokenTick, 24);
       } else {
-        push({ type: "done", payload: { finish_reason: "stop", total_tokens: 180, prompt_tokens: 960 } });
+        push({ type: "done", payload: { finish_reason: "stop", total_tokens: 180, prompt_tokens: 960, cache_tokens: 640 } });
       }
     };
     tokenTick();

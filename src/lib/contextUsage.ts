@@ -74,6 +74,40 @@ export function contextUsage(
   };
 }
 
+/** One slice of what fills the context window, for the hover breakdown. */
+export interface ContextSegment {
+  label: string;
+  tokens: number;
+}
+
+const TOOL_SPEC_TOKENS = 400;
+const MCP_TOOL_TOKENS = 800;
+
+/**
+ * What composes the prompt, the way the model receives it: the message
+ * history, the tool schemas, the meta context (pinned notes, folder line),
+ * the skill list and the system instructions. Everything is the same
+ * chars/4 estimate as the meter, so shares match its total.
+ */
+export function contextSegments(
+  messages: ChatMessage[],
+  opts: { from?: number; draft?: string; systemPrompt?: string; tools?: number; mcpServers?: number; pinnedNotes?: string[]; skills?: { name: string; description: string }[]; skillsOn?: boolean } = {},
+): ContextSegment[] {
+  const sent = messages.slice(opts.from ?? 0).filter(sentAsHistory);
+  const messageTokens = sent.reduce((sum, m) => sum + estimateTokens(m.content) + 4, 0) + estimateTokens(opts.draft ?? "");
+  const segments: ContextSegment[] = [{ label: "Messages", tokens: messageTokens }];
+  const tools = (opts.tools ?? 0) * TOOL_SPEC_TOKENS + (opts.mcpServers ?? 0) * MCP_TOOL_TOKENS;
+  if (tools > 0) segments.push({ label: "System tools", tokens: tools });
+  const meta = (opts.pinnedNotes ?? []).reduce((sum, note) => sum + estimateTokens(note) + 16, 60);
+  segments.push({ label: "Meta context", tokens: meta });
+  if (opts.skillsOn) {
+    const skillTokens = (opts.skills ?? []).reduce((sum, skill) => sum + estimateTokens(skill.name) + estimateTokens(skill.description) + 24, 0);
+    if (skillTokens > 0) segments.push({ label: "Skills", tokens: skillTokens });
+  }
+  segments.push({ label: "System prompt", tokens: PROMPT_OVERHEAD_TOKENS + estimateTokens(opts.systemPrompt ?? "") });
+  return segments;
+}
+
 /** True when the chat is under the threshold and the answer still fits. */
 export const fits = (u: ContextUsage, threshold: number): boolean => u.percent < threshold && !u.overflow;
 

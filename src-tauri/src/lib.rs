@@ -262,6 +262,8 @@ pub fn run() {
             commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,
+            commands::settings_model_prices,
+            commands::settings_set_model_prices,
             commands::settings_model_memory,
             commands::settings_set_model_memory,
             commands::chat_prefs_get,

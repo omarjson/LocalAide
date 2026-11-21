@@ -28,7 +28,7 @@
   import ChatInput from "../components/ChatInput.svelte";
   import ModelPicker from "../components/ModelPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
-  import { compactionStart, contextUsage, fits } from "../lib/contextUsage";
+  import { compactionStart, contextSegments, contextUsage, fits } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
 
   let messages = $state<ChatMessage[]>([]);
@@ -685,6 +685,8 @@
   // The server's own prompt count from the last answer beats the chars/4
   // estimate whenever it reports one.
   let realPromptTokens = $state<number | null>(null);
+  // Cache hit rate of the last answer, when the provider reports cached tokens.
+  let lastCacheRate = $state<number | null>(null);
   const usage = $derived.by(() => {
     const estimate = contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve });
     if (realPromptTokens !== null && activeChoice?.context) {
@@ -692,6 +694,20 @@
     }
     return estimate;
   });
+  // What the window is made of, for the hover breakdown: history, tool
+  // schemas, meta context, skills and instructions.
+  const segments = $derived(
+    contextSegments(messages, {
+      from: historyFrom,
+      draft: input,
+      systemPrompt,
+      tools: allowedTools.length,
+      mcpServers: mcpList.length,
+      pinnedNotes: pinnedTitles,
+      skills,
+      skillsOn: useSkills && moduleOn("skills"),
+    }),
+  );
 
   /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
   const compactConversation = (threshold = autoCompactAt, draft = "") => {
@@ -870,6 +886,7 @@
     previousDraft = null;
     planReady = false;
     realPromptTokens = null;
+    lastCacheRate = null;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
     for (const m of messages) {
@@ -945,6 +962,7 @@
           history,
           images,
           model,
+          thread_id: activeThreadId,
           system_prompt: systemPrompt,
           temperature,
           max_tokens: maxTokens,
@@ -1007,6 +1025,9 @@
           } else if (event.type === "done") {
             settleParts(parts(), now);
             realPromptTokens = event.payload.prompt_tokens ?? null;
+            lastCacheRate = event.payload.prompt_tokens && event.payload.cache_tokens
+              ? Math.min(100, (event.payload.cache_tokens / event.payload.prompt_tokens) * 100)
+              : null;
             answer().stats = {
               tokens: event.payload.total_tokens,
               inputTokens: event.payload.prompt_tokens
@@ -1550,6 +1571,8 @@
       toolRounds={runToolRounds}
       live={streaming}
       {usage}
+      {segments}
+      cacheRate={lastCacheRate}
       {autoCompactAt}
       onAsk={askFromRail}
       onSkill={skillFromRail}
@@ -1907,7 +1930,7 @@
           <PermissionMenu mode={approvalMode} onChange={setApprovalMode} />
         {/snippet}
         {#snippet trailing()}
-          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} onCompact={() => handleSlashCommand("compact")} />
+          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} onCompact={() => handleSlashCommand("compact")} />
           <ModelPicker
             {effort}
             onEffort={setEffort}

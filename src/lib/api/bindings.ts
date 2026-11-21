@@ -315,6 +315,7 @@ export interface ChatStreamRequest {
   message: string;
   model: string;
   system_prompt?: string;
+  thread_id?: string | null;
   temperature?: number;
   max_tokens?: number;
   history?: ChatMessage[];
@@ -367,7 +368,7 @@ export type ChatStreamEvent =
   | { type: "token"; payload: { token: string } }
   | { type: "citation"; payload: Citation }
   | { type: "status"; payload: { label: string } }
-  | { type: "done"; payload: { finish_reason: string; total_tokens: number; prompt_tokens?: number | null } }
+  | { type: "done"; payload: { finish_reason: string; total_tokens: number; prompt_tokens?: number | null; cache_tokens?: number | null } }
   | { type: "error"; payload: { error: string } }
   | { type: "reasoning"; payload: { text: string } }
   | {
@@ -479,9 +480,18 @@ export interface UsageModel {
   answers: number;
   input: number;
   output: number;
+  cache: number;
+  steps: number;
   avg_ms: number;
   avg_tok_s: number | null;
   avg_ttft_ms: number | null;
+}
+
+/** What one model costs, USD per 1M tokens. */
+export interface ModelPrice {
+  input: number;
+  output: number;
+  cache_read: number | null;
 }
 
 export interface UsageProject {
@@ -498,8 +508,12 @@ export interface UsageSummary {
   cancelled: number;
   input_tokens: number;
   output_tokens: number;
+  cache_tokens: number;
   ms: number;
   tool_calls: number;
+  sessions: number;
+  active_days: number;
+  longest_streak: number;
   per_day: UsageDay[];
   per_model: UsageModel[];
   per_folder: UsageProject[];

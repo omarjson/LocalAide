@@ -183,6 +183,8 @@ pub struct StreamOutcome {
     pub completion_tokens: Option<usize>,
     /// Prompt size the server reported, the context meter's ground truth.
     pub prompt_tokens: Option<usize>,
+    /// Cached prompt tokens the server reported, when it does.
+    pub cache_tokens: Option<usize>,
     /// Content and reasoning pieces received, a fallback token count.
     pub pieces: usize,
     pub cancelled: bool,
@@ -758,6 +760,13 @@ pub fn apply_event(
         .and_then(Value::as_u64)
     {
         outcome.prompt_tokens = Some(tokens as usize);
+    }
+    if let Some(tokens) = usage
+        .and_then(|u| u.get("prompt_tokens_details"))
+        .and_then(|d| d.get("cached_tokens"))
+        .and_then(Value::as_u64)
+    {
+        outcome.cache_tokens = Some(tokens as usize);
     }
     let Some(choice) = event.get("choices").and_then(|c| c.get(0)) else {
         return Ok(Vec::new());

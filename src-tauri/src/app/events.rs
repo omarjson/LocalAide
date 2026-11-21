@@ -23,6 +23,8 @@ pub enum ChatStreamEvent {
         total_tokens: usize,
         /// The server's own prompt count for the last round, when reported.
         prompt_tokens: Option<usize>,
+        /// Cached prompt tokens the server reported, when it does.
+        cache_tokens: Option<usize>,
     },
     Error {
         error: String,

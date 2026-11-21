@@ -3,7 +3,7 @@
   import { popover } from "../lib/actions/popover";
   import { dur, motion } from "../lib/motion";
   import { contextLabel } from "../lib/chatParts";
-  import type { ContextUsage } from "../lib/contextUsage";
+  import type { ContextSegment, ContextUsage } from "../lib/contextUsage";
 
   interface Props {
     usage: ContextUsage;
@@ -11,11 +11,32 @@
     autoCompactAt: number;
     /** Older messages are already left out. */
     compacted?: boolean;
+    /** What fills the window, for the hover breakdown. */
+    segments?: ContextSegment[];
+    /** Cache hit rate of the last answer, 0-100, when the model reports it. */
+    cacheRate?: number | null;
     onCompact?: () => void;
   }
 
-  let { usage, streaming = false, autoCompactAt, compacted = false, onCompact }: Props = $props();
+  let { usage, streaming = false, autoCompactAt, compacted = false, segments = [], cacheRate = null, onCompact }: Props = $props();
   let open = $state(false);
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Opens on hover like a tooltip, stays while the pointer is inside, and
+  // click still toggles for touch and keyboard users.
+  const openSoon = () => {
+    clearTimeout(leaveTimer);
+    if (open) return;
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => (open = true), 300);
+  };
+  const closeSoon = () => {
+    clearTimeout(hoverTimer);
+    clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(() => (open = false), 180);
+  };
+  const keepOpen = () => clearTimeout(leaveTimer);
 
   const known = $derived(usage.limit > 0);
   // Ember until close to the auto-compact line, then a deeper burnt orange,
@@ -25,7 +46,14 @@
   const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n));
 </script>
 
-<div class="relative" use:popover={{ open, onClose: () => (open = false) }}>
+<div
+  class="relative"
+  role="presentation"
+  use:popover={{ open, onClose: () => (open = false) }}
+  onmouseenter={openSoon}
+  onmouseleave={closeSoon}
+  onfocusin={keepOpen}
+>
   <button
     type="button"
     class="meter-button"
@@ -48,15 +76,33 @@
           <div class="h-full rounded-full transition-[width] duration-300" style={`width:${usage.percent}%;background:${tone}`}></div>
         </div>
       {/if}
-      <dl class="mt-3 space-y-1 text-xs">
-        <div class="flex justify-between"><dt class="text-ink-400">Chat so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.input - usage.output)}</dd></div>
-        <div class="flex justify-between"><dt class="text-ink-400">Answers so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.output)}</dd></div>
-        <div class="flex justify-between"><dt class="text-ink-400">Instructions</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.overhead)}</dd></div>
-        <div class="flex justify-between"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
-        {#if known}
-          <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
-        {/if}
-      </dl>
+      {#if segments.length > 0 && known}
+        <!-- What the window is made of, biggest slice first, shares of the
+             used tokens so the rows read against the header percent. -->
+        <dl class="mt-3 space-y-1 text-xs">
+          {#each [...segments].sort((a, b) => b.tokens - a.tokens) as segment (segment.label)}
+            <div class="flex items-center justify-between gap-2">
+              <dt class="flex min-w-0 items-center gap-1.5 text-ink-400"><span class="segment-dot" aria-hidden="true"></span><span class="truncate">{segment.label}</span></dt>
+              <dd class="shrink-0 tabular-nums text-ink-200">{usage.used > 0 ? ((segment.tokens / usage.used) * 100).toFixed(1) : "0.0"}%</dd>
+            </div>
+          {/each}
+          {#if cacheRate !== null}
+            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Average cache hit rate</dt><dd class="tabular-nums text-ink-200">{cacheRate.toFixed(1)}%</dd></div>
+          {/if}
+          <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
+        </dl>
+      {:else}
+        <dl class="mt-3 space-y-1 text-xs">
+          <div class="flex justify-between"><dt class="text-ink-400">Chat so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.input - usage.output)}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-400">Answers so far</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.output)}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-400">Instructions</dt><dd class="tabular-nums text-ink-200">~{fmt(usage.overhead)}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
+          {#if known}
+            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
+          {/if}
+        </dl>
+      {/if}
       <p class="mt-3 text-xs leading-5 text-ink-500">
         Estimated from text length; the model's own count can differ. Cached tokens are not reported by this engine.
         {streaming ? "The answer is still growing." : known ? `At ${autoCompactAt}%, older messages stop being sent.` : ""}
@@ -75,4 +121,5 @@
   .meter-button:hover, .meter-button[aria-expanded="true"] { background: color-mix(in oklab, var(--color-veil) 7%, transparent); }
   .meter { height: 1.15rem; width: 1.15rem; border-radius: 9999px; background: conic-gradient(var(--tone) var(--usage), var(--color-ink-700) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); transition: background 300ms ease-out; }
   .meter-popover { position: absolute; bottom: calc(100% + 0.5rem); right: 0; z-index: 45; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55); }
+  .segment-dot { height: 0.4rem; width: 0.4rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-ember-400); }
 </style>

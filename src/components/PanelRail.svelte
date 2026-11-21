@@ -7,7 +7,7 @@
   import Icon from "./Icon.svelte";
   import WorkStatus from "./WorkStatus.svelte";
   import type { Citation, MessagePart, Skill, TodoItem } from "../lib/api/bindings";
-  import type { ContextUsage } from "../lib/contextUsage";
+  import type { ContextSegment, ContextUsage } from "../lib/contextUsage";
   import { dur, motion } from "../lib/motion";
 
   type ToolPart = Extract<MessagePart, { type: "tool" }>;
@@ -21,6 +21,9 @@
     toolRounds: number;
     live: boolean;
     usage: ContextUsage;
+    segments?: ContextSegment[];
+    /** Cache hit rate of the last answer, when the model reports it. */
+    cacheRate?: number | null;
     autoCompactAt: number;
     onAsk: (text: string) => void;
     onSkill: (name: string) => void;
@@ -28,7 +31,7 @@
     onClose: () => void;
   }
 
-  let { sources, skills, todos, subagents, startedAt, toolRounds, live, usage, autoCompactAt, onAsk, onSkill, onCompact, onClose }: Props = $props();
+  let { sources, skills, todos, subagents, startedAt, toolRounds, live, usage, segments = [], cacheRate = null, autoCompactAt, onAsk, onSkill, onCompact, onClose }: Props = $props();
 
   const busy = $derived(live || (todos?.length ?? 0) > 0 || subagents.length > 0 || startedAt !== null);
 </script>
@@ -84,7 +87,7 @@
           <button type="button" class="rounded-md px-2 py-0.5 text-xs text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100" onclick={onCompact} title="Compact: drop older turns to free room">Compact</button>
         {/if}
       </div>
-      <ContextMeter {usage} streaming={live} {autoCompactAt} compacted={false} onCompact={onCompact} />
+      <ContextMeter {usage} streaming={live} {autoCompactAt} {segments} {cacheRate} compacted={false} onCompact={onCompact} />
       {#if usage.limit > 0}
         <p class="mt-2 text-xs text-ink-500">{usage.used.toLocaleString()} of {usage.limit.toLocaleString()} tokens used{usage.overflow ? " — the next answer will not fit" : ""}</p>
       {/if}

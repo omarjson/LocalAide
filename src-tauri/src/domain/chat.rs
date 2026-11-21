@@ -127,6 +127,9 @@ pub struct ChatStreamRequest {
     pub message: String,
     pub model: String,
     pub system_prompt: Option<String>,
+    /// The thread the message belongs to, for per-session usage counts.
+    #[serde(default)]
+    pub thread_id: Option<String>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<i32>,
     /// Earlier turns of this conversation, oldest first. Excludes `message`.

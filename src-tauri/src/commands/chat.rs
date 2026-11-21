@@ -280,6 +280,7 @@ pub async fn chat_stream(
                     },
                     total_tokens: done.tokens,
                     prompt_tokens: done.prompt_tokens,
+                    cache_tokens: done.cache_tokens,
                 });
             }
             Err(e) => {
@@ -468,6 +469,7 @@ pub(crate) fn prepare_run(
         read_top_page: mode.gathers_web(),
         jail,
         folder: req.folder.clone(),
+        session: req.thread_id.clone(),
     };
     Ok((run, model_label, job_id, cancel_flag))
 }
