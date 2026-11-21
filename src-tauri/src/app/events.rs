@@ -57,6 +57,62 @@ pub enum ChatStreamEvent {
         summary: String,
         output: String,
     },
+    /// The model asked the user a question with options (`ask_user`). The
+    /// answer ends here; the user's choice is the next message.
+    Question {
+        id: String,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+        /// Every question of this call, with option descriptions. The
+        /// fields above repeat the first one, for older readers.
+        #[serde(default)]
+        items: Vec<QuestionItem>,
+    },
+    /// The model's to-do list for this task (`update_todos`), shown as
+    /// "Completed 2/4" in the work status above the chat box.
+    Todos {
+        items: Vec<TodoItem>,
+    },
+    /// What a subagent (`run_subagent`, tool call `id`) is doing now.
+    SubagentStep {
+        id: String,
+        step: String,
+    },
+    /// The model saved or improved a skill on its own (`save_skill`). The
+    /// chat shows a note with Undo, which calls `skills_undo(change_id)`.
+    SkillChange {
+        id: String,
+        change_id: String,
+        name: String,
+        /// "created" or "updated".
+        action: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QuestionOption {
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QuestionItem {
+    /// A short heading such as "Clarify", may be empty.
+    #[serde(default)]
+    pub header: String,
+    pub question: String,
+    pub options: Vec<QuestionOption>,
+    #[serde(default)]
+    pub multiple: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TodoItem {
+    pub text: String,
+    /// "pending", "in_progress" or "done".
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

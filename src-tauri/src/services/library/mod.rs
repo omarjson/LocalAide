@@ -34,6 +34,30 @@ pub struct FolderReport {
     pub limited: bool,
 }
 
+/// What happens to one entry while a folder is added.
+pub enum FolderEvent<'a> {
+    Reading(&'a Path),
+    Indexed(&'a Path),
+    Skipped(&'a Path, &'static str),
+}
+
+/// A plain reason for a file the library did not add.
+fn skip_reason(message: &str) -> &'static str {
+    if message.contains("exceeds maximum indexing size")
+        || message.contains("grew past the indexing limit")
+    {
+        "Larger than 5 MB"
+    } else if message.ends_with("is a binary file") {
+        "Not a text file"
+    } else if message.ends_with("is empty") {
+        "Empty"
+    } else if message.ends_with("contains no extractable text") {
+        "No text could be read from it"
+    } else {
+        "Could not be read"
+    }
+}
+
 pub struct LibraryService {
     db: Arc<LibraryDb>,
     searcher: HybridSearcher,
@@ -186,6 +210,18 @@ impl LibraryService {
         folder: &Path,
         cancel_flag: Option<Arc<AtomicBool>>,
     ) -> Result<FolderReport, AppError> {
+        self.index_folder_with(folder, cancel_flag, &mut |_| {})
+    }
+
+    /// Like `index_folder_report`, with a callback for every file seen and
+    /// every file skipped (with the reason), for live progress and the
+    /// report at the end.
+    pub fn index_folder_with(
+        &self,
+        folder: &Path,
+        cancel_flag: Option<Arc<AtomicBool>>,
+        observe: &mut dyn FnMut(FolderEvent<'_>),
+    ) -> Result<FolderReport, AppError> {
         if !folder.exists() || !folder.is_dir() {
             return Err(AppError::invalid_input(format!(
                 "Directory does not exist: {}",
@@ -211,6 +247,10 @@ impl LibraryService {
                 Ok(entries) => entries,
                 Err(_) => {
                     report.skipped += 1;
+                    observe(FolderEvent::Skipped(
+                        &current_dir,
+                        "This folder could not be opened",
+                    ));
                     continue;
                 }
             };
@@ -231,6 +271,7 @@ impl LibraryService {
                 // The entry's own type, without following a link.
                 let Ok(file_type) = entry.file_type() else {
                     report.skipped += 1;
+                    observe(FolderEvent::Skipped(&p, "Could not be read"));
                     continue;
                 };
                 if file_type.is_symlink() {
@@ -251,14 +292,23 @@ impl LibraryService {
                     }
                     if !FileIngester::is_supported_extension(&p) {
                         report.skipped += 1;
+                        observe(FolderEvent::Skipped(
+                            &p,
+                            "Not a file type the library reads",
+                        ));
                         continue;
                     }
 
+                    observe(FolderEvent::Reading(&p));
                     match self.index_file(&p) {
-                        Ok(_) => report.indexed += 1,
+                        Ok(_) => {
+                            report.indexed += 1;
+                            observe(FolderEvent::Indexed(&p));
+                        }
                         Err(e) => {
                             log::debug!("Skipping file {}: {e}", p.display());
                             report.skipped += 1;
+                            observe(FolderEvent::Skipped(&p, skip_reason(&e.message)));
                         }
                     }
                 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 pub mod app;
 pub mod commands;
@@ -65,6 +65,7 @@ pub fn run() {
     );
 
     let tools = Arc::new(crate::services::tools::ToolService::new(jail, library.db()));
+    crate::services::cloud_audit::install(library.db());
 
     // User-saved prompt skills (markdown files) plus the honest local usage
     // counters behind the "save this as a skill?" suggestions.
@@ -137,6 +138,7 @@ pub fn run() {
 
     // Handles for the background load and the exit handler. AppState holds only
     // shared handles, so cloning it is cheap.
+    crate::commands::library_status::start_embedding_at_launch(app_state.clone());
     let startup_state = app_state.clone();
     let shutdown_state = app_state.clone();
     let engine_loading = app_state.engine_loading.clone();
@@ -229,6 +231,28 @@ pub fn run() {
             commands::settings_context,
             commands::settings_set_context,
             commands::settings_context_info,
+            commands::selftest_run,
+            commands::library_folder_presets,
+            commands::library_index_start,
+            commands::library_index_cancel,
+            commands::library_folders,
+            commands::library_folder_remove,
+            commands::library_status,
+            commands::library_embedding_select,
+            commands::voice_settings_get,
+            commands::voice_settings_set,
+            commands::voice_key_set,
+            commands::voice_models,
+            commands::voice_engine_fetch,
+            commands::voice_transcribe,
+            commands::voice_live_start,
+            commands::voice_live_push,
+            commands::voice_live_stop,
+            commands::voice_cleanup,
+            commands::share_status,
+            commands::share_start,
+            commands::share_stop,
+            commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,
             commands::settings_model_memory,
@@ -249,6 +273,19 @@ pub fn run() {
             commands::update_check,
             commands::update_install,
             commands::logs_tail,
+            commands::engine_info,
+            commands::chat_enhance_prompt,
+            commands::chat_suggest_next,
+            commands::chat_starters,
+            commands::skills_undo,
+            commands::files_open,
+            commands::files_reveal,
+            commands::files_open_with_apps,
+            commands::files_open_with,
+            commands::ui_scale_get,
+            commands::ui_scale_set,
+            crate::services::frames::render_frame_put,
+            commands::engine_fetch,
             commands::backup_config_get,
             commands::backup_config_set,
             commands::backup_run,
@@ -289,6 +326,9 @@ pub fn run() {
             commands::chat_attach_dropped,
             commands::cloud_provider_set_enabled,
             commands::cloud_online_set,
+            commands::cloud_audit_list,
+            commands::cloud_provider_test,
+            commands::cloud_audit_clear,
             commands::cloud_models_refresh,
             commands::mcp_servers_list,
             commands::mcp_presets,
@@ -298,7 +338,19 @@ pub fn run() {
             commands::mcp_server_test,
             commands::mcp_import,
         ])
+        // Pages the model draws in chat, each with its own strict policy.
+        .register_uri_scheme_protocol("mockup", |_ctx, request| {
+            crate::services::frames::serve(&request)
+        })
         .setup(move |setup_app| {
+            crate::services::engine::init(setup_app.handle().clone());
+            // The interface scale from Settings → Appearance.
+            let scale = commands::assist::saved_scale();
+            if (scale - 1.0).abs() > f64::EPSILON
+                && let Some(window) = setup_app.get_webview_window("main")
+            {
+                let _ = window.set_zoom(scale);
+            }
             if let Some((model_id, path, context)) = pending_load {
                 let handle = setup_app.handle().clone();
                 engine_loading.store(true, Ordering::SeqCst);
@@ -311,7 +363,8 @@ pub fn run() {
                     },
                 );
                 std::thread::spawn(move || {
-                    let result = startup_state.inference_engine.load(&path, context);
+                    let result = tauri::async_runtime::block_on(crate::services::engine::ensure())
+                        .and_then(|_| startup_state.inference_engine.load(&path, context));
                     engine_loading.store(false, Ordering::SeqCst);
                     let payload = match result {
                         Ok(_) => {
@@ -347,6 +400,7 @@ pub fn run() {
                 shutdown_state.embedding_engine.stop();
                 shutdown_state.rerank_engine.stop();
                 shutdown_state.mcp.disconnect_all();
+                crate::services::share::stop(&shutdown_state);
                 // Fold the database log into the file, so the next start is quick.
                 if let Err(e) = shutdown_state.library.checkpoint() {
                     log::warn!("Database checkpoint at exit failed: {e}");

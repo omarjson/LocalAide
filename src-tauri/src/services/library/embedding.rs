@@ -138,9 +138,7 @@ impl EmbeddingEngine {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(AppError::model_load_failed(
                     &model_id,
-                    &format!(
-                        "llama-server exited during startup ({status}). See logs/llama-server.log."
-                    ),
+                    &crate::services::inference::sidecar::startup_exit_message(&status),
                 ));
             }
             if self.health_ok(running.port) {

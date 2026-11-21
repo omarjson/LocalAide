@@ -65,7 +65,24 @@ pub async fn list_models(base_url: &str, api_key: &str) -> Result<Vec<ProviderMo
     if !api_key.trim().is_empty() {
         request = request.bearer_auth(api_key.trim());
     }
-    let response = request.send().await.map_err(|e| {
+    let audit = crate::services::cloud_audit::start(
+        &crate::services::cloud_audit::host_of(base_url),
+        base_url,
+        "",
+        "model list",
+        "Asked which models it offers (no chat content)",
+        0,
+        Some(api_key),
+    );
+    let sent = request.send().await;
+    match &sent {
+        Ok(r) => audit.finish(
+            r.status().is_success(),
+            &format!("HTTP {}", r.status().as_u16()),
+        ),
+        Err(_) => audit.finish(false, "could not connect"),
+    }
+    let response = sent.map_err(|e| {
         AppError::new(
             "PROVIDER_UNREACHABLE",
             "Could not reach the provider. Check the address and your connection. A router on this computer must be running.",

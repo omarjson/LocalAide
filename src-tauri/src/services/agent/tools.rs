@@ -12,6 +12,7 @@ use crate::app::state::AppState;
 use crate::config::McpServerConfig;
 use crate::domain::memory::Citation;
 use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
+use crate::services::tools::shell;
 
 /// Which groups of tools this chat may use.
 #[derive(Debug, Clone, Default)]
@@ -20,13 +21,23 @@ pub struct Permissions {
     pub notes: bool,
     pub files: bool,
     pub skills: bool,
+    /// Run terminal commands in the workspace.
+    pub shell: bool,
+    /// Ask the user a question with buttons (off in Autonomous mode).
+    pub ask: bool,
+    /// Keep a to-do list for a longer task (`update_todos`).
+    pub todos: bool,
+    /// Hand parts of a task to read-only subagents (`run_subagent`).
+    pub subagents: bool,
+    /// Save and improve skills learned from the chat (`save_skill`).
+    pub learn_skills: bool,
     /// MCP servers switched on for this chat.
     pub mcp: Vec<McpServerConfig>,
 }
 
 impl Permissions {
     pub fn any(&self) -> bool {
-        self.web || self.notes || self.files || self.skills || !self.mcp.is_empty()
+        self.web || self.notes || self.files || self.skills || self.shell || !self.mcp.is_empty()
     }
 }
 
@@ -43,6 +54,11 @@ pub enum ToolKind {
     ReadFile,
     SearchFiles,
     WriteFile,
+    RunCommand,
+    AskUser,
+    Todos,
+    Subagent,
+    SaveSkill,
     Mcp,
 }
 
@@ -52,8 +68,12 @@ impl ToolKind {
         match self {
             Self::WebSearch | Self::ReadPage => "web",
             Self::SearchNotes | Self::SaveNote => "notes",
-            Self::ListSkills | Self::UseSkill => "skills",
+            Self::ListSkills | Self::UseSkill | Self::SaveSkill => "skills",
+            Self::Todos => "todos",
+            Self::Subagent => "subagent",
             Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile => "files",
+            Self::RunCommand => "shell",
+            Self::AskUser => "question",
             Self::Mcp => "mcp",
         }
     }
@@ -93,6 +113,49 @@ impl ToolSpec {
             Some((server, _)) => !server.auto_approve,
             None => self.kind.changes_something(),
         }
+    }
+
+    /// Whether this call waits for the user. Terminal commands ask only
+    /// when they change something; read-only ones run straight away.
+    pub fn needs_approval_for(&self, args: &Value) -> bool {
+        if self.kind == ToolKind::RunCommand {
+            let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+            return shell::classify(command) != shell::Verdict::ReadOnly;
+        }
+        self.needs_approval()
+    }
+
+    /// Whether Autonomous mode still asks first: commands whose effects are
+    /// hard to undo, replacing a file that exists, and MCP tools (LocalAide
+    /// cannot tell what they do).
+    pub fn risky(
+        &self,
+        args: &Value,
+        jail: &crate::services::tools::sandbox::WorkspaceJail,
+    ) -> bool {
+        match self.kind {
+            ToolKind::RunCommand => {
+                let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+                shell::risky(command)
+            }
+            ToolKind::WriteFile => {
+                let path = args.get("path").and_then(Value::as_str).unwrap_or("");
+                jail.resolve_path(path).map(|p| p.exists()).unwrap_or(true)
+            }
+            ToolKind::Mcp => true,
+            _ => false,
+        }
+    }
+
+    /// A reason this call may never run, checked before asking the user.
+    pub fn refusal(&self, args: &Value) -> Option<String> {
+        if self.kind == ToolKind::RunCommand {
+            let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+            if let shell::Verdict::Blocked(reason) = shell::classify(command) {
+                return Some(reason);
+            }
+        }
+        None
     }
 }
 
@@ -177,7 +240,7 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "list_files",
             ToolKind::ListFiles,
-            "List files in the LocalAide workspace folder. Paths are relative to it.",
+            "List files in the folder this chat works in. Paths are relative to it.",
             object(
                 json!({"path": {"type": "string", "description": "A folder inside the workspace. Empty for the top."}}),
                 &[],
@@ -186,13 +249,13 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "read_file",
             ToolKind::ReadFile,
-            "Read a text file from the LocalAide workspace folder.",
+            "Read a text file from the folder this chat works in.",
             object(json!({"path": {"type": "string"}}), &["path"]),
         ));
         specs.push(builtin(
             "search_files",
             ToolKind::SearchFiles,
-            "Find files in the workspace whose name contains the words.",
+            "Find files in the chat's folder whose name contains the words.",
             object(
                 json!({"query": {"type": "string"}, "path": {"type": "string"}}),
                 &["query"],
@@ -201,10 +264,120 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "write_file",
             ToolKind::WriteFile,
-            "Write a text file in the LocalAide workspace folder. Replaces the file if it exists. The user approves each write.",
+            "Write a text file in the folder this chat works in. Replaces the file if it exists. Depending on the user's permission mode, the user approves the write first.",
             object(
                 json!({"path": {"type": "string"}, "content": {"type": "string"}}),
                 &["path", "content"],
+            ),
+        ));
+    }
+    if perms.shell {
+        specs.push(builtin(
+            "execute_command",
+            ToolKind::RunCommand,
+            &format!(
+                "Run a terminal command on the user's computer with {}, in the folder this chat works in. Use it when the user asks you to run, build, check or inspect something with a command. Read-only commands (ls, cat, git status and similar) run at once; commands that change something wait for the user's OK; destructive commands (recursive deletes, disk formatting, piping downloads into a shell, administrator rights) are refused. The result has the exit code and the output, which may be shortened.",
+                shell::shell_name()
+            ),
+            object(
+                json!({
+                    "command": {"type": "string", "description": "The command line to run."},
+                    "cwd": {"type": "string", "description": "A folder inside the workspace to run in. Empty for the top."},
+                    "timeout_seconds": {"type": "integer", "description": "Time limit, 1 to 300. Default 60."}
+                }),
+                &["command"],
+            ),
+        ));
+    }
+    if perms.ask {
+        specs.push(builtin(
+            "ask_user",
+            ToolKind::AskUser,
+            "Ask the user one or more short questions with answer options they can pick, when you need their choice before you can continue. Give 2 to 6 options per question, each with a short label and an optional one-line description. The user can also type their own answer. Do not use it for questions you can answer yourself.",
+            object(
+                json!({
+                    "questions": {
+                        "type": "array",
+                        "description": "1 to 4 questions, asked together.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "header": {"type": "string", "description": "One or two words, for example Clarify or Format."},
+                                "question": {"type": "string", "description": "The question, in one sentence."},
+                                "options": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "description": {"type": "string"}
+                                        },
+                                        "required": ["label"]
+                                    },
+                                    "description": "2 to 6 answers."
+                                },
+                                "multiple": {"type": "boolean", "description": "True when the user may pick more than one."}
+                            },
+                            "required": ["question", "options"]
+                        }
+                    },
+                    "question": {"type": "string", "description": "A single question (older form; use questions)."},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": "Its answers (older form)."},
+                    "multiple": {"type": "boolean"}
+                }),
+                &[],
+            ),
+        ));
+    }
+    if perms.todos {
+        specs.push(builtin(
+            "update_todos",
+            ToolKind::Todos,
+            "Keep a short to-do list for a task with several steps, so the user sees progress. Send the whole list each time, with each step's status. Use it only for tasks of 3 or more steps.",
+            object(
+                json!({
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "status": {"type": "string", "enum": ["pending", "in_progress", "done"]}
+                            },
+                            "required": ["text", "status"]
+                        }
+                    }
+                }),
+                &["items"],
+            ),
+        ));
+    }
+    if perms.subagents {
+        specs.push(builtin(
+            "run_subagent",
+            ToolKind::Subagent,
+            "Give one self-contained part of a bigger task to a subagent: a helper with its own fresh context that can search and read (web, notes, files, read-only commands) but cannot change anything. Several calls in one turn run at the same time. Use it to research or inspect several things in parallel; it returns its findings.",
+            object(
+                json!({
+                    "title": {"type": "string", "description": "A few words naming the job, for example Check the tests."},
+                    "task": {"type": "string", "description": "Everything the subagent needs to know: the goal, where to look, and what to report back."}
+                }),
+                &["task"],
+            ),
+        ));
+    }
+    if perms.learn_skills {
+        specs.push(builtin(
+            "save_skill",
+            ToolKind::SaveSkill,
+            "Save a reusable skill, or improve the user's skill with the same name: instructions for a kind of task, learned from this chat. Use it when the user teaches you how they want a recurring task done, or corrects how you did a task a skill covers. Not for one-off facts (those are notes). It saves at once; the user can undo it. Tell the user in one short sentence.",
+            object(
+                json!({
+                    "name": {"type": "string", "description": "A short name, for example Weekly report."},
+                    "description": {"type": "string", "description": "One line: when to use it."},
+                    "instructions": {"type": "string", "description": "The full, improved instructions in markdown. For an existing skill, keep what still applies and add what you learned."}
+                }),
+                &["name", "instructions"],
             ),
         ));
     }
@@ -293,6 +466,11 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadFile => "Read a file".to_string(),
         ToolKind::SearchFiles => "Searched workspace files".to_string(),
         ToolKind::WriteFile => "Write a file".to_string(),
+        ToolKind::RunCommand => "Run a command".to_string(),
+        ToolKind::AskUser => "Asked you".to_string(),
+        ToolKind::Todos => "Updated the plan".to_string(),
+        ToolKind::Subagent => "Subagent".to_string(),
+        ToolKind::SaveSkill => "Learned a skill".to_string(),
         ToolKind::Mcp => match &spec.mcp {
             Some((server, tool)) => format!("{} · {}", server.name, tool),
             None => spec.name.clone(),
@@ -305,6 +483,18 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::UseSkill => text("name"),
         ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile => text("path"),
         ToolKind::ListSkills => String::new(),
+        ToolKind::RunCommand => text("command"),
+        ToolKind::AskUser => text("question"),
+        ToolKind::Todos => String::new(),
+        ToolKind::Subagent => {
+            let title = text("title");
+            if title.is_empty() {
+                text("task")
+            } else {
+                title
+            }
+        }
+        ToolKind::SaveSkill => text("name"),
         ToolKind::Mcp => {
             // The first short string argument says the most.
             args.as_object()
@@ -314,6 +504,134 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         }
     };
     (title, detail)
+}
+
+/// Where a tool call comes from and how it was allowed, for the audit log.
+pub struct RunContext<'a> {
+    /// "chat", or "share" for requests through a shared link.
+    pub source: &'a str,
+    /// Set when approval was skipped by the chat's approval mode.
+    pub note: Option<&'a str>,
+    pub cancel: &'a std::sync::atomic::AtomicBool,
+    /// The folder this chat works in.
+    pub jail: &'a crate::services::tools::sandbox::WorkspaceJail,
+}
+
+/// Run a terminal command and describe the result for the model and the
+/// chat card. Long output is cut; the full text is saved in the workspace.
+fn run_command(state: &AppState, args: &Value, max_chars: usize, ctx: &RunContext) -> ToolOutcome {
+    let command = args
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let cwd = args.get("cwd").and_then(Value::as_str);
+    let secs = args
+        .get("timeout_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(shell::DEFAULT_TIMEOUT_SECS)
+        .clamp(1, shell::MAX_TIMEOUT_SECS);
+    let run = match state.tools.run_command_in(
+        ctx.jail,
+        ctx.source,
+        &command,
+        cwd,
+        std::time::Duration::from_secs(secs),
+        ctx.cancel,
+        ctx.note,
+    ) {
+        Ok(r) => r,
+        Err(e) => return failed(e.message),
+    };
+    let out = &run.output;
+    let mut text = String::new();
+    if !out.stdout.is_empty() {
+        text.push_str(&out.stdout);
+    }
+    if !out.stderr.is_empty() {
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&out.stderr);
+    }
+    let limit = max_chars.max(4000);
+    let (shown, cut_here) = cut(&text, limit);
+    let mut saved = None;
+    if cut_here || out.capture_cut {
+        let dir = run.workspace.join(".localaide").join("command-output");
+        let name = format!(
+            "{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+        if std::fs::create_dir_all(&dir).is_ok() && std::fs::write(dir.join(&name), &text).is_ok() {
+            saved = Some(format!(".localaide/command-output/{name}"));
+        }
+    }
+    let exit = out
+        .exit_code
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "none".into());
+    let status_line = if out.timed_out {
+        format!("The command was stopped after {secs} s (time limit).")
+    } else if out.cancelled {
+        "The command was stopped because the answer was cancelled.".to_string()
+    } else {
+        format!("Exit code {exit}, after {} ms.", out.millis)
+    };
+    let mut notes = Vec::new();
+    if cut_here || out.capture_cut {
+        notes.push(format!(
+            "The output was shortened ({} bytes in total).{}",
+            out.total_bytes,
+            saved
+                .as_ref()
+                .map(|p| format!(" The full output is in the workspace file {p}; read it with read_file if you need more."))
+                .unwrap_or_default()
+        ));
+    }
+    let body = if shown.trim().is_empty() {
+        "(no output)".to_string()
+    } else {
+        shown
+    };
+    let ok = out.exit_code == Some(0) && !out.timed_out && !out.cancelled;
+    let for_model = format!(
+        "$ {command}\n{status_line}\n{}\n--- output ---\n{body}",
+        notes.join(" ")
+    );
+    let summary = if out.timed_out {
+        format!("Stopped after {secs} s")
+    } else if out.cancelled {
+        "Stopped".to_string()
+    } else if ok {
+        format!("Done in {} ms", out.millis)
+    } else {
+        format!("Exit code {exit}")
+    };
+    // The chat card reads the first line as metadata.
+    let for_user = format!(
+        "{}\n{}",
+        serde_json::json!({
+            "exit": out.exit_code,
+            "ms": out.millis,
+            "timed_out": out.timed_out,
+            "cut": cut_here || out.capture_cut,
+            "saved": saved,
+            "cwd": run.cwd,
+        }),
+        cut(&body, 4000).0
+    );
+    ToolOutcome {
+        ok,
+        for_model,
+        summary,
+        for_user,
+        citations: Vec::new(),
+    }
 }
 
 /// What a finished tool returns.
@@ -354,6 +672,7 @@ pub fn run(
     args: &Value,
     max_chars: usize,
     next_citation: &mut usize,
+    ctx: &RunContext,
 ) -> ToolOutcome {
     let text = |key: &str| {
         args.get(key)
@@ -370,6 +689,7 @@ pub fn run(
         ToolKind::UseSkill => use_skill(state, &text("name"), max_chars),
         ToolKind::ListFiles => workspace(
             state,
+            ctx.jail,
             ToolActionType::ListDir,
             &text("path"),
             None,
@@ -378,6 +698,7 @@ pub fn run(
         ),
         ToolKind::ReadFile => workspace(
             state,
+            ctx.jail,
             ToolActionType::ReadFile,
             &text("path"),
             None,
@@ -386,6 +707,7 @@ pub fn run(
         ),
         ToolKind::SearchFiles => workspace(
             state,
+            ctx.jail,
             ToolActionType::SearchFiles,
             &text("path"),
             None,
@@ -394,22 +716,44 @@ pub fn run(
         ),
         ToolKind::WriteFile => workspace(
             state,
+            ctx.jail,
             ToolActionType::WriteFile,
             &text("path"),
             Some(text("content")),
             None,
             max_chars,
         ),
+        ToolKind::RunCommand => run_command(state, args, max_chars, ctx),
+        // Handled by the chat loop, which ends the answer with the question.
+        ToolKind::AskUser => ToolOutcome {
+            ok: true,
+            for_model: "The question was shown to the user.".into(),
+            summary: "Waiting for your answer".into(),
+            ..Default::default()
+        },
+        // Run by the chat loop, which needs the stream and the model.
+        ToolKind::Todos | ToolKind::Subagent | ToolKind::SaveSkill => {
+            failed("This tool runs in the chat loop.")
+        }
         ToolKind::Mcp => mcp_call(state, spec, args, max_chars),
     };
-    // Workspace actions write their own audit rows; the rest are recorded here.
+    // Workspace actions and commands write their own audit rows; the rest
+    // are recorded here.
     if !matches!(
         spec.kind,
-        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::SearchFiles | ToolKind::WriteFile
+        ToolKind::ListFiles
+            | ToolKind::ReadFile
+            | ToolKind::SearchFiles
+            | ToolKind::WriteFile
+            | ToolKind::RunCommand
+            | ToolKind::AskUser
+            | ToolKind::Todos
+            | ToolKind::Subagent
+            | ToolKind::SaveSkill
     ) {
         let (_, detail) = describe(spec, args);
         state.tools.record_event(
-            &format!("chat:{}", spec.name),
+            &format!("{}:{}", ctx.source, spec.name),
             spec.kind.group(),
             &detail,
             if outcome.ok { "success" } else { "error" },
@@ -547,6 +891,16 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
             .ok()
             .flatten()
     };
+    // Never degrade silently: say when the search could only match words.
+    let keyword_note = if vector.is_none() {
+        if state.embedding_engine.is_running() {
+            " (Matched by words only this time: the meaning model did not answer in time.)"
+        } else {
+            " (Matched by words only: no meaning model is running, so related wording may be missed. The user can pick one in Search → Library status.)"
+        }
+    } else {
+        ""
+    };
     let recall = match state.memory.recall(query, vector.as_deref(), Some(900)) {
         Ok(r) => r,
         Err(e) => return failed(format!("Your notes could not be searched: {}", e.message)),
@@ -554,8 +908,9 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     if recall.citations.is_empty() {
         return ToolOutcome {
             ok: true,
-            for_model: "Nothing in the user's notes or documents matches. Say so if it matters."
-                .into(),
+            for_model: format!(
+                "Nothing in the user's notes or documents matches.{keyword_note} Say so if it matters."
+            ),
             summary: "Nothing found".into(),
             for_user: "Nothing matched in your notes and documents.".into(),
             citations: Vec::new(),
@@ -566,9 +921,12 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     for cit in recall.citations {
         let index = *next_citation;
         *next_citation += 1;
+        let name = std::path::Path::new(&cit.source)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| cit.title.clone());
         lines.push(format!(
-            "[{index}] {} ({})\n{}",
-            cit.title,
+            "[{index}] {name} — {}\n{}",
             cit.source,
             cit.snippet.trim()
         ));
@@ -577,8 +935,23 @@ fn search_notes(state: &AppState, query: &str, next_citation: &mut usize) -> Too
     let body = lines.join("\n\n");
     ToolOutcome {
         ok: true,
-        for_model: format!("From the user's notes and documents:\n\n{body}\n\nCite them as [n]."),
-        summary: format!("{} matches", citations.len()),
+        for_model: format!(
+            "From the user's notes and documents{keyword_note}:\n\n{body}\n\nAnswer from these, name the file you used, and cite it as [n]."
+        ),
+        summary: format!(
+            "{} {}{}",
+            citations.len(),
+            if citations.len() == 1 {
+                "match"
+            } else {
+                "matches"
+            },
+            if vector.is_none() {
+                " · words only"
+            } else {
+                ""
+            }
+        ),
         for_user: body,
         citations,
     }
@@ -668,6 +1041,7 @@ fn use_skill(state: &AppState, name: &str, max_chars: usize) -> ToolOutcome {
 
 fn workspace(
     state: &AppState,
+    jail: &crate::services::tools::sandbox::WorkspaceJail,
     action_type: ToolActionType,
     path: &str,
     content: Option<String>,
@@ -687,7 +1061,7 @@ fn workspace(
         approved: Some(true),
         session_token: None,
     };
-    match state.tools.execute(req) {
+    match state.tools.execute_in(jail, req) {
         Ok(res) if res.success => {
             let (text, truncated) = cut(&res.output, max_chars);
             let summary = match action_type {
@@ -811,8 +1185,29 @@ mod tests {
             notes: true,
             files: true,
             skills: true,
+            shell: true,
+            ask: true,
+            todos: true,
+            subagents: true,
+            learn_skills: true,
             mcp: vec![],
         });
+        for name in ["update_todos", "run_subagent", "save_skill", "ask_user"] {
+            assert!(all.iter().any(|s| s.name == name), "{name} is offered");
+        }
+        assert!(
+            all.iter()
+                .all(|s| s.name != "save_skill" || !s.needs_approval()),
+            "learned skills save at once, with Undo"
+        );
+        let cmd = all.iter().find(|s| s.name == "execute_command").unwrap();
+        assert!(!cmd.needs_approval_for(&serde_json::json!({"command": "git status"})));
+        assert!(cmd.needs_approval_for(&serde_json::json!({"command": "npm install"})));
+        assert!(
+            cmd.refusal(&serde_json::json!({"command": "rm -rf /"}))
+                .is_some()
+        );
+        assert!(cmd.refusal(&serde_json::json!({"command": "ls"})).is_none());
         assert!(
             all.iter()
                 .any(|s| s.name == "write_file" && s.needs_approval())

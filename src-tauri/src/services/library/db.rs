@@ -191,6 +191,29 @@ impl LibraryDb {
             );
             CREATE INDEX IF NOT EXISTS idx_tool_audit_ts ON tool_audit(timestamp DESC);
 
+            CREATE TABLE IF NOT EXISTS cloud_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                host TEXT NOT NULL,
+                model TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                preview TEXT NOT NULL,
+                bytes INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_cloud_audit_ts ON cloud_audit(timestamp DESC);
+
+            CREATE TABLE IF NOT EXISTS library_folders (
+                path TEXT PRIMARY KEY,
+                added_at INTEGER NOT NULL,
+                last_scan_at INTEGER NOT NULL,
+                indexed INTEGER NOT NULL,
+                skipped INTEGER NOT NULL,
+                limited INTEGER NOT NULL
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
                 chunk_id UNINDEXED,
                 document_id UNINDEXED,
@@ -211,6 +234,13 @@ impl LibraryDb {
             params![MAX_AUDIT_ROWS],
         )
         .map_err(|e| AppError::storage(format!("Failed to trim the activity log: {e}")))?;
+        conn.execute(
+            "DELETE FROM cloud_audit WHERE id <= (
+                 SELECT id FROM cloud_audit ORDER BY id DESC LIMIT 1 OFFSET ?1
+             )",
+            params![MAX_AUDIT_ROWS],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to trim the online log: {e}")))?;
 
         Ok(())
     }
@@ -1031,5 +1061,247 @@ impl LibraryDb {
             .iter()
             .map(|chunk| f32::from_le_bytes(*chunk))
             .collect()
+    }
+}
+
+/// One call that left this computer (Settings → Online providers → What left
+/// this computer).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CloudCallRow {
+    pub id: i64,
+    pub timestamp: i64,
+    pub provider: String,
+    pub host: String,
+    pub model: String,
+    pub kind: String,
+    pub preview: String,
+    pub bytes: i64,
+    pub status: String,
+    pub detail: Option<String>,
+}
+
+/// A folder the user added to the library.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FolderRow {
+    pub path: String,
+    pub added_at: i64,
+    pub last_scan_at: i64,
+    pub indexed: i64,
+    pub skipped: i64,
+    pub limited: bool,
+    /// Documents now in the library from this folder.
+    pub documents: i64,
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+impl LibraryDb {
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_cloud_call(
+        &self,
+        provider: &str,
+        host: &str,
+        model: &str,
+        kind: &str,
+        preview: &str,
+        bytes: usize,
+        status: &str,
+    ) -> Result<i64, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute(
+            "INSERT INTO cloud_audit (timestamp, provider, host, model, kind, preview, bytes, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![now_secs(), provider, host, model, kind, preview, bytes as i64, status],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to record an online call: {e}")))?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn finish_cloud_call(
+        &self,
+        id: i64,
+        status: &str,
+        detail: Option<&str>,
+    ) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute(
+            "UPDATE cloud_audit SET status = ?2, detail = ?3 WHERE id = ?1",
+            params![id, status, detail],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to update an online call: {e}")))?;
+        Ok(())
+    }
+
+    pub fn list_cloud_calls(&self, limit: usize) -> Result<Vec<CloudCallRow>, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, timestamp, provider, host, model, kind, preview, bytes, status, detail
+                 FROM cloud_audit ORDER BY id DESC LIMIT ?1",
+            )
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![limit as i64], |r| {
+                Ok(CloudCallRow {
+                    id: r.get(0)?,
+                    timestamp: r.get(1)?,
+                    provider: r.get(2)?,
+                    host: r.get(3)?,
+                    model: r.get(4)?,
+                    kind: r.get(5)?,
+                    preview: r.get(6)?,
+                    bytes: r.get(7)?,
+                    status: r.get(8)?,
+                    detail: r.get(9)?,
+                })
+            })
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::storage(e.to_string()))
+    }
+
+    pub fn clear_cloud_calls(&self) -> Result<usize, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute("DELETE FROM cloud_audit", [])
+            .map_err(|e| AppError::storage(format!("Failed to clear the online log: {e}")))
+    }
+
+    /// Remember a folder scan. The first scan sets when it was added.
+    pub fn save_folder_scan(
+        &self,
+        path: &str,
+        indexed: usize,
+        skipped: usize,
+        limited: bool,
+    ) -> Result<(), AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let now = now_secs();
+        conn.execute(
+            "INSERT INTO library_folders (path, added_at, last_scan_at, indexed, skipped, limited)
+             VALUES (?1, ?2, ?2, ?3, ?4, ?5)
+             ON CONFLICT(path) DO UPDATE SET last_scan_at = ?2, indexed = ?3, skipped = ?4, limited = ?5",
+            params![path, now, indexed as i64, skipped as i64, limited as i64],
+        )
+        .map_err(|e| AppError::storage(format!("Failed to save the folder: {e}")))?;
+        Ok(())
+    }
+
+    pub fn list_folders(&self) -> Result<Vec<FolderRow>, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT path, added_at, last_scan_at, indexed, skipped, limited FROM library_folders ORDER BY added_at",
+            )
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        let mut rows: Vec<FolderRow> = stmt
+            .query_map([], |r| {
+                Ok(FolderRow {
+                    path: r.get(0)?,
+                    added_at: r.get(1)?,
+                    last_scan_at: r.get(2)?,
+                    indexed: r.get(3)?,
+                    skipped: r.get(4)?,
+                    limited: r.get::<_, i64>(5)? != 0,
+                    documents: 0,
+                })
+            })
+            .map_err(|e| AppError::storage(e.to_string()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        for row in &mut rows {
+            let sep = if row.path.contains('\\') { '\\' } else { '/' };
+            let prefix = format!("{}{sep}%", row.path.trim_end_matches(['/', '\\']));
+            row.documents = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM documents WHERE path LIKE ?1 ESCAPE '^'",
+                    params![prefix.replace('^', "^^").replace('_', "^_")],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+        }
+        Ok(rows)
+    }
+
+    pub fn remove_folder(&self, path: &str) -> Result<bool, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        let n = conn
+            .execute("DELETE FROM library_folders WHERE path = ?1", params![path])
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        Ok(n > 0)
+    }
+
+    /// Forget every stored vector, for example after a switch to an
+    /// embedding model with other vectors.
+    pub fn clear_embeddings(&self) -> Result<usize, AppError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AppError::internal("DB lock poisoned"))?;
+        conn.execute(
+            "UPDATE chunks SET embedding = NULL WHERE embedding IS NOT NULL",
+            [],
+        )
+        .map_err(|e| AppError::storage(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod audit_and_folder_tests {
+    use super::LibraryDb;
+
+    #[test]
+    fn cloud_calls_and_folders_round_trip() {
+        let db = LibraryDb::open_in_memory().unwrap();
+        let id = db
+            .record_cloud_call(
+                "OpenRouter",
+                "openrouter.ai",
+                "m",
+                "chat",
+                "hello",
+                5,
+                "sent",
+            )
+            .unwrap();
+        db.finish_cloud_call(id, "ok", Some("200")).unwrap();
+        let calls = db.list_cloud_calls(10).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].status, "ok");
+        assert_eq!(db.clear_cloud_calls().unwrap(), 1);
+
+        db.save_folder_scan("/home/u/Documents", 3, 1, false)
+            .unwrap();
+        db.save_folder_scan("/home/u/Documents", 4, 0, false)
+            .unwrap();
+        let folders = db.list_folders().unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].indexed, 4);
+        assert!(db.remove_folder("/home/u/Documents").unwrap());
     }
 }

@@ -32,6 +32,8 @@ struct StoredThread {
     pub created_at: u64,
     pub updated_at: u64,
     pub messages: Vec<ChatMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 const MAX_IMAGES: usize = 4;
@@ -118,6 +120,8 @@ pub(crate) async fn load_and_activate(state: &AppState, id: String) -> Result<St
     if !path.is_file() {
         return Err(AppError::model_not_installed(&id));
     }
+    // The first load downloads the model engine for this processor.
+    crate::services::engine::ensure().await?;
     // The engine uses a blocking HTTP client. Run it on a plain thread, not the async runtime.
     let engine = state.inference_engine.clone();
     let load_path = path.clone();
@@ -189,7 +193,7 @@ pub(crate) fn history_text(content: &str, attachments: &[ChatAttachment]) -> Str
 }
 
 /// The model this message goes to: the picker's choice, or the default.
-fn resolve_target(
+pub(crate) fn resolve_target(
     state: &AppState,
     cfg: &crate::config::AppConfig,
     requested: Option<&ChatTargetRequest>,
@@ -255,6 +259,63 @@ pub async fn chat_stream(
     req: ChatStreamRequest,
     channel: tauri::ipc::Channel<ChatStreamEvent>,
 ) -> Result<String, AppError> {
+    let (run, model_label, job_id, cancel_flag) = prepare_run(&state, req, "chat")?;
+    let owned: AppState = (*state).clone();
+    let jobs = state.jobs.clone();
+    let jid = job_id.clone();
+    let _ = channel.send(ChatStreamEvent::Status {
+        label: format!("Answering with {model_label}"),
+    });
+
+    std::thread::spawn(move || {
+        let result = crate::services::agent::run(&owned, run, &cancel_flag, &channel);
+        match result {
+            Ok(done) => {
+                jobs.complete_job(&jid);
+                let _ = channel.send(ChatStreamEvent::Done {
+                    finish_reason: if done.cancelled {
+                        "cancelled".to_string()
+                    } else {
+                        done.finish_reason
+                    },
+                    total_tokens: done.tokens,
+                });
+            }
+            Err(e) => {
+                jobs.fail_job(&jid, &e.message);
+                let _ = channel.send(ChatStreamEvent::Error { error: e.message });
+            }
+        }
+    });
+
+    Ok(job_id)
+}
+
+/// Everything an answer needs, from a chat request: the model, the tools,
+/// the system prompt and the history. `source` is "chat" in the app and
+/// "share" for a shared link, which always asks before tools change
+/// anything.
+pub(crate) fn prepare_run(
+    state: &AppState,
+    mut req: ChatStreamRequest,
+    source: &'static str,
+) -> Result<
+    (
+        AgentRun,
+        String,
+        String,
+        std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ),
+    AppError,
+> {
+    if source == "share" {
+        // Shared links always ask, stay in the shared workspace and never
+        // change the owner's skills.
+        req.approval_mode = None;
+        req.folder = None;
+        req.learn_skills = Some(false);
+    }
+    let jail = folder_jail(state, req.folder.as_deref())?;
     validate_images(&req.images)?;
     let cfg = {
         let store = state
@@ -263,8 +324,8 @@ pub async fn chat_stream(
             .map_err(|e| AppError::internal(e.to_string()))?;
         store.load().map_err(AppError::internal)?
     };
-    let (target, target_req, model_label) = resolve_target(&state, &cfg, req.target.as_ref())?;
-    let caps = crate::commands::picker::caps_for_target(&state, &cfg, &target_req);
+    let (target, target_req, model_label) = resolve_target(state, &cfg, req.target.as_ref())?;
+    let caps = crate::commands::picker::caps_for_target(state, &cfg, &target_req);
 
     let mode = ChatMode::parse(req.mode.as_deref());
     let temperature = mode.temperature(req.temperature.unwrap_or(0.7));
@@ -292,8 +353,17 @@ pub async fn chat_stream(
         notes: req.use_recall.unwrap_or(true) && module_on("memory"),
         files: req.use_files.unwrap_or(true),
         skills: req.use_skills.unwrap_or(true) && module_on("skills"),
+        shell: req.use_shell.unwrap_or(true) && module_on("terminal"),
+        // Autonomous mode works on without asking follow-up questions.
+        ask: mode != ChatMode::Autonomous,
+        todos: true,
+        subagents: req.use_subagents.unwrap_or(true),
+        learn_skills: req.learn_skills.unwrap_or(true)
+            && req.use_skills.unwrap_or(true)
+            && module_on("skills"),
         mcp,
     };
+    let approval_mode = crate::services::agent::ApprovalMode::parse(req.approval_mode.as_deref());
 
     let context_tokens = match &target {
         ChatTarget::Local => state
@@ -318,12 +388,24 @@ pub async fn chat_stream(
             notes: perms.notes,
             files: perms.files,
             skills: perms.skills,
+            shell: perms.shell,
             mcp: !perms.mcp.is_empty(),
         },
         mode,
     );
     if caps.tools && !guidance.is_empty() {
         extra.push(guidance);
+    }
+    if let Some(folder) = req.folder.as_deref().filter(|f| !f.trim().is_empty()) {
+        extra.push(format!(
+            "This chat works in the user's project folder {folder}. File tools and terminal commands use it; paths are relative to it."
+        ));
+    }
+    if approval_mode == crate::services::agent::ApprovalMode::Plan {
+        extra.push(PLAN_GUIDANCE.to_string());
+    }
+    if req.rich_output.unwrap_or(true) {
+        extra.push(RICH_OUTPUT_GUIDANCE.to_string());
     }
     let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
 
@@ -378,39 +460,54 @@ pub async fn chat_stream(
         max_rounds: mode.max_rounds(),
         context_tokens,
         auto_approve: req.allowed_tools.iter().cloned().collect(),
+        approval_mode,
+        source,
         first_citation: 1,
         user_message: req.message.clone(),
         read_top_page: mode.gathers_web(),
+        jail,
     };
-    let owned: AppState = (*state).clone();
-    let jobs = state.jobs.clone();
-    let jid = job_id.clone();
-    let _ = channel.send(ChatStreamEvent::Status {
-        label: format!("Answering with {model_label}"),
-    });
+    Ok((run, model_label, job_id, cancel_flag))
+}
 
-    std::thread::spawn(move || {
-        let result = crate::services::agent::run(&owned, run, &cancel_flag, &channel);
-        match result {
-            Ok(done) => {
-                jobs.complete_job(&jid);
-                let _ = channel.send(ChatStreamEvent::Done {
-                    finish_reason: if done.cancelled {
-                        "cancelled".to_string()
-                    } else {
-                        done.finish_reason
-                    },
-                    total_tokens: done.tokens,
-                });
-            }
-            Err(e) => {
-                jobs.fail_job(&jid, &e.message);
-                let _ = channel.send(ChatStreamEvent::Error { error: e.message });
-            }
-        }
-    });
+const PLAN_GUIDANCE: &str = "Plan mode is on. Look around with the read-only tools as much as you need, then answer with a short numbered plan: what you would change, in which files, and which commands you would run. Do not try to make the changes; they will not run. End by saying the user can press Build to carry out the plan.";
 
-    Ok(job_id)
+const RICH_OUTPUT_GUIDANCE: &str = "The chat can draw visuals from fenced code blocks. Use one only when a visual helps more than text:\n- ```chart with JSON: {\"type\": \"bar\" | \"line\" | \"pie\", \"title\": \"...\", \"labels\": [\"...\"], \"series\": [{\"name\": \"...\", \"values\": [1, 2]}]}\n- ```mermaid for diagrams (flowchart, sequence, class, state, timeline, gantt).\n- ```html for an interface mockup or a small page. It runs in a sandbox with no network and no access to the user's files; inline all CSS and scripts. To let the user pick an option on it, call localaide.choose(\"the choice in a few words\") from a button; the choice comes back as the user's next message.\nFor tables, use markdown tables.";
+
+/// The jail for the folder a chat works in. A project folder must be a
+/// real folder the user picked; the whole disk, the home folder itself and
+/// LocalAide's own data folder (keys, settings, chats) are refused.
+pub(crate) fn folder_jail(
+    state: &AppState,
+    folder: Option<&str>,
+) -> Result<std::sync::Arc<crate::services::tools::sandbox::WorkspaceJail>, AppError> {
+    let Some(folder) = folder.map(str::trim).filter(|f| !f.is_empty()) else {
+        return Ok(state.tools.workspace_jail());
+    };
+    let path = std::path::Path::new(folder);
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(AppError::invalid_input(format!(
+            "The chat's folder {folder} is not there any more. Start a chat in another folder."
+        )));
+    }
+    let real = fs::canonicalize(path).map_err(|e| AppError::storage(e.to_string()))?;
+    let home = dirs_next::home_dir().and_then(|h| fs::canonicalize(h).ok());
+    if real.parent().is_none() || home.as_deref() == Some(real.as_path()) {
+        return Err(AppError::invalid_input(
+            "Pick a project folder, not the whole disk or your home folder.",
+        ));
+    }
+    if let Ok(app) = fs::canonicalize(crate::app::paths::app_dir())
+        && (real.starts_with(&app) || app.starts_with(&real))
+        && fs::canonicalize(crate::app::paths::workspace_dir()).ok() != Some(real.clone())
+    {
+        return Err(AppError::invalid_input(
+            "That folder holds LocalAide's own data, so a chat cannot work in it.",
+        ));
+    }
+    Ok(std::sync::Arc::new(
+        crate::services::tools::sandbox::WorkspaceJail::new(&real)?,
+    ))
 }
 
 /// The user's answer to a tool approval question.
@@ -493,7 +590,7 @@ pub async fn chat_thread_list() -> Result<Vec<ChatThread>, AppError> {
     run_blocking(chat_thread_list_work).await
 }
 
-fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
+pub(crate) fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
     let dir = conversations_dir();
     if !dir.exists() {
         return Ok(vec![]);
@@ -514,6 +611,7 @@ fn chat_thread_list_work() -> Result<Vec<ChatThread>, AppError> {
                 created_at: stored.created_at,
                 updated_at: stored.updated_at,
                 message_count: stored.messages.len(),
+                folder: stored.folder,
             });
         }
     }
@@ -527,15 +625,19 @@ pub async fn chat_thread_save(
     title: String,
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
+    folder: Option<String>,
 ) -> Result<(), AppError> {
-    run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages)).await
+    run_blocking(move || chat_thread_save_work(thread_id, title, system_prompt, messages, folder))
+        .await
 }
 
-fn chat_thread_save_work(
+/// `folder` None keeps the folder the saved chat already has.
+pub(crate) fn chat_thread_save_work(
     thread_id: String,
     title: String,
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
+    folder: Option<String>,
 ) -> Result<(), AppError> {
     validate_thread_id(&thread_id)?;
     let dir = conversations_dir();
@@ -547,17 +649,13 @@ fn chat_thread_save_work(
         .as_secs();
 
     let path = dir.join(format!("{thread_id}.json"));
-    let created_at = if path.exists() {
-        if let Ok(existing) = fs::read_to_string(&path) {
-            serde_json::from_str::<StoredThread>(&existing)
-                .map(|t| t.created_at)
-                .unwrap_or(now)
-        } else {
-            now
-        }
-    } else {
-        now
-    };
+    let existing: Option<StoredThread> = fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok());
+    let created_at = existing.as_ref().map(|t| t.created_at).unwrap_or(now);
+    let folder = folder
+        .filter(|f| !f.trim().is_empty())
+        .or_else(|| existing.and_then(|t| t.folder));
 
     let stored = StoredThread {
         id: thread_id,
@@ -566,6 +664,7 @@ fn chat_thread_save_work(
         created_at,
         updated_at: now,
         messages,
+        folder,
     };
 
     let json = serde_json::to_string_pretty(&stored).map_err(AppError::from)?;
@@ -578,7 +677,7 @@ pub async fn chat_thread_load(thread_id: String) -> Result<Vec<ChatMessage>, App
     run_blocking(move || chat_thread_load_work(thread_id)).await
 }
 
-fn chat_thread_load_work(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
+pub(crate) fn chat_thread_load_work(thread_id: String) -> Result<Vec<ChatMessage>, AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if !path.exists() {
@@ -594,7 +693,7 @@ pub async fn chat_thread_delete(thread_id: String) -> Result<(), AppError> {
     run_blocking(move || chat_thread_delete_work(thread_id)).await
 }
 
-fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
+pub(crate) fn chat_thread_delete_work(thread_id: String) -> Result<(), AppError> {
     validate_thread_id(&thread_id)?;
     let path = conversations_dir().join(format!("{thread_id}.json"));
     if path.exists() {

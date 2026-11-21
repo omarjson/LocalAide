@@ -110,18 +110,37 @@ impl RemoteEngine {
         });
 
         let start = Instant::now();
+        let audit = crate::services::cloud_audit::start(
+            &target.label,
+            &url,
+            &target.model,
+            "chat",
+            &crate::services::cloud_audit::last_user_text(&body),
+            body.to_string().len(),
+            Some(&target.api_key),
+        );
         let mut request = self.client.post(&url).json(&body);
         // Keyless providers (Pollinations, local routers) get no
         // Authorization header at all, rather than an empty bearer token.
         if !target.api_key.trim().is_empty() {
             request = request.bearer_auth(&target.api_key);
         }
-        let resp = request.send().map_err(|e| {
-            AppError::internal(format!(
-                "Could not reach {label}: {e}. Check the base URL and your connection.",
-                label = target.label
-            ))
-        })?;
+        let resp = match request.send() {
+            Ok(r) => {
+                audit.finish(
+                    r.status().is_success(),
+                    &format!("HTTP {}", r.status().as_u16()),
+                );
+                r
+            }
+            Err(e) => {
+                audit.finish(false, "could not connect");
+                return Err(AppError::internal(format!(
+                    "Could not reach {label}: {e}. Check the base URL and your connection.",
+                    label = target.label
+                )));
+            }
+        };
 
         if !resp.status().is_success() {
             let code = resp.status();

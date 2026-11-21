@@ -22,7 +22,7 @@ Chat runs in a `llama-server` child process built from llama.cpp tag v0.9.0.
 - Cancel closes the HTTP connection. The server stops generating.
 - Speech is handled separately. See `.kiro/specs/engine-upgrade/tasks.md`, Phase 5.
 
-The sidecar binary is built by `.github/workflows/llama-server.yml` for macOS (Apple Silicon and Intel), Windows x64, and Linux x64. The release job bundles it through `src-tauri/tauri.sidecar.conf.json`.
+Superseded in part by [ADR-0012](0012-engine-download.md) (0.1.7): the binary is no longer bundled, it is downloaded for the user's processor. Before 0.1.7, the sidecar binary was built by `.github/workflows/llama-server.yml` for macOS (Apple Silicon and Intel), Windows x64, and Linux x64. The release job bundles it through `src-tauri/tauri.sidecar.conf.json`.
 
 ## Consequences
 

@@ -137,7 +137,48 @@ export type MessagePart =
       status: ToolStatus;
       summary: string;
       output: string;
+      /** Subagents: what it did, newest last. */
+      steps?: string[];
+      /** save_skill: the change Undo reverts, and whether it was undone. */
+      skill?: { change_id: string; name: string; action: string; undone?: boolean } | null;
+    }
+  | {
+      /** A question the model asked with `ask_user`. */
+      type: "question";
+      id: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+      /** Every question of the call, with option descriptions (0.1.7). */
+      items?: QuestionItem[];
+      /** What the user picked, once answered. */
+      answer?: string | null;
+      /** The user sent another message instead of answering. */
+      deferred?: boolean;
+      dismissed?: boolean;
+    }
+  | {
+      /** The model's to-do list (`update_todos`), newest version. */
+      type: "todos";
+      items: TodoItem[];
     };
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface QuestionItem {
+  header: string;
+  question: string;
+  options: QuestionOption[];
+  multiple: boolean;
+}
+
+export interface TodoItem {
+  text: string;
+  status: "pending" | "in_progress" | "done";
+}
 
 /** A file attached to a message (chat_attach_pick / chat_attach_dropped). */
 export interface ChatAttachment {
@@ -266,6 +307,8 @@ export interface ChatThread {
   created_at: number;
   updated_at: number;
   message_count: number;
+  /** The project folder this chat works in; null for a plain chat. */
+  folder?: string | null;
 }
 
 export interface ChatStreamRequest {
@@ -290,6 +333,9 @@ export interface ChatStreamRequest {
   mcp_servers?: string[];
   /** Tools the user allowed for the rest of this chat. */
   allowed_tools?: string[];
+  /** Let the model run terminal commands in the workspace. */
+  use_shell?: boolean;
+  approval_mode?: ApprovalMode;
   /** The picker's model; omit for the default. */
   target?: ChatTarget;
   /** "auto", "off", "on", "low", "medium", "high"… */
@@ -297,6 +343,14 @@ export interface ChatStreamRequest {
   attachments?: ChatAttachment[];
   /** The user's local date and time. */
   now?: string;
+  /** The project folder the chat works in; omit for the shared workspace. */
+  folder?: string | null;
+  /** Let the model save and improve skills on its own (default true). */
+  learn_skills?: boolean;
+  /** Let the model hand work to read-only subagents (default true). */
+  use_subagents?: boolean;
+  /** Tell the model it can draw charts, diagrams and mockups (default true). */
+  rich_output?: boolean;
 }
 
 export type ChatModeId = "standard" | "strict" | "unrestricted" | "autonomous";
@@ -324,7 +378,45 @@ export type ChatStreamEvent =
       type: "tool_approval";
       payload: { approval_id: string; id: string; title: string; detail: string; preview: string };
     }
-  | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } };
+  | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } }
+  | { type: "question"; payload: { id: string; question: string; options: string[]; multiple: boolean; items?: QuestionItem[] } }
+  | { type: "todos"; payload: { items: TodoItem[] } }
+  | { type: "subagent_step"; payload: { id: string; step: string } }
+  | { type: "skill_change"; payload: { id: string; change_id: string; name: string; action: string } };
+
+/** How much the chat asks before tools run: Plan mode, Ask before changes,
+ * Autonomous (asks only when there is risk) and Full access. "chat" is
+ * the 0.1.6 "Allow for this chat". */
+export type ApprovalMode = "plan" | "ask" | "smart" | "auto" | "chat";
+
+/** The model engine (llama.cpp), downloaded for this processor. */
+export interface EngineInfo {
+  installed: boolean;
+  build: string;
+  cpu: string;
+  download_bytes: number | null;
+  custom: boolean;
+  path: string | null;
+}
+
+export interface EngineDownloadEvent {
+  state: "downloading" | "ready" | "failed";
+  downloaded_bytes: number;
+  total_bytes: number;
+  percent: number;
+  message: string | null;
+}
+
+export interface Starter {
+  title: string;
+  prompt: string;
+  uses: number;
+}
+
+export interface OpenWithApp {
+  id: string;
+  name: string;
+}
 
 export interface SummarizeRequest {
   text: string;
@@ -478,6 +570,18 @@ export interface CloudProviderDto {
   enabled: boolean;
   /** Models saved from the last "Load models". */
   model_count: number;
+  /** A few of those models, for the card. */
+  sample_models: string[];
+  /** The last time LocalAide reached the provider. */
+  check: ProviderCheck | null;
+}
+
+export interface ProviderCheck {
+  ok: boolean;
+  /** Seconds since 1970. */
+  at: number;
+  model_count: number;
+  error: string | null;
 }
 
 /** Settings → Conversation memory. */
@@ -789,4 +893,188 @@ export interface EngineStatusEvent {
   state: string;
   model_id: string | null;
   message: string | null;
+}
+
+/** Search → Library status. */
+export interface LibraryFolder {
+  path: string;
+  added_at: number;
+  last_scan_at: number;
+  indexed: number;
+  skipped: number;
+  limited: boolean;
+  documents: number;
+}
+
+export interface EmbeddingChoice {
+  id: string;
+  name: string;
+  installed: boolean;
+  size_bytes: number;
+}
+
+export interface LibraryStatus {
+  folders: LibraryFolder[];
+  documents: number;
+  total_bytes: number;
+  last_scan_at: number | null;
+  search_mode: "semantic" | "keyword";
+  reason: string | null;
+  embedding_model: string | null;
+  embedding_ready: boolean;
+  embedded_chunks: number;
+  total_chunks: number;
+  choices: EmbeddingChoice[];
+  storage_path: string;
+}
+
+export interface FolderPreset {
+  id: string;
+  label: string;
+  path: string | null;
+  exists: boolean;
+  added: boolean;
+}
+
+export interface IndexProgress {
+  folder: string;
+  seen: number;
+  indexed: number;
+  skipped: number;
+  current: string;
+}
+
+export interface IndexReport {
+  folder: string;
+  indexed: number;
+  skipped: number;
+  limited: boolean;
+  cancelled: boolean;
+  ms: number;
+  reasons: [string, number][];
+  skipped_files: { path: string; reason: string }[];
+}
+
+/** Settings → General → Check my setup. */
+export interface SelfTestStep {
+  step: "model" | "engine" | "load" | "reply";
+  label: string;
+  status: "running" | "pass" | "fail" | "skip";
+  ms: number;
+  detail: string;
+  percent: number | null;
+}
+
+export interface SelfTestReport {
+  passed: boolean;
+  model_id: string;
+  steps: SelfTestStep[];
+  ms: number;
+}
+
+/** One call that left this computer. */
+export interface CloudCall {
+  id: number;
+  timestamp: number;
+  provider: string;
+  host: string;
+  model: string;
+  kind: string;
+  preview: string;
+  bytes: number;
+  status: string;
+  detail: string | null;
+}
+
+/** Settings → Voice. */
+export interface VoiceSettings {
+  enabled: boolean;
+  /** A local model id ("stt-whisper-tiny") or "online:<provider>:<model>:<live|batch>". */
+  model: string;
+  local_only: boolean;
+  cleanup: boolean;
+  auto_send: boolean;
+  read_aloud: boolean;
+  voice_name: string | null;
+  rate: number;
+  /** The end of each saved key, by provider id. */
+  key_hints: Record<string, string>;
+}
+
+export type VoiceUpdate = Partial<Omit<VoiceSettings, "key_hints" | "voice_name">> & { voice_name?: string };
+
+export interface LocalVoiceModel {
+  id: string;
+  name: string;
+  params: string;
+  description: string;
+  license: string;
+  size_bytes: number;
+  installed: boolean;
+}
+
+export interface OnlineVoiceModel {
+  key: string;
+  provider: string;
+  provider_label: string;
+  host: string;
+  key_url: string;
+  model: string;
+  label: string;
+  delivery: "live" | "batch";
+  note: string;
+  has_key: boolean;
+}
+
+/** A program LocalAide fetches once (voice engine, cloudflared). */
+export interface ProgramStatus {
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  download_bytes: number | null;
+  available: boolean;
+}
+
+export interface VoiceModels {
+  local: LocalVoiceModel[];
+  online: OnlineVoiceModel[];
+  engine: ProgramStatus;
+}
+
+export interface Transcript {
+  text: string;
+  model: string;
+  ms: number;
+  online: boolean;
+  language: string | null;
+}
+
+export type LiveEvent =
+  | { type: "open" }
+  | { type: "interim"; text: string }
+  | { type: "final"; text: string }
+  | { type: "done"; text: string }
+  | { type: "error"; message: string };
+
+export interface VoiceCleanup {
+  text: string;
+  changed: boolean;
+  skipped: string | null;
+}
+
+/** Settings → Share my assistant. */
+export interface ShareStatus {
+  on: boolean;
+  url: string | null;
+  started_at: number | null;
+  requests: number;
+  refused: number;
+  last_seen: number | null;
+  cloudflared: ProgramStatus;
+}
+
+export interface ShareStarted {
+  status: ShareStatus;
+  viewer_link: string;
+  remote_link: string;
 }

@@ -1,19 +1,27 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
   import MarkdownDoc from "./MarkdownDoc.svelte";
+  import ChartBlock from "./ChartBlock.svelte";
+  import MermaidBlock from "./MermaidBlock.svelte";
+  import HtmlFrame from "./HtmlFrame.svelte";
 
   interface Props {
     text: string;
     /** Show the blinking caret after the text. */
     caret?: boolean;
+    /** Draw ```chart, ```mermaid and ```html blocks (default true). */
+    visuals?: boolean;
+    /** A pick from a mockup, sent as the user's reply. */
+    onChoose?: (text: string) => void;
   }
 
-  let { text, caret = false }: Props = $props();
+  let { text, caret = false, visuals = true, onChoose }: Props = $props();
+  const VISUAL = new Set(["chart", "mermaid", "html"]);
 
   let copiedBlock = $state<number | null>(null);
   let copyError = $state(false);
 
-  type Segment = { type: "text"; text: string } | { type: "code"; lang: string; code: string };
+  type Segment = { type: "text"; text: string } | { type: "code"; lang: string; code: string; closed: boolean };
 
   // Code blocks are split out first; a block that is still streaming (no
   // closing fence yet) shows as code too, so it does not flicker.
@@ -25,7 +33,7 @@
     let m: RegExpExecArray | null;
     while ((m = fence.exec(text)) !== null) {
       if (m.index > last) parts.push({ type: "text", text: text.slice(last, m.index) });
-      parts.push({ type: "code", lang: m[1] || "code", code: m[2].trimEnd() });
+      parts.push({ type: "code", lang: m[1] || "code", code: m[2].trimEnd(), closed: m[3] === "```" });
       last = m.index + m[0].length;
       if (m[0].length === 0) break;
     }
@@ -51,6 +59,16 @@
   {#each segments as seg, idx (idx)}
     {#if seg.type === "text"}
       <MarkdownDoc source={seg.text} class="answer-text" />
+    {:else if visuals && seg.closed && VISUAL.has(seg.lang.toLowerCase())}
+      {#if seg.lang.toLowerCase() === "chart"}
+        <ChartBlock source={seg.code} />
+      {:else if seg.lang.toLowerCase() === "mermaid"}
+        <MermaidBlock source={seg.code} />
+      {:else}
+        <HtmlFrame source={seg.code} {onChoose} />
+      {/if}
+    {:else if visuals && !seg.closed && VISUAL.has(seg.lang.toLowerCase())}
+      <div class="flex items-center gap-2 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2.5 text-sm text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500"></span>Drawing the {seg.lang.toLowerCase() === "html" ? "mockup" : seg.lang.toLowerCase() === "chart" ? "chart" : "diagram"}…</div>
     {:else}
       <div class="overflow-hidden rounded-xl border border-ink-700 bg-ink-950">
         <div class="flex items-center justify-between border-b border-ink-800 bg-ink-900/70 px-3 py-1.5 font-mono text-xs text-ink-400">

@@ -174,6 +174,7 @@ fn test_chat_thread_serialization() {
         created_at: 1700000000,
         updated_at: 1700000100,
         message_count: 4,
+        folder: None,
     };
 
     let json = serde_json::to_string(&thread).expect("Serialization must succeed");

@@ -8,12 +8,12 @@ inclusion: always
 
 - `src/`: Svelte 5 frontend.
 - `src-tauri/`: Rust core and Tauri config. `about.toml` and `about.hbs` drive the `cargo about` license file for releases.
-- `vendor/`: deleted. The old vendored `llama_cpp_rs` fork is gone; the `llama-server` sidecar is built from the pinned llama.cpp tag by CI (`.github/workflows/llama-server.yml`).
+- `vendor/`: deleted. The old vendored `llama_cpp_rs` fork is gone; `llama-server` is downloaded at runtime for the user's processor (`services/engine.rs`, pins in `services/externals.rs`, ADR-0012).
 - `docs/`: scope, backlog, ADRs, evidence, and `release.md` (how releases are built and signed).
-- `scripts/`: smoke test (`smoke-test.mjs`), catalog tools, `prepare-sidecar.sh`, and `ci/` (`cargo-annotate.mjs` turns cargo failures into annotations; `check-versions.mjs` is the version gate; `updater-config.mjs` and `make-latest-json.mjs` sign update packages and write the update feed), and `gen-installer-art.mjs` (installer images from the logo).
+- `scripts/`: smoke test (`smoke-test.mjs`), catalog tools, and `ci/` (`cargo-annotate.mjs` turns cargo failures into annotations; `check-versions.mjs` is the version gate; `updater-config.mjs` and `make-latest-json.mjs` sign update packages and write the update feed), and `gen-installer-art.mjs` (installer images from the logo).
 - `tests/unit/`: frontend unit tests, run by Node's own test runner (`npm run test:unit`).
 - `public/`: files served as they are, including `theme-init.js`, which sets the theme before the first paint.
-- `.github/`: workflows (`ci.yml`, `llama-server.yml`, `audit.yml`), `dependabot.yml`, issue templates.
+- `.github/`: workflows (`ci.yml`, `audit.yml`), `dependabot.yml`, issue templates.
 - `.kiro/`: Kiro project files: `skills/impeccable/`, `skills/ui-ux-pro-max/` (MIT, vendored from nextlevelbuilder/ui-ux-pro-max-skill; run `python3 .kiro/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux`), this `steering/` folder, and `specs/` (`engine-upgrade`, `kiroween-2026`).
 - `PRIVACY.md`, `TERMS.md`: legal pages, bundled into the app and the installer.
 - `src-tauri/installer/`: installer art (NSIS header and sidebar, DMG background, macOS icon source).

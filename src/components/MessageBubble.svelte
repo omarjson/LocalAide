@@ -5,10 +5,16 @@
   import AnswerText from "./AnswerText.svelte";
   import ThinkingBlock from "./ThinkingBlock.svelte";
   import ToolCallCard from "./ToolCallCard.svelte";
+  import QuestionCard from "./QuestionCard.svelte";
+  import QuestionDock from "./QuestionDock.svelte";
+  import TodoList from "./TodoList.svelte";
+  import { questionItems } from "../lib/chatParts";
+  import { parseQuestion } from "../lib/questions";
   import { openInBrowser } from "../lib/links";
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { speak, speechAvailable, stopSpeaking } from "../lib/speech";
+  import { voice } from "../lib/voice.svelte";
   import { onDestroy } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import type { ChatAttachment, Citation, MessagePart } from "../lib/api/bindings";
@@ -39,6 +45,18 @@
     /** Tool calls waiting for the user, by tool call id. */
     approvals?: Record<string, { approval_id: string; preview: string }>;
     onDecide?: (toolId: string, decision: "allow" | "allow_chat" | "deny") => void;
+    /** Set on the newest answer: send a tapped option as the reply. */
+    onAnswer?: (text: string, questionId: string | null) => void;
+    /** "Other…": put the cursor in the chat box. */
+    onOther?: () => void;
+    /** Dismiss an ask_user question without answering. */
+    onDismissQuestion?: (questionId: string) => void;
+    /** Undo a skill the model saved, by tool call id. */
+    onUndoSkill?: (toolId: string) => void;
+    /** The chat's project folder, for file buttons. */
+    folder?: string | null;
+    /** An earlier question the user moved past can still be answered. */
+    onAnswerDeferred?: (text: string, questionId: string) => void;
   }
 
   let {
@@ -60,7 +78,21 @@
     model = "",
     approvals = {},
     onDecide,
+    onAnswer,
+    onOther,
+    onDismissQuestion,
+    onUndoSkill,
+    folder = null,
+    onAnswerDeferred,
   }: Props = $props();
+
+  // A question at the end of a plain answer gets buttons too, when the
+  // model did not use ask_user.
+  const parsedQuestion = $derived(
+    role === "assistant" && isLast && !streaming && onAnswer && !parts.some((p) => p.type === "question")
+      ? parseQuestion(content)
+      : null,
+  );
 
   let copied = $state(false);
   let copyError = $state<string | null>(null);
@@ -72,8 +104,8 @@
   let referencesOpen = $state(false);
   let raw = $state(false);
   let speaking = $state(false);
-  // Experimental "Read answers aloud", where the system has a voice.
-  const canSpeak = $derived(flag("read_aloud") && speechAvailable());
+  // Settings → Voice → Read answers aloud, where the system has a voice.
+  const canSpeak = $derived(!!voice.settings?.read_aloud && speechAvailable());
 
   const toggleSpeak = () => {
     if (speaking) {
@@ -82,7 +114,7 @@
       return;
     }
     speaking = true;
-    speak(content, () => { speaking = false; });
+    speak(content, () => { speaking = false; }, { voiceName: voice.settings?.voice_name, rate: voice.settings?.rate });
   };
 
   onDestroy(() => { if (speaking) stopSpeaking(); });
@@ -219,6 +251,21 @@
           {#each parts as part, i (i)}
             {#if part.type === "reasoning"}
               <ThinkingBlock text={part.text} ms={part.ms ?? null} live={streaming && i === parts.length - 1} />
+            {:else if part.type === "question"}
+              <QuestionDock
+                items={questionItems(part)}
+                answer={part.answer ?? null}
+                deferred={part.deferred ?? false}
+                dismissed={part.dismissed ?? false}
+                onAnswer={isLast && !streaming && onAnswer
+                  ? (text) => onAnswer?.(text, part.id)
+                  : part.deferred && onAnswerDeferred
+                    ? (text) => onAnswerDeferred?.(text, part.id)
+                    : undefined}
+                onDismiss={() => onDismissQuestion?.(part.id)}
+              />
+            {:else if part.type === "todos"}
+              <TodoList items={part.items} />
             {:else if part.type === "tool"}
               <ToolCallCard
                 title={part.title}
@@ -230,10 +277,14 @@
                 output={part.output}
                 approval={approvals[part.id] ? { preview: approvals[part.id].preview } : null}
                 onDecide={(decision) => onDecide?.(part.id, decision)}
+                steps={part.steps ?? []}
+                skill={part.skill ?? null}
+                onUndoSkill={onUndoSkill ? () => onUndoSkill?.(part.id) : undefined}
+                {folder}
               />
-            {:else if part.text.trim()}
+            {:else if part.type === "text" && part.text.trim()}
               <div class={i > 0 ? "pt-1" : ""}>
-                <AnswerText text={part.text} caret={streaming && i === parts.length - 1} />
+                <AnswerText text={part.text} caret={streaming && i === parts.length - 1} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} />
               </div>
             {/if}
           {/each}
@@ -242,7 +293,20 @@
           {/if}
         </div>
       {:else}
-        <AnswerText text={content} caret={streaming && !!content.trim()} />
+        <AnswerText text={content} caret={streaming && !!content.trim()} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} />
+      {/if}
+
+      {#if parsedQuestion}
+        <div class="mt-3">
+          <QuestionCard
+            question={parsedQuestion.question}
+            options={parsedQuestion.options}
+            multiple={parsedQuestion.multiple}
+            showQuestion={false}
+            onAnswer={(text) => onAnswer?.(text, null)}
+            {onOther}
+          />
+        </div>
       {/if}
 
       {#if citations.length > 0}

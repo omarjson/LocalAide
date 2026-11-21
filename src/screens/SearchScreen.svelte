@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { formatBytes } from "../lib/format";
+  import LibraryStatus from "../components/LibraryStatus.svelte";
   import { onMount } from "svelte";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
@@ -210,26 +212,23 @@
     }
   };
 
+  // Folders go through the Library status card, which shows live progress
+  // and the report of what was added and skipped.
+  let libraryEl = $state<{ addFolder: (path: string) => Promise<void> } | null>(null);
   const indexFolder = async () => {
     if (!folder.trim()) return;
     loading = true;
     errorMessage = null;
     try {
-      const added = await api.indexFolder(folder);
-      const files = `${added.indexed} ${added.indexed === 1 ? "file" : "files"}`;
-      showToast(
-        added.limited
-          ? `Added ${files}. The folder is very large, so only part of it was added.`
-          : `Added ${files}.`,
-      );
-      await refreshStats();
-      query = "";
-      await loadInitialLibrary();
-    } catch (e: unknown) {
-      errorMessage = errMsg(e);
+      await libraryEl?.addFolder(folder.trim());
     } finally {
       loading = false;
     }
+  };
+  const libraryChanged = async () => {
+    await refreshStats();
+    await refreshEmbedding();
+    if (!query.trim()) await loadInitialLibrary();
   };
 
   const refreshStats = async () => {
@@ -423,6 +422,10 @@
     </div>
   {/if}
 
+  <div class="mb-5">
+    <LibraryStatus bind:this={libraryEl} onChanged={() => void libraryChanged()} />
+  </div>
+
   <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
     <div class="field-shell flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-700 bg-ink-950 px-3 shadow-sm">
       <Icon name="search" class="h-[18px] w-[18px] shrink-0 text-ink-400" />
@@ -462,7 +465,7 @@
   <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-400">
     <span>{stats?.doc_count ?? results.length} {stats?.doc_count === 1 ? "document" : "documents"}</span>
     {#if stats}
-      <span>{(stats.total_bytes / 1024).toFixed(1)} KB stored</span>
+      <span>{formatBytes(stats.total_bytes)} stored</span>
     {/if}
     {#if watching}
       <StatusBadge label="Watching for new files" tone="ok" dot />

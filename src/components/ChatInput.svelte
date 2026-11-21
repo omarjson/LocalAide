@@ -2,12 +2,13 @@
   import { onMount, tick, type Snippet } from "svelte";
   import { fly } from "svelte/transition";
   import Icon, { type IconName } from "./Icon.svelte";
-  import { MODE_ICONS } from "../lib/chatModes";
   import { popover } from "../lib/actions/popover";
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { slashItems, type SlashItem } from "../lib/slash";
-  import type { ChatAttachment, ChatModeId, ChatModeInfo, Skill } from "../lib/api/bindings";
+  import VoiceButton from "./VoiceButton.svelte";
+  import { voice } from "../lib/voice.svelte";
+  import type { ChatAttachment, Skill } from "../lib/api/bindings";
 
   /** An MCP server as the tools menu shows it. */
   export interface ToolServer {
@@ -37,9 +38,6 @@
     skills?: Skill[];
     onPickSkill?: (body: string) => void;
     onSlashCommand?: (command: string) => void;
-    mode?: ChatModeId;
-    modes?: ChatModeInfo[];
-    onModeChange?: (mode: ChatModeId) => void;
     useWeb?: boolean;
     webAvailable?: boolean;
     onToggleWeb?: () => void;
@@ -51,12 +49,22 @@
     useSkills?: boolean;
     skillsAvailable?: boolean;
     onToggleSkills?: () => void;
+    useShell?: boolean;
+    shellAvailable?: boolean;
+    onToggleShell?: () => void;
     mcpServers?: ToolServer[];
     mcpAvailable?: boolean;
     onToggleMcp?: (id: string) => void;
     onManageTools?: () => void;
     /** The model and thinking pickers, at the right of the box. */
     trailing?: Snippet;
+    /** The permission icon, after the attach button. */
+    leading?: Snippet;
+    /** Rewrite the draft into a clearer prompt. */
+    onEnhance?: () => void;
+    enhancing?: boolean;
+    /** A suggested next message: shown in the empty box, Tab takes it. */
+    suggestion?: string | null;
   }
 
   let {
@@ -79,9 +87,6 @@
     skills = [],
     onPickSkill,
     onSlashCommand,
-    mode = "standard",
-    modes = [],
-    onModeChange,
     useWeb = false,
     webAvailable = false,
     onToggleWeb,
@@ -93,24 +98,29 @@
     useSkills = true,
     skillsAvailable = true,
     onToggleSkills,
+    useShell = true,
+    shellAvailable = false,
+    onToggleShell,
     mcpServers = [],
     mcpAvailable = true,
     onToggleMcp,
     onManageTools,
     trailing,
+    leading,
+    onEnhance,
+    enhancing = false,
+    suggestion = null,
   }: Props = $props();
 
   let textareaEl = $state<HTMLTextAreaElement>();
   let fileInputEl = $state<HTMLInputElement>();
   let skillCursor = $state(0);
-  let modeMenuOpen = $state(false);
   let attachMenuOpen = $state(false);
   let toolsMenuOpen = $state(false);
   // Experimental: Ctrl+Enter (Cmd+Enter on a Mac) sends, Enter adds a line.
   const ctrlEnterSends = $derived(flag("send_ctrl_enter"));
   onMount(() => textareaEl?.focus());
 
-  const currentMode = $derived(modes.find((m) => m.id === mode));
 
   // The box stays focusable while an answer streams (read-only, not disabled),
   // so Escape still stops it. Focus comes back when the answer ends.
@@ -183,6 +193,12 @@
         return;
       }
     }
+    // Tab takes the suggested next message into the empty box.
+    if (e.key === "Tab" && !e.shiftKey && suggestion && !input.trim()) {
+      e.preventDefault();
+      input = suggestion;
+      return;
+    }
     // With "Send with Ctrl+Enter" on, plain Enter adds a new line instead.
     const sendKey = ctrlEnterSends
       ? e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
@@ -218,6 +234,7 @@
     if (recallAvailable) rows.push({ id: "notes", label: "Notes and documents", hint: "Search your notes and library, save notes", icon: "memory", on: useRecall, toggle: onToggleRecall });
     rows.push({ id: "files", label: "Workspace files", hint: "Read files; writing asks you first", icon: "folder", on: useFiles, toggle: onToggleFiles });
     if (skillsAvailable) rows.push({ id: "skills", label: "Skills", hint: "Use your saved skills", icon: "skills", on: useSkills, toggle: onToggleSkills });
+    if (shellAvailable) rows.push({ id: "shell", label: "Terminal", hint: "Run commands in the workspace; changes ask first", icon: "terminal", on: useShell, toggle: onToggleShell });
     return rows;
   });
   const toolsOn = $derived(toolRows.filter((r) => r.on).length + (mcpAvailable ? mcpServers.filter((s) => s.on).length : 0));
@@ -326,7 +343,7 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Answering… press Esc to stop" : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
+      placeholder={streaming ? "Answering… press Esc to stop" : suggestion ? `Tab to use: ${suggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
       readonly={streaming}
       aria-busy={streaming}
       rows={1}
@@ -369,9 +386,22 @@
         {/if}
       </div>
 
+      {#if leading}{@render leading()}{/if}
+
+      {#if voice.settings?.enabled}
+        <VoiceButton
+          disabled={streaming}
+          onText={(text) => {
+            input = input.trim() ? `${input.trimEnd()} ${text}` : text;
+            if (voice.settings?.auto_send) void tick().then(() => onSend());
+            else void tick().then(() => textareaEl?.focus());
+          }}
+        />
+      {/if}
+
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
-          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-[11px] leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
+          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
         </button>
         {#if toolsMenuOpen}
           <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
@@ -405,47 +435,19 @@
       </div>
 
 
-      {#if modes.length > 0}
-        <div class="relative" use:popover={{ open: modeMenuOpen, onClose: () => (modeMenuOpen = false) }}>
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={modeMenuOpen}
-            onclick={() => (modeMenuOpen = !modeMenuOpen)}
-            class={`composer-chip ${mode !== "standard" ? "composer-chip-on" : ""}`}
-            title={currentMode?.description}
-          >
-            <Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />
-            <span class="hidden md:inline">{currentMode?.label ?? "Standard"}</span>
-            <Icon name="chevron-down" class={`h-3 w-3 transition-transform duration-200 ${modeMenuOpen ? "rotate-180" : ""}`} />
-          </button>
-          {#if modeMenuOpen}
-            <div role="menu" aria-label="Chat mode" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
-              <div class="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-ink-500">How LocalAide answers</div>
-              {#each modes as m (m.id)}
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={m.id === mode}
-                  data-popover-item
-                  onclick={() => { onModeChange?.(m.id); modeMenuOpen = false; }}
-                  class={`menu-row ${m.id === mode ? "bg-ember-500/10" : ""}`}
-                >
-                  <span class={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md ${m.id === mode ? "bg-ember-500/20 text-ember-300" : "bg-ink-800 text-ink-300"}`}><Icon name={MODE_ICONS[m.id]} class="h-4 w-4" /></span>
-                  <span class="min-w-0 flex-1">
-                    <span class="block text-sm font-semibold text-ink-50">{m.label}</span>
-                    <span class="block text-xs leading-5 text-ink-400">{m.description}</span>
-                  </span>
-                  {#if m.id === mode}<Icon name="check" class="mt-1 h-4 w-4 shrink-0 text-ember-300" />{/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
-
       <span class="ml-auto"></span>
       {#if trailing}{@render trailing()}{/if}
+
+      {#if onEnhance && !streaming}
+        <button
+          type="button"
+          onclick={onEnhance}
+          disabled={!input.trim() || enhancing}
+          aria-label="Improve this prompt"
+          title="Improve this prompt with the model"
+          class="composer-tool ml-0.5 disabled:opacity-40"
+        >{#if enhancing}<span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>{:else}<Icon name="wand" class="h-4 w-4" />{/if}</button>
+      {/if}
 
       {#if streaming}
         <button

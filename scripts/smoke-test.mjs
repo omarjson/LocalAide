@@ -77,7 +77,10 @@ if (jsFiles.length === 0) {
   process.exit(1);
 }
 
-const jsPath = join(assetsDir, jsFiles[0]);
+// The entry script index.html loads; diagrams and other lazy chunks are
+// separate files.
+const entry = /<script[^>]+src="\/assets\/([^"]+\.js)"/.exec(indexHtml)?.[1] ?? jsFiles[0];
+const jsPath = join(assetsDir, entry);
 const jsContent = readFileSync(jsPath, 'utf-8');
 
 if (!jsContent.includes('LocalAide')) {
@@ -85,5 +88,5 @@ if (!jsContent.includes('LocalAide')) {
   process.exit(1);
 }
 
-console.log(`PASS: JS bundle compiled successfully (${jsFiles[0]}, ${statSync(jsPath).size} bytes).`);
+console.log(`PASS: JS bundle compiled successfully (${entry}, ${statSync(jsPath).size} bytes).`);
 console.log("=== ALL SMOKE CHECKS PASSED ===");

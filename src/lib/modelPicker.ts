@@ -67,3 +67,48 @@ export function pickerSections(choices: ModelChoices | null, query: string, filt
   }
   return out;
 }
+
+/** "local" for models on this computer, else the provider id. */
+export function providerKey(m: ModelChoice): string {
+  return m.provider_id ?? "local";
+}
+
+export interface PickerProvider {
+  key: string;
+  providerId: string | null;
+  label: string;
+  /** "Free" when every listed model of the provider is free. */
+  badge: string;
+  router: boolean;
+  needsRefresh: boolean;
+}
+
+/** The providers the picker can switch to: this computer first, then the
+ * online providers that are switched on. */
+export function providerList(choices: ModelChoices | null): PickerProvider[] {
+  if (!choices) return [];
+  const out: PickerProvider[] = [
+    { key: "local", providerId: null, label: "This computer", badge: "Private", router: false, needsRefresh: false },
+  ];
+  if (choices.online_allowed === false) return out;
+  for (const g of choices.groups.filter((g) => g.enabled)) {
+    const models = choices.models.filter((m) => m.provider_id === g.provider_id);
+    out.push({
+      key: g.provider_id,
+      providerId: g.provider_id,
+      label: g.label,
+      badge: models.length > 0 && models.every((m) => m.free) ? "Free" : g.local_router ? "Local" : "",
+      router: g.local_router,
+      needsRefresh: g.needs_refresh,
+    });
+  }
+  return out;
+}
+
+/** One provider's models matching the search, starred first. */
+export function providerModels(choices: ModelChoices | null, key: string, query: string): ModelChoice[] {
+  if (!choices) return [];
+  return choices.models
+    .filter((m) => providerKey(m) === key && matchesModel(m, query, NO_FILTERS))
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite));
+}

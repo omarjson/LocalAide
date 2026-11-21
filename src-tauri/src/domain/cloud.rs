@@ -16,6 +16,10 @@ pub struct CloudProviderDto {
     pub enabled: bool,
     /// Models saved from the last "Load models".
     pub model_count: usize,
+    /// A few of those models, for the provider card.
+    pub sample_models: Vec<String>,
+    /// The last connection check, if any.
+    pub check: Option<crate::config::ProviderCheck>,
 }
 
 /// One model in the chat's model picker.

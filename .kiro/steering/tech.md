@@ -39,7 +39,7 @@ Everything sits under `~/.aiassistant/`:
 - `npm run test:unit`: Node's test runner on `tests/unit/*.test.ts`. `npm test` runs the smoke test and the unit tests.
 - `cd src-tauri && cargo test --all-targets`.
 - `cd src-tauri && cargo clippy --all-targets -- -D warnings`, as CI runs it. No crate-level `allow` hides lints.
-- `make all` runs check, fmt, lint, test and smoke, like CI. `make release` runs the sidecar-overlay build (`npx tauri build --config src-tauri/tauri.sidecar.conf.json`) after `npm run build`.
+- `make all` runs check, fmt, lint, test and smoke, like CI. `make release` runs the release-overlay build (`npx tauri build --config src-tauri/tauri.release.conf.json`) after `npm run build`.
 - On Windows use `npm.cmd`, since PowerShell may block `npm.ps1`.
 
 ## Conventions

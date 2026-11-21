@@ -6,7 +6,7 @@ This page explains how a release is built, what CI checks, and the steps that ne
 
 1. Set one version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`. The `version-gate` job fails if they differ, or if a tag does not match them.
 2. Push a tag such as `v0.1.3`, or run the "CI & Release Pipeline" workflow by hand with "Create a draft GitHub Release" ticked.
-3. CI builds `llama-server` for each platform, checks that it starts, then builds the installers.
+3. CI builds the installers for macOS (Apple silicon and Intel), Windows (x64 and ARM64) and Linux (x64). The model engine is not in them: the app downloads the official llama.cpp build for the user's processor the first time a model loads ([ADR-0012](adr/0012-engine-download.md)).
 4. The `publish-release` job makes a **draft** release with the installers, `SHA256SUMS.txt` and `localaide-sbom.spdx.json`. Nothing is public yet.
 5. A person downloads the installers from the draft, tries them on a real machine, then presses "Publish".
 
@@ -25,18 +25,16 @@ You need:
   - Windows: Visual Studio C++ Build Tools (MSVC), and Git Bash for the shell scripts.
   - Linux: `libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`.
 - **`cargo-about`**, for the license file: `cargo install cargo-about --locked`.
-- **`llama-server` for your platform.** Download the `llama-server-<target>` artifact from a `[build-all]` CI run, or build llama.cpp `v1.0.0` with the flags in `.github/workflows/llama-server.yml`.
 
 Then, from the repository root:
 
 ```bash
-scripts/prepare-sidecar.sh <folder-with-llama-server> <target-triple>
 (cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html)
 npm ci
 make release
 ```
 
-The target triple is one of `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc` or `x86_64-unknown-linux-gnu`. `make release` builds with the `src-tauri/tauri.sidecar.conf.json` overlay, which bundles `llama-server` and the license file. A bare `npx tauri build` makes an app that cannot chat.
+`make release` builds with the `src-tauri/tauri.release.conf.json` overlay, which bundles the license file. The app downloads its model engine on first use, so a local build needs nothing else. To try your own `llama-server`, set `LOCALAIDE_LLAMA_SERVER` to its path.
 
 The installers land in `src-tauri/target/release/bundle/`, in `nsis/` (Windows), `dmg/` and `macos/` (macOS), or `deb/` and `appimage/` (Linux).
 
@@ -44,7 +42,7 @@ The installers land in `src-tauri/target/release/bundle/`, in `nsis/` (Windows),
 
 | File | What it is |
 |---|---|
-| `*-setup.exe` | Windows installer (NSIS) |
+| `*_x64-setup.exe`, `*_arm64-setup.exe` | Windows installers (NSIS) for x64 PCs and Windows on ARM |
 | `*_aarch64.dmg`, `*_x64.dmg` | macOS disk images for Apple Silicon and Intel |
 | `*.deb`, `*.AppImage` | Linux packages, built on Ubuntu 22.04 |
 | `SHA256SUMS.txt` | SHA-256 of every file above. Check a download with `sha256sum -c SHA256SUMS.txt --ignore-missing` (Linux and macOS) or compare with `Get-FileHash <file>` (Windows). |
@@ -55,7 +53,7 @@ Inside the app: `LICENSE`, `PRIVACY.md`, `TERMS.md`, `THIRD_PARTY_NOTICES.md` an
 
 ## CPU and runtime requirements
 
-`llama-server` is built with `GGML_NATIVE=OFF`. On x86_64 that means a CPU with AVX2 (Intel Haswell from 2013, AMD Excavator from 2015, or newer). It is built without OpenMP, and on Windows with the static C runtime, so it needs no Visual C++ Redistributable.
+The model engine is llama.cpp build `b12359` (the v1.0.0 release), downloaded from github.com/ggml-org/llama.cpp with a pinned SHA-256 for each platform (`services/externals.rs`), into `~/.aiassistant/tools/`. LocalAide picks the build for the processor itself, not for the app: an x64 app on Windows on ARM, or an Intel app under Rosetta, still gets the ARM64 engine. The x64 Windows and Linux builds carry a CPU library for each instruction set from SSE4.2 to AVX-512 and load the one the processor supports, so processors without AVX2 work too. The macOS builds use Metal.
 
 The Windows installer carries the WebView2 bootstrapper. Windows 10 and 11 usually have WebView2 already. When they do not, the installer needs the internet once to fetch it.
 

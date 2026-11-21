@@ -1,6 +1,6 @@
 [package]
 name = "ai-desktop-assistant"
-version = "0.1.5"
+version = "0.1.7"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
@@ -33,7 +33,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 sysinfo = "0.32"
 # reqwest 0.13 puts `.form()` behind the "form" feature (web search uses it).
-reqwest = { version = "0.13", features = ["json", "stream", "blocking", "form"] }
+reqwest = { version = "0.13", features = ["json", "stream", "blocking", "form", "multipart"] }
 url = "2"
 # "time" lets a download notice Pause while the network is silent.
 tokio = { version = "1", features = ["sync", "time", "macros"] }
@@ -60,6 +60,16 @@ aes-gcm = "0.11"
 argon2 = "0.6"
 # Wipes backup keys and decrypted backups from memory after use.
 zeroize = "1"
+# The local server behind "Share my assistant" (127.0.0.1 only).
+tiny_http = "0.12"
+# Audio for online transcription is sent as base64.
+base64 = "0.22"
+# Live transcription over WebSocket (Gemini Live, Deepgram, Soniox).
+tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+
+# The terminal tool kills a command's whole process group on timeout.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # Async tests for the HTTP clients (OpenCode link, skill discovery).
 [dev-dependencies]

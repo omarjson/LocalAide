@@ -24,8 +24,9 @@ export const motion = {
   enter: quintOut,
 } as const;
 
-/** A screen or section entering: a short rise plus fade. */
-export const enterScreen = () => ({ y: 8, duration: dur(motion.slow), easing: motion.enter });
+/** A screen or section entering: switched many times a day (often by
+ * keyboard), so only a short, small rise. */
+export const enterScreen = () => ({ y: 4, duration: dur(motion.fast), easing: motion.enter });
 
 /** A dialog panel entering. */
 export const enterDialog = () => ({ start: 0.96, duration: dur(motion.base), easing: motion.enter });

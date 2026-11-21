@@ -1,5 +1,14 @@
 pub mod approval;
 pub mod sandbox;
+pub mod shell;
+
+/// A finished terminal command and where it ran.
+pub struct CommandRun {
+    pub output: shell::RunOutput,
+    /// The folder inside the workspace, empty for the top.
+    pub cwd: String,
+    pub workspace: std::path::PathBuf,
+}
 
 use crate::app::error::AppError;
 use crate::domain::tool::{
@@ -25,7 +34,23 @@ impl ToolService {
         }
     }
 
+    /// The shared workspace folder's jail.
+    pub fn workspace_jail(&self) -> Arc<WorkspaceJail> {
+        self.jail.clone()
+    }
+
     pub fn execute(&self, req: ToolExecutionRequest) -> Result<ToolExecutionResponse, AppError> {
+        let jail = self.jail.clone();
+        self.execute_in(&jail, req)
+    }
+
+    /// Run a file action inside `jail`: the workspace, or the folder a chat
+    /// works in.
+    pub fn execute_in(
+        &self,
+        jail: &WorkspaceJail,
+        req: ToolExecutionRequest,
+    ) -> Result<ToolExecutionResponse, AppError> {
         let action_name = match req.action.action_type {
             ToolActionType::ListDir => "list_dir",
             ToolActionType::ReadFile => "read_file",
@@ -91,7 +116,7 @@ impl ToolService {
 
         // Errors are kept, not returned early, so a refused or failed action
         // is still recorded below.
-        let exec_result = self.run_in_jail(&req);
+        let exec_result = Self::run_in_jail(jail, &req);
 
         let (status, details) = match &exec_result {
             Ok(_) => ("success", None),
@@ -134,10 +159,13 @@ impl ToolService {
     }
 
     /// Runs one approved action inside the workspace jail.
-    fn run_in_jail(&self, req: &ToolExecutionRequest) -> Result<(String, bool), AppError> {
+    fn run_in_jail(
+        jail: &WorkspaceJail,
+        req: &ToolExecutionRequest,
+    ) -> Result<(String, bool), AppError> {
         match req.action.action_type {
             ToolActionType::ListDir => {
-                let entries = self.jail.list_dir(Some(&req.action.path))?;
+                let entries = jail.list_dir(Some(&req.action.path))?;
                 let mut out = format!("Found {} entries:\n", entries.len());
                 for e in entries {
                     let kind = if e.is_dir { "DIR " } else { "FILE" };
@@ -149,12 +177,12 @@ impl ToolService {
                 Ok((out, false))
             }
             ToolActionType::ReadFile => {
-                let (content, truncated) = self.jail.read_file(&req.action.path)?;
+                let (content, truncated) = jail.read_file(&req.action.path)?;
                 Ok((content, truncated))
             }
             ToolActionType::WriteFile => {
                 let content = req.action.content.as_deref().unwrap_or("");
-                let bytes = self.jail.write_file(&req.action.path, content)?;
+                let bytes = jail.write_file(&req.action.path, content)?;
                 Ok((
                     format!("Successfully wrote {bytes} bytes to {}", req.action.path),
                     false,
@@ -162,7 +190,7 @@ impl ToolService {
             }
             ToolActionType::SearchFiles => {
                 let query = req.action.query.as_deref().unwrap_or("");
-                let matches = self.jail.search_files(query, Some(&req.action.path))?;
+                let matches = jail.search_files(query, Some(&req.action.path))?;
                 let mut out = format!("Search for '{query}' returned {} matches:\n", matches.len());
                 for m in matches {
                     out.push_str(&format!("  - {m}\n"));
@@ -188,6 +216,105 @@ impl ToolService {
         {
             log::warn!("Could not record a chat tool action: {e}");
         }
+    }
+
+    /// Run a terminal command in the workspace (or a folder inside it).
+    /// The audit row is written before the command starts, so a run that
+    /// crashes the app is still on record, and finished afterwards.
+    /// `source` names who asked, for example "chat" or "share".
+    pub fn run_command(
+        &self,
+        source: &str,
+        command: &str,
+        cwd: Option<&str>,
+        timeout: std::time::Duration,
+        cancel: &std::sync::atomic::AtomicBool,
+        note: Option<&str>,
+    ) -> Result<CommandRun, AppError> {
+        let jail = self.jail.clone();
+        self.run_command_in(&jail, source, command, cwd, timeout, cancel, note)
+    }
+
+    /// Run a terminal command in `jail`'s folder (or a folder inside it).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_command_in(
+        &self,
+        jail: &WorkspaceJail,
+        source: &str,
+        command: &str,
+        cwd: Option<&str>,
+        timeout: std::time::Duration,
+        cancel: &std::sync::atomic::AtomicBool,
+        note: Option<&str>,
+    ) -> Result<CommandRun, AppError> {
+        if let shell::Verdict::Blocked(reason) = shell::classify(command) {
+            self.record_event(
+                &format!("{source}:execute_command"),
+                "shell",
+                command,
+                "blocked",
+                Some(&reason),
+            );
+            return Err(AppError::new("COMMAND_BLOCKED", reason));
+        }
+        let folder = match cwd.map(str::trim).filter(|c| !c.is_empty() && *c != ".") {
+            Some(dir) => {
+                let path = jail.resolve_path(dir)?;
+                if !path.is_dir() {
+                    return Err(AppError::invalid_input(format!(
+                        "There is no folder called {dir} in the workspace."
+                    )));
+                }
+                path
+            }
+            None => jail.root_path().to_path_buf(),
+        };
+        let shown_cwd = folder
+            .strip_prefix(jail.root_path())
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        let audit_id = self.db.record_tool_audit(
+            &format!("{source}:execute_command"),
+            "shell",
+            command,
+            true,
+            "started",
+            Some(&format!(
+                "in workspace/{shown_cwd}{}",
+                note.map(|n| format!(" · {n}")).unwrap_or_default()
+            )),
+        )?;
+        let output = match shell::run(command, &folder, timeout, cancel) {
+            Ok(o) => o,
+            Err(message) => {
+                let _ = self.db.finish_tool_audit(audit_id, "error", Some(&message));
+                return Err(AppError::invalid_input(message));
+            }
+        };
+        let status = if output.timed_out {
+            "timeout"
+        } else if output.cancelled {
+            "cancelled"
+        } else if output.exit_code == Some(0) {
+            "success"
+        } else {
+            "error"
+        };
+        let summary = format!(
+            "exit {} · {} ms · {} bytes of output",
+            output
+                .exit_code
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "none".into()),
+            output.millis,
+            output.total_bytes
+        );
+        let _ = self.db.finish_tool_audit(audit_id, status, Some(&summary));
+        Ok(CommandRun {
+            output,
+            cwd: shown_cwd,
+            workspace: jail.root_path().to_path_buf(),
+        })
     }
 
     pub fn list_audits(&self, limit: usize) -> Result<Vec<ToolAuditEntry>, AppError> {

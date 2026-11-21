@@ -64,6 +64,18 @@ pub enum MessagePart {
         #[serde(default)]
         output: String,
     },
+    /// A question the model asked with options (`ask_user`).
+    Question {
+        id: String,
+        question: String,
+        #[serde(default)]
+        options: Vec<String>,
+        #[serde(default)]
+        multiple: bool,
+        /// What the user picked.
+        #[serde(default)]
+        answer: Option<String>,
+    },
 }
 
 /// A file attached to a message. Images travel as data URLs and are not
@@ -96,6 +108,10 @@ pub struct ChatThread {
     pub created_at: u64,
     pub updated_at: u64,
     pub message_count: usize,
+    /// The project folder this chat works in. None = a plain chat in the
+    /// shared workspace.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 /// The model the picker chose. No provider = the local model.
@@ -142,6 +158,13 @@ pub struct ChatStreamRequest {
     /// Tools the user allowed for the rest of this chat.
     #[serde(default)]
     pub allowed_tools: Vec<String>,
+    /// Let the model run terminal commands in the workspace. Default true;
+    /// commands that change something still ask.
+    #[serde(default)]
+    pub use_shell: Option<bool>,
+    /// "ask" (default), "chat" (allowed for this chat) or "auto".
+    #[serde(default)]
+    pub approval_mode: Option<String>,
     /// The model chosen in the picker. None = the current default.
     #[serde(default)]
     pub target: Option<ChatTargetRequest>,
@@ -156,6 +179,19 @@ pub struct ChatStreamRequest {
     /// 2026, 14:05 (Europe/Berlin)". Models do not know today's date.
     #[serde(default)]
     pub now: Option<String>,
+    /// The project folder this chat works in (picked by the user). None =
+    /// the shared workspace.
+    #[serde(default)]
+    pub folder: Option<String>,
+    /// Let the model save and improve skills on its own. Default true.
+    #[serde(default)]
+    pub learn_skills: Option<bool>,
+    /// Let the model hand work to read-only subagents. Default true.
+    #[serde(default)]
+    pub use_subagents: Option<bool>,
+    /// Tell the model it can draw charts, diagrams and mockups. Default true.
+    #[serde(default)]
+    pub rich_output: Option<bool>,
 }
 
 /// The user's answer to a tool approval question.
@@ -208,5 +244,16 @@ mod tests {
         let null: ChatMessage =
             serde_json::from_str(r#"{"role":"user","content":"x","ts":null}"#).unwrap();
         assert_eq!(null.ts, None);
+    }
+
+    #[test]
+    fn questions_save_and_load() {
+        let json = r#"{"role":"assistant","content":"","parts":[{"type":"question","id":"c1","question":"Which?","options":["A","B"],"multiple":false,"answer":"A"},
+            {"type":"tool","id":"c2","name":"execute_command","title":"Run a command","group":"shell","status":"done"}]}"#;
+        let m: ChatMessage = serde_json::from_str(json).unwrap();
+        let parts = m.parts.unwrap();
+        assert!(matches!(&parts[0], MessagePart::Question { answer: Some(a), .. } if a == "A"));
+        let back = serde_json::to_string(&parts[0]).unwrap();
+        assert!(back.contains("\"type\":\"question\""));
     }
 }

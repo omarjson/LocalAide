@@ -23,12 +23,11 @@ build:
 smoke: build
 	node scripts/smoke-test.mjs
 
-# The packaged app needs llama-server next to the binary to chat. Stage it
-# first (see docs/release.md and scripts/prepare-sidecar.sh), or rely on CI,
-# which does both. Release builds also need THIRD_PARTY_LICENSES.html:
+# The app downloads its model engine (llama-server) on first use, so the
+# package needs only THIRD_PARTY_LICENSES.html:
 #   cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
 release: build
-	npx tauri build --config src-tauri/tauri.sidecar.conf.json
+	npx tauri build --config src-tauri/tauri.release.conf.json
 
 clean:
 	rm -rf dist src-tauri/target

@@ -31,9 +31,12 @@ const notes = `${section}
 | Your computer | File |
 |---|---|
 | Windows 10 or 11 | \`LocalAide_${version}_x64-setup.exe\` |
+| Windows 11 on ARM (Snapdragon and similar) | \`LocalAide_${version}_arm64-setup.exe\` |
 | Mac with Apple Silicon (M1 or newer) | \`LocalAide_${version}_aarch64.dmg\` |
 | Mac with an Intel processor | \`LocalAide_${version}_x64.dmg\` |
 | Linux | \`.AppImage\` or \`.deb\` |
+
+The first time a model loads, LocalAide downloads the llama.cpp engine built for your processor (13 to 25 MB, from github.com).
 
 The installers are not code-signed yet. Windows may show "Windows protected your PC": choose **More info**, then **Run anyway**. On a Mac, if it says the app cannot be opened, right-click LocalAide in Applications and choose **Open**.
 

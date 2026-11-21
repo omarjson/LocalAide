@@ -7,6 +7,8 @@ export type SettingsSectionId =
   | "online"
   | "tools"
   | "web"
+  | "voice"
+  | "share"
   | "integrations"
   | "privacy"
   | "backups"
@@ -29,3 +31,6 @@ export function requestSettings(section: SettingsSectionId, checkUpdates = false
   screenRequest.screen = "settings";
   screenRequest.tick += 1;
 }
+
+/** The Settings section last shown, so coming back to Settings keeps it. */
+export const settingsView = $state<{ section: SettingsSectionId; handledTick: number }>({ section: "general", handledTick: 0 });

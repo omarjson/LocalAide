@@ -12,16 +12,23 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import Slider from "../components/Slider.svelte";
   import Switch from "../components/Switch.svelte";
+  import ProviderCard from "../components/ProviderCard.svelte";
+  import ProviderForm from "../components/ProviderForm.svelte";
+  import CloudAuditLog from "../components/CloudAuditLog.svelte";
+  import SelfTest from "../components/SelfTest.svelte";
+  import VoiceSettings from "../components/VoiceSettings.svelte";
+  import ShareSettings from "../components/ShareSettings.svelte";
   import Tabs from "../components/Tabs.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
   import { openInBrowser } from "../lib/links";
   import { dur, enterScreen } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
-  import { settingsRequest, type SettingsSectionId } from "../lib/nav.svelte";
+  import { settingsRequest, settingsView, type SettingsSectionId } from "../lib/nav.svelte";
   import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
-  import type { OpenCodeSettings } from "../lib/api/bindings";
+  import type { EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
+  import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
   import { applyTheme, currentTheme } from "../lib/theme";
@@ -31,7 +38,6 @@
     CloudConfigStatus,
     CloudProviderPreset,
     ContextInfo,
-    ProviderModel,
     SystemHealthResponse,
     ToolAuditEntry,
     UpdateCheckResponse,
@@ -47,11 +53,13 @@
     action: () => void | Promise<void>;
   };
 
-  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" | "wrench" }[] = [
+  const allSections: { id: SettingsSection; label: string; icon: "sun" | "cloud" | "globe" | "lock" | "database" | "file" | "info" | "plug" | "flask" | "wrench" | "mic" | "link" }[] = [
     { id: "general", label: "General", icon: "sun" },
     { id: "online", label: "Online providers", icon: "cloud" },
     { id: "tools", label: "Tools and MCP", icon: "wrench" },
     { id: "web", label: "Web search", icon: "globe" },
+    { id: "voice", label: "Voice", icon: "mic" },
+    { id: "share", label: "Share my assistant", icon: "link" },
     { id: "integrations", label: "Integrations", icon: "plug" },
     { id: "privacy", label: "Privacy & files", icon: "lock" },
     { id: "backups", label: "Backups", icon: "database" },
@@ -141,7 +149,24 @@
     { value: "light", label: "Light" },
   ];
 
-  let activeTab = $state<SettingsSection>("general");
+  // Starts where the user left Settings last time.
+  let activeTab = $state<SettingsSection>(settingsView.section as SettingsSection);
+  let engine = $state<EngineInfo | null>(null);
+  let scalePct = $state(Math.round(scale.value * 100));
+  $effect(() => {
+    scalePct = Math.round(scale.value * 100);
+  });
+  let engineBusy = $state(false);
+  const fetchEngine = async () => {
+    engineBusy = true;
+    try {
+      engine = await api.engineFetch();
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      engineBusy = false;
+    }
+  };
   let appVersion = $state("");
   let usableRamGb = $state(0);
   let health = $state<SystemHealthResponse | null>(null);
@@ -185,55 +210,14 @@
   let cloudBusy = $state(false);
   let showProviderForm = $state(false);
   let editingProviderId = $state<string | null>(null);
-  let providerLabel = $state("");
-  let providerUrl = $state("");
-  let providerModel = $state("");
-  let providerKey = $state("");
-  let providerFormError = $state<string | null>(null);
-
   let webProviders = $state<WebProviderStatus[]>([]);
-  let webPresets = $state<CloudProviderPreset[]>([]);
-  let appliedPresetId = $state<string | null>(null);
   let webKeyDraft = $state<Record<string, string>>({});
   let webBusy = $state(false);
   let webNotice = $state<string | null>(null);
-  const appliedPreset = $derived(webPresets.find((preset) => preset.id === appliedPresetId) ?? null);
-  const presetGroups = $derived([
-    { title: "No key needed", items: webPresets.filter((p) => !p.needs_key && !p.local) },
-    { title: "On this computer", items: webPresets.filter((p) => p.local) },
-    { title: "Free key", items: webPresets.filter((p) => p.needs_key && p.free && !p.local) },
-    { title: "Paid", items: webPresets.filter((p) => p.needs_key && !p.free && !p.local) },
-  ].filter((g) => g.items.length > 0));
-
-  let providerModels = $state<ProviderModel[]>([]);
-  let modelsBusy = $state(false);
-  let modelsError = $state<string | null>(null);
-  let modelQuery = $state("");
-  let freeOnly = $state(false);
-  const shownModels = $derived(
-    providerModels
-      .filter((m) => !freeOnly || m.free)
-      .filter((m) => {
-        const q = modelQuery.trim().toLowerCase();
-        return !q || m.id.toLowerCase().includes(q) || (m.name ?? "").toLowerCase().includes(q);
-      })
-      .slice(0, 200),
-  );
-
-  const loadProviderModels = async () => {
-    modelsBusy = true;
-    modelsError = null;
-    try {
-      providerModels = await api.cloudListModels(providerUrl.trim(), providerKey.trim() || undefined, editingProviderId ?? undefined);
-      freeOnly = providerModels.some((m) => m.free) && !providerModels.every((m) => m.free) && !providerModel;
-      if (providerModels.length === 0) modelsError = "The provider sent an empty list. Type the model name instead.";
-    } catch (e: unknown) {
-      providerModels = [];
-      modelsError = errorMessage(e);
-    } finally {
-      modelsBusy = false;
-    }
-  };
+  // Presets tell which saved providers need a key, for the card status.
+  let cloudPresets = $state<CloudProviderPreset[]>([]);
+  let testingProvider = $state<string | null>(null);
+  const presetFor = (url: string) => cloudPresets.find((p) => p.base_url.replace(/\/+$/, "") === url.replace(/\/+$/, ""));
   let confirmation = $state<Confirmation | null>(null);
 
   let theme = $state<"dark" | "light">(currentTheme());
@@ -250,6 +234,7 @@
 
   const selectSection = (section: SettingsSection) => {
     activeTab = section;
+    settingsView.section = section as SettingsSectionId;
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
     if (section === "about") void loadDiagnostics();
@@ -299,30 +284,24 @@
   };
 
   const loadPresets = async () => {
-    if (webPresets.length) return;
+    if (cloudPresets.length) return;
     try {
-      webPresets = await api.cloudProviderPresets();
+      cloudPresets = await api.cloudProviderPresets();
     } catch (e: unknown) {
       console.error(e);
     }
   };
 
-  const choosePreset = (id: string) => {
-    appliedPresetId = id;
-    applyPreset();
-  };
-
-  const applyPreset = () => {
-    const preset = webPresets.find((item) => item.id === appliedPresetId);
-    if (!preset) return;
-    providerModels = [];
-    modelsError = null;
-    modelQuery = "";
-    providerLabel = preset.label;
-    providerUrl = preset.base_url;
-    providerModel = preset.model;
-    providerKey = preset.public_key ?? "";
-    providerFormError = null;
+  const testProvider = async (id: string) => {
+    testingProvider = id;
+    cloudError = null;
+    try {
+      cloud = await api.testCloudProvider(id);
+    } catch (e: unknown) {
+      cloudError = errorMessage(e);
+    } finally {
+      testingProvider = null;
+    }
   };
 
   const loadAudits = async () => {
@@ -360,6 +339,7 @@
   };
 
   const loadCloud = async () => {
+    void loadPresets();
     try {
       cloud = await api.getCloudConfig();
     } catch (e: unknown) {
@@ -370,49 +350,13 @@
 
   const openAddProvider = () => {
     editingProviderId = null;
-    providerLabel = "";
-    providerUrl = "";
-    providerModel = "";
-    providerKey = "";
-    providerFormError = null;
-    appliedPresetId = null;
-    providerModels = [];
-    modelsError = null;
-    void loadPresets();
     showProviderForm = true;
   };
 
   const openEditProvider = (id: string) => {
-    const provider = cloud?.providers.find((item) => item.id === id);
-    if (!provider) return;
+    if (!cloud?.providers.some((item) => item.id === id)) return;
     editingProviderId = id;
-    providerLabel = provider.label;
-    providerUrl = provider.base_url;
-    providerModel = provider.model;
-    providerKey = "";
-    providerFormError = null;
-    appliedPresetId = null;
-    void loadPresets();
     showProviderForm = true;
-  };
-
-  const saveProvider = async () => {
-    providerFormError = null;
-    cloudBusy = true;
-    try {
-      cloud = await api.saveCloudProvider({
-        id: editingProviderId ?? undefined,
-        label: providerLabel,
-        base_url: providerUrl,
-        model: providerModel,
-        api_key: providerKey ? providerKey : undefined,
-      });
-      showProviderForm = false;
-    } catch (e: unknown) {
-      providerFormError = errorMessage(e);
-    } finally {
-      cloudBusy = false;
-    }
   };
 
   const deleteProviderNow = async (id: string) => {
@@ -540,7 +484,10 @@
 
   // The command palette can open a section (and start an update check).
   $effect(() => {
-    if (settingsRequest.tick === 0 || !settingsRequest.section) return;
+    // Each request opens its section once; coming back later keeps the
+    // section the user chose since.
+    if (settingsRequest.tick === 0 || !settingsRequest.section || settingsRequest.tick === settingsView.handledTick) return;
+    settingsView.handledTick = settingsRequest.tick;
     selectSection(settingsRequest.section);
     if (settingsRequest.checkUpdates) {
       settingsRequest.checkUpdates = false;
@@ -683,6 +630,9 @@
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
+    // Load what the remembered section shows.
+    selectSection(activeTab);
+    void api.engineInfo().then((info) => (engine = info)).catch(() => undefined);
     // A setting that fails to load shows a message, so it never looks empty.
     const failed: string[] = [];
     try {
@@ -758,6 +708,8 @@
           <h2 class="text-xl font-semibold text-ink-50">General</h2>
           <p class="mt-1 text-sm text-ink-400">Change how LocalAide looks and uses this computer.</p>
 
+          <div class="mt-6"><SelfTest /></div>
+
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Appearance</h3>
           <SettingsGroup>
             <SettingsRow icon="sun" title="Theme" description="Dark is the default. Your choice is kept when you restart.">
@@ -765,10 +717,26 @@
                 <Tabs items={themeTabs} value={theme} onChange={(value) => { if (value === "dark" || value === "light") void setTheme(value); }} ariaLabel="Theme" />
               {/snippet}
             </SettingsRow>
+            <SettingsRow icon="scale" title="Interface scale" description="Makes everything bigger or smaller, from 70% to 250%. Ctrl + and Ctrl − change it anywhere; Ctrl 0 resets it." class="border-t border-ink-800">
+              {#snippet control()}
+                <Slider min={70} max={250} step={10} bind:value={scalePct} onchange={() => void setScale(scalePct / 100)} class="w-44" label="Interface scale" />
+                <span class="min-w-12 text-right text-sm tabular-nums text-ink-200">{scalePct}%</span>
+                {#if scale.value !== 1}<button type="button" class="rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-veil/5 hover:text-ink-100" onclick={() => void setScale(1)}>Reset</button>{/if}
+              {/snippet}
+            </SettingsRow>
           </SettingsGroup>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Performance</h3>
           <SettingsGroup>
+            <SettingsRow icon="computer" title="Model engine" description={engine ? (engine.custom ? `A llama-server you placed yourself is in use: ${engine.path ?? ""}` : engine.installed ? `llama.cpp ${engine.build}, the build for ${engine.cpu} processors. It picks the fastest instructions this processor has.` : `Downloads once, the first time a model loads: llama.cpp ${engine.build} for ${engine.cpu} processors${engine.download_bytes ? `, ${formatBytes(engine.download_bytes)}` : ""}, from github.com.`) : "Checking…"}>
+              {#snippet control()}
+                {#if engine && !engine.installed}
+                  <Button variant="secondary" onclick={() => void fetchEngine()} disabled={engineBusy}>{engineBusy ? "Downloading…" : "Download now"}</Button>
+                {:else if engine}
+                  <span class="text-sm text-emerald-300">Ready</span>
+                {/if}
+              {/snippet}
+            </SettingsRow>
             <SettingsRow icon="models" title="Memory for models" description="How much of this computer's memory the AI may use. More lets you run bigger models.">
               {#snippet control()}
                 <Slider min={20} max={90} bind:value={ramBudget} oninput={scheduleSave} class="w-44" label="Memory for models" />
@@ -827,136 +795,52 @@
             </SettingsRow>
           </SettingsGroup>
 
-          {#if !cloud || cloud.providers.length === 0}
-            <div class="mt-3 rounded-lg border border-ink-700 bg-ink-900 p-5 text-center">
-              <p class="text-sm text-ink-400">No provider yet. Everything stays local until you add one.</p>
-              <Button variant="primary" class="mt-4" onclick={openAddProvider}><Icon name="plus" class="h-4 w-4" />Add provider</Button>
-            </div>
-          {:else}
-            <div class="mt-3 space-y-2">
-              {#if !cloud.online_allowed}
-                <p class="flex items-center gap-2 text-sm text-ink-400"><Icon name="info" class="h-4 w-4 shrink-0" />Not available while online models are switched off. You can still edit or remove them.</p>
-              {/if}
-              {#each cloud.providers as provider (provider.id)}
-                {@const inUse = cloud.online_allowed && cloud.cloud_enabled && provider.is_active}
-                <div class={`rounded-lg border p-4 transition-colors ${inUse ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`} aria-disabled={!cloud.online_allowed}>
-                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class={`min-w-0 transition-opacity ${cloud.online_allowed ? "" : "opacity-50 grayscale"}`}>
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="font-semibold text-ink-50">{provider.label}</span>
-                        {#if !cloud.online_allowed}<StatusBadge label="Not available" tone="idle" />
-                        {:else if inUse}<StatusBadge label="In use" tone="ok" dot />{/if}
-                      </div>
-                      <div class="mt-1 truncate text-sm text-ink-400">{provider.model} · {provider.base_url} · {provider.api_key_hint ? `key ${provider.api_key_hint}` : "no key"}{provider.model_count ? ` · ${provider.model_count} models listed` : ""}</div>
-                    </div>
-                    <div class="flex shrink-0 items-center gap-2">
-                      <span class={`mr-1 flex items-center gap-2 text-sm text-ink-300 ${cloud.online_allowed ? "" : "opacity-50"}`} title="Show this provider's models in the chat's model menu">
-                        <Switch checked={cloud.online_allowed && provider.enabled} label={`Show ${provider.label} in the model menu`} disabled={cloudBusy || !cloud.online_allowed} onchange={(on) => void toggleProviderEnabled(provider.id, on)} />
-                        <span class="hidden md:inline">In model menu</span>
-                      </span>
-                      <Button variant="subtle" disabled={cloudBusy} onclick={() => openEditProvider(provider.id)}>Edit</Button>
-                      <Button variant="danger" disabled={cloudBusy} onclick={() => deleteProvider(provider.id)}>Remove</Button>
-                    </div>
-                  </div>
-                </div>
-              {/each}
-              <Button variant="secondary" class="mt-2" disabled={cloudBusy} onclick={openAddProvider}><Icon name="plus" class="h-4 w-4" />Add provider</Button>
+          {#if showProviderForm}
+            <div class="mt-3">
+              {#key editingProviderId}
+              <ProviderForm
+                editing={editingProviderId ? cloud?.providers.find((p) => p.id === editingProviderId) ?? null : null}
+                onSaved={(status) => { cloud = status; showProviderForm = false; }}
+                onCancel={() => (showProviderForm = false)}
+              />
+              {/key}
             </div>
           {/if}
 
-          {#if showProviderForm}
-            <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4" transition:slide={{ duration: dur(150) }}>
-              <div class="flex items-center justify-between">
-                <h3 class="font-semibold text-ink-50">{editingProviderId ? "Edit provider" : "Add provider"}</h3>
-                <Button variant="subtle" ariaLabel="Close provider form" onclick={() => showProviderForm = false}><Icon name="close" class="h-4 w-4" /></Button>
+          {#if !cloud || cloud.providers.length === 0}
+            {#if !showProviderForm}
+              <div class="mt-3 rounded-xl border border-dashed border-ink-700 p-6 text-center">
+                <p class="text-sm text-ink-300">No provider yet. Chat stays on this computer until you add one.</p>
+                <Button variant="primary" class="mt-4" onclick={openAddProvider}><Icon name="plus" class="h-4 w-4" />Add a provider</Button>
               </div>
-              {#if !editingProviderId}
-                <div class="mt-4 space-y-4">
-                  {#each presetGroups as group (group.title)}
-                    <div>
-                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">{group.title}</div>
-                      <div class="grid gap-2 sm:grid-cols-2">
-                        {#each group.items as preset (preset.id)}
-                          <button
-                            type="button"
-                            aria-pressed={appliedPresetId === preset.id}
-                            onclick={() => choosePreset(preset.id)}
-                            class={`lift flex min-h-[52px] items-center gap-3 rounded-md border px-3 py-2 text-left text-sm ${appliedPresetId === preset.id ? "border-ember-500/60 bg-ember-500/10 text-ink-50" : "border-ink-700 bg-ink-950 text-ink-200 hover:border-edge"}`}
-                          >
-                            <span class={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${appliedPresetId === preset.id ? "bg-ember-500/20 text-ember-300" : "bg-ink-800 text-ink-300"}`}>
-                              <Icon name={preset.local ? "computer" : preset.needs_key ? "key" : "sparkle"} class="h-4 w-4" />
-                            </span>
-                            <span class="min-w-0 flex-1 font-medium leading-snug">{preset.label}</span>
-                            {#if appliedPresetId === preset.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ember-300" />{/if}
-                          </button>
-                        {/each}
-                      </div>
-                    </div>
-                  {:else}
-                    <div class="skeleton h-24"></div>
-                  {/each}
-                </div>
-              {/if}
-              {#if appliedPreset}
-                <div class="mt-4 rounded-md border border-ink-800 bg-ink-950 p-3 text-sm text-ink-300" in:slide={{ duration: dur(150) }}>
-                  {appliedPreset.note}
-                  {#if appliedPreset.key_url}
-                    <a class="ml-1 inline-flex items-center gap-1 text-ember-300 hover:underline" href={appliedPreset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, appliedPreset?.key_url ?? "")}>{appliedPreset.needs_key ? "Get a key" : appliedPreset.local ? "How to install it" : "More about it"}<Icon name="external" class="h-3.5 w-3.5" /></a>
-                  {/if}
-                </div>
-              {/if}
-              <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                <label class="text-sm text-ink-400">Name<input bind:value={providerLabel} placeholder="A name for this provider" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
-                <label class="text-sm text-ink-400">Provider address<input bind:value={providerUrl} placeholder="https://api.example.com/v1" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
-                <label class="text-sm text-ink-400 sm:col-span-2">API key {editingProviderId ? "(leave empty to keep the saved key)" : appliedPreset && !appliedPreset.needs_key ? "(optional for this provider)" : ""}<input type="password" bind:value={providerKey} placeholder={appliedPreset && !appliedPreset.needs_key ? "Not needed" : "Paste your key"} autocomplete="off" class="mt-1 h-10 w-full rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" /></label>
-                <div class="sm:col-span-2">
-                  <label class="text-sm text-ink-400" for="provider-model">Model</label>
-                  <div class="mt-1 flex gap-2">
-                    <input id="provider-model" bind:value={providerModel} placeholder="Model name, or load the list" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 placeholder:text-ink-400" />
-                    <Button variant="secondary" class="h-10" disabled={modelsBusy || !providerUrl.trim()} onclick={() => void loadProviderModels()}>
-                      <Icon name="refresh" class={`h-4 w-4 ${modelsBusy ? "animate-spin" : ""}`} />
-                      {modelsBusy ? "Loading…" : "Load models"}
-                    </Button>
-                  </div>
-                  {#if modelsError}<p class="mt-2 text-sm text-amber-300" in:slide={{ duration: dur(120) }}>{modelsError}</p>{/if}
-                  {#if providerModels.length > 0}
-                    <div class="mt-2 overflow-hidden rounded-md border border-ink-700 bg-ink-950" in:slide={{ duration: dur(180) }}>
-                      <div class="flex items-center gap-2 border-b border-ink-800 px-2 py-1.5">
-                        <span class="field-shell flex h-8 min-w-0 flex-1 items-center gap-2 rounded border border-transparent px-2">
-                          <Icon name="search" class="h-4 w-4 shrink-0 text-ink-400" />
-                          <input type="search" bind:value={modelQuery} aria-label="Filter models" placeholder={`Filter ${providerModels.length} models`} class="field-bare min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500" />
-                        </span>
-                        {#if providerModels.some((m) => m.free)}
-                          <span class="flex shrink-0 items-center gap-2 text-sm text-ink-300"><Switch checked={freeOnly} label="Free models only" onchange={(on) => (freeOnly = on)} />Free only</span>
-                        {/if}
-                      </div>
-                      <div class="max-h-56 overflow-y-auto p-1" role="listbox" aria-label="Models">
-                        {#each shownModels as m (m.id)}
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={providerModel === m.id}
-                            onclick={() => providerModel = m.id}
-                            class={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${providerModel === m.id ? "bg-ember-500/10 text-ink-50" : "text-ink-200 hover:bg-veil/5"}`}
-                          >
-                            <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{m.id}</span>
-                            {#if m.context_length}<span class="shrink-0 text-xs text-ink-500">{Math.round(m.context_length / 1000)}k</span>{/if}
-                            {#if m.free}<span class="shrink-0 rounded bg-emerald-500/15 px-1.5 text-xs font-semibold text-emerald-300">Free</span>{/if}
-                            {#if providerModel === m.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ember-300" />{/if}
-                          </button>
-                        {:else}
-                          <p class="px-2 py-3 text-sm text-ink-400">No models match.</p>
-                        {/each}
-                      </div>
-                    </div>
-                  {/if}
-                </div>
-              </div>
-              {#if providerFormError}<div class="mt-3"><ErrorBanner message={providerFormError} onRetry={() => void saveProvider()} onDismiss={() => providerFormError = null} /></div>{/if}
-              <p class="mt-3 text-sm text-ink-400">The key stays in this app's local settings and is sent only to the address above.</p>
-              <div class="mt-4 flex justify-end gap-2"><Button variant="subtle" onclick={() => showProviderForm = false}>Cancel</Button><Button variant="primary" disabled={cloudBusy} onclick={() => void saveProvider()}>{cloudBusy ? "Saving…" : "Save provider"}</Button></div>
+            {/if}
+          {:else}
+            {#if !cloud.online_allowed}
+              <p class="mt-3 flex items-center gap-2 text-sm text-ink-400"><Icon name="info" class="h-4 w-4 shrink-0" />Not available while online models are switched off. You can still edit or remove them.</p>
+            {/if}
+            <div class="mt-3 space-y-3">
+              {#each cloud.providers as provider (provider.id)}
+                <ProviderCard
+                  {provider}
+                  available={cloud.online_allowed}
+                  needsKey={!provider.api_key_hint && !!presetFor(provider.base_url)?.needs_key}
+                  busy={cloudBusy}
+                  testing={testingProvider === provider.id}
+                  onToggle={(on) => void toggleProviderEnabled(provider.id, on)}
+                  onTest={() => void testProvider(provider.id)}
+                  onEdit={() => openEditProvider(provider.id)}
+                  onRemove={() => deleteProvider(provider.id)}
+                />
+              {/each}
             </div>
+            {#if !showProviderForm}
+              <Button variant="secondary" class="mt-3" disabled={cloudBusy} onclick={openAddProvider}><Icon name="plus" class="h-4 w-4" />Add a provider</Button>
+            {/if}
           {/if}
+
+          <div class="mt-9">
+            <CloudAuditLog />
+          </div>
         </div>
       {:else if activeTab === "tools"}
         <McpSettings />
@@ -1003,6 +887,10 @@
           </div>
           <p class="mt-4 text-sm text-ink-400">Keys stay in this app's local settings and are sent only to their own provider. Without a key, free limits apply per computer. Backups leave keys out unless you choose to include them.</p>
         </div>
+      {:else if activeTab === "voice"}
+        <VoiceSettings />
+      {:else if activeTab === "share"}
+        <ShareSettings />
       {:else if activeTab === "integrations"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Integrations</h2>
