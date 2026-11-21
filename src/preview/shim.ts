@@ -15,6 +15,27 @@ const ago = (minutes: number) => now - minutes * 60_000;
 // Memory timestamps cross the bridge in seconds, like the Rust backend.
 const sec = (minutes: number) => Math.floor(ago(minutes) / 1000);
 
+// Threads saved through the shim persist in local storage, so a thread the
+// session created (e.g. one with a parked branch) is still openable after a
+// reload — the way the real library database behaves.
+const SHIM_THREADS_KEY = "localaide-shim-threads";
+type ShimThread = {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  message_count: number;
+  folder: string | null;
+  messages: unknown[];
+};
+const savedShimThreads = (): ShimThread[] => {
+  try {
+    return JSON.parse(localStorage.getItem(SHIM_THREADS_KEY) ?? "[]") as ShimThread[];
+  } catch {
+    return [];
+  }
+};
+
 const MODEL_QWEN = {
   id: "qwen3.5-9b",
   name: "Qwen3.5 9B Instruct (Q4_K_M)",
@@ -290,10 +311,42 @@ const fixtures: Record<string, Handler> = {
     { id: "t3", title: "Landing page ideas", created_at: ago(60 * 26), updated_at: ago(60 * 20), message_count: 6, folder: "C:\\Users\\Omar\\Documents\\site" },
     { id: "t4", title: "Plan my week", created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), message_count: 2, folder: null },
     { id: "t5", title: "Email about the late invoice", created_at: ago(60 * 24 * 8), updated_at: ago(60 * 24 * 8), message_count: 3, folder: null },
+    // Threads the session itself saved, so flows like branching can be
+    // reopened from the sidebar across reloads.
+    ...savedShimThreads(),
   ],
-  chat_thread_load: () => [],
-  chat_thread_save: () => null,
-  chat_thread_delete: () => null,
+  chat_thread_load: (args) => savedShimThreads().find((t) => t.id === args?.threadId)?.messages ?? [],
+  chat_thread_save: (args) => {
+    const threadId = args?.threadId as string | undefined;
+    if (!threadId) return null;
+    const saved = savedShimThreads().filter((t) => t.id !== threadId);
+    saved.unshift({
+      id: threadId,
+      title: (args.title as string) ?? "Chat",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      message_count: ((args.messages as unknown[]) ?? []).length,
+      folder: (args.folder as string | null) ?? null,
+      messages: (args.messages as unknown[]) ?? [],
+    });
+    try {
+      localStorage.setItem(SHIM_THREADS_KEY, JSON.stringify(saved.slice(0, 20)));
+    } catch {
+      // Storage full: the preview just keeps its fixture threads.
+    }
+    return null;
+  },
+  chat_thread_delete: (args) => {
+    const threadId = args?.threadId as string | undefined;
+    if (threadId) {
+      try {
+        localStorage.setItem(SHIM_THREADS_KEY, JSON.stringify(savedShimThreads().filter((t) => t.id !== threadId)));
+      } catch {
+        // Ignore: same nicety as save.
+      }
+    }
+    return null;
+  },
   chat_thread_export_save: () => null,
   chat_export_text_save: () => null,
   chat_cancel: () => null,

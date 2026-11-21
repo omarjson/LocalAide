@@ -1,8 +1,9 @@
 // Conversation branches. Editing an old message no longer throws its
 // future away: the discarded tail is parked here and a checkpoint chip on
 // that message can swap it back in — again and again, like flipping a
-// switch between the two paths. Kept per thread in local storage, so the
-// branches survive a restart. Message indices are the chat's own, so a
+// switch between the two paths. The store is reactive (so the checkpoint
+// chips appear the moment a branch exists) and mirrors to local storage,
+// so branches survive a restart. Message indices are the chat's own, so a
 // compaction can shift where a branch sits; the tail itself stays intact.
 
 import type { ChatMessage } from "./api/bindings";
@@ -14,7 +15,7 @@ const MAX_TAIL_CHARS = 400_000;
 
 type BranchStore = Record<string, Record<string, { messages: ChatMessage[] }>>;
 
-const read = (): BranchStore => {
+const readFromDisk = (): BranchStore => {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? "{}") as BranchStore;
   } catch {
@@ -22,7 +23,9 @@ const read = (): BranchStore => {
   }
 };
 
-const write = (store: BranchStore): void => {
+let store = $state<BranchStore>(readFromDisk());
+
+const syncToDisk = (): void => {
   try {
     localStorage.setItem(KEY, JSON.stringify(store));
   } catch {
@@ -34,17 +37,15 @@ const write = (store: BranchStore): void => {
 export function saveBranch(threadId: string, index: number, tail: ChatMessage[]): void {
   if (!threadId || tail.length === 0) return;
   if (JSON.stringify(tail).length > MAX_TAIL_CHARS) return;
-  const store = read();
-  const forThread = store[threadId] ?? {};
-  forThread[String(index)] = { messages: tail };
-  store[threadId] = forThread;
-  write(store);
+  if (!store[threadId]) store[threadId] = {};
+  store[threadId][String(index)] = { messages: tail };
+  syncToDisk();
 }
 
 /** How many later messages are parked at this message's checkpoint. */
 export function branchCount(threadId: string, index: number): number {
   if (!threadId) return 0;
-  return read()[threadId]?.[String(index)]?.messages.length ?? 0;
+  return store[threadId]?.[String(index)]?.messages.length ?? 0;
 }
 
 /**
@@ -54,21 +55,19 @@ export function branchCount(threadId: string, index: number): number {
  */
 export function swapBranch(threadId: string, index: number, currentTail: ChatMessage[]): ChatMessage[] | null {
   if (!threadId) return null;
-  const store = read();
   const parked = store[threadId]?.[String(index)];
   if (!parked || parked.messages.length === 0) return null;
   if (JSON.stringify(currentTail).length <= MAX_TAIL_CHARS) {
-    store[threadId]![String(index)] = { messages: currentTail };
-    write(store);
+    store[threadId][String(index)] = { messages: currentTail };
   }
+  syncToDisk();
   return parked.messages;
 }
 
 export function clearThreadBranches(threadId: string): void {
   if (!threadId) return;
-  const store = read();
   if (store[threadId]) {
     delete store[threadId];
-    write(store);
+    syncToDisk();
   }
 }
