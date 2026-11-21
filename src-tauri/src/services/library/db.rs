@@ -272,7 +272,9 @@ impl LibraryDb {
             let has_pinned = tx
                 .prepare("SELECT 1 FROM pragma_table_info('notes') WHERE name = 'pinned'")
                 .and_then(|mut stmt| stmt.exists([]))
-                .map_err(|e| AppError::storage(format!("Failed to inspect the notes table: {e}")))?;
+                .map_err(|e| {
+                    AppError::storage(format!("Failed to inspect the notes table: {e}"))
+                })?;
             if !has_pinned {
                 tx.execute_batch("ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;")
                     .map_err(|e| AppError::storage(format!("Failed to add notes.pinned: {e}")))?;
@@ -1001,7 +1003,9 @@ impl LibraryDb {
             .map_err(|e| AppError::storage(format!("Failed to query pinned notes: {e}")))?;
         let mut notes = Vec::new();
         for r in rows {
-            notes.push(r.map_err(|e| AppError::storage(format!("Pinned note row read error: {e}")))?);
+            notes.push(
+                r.map_err(|e| AppError::storage(format!("Pinned note row read error: {e}")))?,
+            );
         }
         Ok(notes)
     }

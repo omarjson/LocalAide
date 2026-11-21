@@ -187,11 +187,8 @@ mod tests {
     use super::*;
 
     fn manager(tag: &str) -> SuggestionsManager {
-        let dir = std::env::temp_dir().join(format!(
-            "localaide-suggest-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("localaide-suggest-{}-{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         SuggestionsManager::new(dir)
     }
