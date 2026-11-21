@@ -65,7 +65,7 @@ tiny_http = "0.12"
 # Audio for online transcription is sent as base64.
 base64 = "0.22"
 # Live transcription over WebSocket (Gemini Live, Deepgram, Soniox).
-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 
 # The terminal tool kills a command's whole process group on timeout.
 [target.'cfg(unix)'.dependencies]
