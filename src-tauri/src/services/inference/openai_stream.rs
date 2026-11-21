@@ -591,7 +591,7 @@ fn empty_call() -> ToolCall {
 /// guard keeps that text out of the answer and turns it back into real
 /// tool calls, so they run like any other call.
 #[derive(Default)]
-struct ToolCallGuard {
+pub struct ToolCallGuard {
     /// Text held back because it may be the start of an open tag.
     held: String,
     /// The text of the block being captured, open tag already removed.
@@ -667,28 +667,28 @@ impl ToolCallGuard {
         }
         // Hermes-style JSON: {"name": ..., "arguments": {...}}, or the
         // same shape wrapped in a "function" object.
-        if trimmed.starts_with('{') {
-            if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-                let named = value.get("function").unwrap_or(&value);
-                let name = named
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                if !name.is_empty() {
-                    let arguments = match named.get("arguments") {
-                        Some(Value::String(s)) => s.clone(),
-                        Some(other) => other.to_string(),
-                        None => "{}".to_string(),
-                    };
-                    self.calls.push(ToolCall {
-                        id: self.next_id(),
-                        name,
-                        arguments,
-                    });
-                }
-                return;
+        if trimmed.starts_with('{')
+            && let Ok(value) = serde_json::from_str::<Value>(trimmed)
+        {
+            let named = value.get("function").unwrap_or(&value);
+            let name = named
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if !name.is_empty() {
+                let arguments = match named.get("arguments") {
+                    Some(Value::String(s)) => s.clone(),
+                    Some(other) => other.to_string(),
+                    None => "{}".to_string(),
+                };
+                self.calls.push(ToolCall {
+                    id: self.next_id(),
+                    name,
+                    arguments,
+                });
             }
+            return;
         }
         // Tagged form: <function=name> with <parameter=key> value </parameter>
         // pairs inside. One block can hold several functions.
@@ -713,7 +713,10 @@ impl ToolCallGuard {
                     break;
                 };
                 if !key.is_empty() {
-                    arguments.insert(key, Value::String(after_tag[..value_end].trim().to_string()));
+                    arguments.insert(
+                        key,
+                        Value::String(after_tag[..value_end].trim().to_string()),
+                    );
                 }
                 scan = &after_tag[value_end + "</parameter>".len()..];
             }
@@ -743,13 +746,18 @@ pub fn apply_event(
             .unwrap_or_else(|| err.to_string());
         return Err(message);
     }
-    if let Some(usage) = event.get("usage") {
-        if let Some(tokens) = usage.get("completion_tokens").and_then(Value::as_u64) {
-            outcome.completion_tokens = Some(tokens as usize);
-        }
-        if let Some(tokens) = usage.get("prompt_tokens").and_then(Value::as_u64) {
-            outcome.prompt_tokens = Some(tokens as usize);
-        }
+    let usage = event.get("usage");
+    if let Some(tokens) = usage
+        .and_then(|u| u.get("completion_tokens"))
+        .and_then(Value::as_u64)
+    {
+        outcome.completion_tokens = Some(tokens as usize);
+    }
+    if let Some(tokens) = usage
+        .and_then(|u| u.get("prompt_tokens"))
+        .and_then(Value::as_u64)
+    {
+        outcome.prompt_tokens = Some(tokens as usize);
     }
     let Some(choice) = event.get("choices").and_then(|c| c.get(0)) else {
         return Ok(Vec::new());
@@ -784,7 +792,11 @@ pub fn apply_event(
 /// A refused request, before any text arrived.
 #[derive(Debug)]
 pub enum StreamError {
-    Http { status: u16, body: String, retry_after: Option<Duration> },
+    Http {
+        status: u16,
+        body: String,
+        retry_after: Option<Duration>,
+    },
     Other(AppError),
 }
 
@@ -968,7 +980,13 @@ pub fn stream_once(
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             continue;
         };
-        match apply_event(&event, &mut splitter, &mut calls, &mut outcome, &mut toolguard) {
+        match apply_event(
+            &event,
+            &mut splitter,
+            &mut calls,
+            &mut outcome,
+            &mut toolguard,
+        ) {
             Ok(pieces) => deliver(pieces, &mut outcome),
             Err(message) => {
                 return Err(StreamError::Other(AppError::internal(format!(
@@ -1017,7 +1035,11 @@ pub fn stream_with_retries(
         let body = build_body(endpoint, turns, opts);
         match stream_once(client, endpoint, &body, cancel, on_delta) {
             Ok(outcome) => return Ok((outcome, adjustments)),
-            Err(StreamError::Http { status, body, retry_after }) => {
+            Err(StreamError::Http {
+                status,
+                body,
+                retry_after,
+            }) => {
                 let retryable = matches!(status, 400 | 422 | 500) && adjustments.len() < 4;
                 // A local server answers 500 when its template cannot render
                 // tools; other providers use 400 and 422.
@@ -1187,8 +1209,14 @@ mod tests {
         let mut g = ToolCallGuard::default();
         let shown = g.push("Let me check the sources: <tool_call>");
         assert_eq!(shown, "Let me check the sources: ");
-        assert_eq!(g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"), "");
-        assert_eq!(g.push("</function></tool_call>And here is what I found."), "And here is what I found.");
+        assert_eq!(
+            g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"),
+            ""
+        );
+        assert_eq!(
+            g.push("</function></tool_call>And here is what I found."),
+            "And here is what I found."
+        );
         let (_, calls) = g.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "list_files");

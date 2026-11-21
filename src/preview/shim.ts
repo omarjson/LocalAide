@@ -448,7 +448,7 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
     },
     { type: "tool_result", payload: { id: "call-1", ok: true, summary: "1 note matched", output: "Invoice policy: net 30 days." } },
     { type: "reasoning", payload: { text: "The user wants the payment window. The note says net 30 days, so the answer is 30 days after the invoice date." } },
-    { type: "citation", payload: { index: 1, title: "Invoice policy", path: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", snippet: "Payment is due net 30 days after the invoice date.", score: 0.42 } },
+    { type: "citation", payload: { index: 1, title: "Invoice policy", source: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", snippet: "Payment is due net 30 days after the invoice date.", score: 0.42 } },
     { type: "token", payload: { token: "" } },
   ];
   const answer =

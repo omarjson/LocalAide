@@ -90,8 +90,7 @@ impl MemoryService {
         for n in notes {
             lines.push(format!("- {}: {}", n.title, n.content.trim()));
         }
-        Ok(lines.join("
-"))
+        Ok(lines.join("\n"))
     }
 
     /// The model offered to remember a fact: it waits in the review queue.
@@ -107,7 +106,9 @@ impl MemoryService {
     pub fn accept_suggestion(&self, file: &str, tags: Vec<String>) -> Result<MemoryNote, AppError> {
         let suggestion = self.suggestions.read(file)?;
         let tags_opt = if tags.is_empty() { None } else { Some(tags) };
-        let note = self.notes.create_note(&suggestion.title, &suggestion.content, tags_opt)?;
+        let note = self
+            .notes
+            .create_note(&suggestion.title, &suggestion.content, tags_opt)?;
         let _ = self.suggestions.dismiss(file);
         Ok(note)
     }

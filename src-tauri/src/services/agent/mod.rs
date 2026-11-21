@@ -30,8 +30,8 @@ use crate::services::inference::openai_stream::{
     stream_with_retries,
 };
 use crate::services::inference::router::ChatTarget;
-use crate::services::usage;
 use crate::services::tools::sandbox::WorkspaceJail;
+use crate::services::usage;
 use approval::{APPROVAL_TIMEOUT, ApprovalHub, Decision};
 use tools::{Permissions, ToolSpec};
 
@@ -272,29 +272,29 @@ pub fn run(
         ChatTarget::Remote(remote) => (remote.model.clone(), remote.label.clone(), false),
     };
     let result = run_inner(state, run, cancel, sink);
-    if let Ok(done) = &result {
-        if source == "chat" || source == "share" {
-            let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            let tok_s = if done.tokens > 0 && ms > 0 {
-                Some(done.tokens as f64 / (ms as f64 / 1000.0))
-            } else {
-                None
-            };
-            usage::record(&usage::UsageRecord {
-                ts: now_secs(),
-                model,
-                provider,
-                local,
-                input_tokens: done.prompt_tokens.unwrap_or(input_tokens),
-                output_tokens: done.tokens,
-                ms,
-                ttft_ms: done.ttft_ms,
-                tok_s,
-                cancelled: done.cancelled,
-                tool_calls: done.tool_calls,
-                source: source.to_string(),
-            });
-        }
+    if let Ok(done) = &result
+        && (source == "chat" || source == "share")
+    {
+        let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let tok_s = if done.tokens > 0 && ms > 0 {
+            Some(done.tokens as f64 / (ms as f64 / 1000.0))
+        } else {
+            None
+        };
+        usage::record(&usage::UsageRecord {
+            ts: now_secs(),
+            model,
+            provider,
+            local,
+            input_tokens: done.prompt_tokens.unwrap_or(input_tokens),
+            output_tokens: done.tokens,
+            ms,
+            ttft_ms: done.ttft_ms,
+            tok_s,
+            cancelled: done.cancelled,
+            tool_calls: done.tool_calls,
+            source: source.to_string(),
+        });
     }
     result
 }

@@ -94,7 +94,11 @@ pub fn record(rec: &UsageRecord) {
     if fs::create_dir_all(&dir).is_err() {
         return;
     }
-    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path()) else {
+    let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path())
+    else {
         return;
     };
     if let Ok(line) = serde_json::to_string(rec) {
@@ -144,9 +148,7 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
             day.0 += 1;
             day.1 += rec.input_tokens;
             day.2 += rec.output_tokens;
-            let acc = per_model
-                .entry((rec.model, rec.provider))
-                .or_insert_with(ModelAcc::default);
+            let acc = per_model.entry((rec.model, rec.provider)).or_default();
             acc.answers += 1;
             acc.input += rec.input_tokens;
             acc.output += rec.output_tokens;
@@ -175,7 +177,11 @@ fn summary_at(path: &Path, days: u32, now_secs: u64) -> Result<UsageSummary, App
     let mut per_model: Vec<UsageModel> = per_model
         .into_iter()
         .map(|((model, provider), acc)| UsageModel {
-            avg_ms: if acc.ms_n > 0 { acc.ms / acc.ms_n as u64 } else { 0 },
+            avg_ms: if acc.ms_n > 0 {
+                acc.ms / acc.ms_n as u64
+            } else {
+                0
+            },
             avg_tok_s: if acc.tok_s_n > 0 {
                 Some(acc.tok_s_sum / acc.tok_s_n as f64)
             } else {
