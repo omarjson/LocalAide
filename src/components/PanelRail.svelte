@@ -87,7 +87,7 @@
           <button type="button" class="rounded-md px-2 py-0.5 text-xs text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100" onclick={onCompact} title="Compact: drop older turns to free room">Compact</button>
         {/if}
       </div>
-      <ContextMeter {usage} streaming={live} {autoCompactAt} {segments} {cacheRate} compacted={false} onCompact={onCompact} />
+      <ContextMeter {usage} streaming={live} {autoCompactAt} {segments} {cacheRate} direction="down" compacted={false} onCompact={onCompact} />
       {#if usage.limit > 0}
         <p class="mt-2 text-xs text-ink-500">{usage.used.toLocaleString()} of {usage.limit.toLocaleString()} tokens used{usage.overflow ? " — the next answer will not fit" : ""}</p>
       {/if}

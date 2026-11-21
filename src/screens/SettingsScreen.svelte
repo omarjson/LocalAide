@@ -197,6 +197,57 @@
   let activeTab = $state<SettingsSection>(settingsView.section as SettingsSection);
   let engine = $state<EngineInfo | null>(null);
   let scalePct = $state(Math.round(scale.value * 100));
+
+  // Model prices (Settings → General → Model costs): USD per 1M tokens,
+  // what the Usage screen's cost cards compute from.
+  type PriceRow = { model: string; input: string; output: string; cache: string };
+  let priceRows = $state<PriceRow[]>([]);
+  let priceDirty = $state(false);
+  let priceSaving = $state(false);
+  let priceError = $state<string | null>(null);
+
+  const loadPrices = async () => {
+    try {
+      const prices = await api.modelPrices();
+      priceRows = Object.entries(prices).map(([model, p]) => ({
+        model,
+        input: String(p.input ?? 0),
+        output: String(p.output ?? 0),
+        cache: p.cache_read === null || p.cache_read === undefined ? "" : String(p.cache_read),
+      }));
+      priceDirty = false;
+    } catch (e: unknown) {
+      priceError = errorMessage(e);
+    }
+  };
+
+  const savePrices = async () => {
+    priceSaving = true;
+    priceError = null;
+    try {
+      const prices: Record<string, { input: number; output: number; cache_read: number | null }> = {};
+      for (const row of priceRows) {
+        const model = row.model.trim();
+        if (!model) continue;
+        prices[model] = {
+          input: Math.max(0, Number(row.input) || 0),
+          output: Math.max(0, Number(row.output) || 0),
+          cache_read: row.cache.trim() === "" ? null : Math.max(0, Number(row.cache) || 0),
+        };
+      }
+      await api.setModelPrices(prices);
+      await loadPrices();
+    } catch (e: unknown) {
+      priceError = errorMessage(e);
+    } finally {
+      priceSaving = false;
+    }
+  };
+
+  const addPriceRow = () => {
+    priceRows = [...priceRows, { model: "", input: "0", output: "0", cache: "" }];
+    priceDirty = true;
+  };
   $effect(() => {
     scalePct = Math.round(scale.value * 100);
   });
@@ -674,6 +725,7 @@
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
+    void loadPrices();
     // Load what the remembered section shows.
     selectSection(activeTab);
     void api.engineInfo().then((info) => (engine = info)).catch(() => undefined);
@@ -784,6 +836,67 @@
                 {#if scale.value !== 1}<button type="button" class="rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-veil/5 hover:text-ink-100" onclick={() => void setScale(1)}>Reset</button>{/if}
               {/snippet}
             </SettingsRow>
+          </SettingsGroup>
+
+          <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Model costs</h3>
+          <SettingsGroup>
+            <div class="px-4 py-3">
+              <p class="text-sm text-ink-400">What each online model charges, in USD per 1M tokens. The Usage screen turns these into cost figures; local models are free and need no row.</p>
+              {#if priceRows.length > 0}
+                <div class="mt-3 space-y-2">
+                  <div class="grid grid-cols-4 gap-2 text-xs text-ink-500">
+                    <span>Model id</span><span>Input $/1M</span><span>Output $/1M</span><span>Cache read $/1M</span>
+                  </div>
+                  {#each priceRows as row, i (`${row.model}-${i}`)}
+                    <div class="grid grid-cols-4 gap-2">
+                      <input
+                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm text-ink-100 outline-none focus:border-ember-500"
+                        value={row.model}
+                        placeholder="gpt-5-mini"
+                        aria-label="Model id"
+                        oninput={(e) => { priceRows[i].model = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
+                      />
+                      <input
+                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
+                        value={row.input}
+                        inputmode="decimal"
+                        aria-label="Input price per million tokens"
+                        oninput={(e) => { priceRows[i].input = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
+                      />
+                      <input
+                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
+                        value={row.output}
+                        inputmode="decimal"
+                        aria-label="Output price per million tokens"
+                        oninput={(e) => { priceRows[i].output = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
+                      />
+                      <div class="flex items-center gap-1">
+                        <input
+                          class="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
+                          value={row.cache}
+                          inputmode="decimal"
+                          placeholder="—"
+                          aria-label="Cache read price per million tokens"
+                          oninput={(e) => { priceRows[i].cache = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
+                        />
+                        <button type="button" class="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-500 transition-colors hover:bg-veil/5 hover:text-ink-100" aria-label={`Remove prices for ${row.model || "row"}`} onclick={() => { priceRows = priceRows.filter((_, j) => j !== i); priceDirty = true; }}>
+                          <Icon name="close" class="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="mt-3 text-sm text-ink-500">No prices yet. Add one per model you use online.</p>
+              {/if}
+              {#if priceError}<p class="mt-2 text-sm text-ember-300">{priceError}</p>{/if}
+              <div class="mt-3 flex items-center gap-2">
+                <Button variant="secondary" onclick={addPriceRow}><Icon name="plus" class="h-4 w-4" />Add model</Button>
+                {#if priceRows.length > 0}
+                  <Button variant="primary" disabled={!priceDirty || priceSaving} onclick={() => void savePrices()}>{priceSaving ? "Saving…" : "Save prices"}</Button>
+                {/if}
+              </div>
+            </div>
           </SettingsGroup>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Performance</h3>
