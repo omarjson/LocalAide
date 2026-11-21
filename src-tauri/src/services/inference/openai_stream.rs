@@ -811,16 +811,15 @@ pub fn http_error_message(label: &str, status: u16, body: &str, has_key: bool) -
 /// Providers say how long to wait after a rate limit, in a header or in
 /// the error body. Only whole seconds are handled; a date header is left
 /// alone as too fussy to parse.
-fn retry_after_from(response: &reqwest::blocking::Response, body: &str) -> Option<Duration> {
-    if let Some(value) = response.headers().get(reqwest::header::RETRY_AFTER) {
-        if let Ok(text) = value.to_str()
-            && let Ok(secs) = text.trim().parse::<u64>()
-        {
-            return Some(Duration::from_secs(secs));
-        }
-    }
+fn retry_after_header(response: &reqwest::blocking::Response) -> Option<Duration> {
+    let value = response.headers().get(reqwest::header::RETRY_AFTER)?;
+    let secs = value.to_str().ok()?.trim().parse::<u64>().ok()?;
+    Some(Duration::from_secs(secs))
+}
+
+fn retry_after_in_body(body: &str) -> Option<Duration> {
     let lower = body.to_ascii_lowercase();
-    for key in [""retry_after"", ""retryafter"", ""retry-after""] {
+    for key in ["\"retry_after\"", "\"retryafter\"", "\"retry-after\""] {
         if let Some(pos) = lower.find(key) {
             let digits: String = lower[pos + key.len()..]
                 .chars()
@@ -889,10 +888,11 @@ pub fn stream_once(
         if let Some(a) = audit {
             a.finish(false, &format!("HTTP {status}"));
         }
+        let header_wait = retry_after_header(&response);
         let body = response.text().unwrap_or_default();
         return Err(StreamError::Http {
             status,
-            retry_after: retry_after_from(&response, &body),
+            retry_after: header_wait.or_else(|| retry_after_in_body(&body)),
             body,
         });
     }
@@ -1189,7 +1189,7 @@ mod tests {
         assert_eq!(shown, "Let me check the sources: ");
         assert_eq!(g.push("<function=list_files>\n<parameter=path> packages/types/src </parameter>\n"), "");
         assert_eq!(g.push("</function></tool_call>And here is what I found."), "And here is what I found.");
-        let calls = g.finish();
+        let (_, calls) = g.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "list_files");
         let args: Value = serde_json::from_str(&calls[0].arguments).unwrap();
@@ -1202,7 +1202,7 @@ mod tests {
         let mut g = ToolCallGuard::default();
         assert_eq!(g.push("Reading the file <tool"), "");
         assert_eq!(g.push("_call>{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.txt\"}}</tool_call> done"), "Reading the file  done");
-        let calls = g.finish();
+        let (_, calls) = g.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");
         let args: Value = serde_json::from_str(&calls[0].arguments).unwrap();

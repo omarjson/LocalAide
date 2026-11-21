@@ -167,6 +167,7 @@ impl NotesManager {
             tags: tags_vec,
             size: meta.len(),
             modified,
+            pinned: false,
         })
     }
 

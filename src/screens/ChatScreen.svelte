@@ -8,6 +8,7 @@
   import { addQuestion, addSubagentStep, appendReasoning, appendText, effortLabel, finishTool, partsForSaving, setSkillChange, setTodos, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
   import PermissionMenu from "../components/PermissionMenu.svelte";
   import WorkStatus from "../components/WorkStatus.svelte";
+  import PanelRail from "../components/PanelRail.svelte";
   import { chatRequest, chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
   import { fileManagerName } from "../lib/platform";
   import { dur, motion, stagger } from "../lib/motion";
@@ -127,6 +128,35 @@
   let localNotes = $state<number | null>(null);
   // Titles of pinned notes, shown as chips above the composer while Recall is on.
   let pinnedTitles = $state<string[]>([]);
+  // The side rail with the live cards. Remembered for the next chats.
+  let railOpen = $state((() => {
+    try {
+      return localStorage.getItem("localaide-rail") !== "off";
+    } catch {
+      return true;
+    }
+  })());
+  const toggleRail = () => {
+    railOpen = !railOpen;
+    try {
+      localStorage.setItem("localaide-rail", railOpen ? "on" : "off");
+    } catch {
+      // Storage can be unavailable; the choice still applies now.
+    }
+  };
+  // Sources of the most recent answer that listed any.
+  const lastCitations = $derived(
+    [...messages].reverse().find((m) => (m.citations?.length ?? 0) > 0)?.citations ?? [],
+  );
+  const askFromRail = (text: string) => {
+    if (streaming) return;
+    input = text;
+    void send();
+  };
+  const skillFromRail = (name: string) => {
+    input = `/${name} `;
+    focusComposer();
+  };
   let localBudgetGb = $state<number | null>(null);
   const loadLocalStats = async () => {
     try {
@@ -1386,6 +1416,7 @@
 
       <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
       <button type="button" onclick={() => (chatSearchOpen = true)} aria-label="Search in this chat" title="Search in this chat (Ctrl+F)" class="chat-icon-btn"><Icon name="search" class="h-[18px] w-[18px]" /></button>
+      <button type="button" onclick={toggleRail} aria-pressed={railOpen} aria-label="Chat panels" title="Chat panels — sources, work, skills (on wide screens)" class="hidden lg:inline-flex chat-icon-btn" class:rail-btn-on={railOpen}><Icon name="list-check" class="h-[18px] w-[18px]" /></button>
       <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
         <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
         {#if showMoreActions}
@@ -1402,6 +1433,24 @@
       <button type="button" onclick={() => newChat(activeFolder)} disabled={streaming} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97] disabled:opacity-50" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
     </div>
   </header>
+
+  {#if railOpen}
+    <PanelRail
+      sources={lastCitations}
+      skills={skills}
+      todos={workTodos}
+      subagents={workAgents}
+      startedAt={runStartedAt}
+      toolRounds={runToolRounds}
+      live={streaming}
+      {usage}
+      {autoCompactAt}
+      onAsk={askFromRail}
+      onSkill={skillFromRail}
+      onCompact={() => handleSlashCommand("compact")}
+      onClose={toggleRail}
+    />
+  {/if}
 
   <!-- Chat settings sheet -->
   {#if showSettingsPanel}
@@ -1522,7 +1571,7 @@
        a live region, so tokens are not read out one by one. -->
   <p class="sr-only" aria-live="polite">{liveStatus}</p>
 
-  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class="relative min-h-0 flex-1 overflow-y-auto">
+  <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class={`relative min-h-0 flex-1 overflow-y-auto ${railOpen ? "lg:pr-72" : ""}`}>
     {#if messages.length === 0}
       <div class={`ember-glow mx-auto flex min-h-full ${chatWidth} flex-col items-center justify-center gap-8 px-5 py-10 text-center`}>
         <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
@@ -1659,7 +1708,7 @@
 
 
 
-  <div class="shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 md:px-6">
+  <div class={`shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 transition-[padding] duration-200 md:px-6 ${railOpen ? "lg:pr-[19.5rem]" : ""}`}>
     <div class={`relative mx-auto ${chatWidth}`}>
   {#if userScrolledUp}
     <button

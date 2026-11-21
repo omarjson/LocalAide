@@ -17,7 +17,8 @@ use model_manager::ModelManager;
 use services::inference::InferenceEngine;
 
 pub use app::paths::{
-    catalog_cache_path, config_path, custom_models_path, index_dir, memory_dir, models_dir,
+    app_dir, catalog_cache_path, config_path, custom_models_path, index_dir, memory_dir,
+    models_dir,
 };
 
 pub fn run() {

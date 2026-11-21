@@ -948,6 +948,8 @@ impl LibraryDb {
         for r in rows {
             notes.push(r.map_err(|e| AppError::storage(format!("Note row read error: {e}")))?);
         }
+        Ok(notes)
+    }
 
     /// Pins or unpins a note. Returns whether a row matched.
     pub fn set_note_pinned(&self, path: &str, pinned: bool) -> Result<bool, AppError> {
@@ -1001,8 +1003,6 @@ impl LibraryDb {
         for r in rows {
             notes.push(r.map_err(|e| AppError::storage(format!("Pinned note row read error: {e}")))?);
         }
-        Ok(notes)
-    }
         Ok(notes)
     }
 

@@ -86,8 +86,9 @@ impl SuggestionsManager {
                 .open(&path)
             {
                 Ok(mut f) => {
-                    f.write_all(markdown.as_bytes())
-                        .map_err(|e| AppError::storage(format!("Failed to write the suggestion: {e}")))?;
+                    f.write_all(markdown.as_bytes()).map_err(|e| {
+                        AppError::storage(format!("Failed to write the suggestion: {e}"))
+                    })?;
                     return Ok(Suggestion {
                         file: name,
                         title: title.trim().to_string(),
@@ -196,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn suggest_list_read_dismiss_roundtrip() {
+    fn suggest_list_read_dismiss_roundtrip() -> Result<(), AppError> {
         let m = manager("roundtrip");
         let made = m.suggest("User's stack", "Prefers Rust and Svelte.")?;
         let all = m.list()?;
@@ -212,11 +213,11 @@ mod tests {
         assert!(m.dismiss(&made.file)?);
         assert!(m.list()?.is_empty());
         let _ = fs::remove_dir_all(&m.dir);
-        Ok::<(), AppError>(())
+        Ok(())
     }
 
     #[test]
-    fn duplicate_titles_get_numbered_files() {
+    fn duplicate_titles_get_numbered_files() -> Result<(), AppError> {
         let m = manager("dupes");
         let a = m.suggest("Same title", "first")?;
         let b = m.suggest("Same title", "second")?;
