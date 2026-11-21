@@ -287,6 +287,34 @@ export interface McpImportResult {
   servers: McpServer[];
 }
 
+export interface Automation {
+  id: string;
+  name: string;
+  prompt: string;
+  /** "daily" | "hourly" | "every" */
+  kind: string;
+  hour: number | null;
+  minute: number | null;
+  interval_minutes: number | null;
+  enabled: boolean;
+  created_at: number;
+  last_run_at: number | null;
+}
+
+export interface AutomationRun {
+  automation_id: string;
+  name: string;
+  at: number;
+  ok: boolean;
+  answer: string;
+  ms: number;
+}
+
+export interface AutomationsState {
+  automations: Automation[];
+  runs: AutomationRun[];
+}
+
 export interface ArtCraftPreset {
   id: string;
   name: string;

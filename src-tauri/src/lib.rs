@@ -141,6 +141,7 @@ pub fn run() {
     // shared handles, so cloning it is cheap.
     crate::commands::library_status::start_embedding_at_launch(app_state.clone());
     let startup_state = app_state.clone();
+    let scheduler_state = app_state.clone();
     let shutdown_state = app_state.clone();
     let engine_loading = app_state.engine_loading.clone();
     let drop_state = app_state.clone();
@@ -199,6 +200,10 @@ pub fn run() {
             commands::inference_status,
             commands::chat_stream,
             commands::chat_cancel,
+            commands::automations_list,
+            commands::automations_save,
+            commands::automations_delete,
+            commands::automations_run_now,
             commands::chat_thread_list,
             commands::chat_thread_save,
             commands::chat_thread_load,
@@ -355,6 +360,16 @@ pub fn run() {
         })
         .setup(move |setup_app| {
             crate::services::engine::init(setup_app.handle().clone());
+    // The Automations scheduler: checks every half minute for due prompts
+    // and answers them quietly in the background.
+    {
+        let scheduler_state = scheduler_state.clone();
+        let scheduler_handle = setup_app.handle().clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            scheduler_state.automations.tick(&scheduler_state, &scheduler_handle);
+        });
+    }
             // The interface scale from Settings → Appearance.
             let scale = commands::assist::saved_scale();
             if (scale - 1.0).abs() > f64::EPSILON

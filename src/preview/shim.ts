@@ -471,6 +471,19 @@ const fixtures: Record<string, Handler> = {
     engine: { installed: true, path: null, version: "1.10.30", download_bytes: null, available: true },
   }),
 
+  automations_list: () => ({
+    automations: [
+      { id: "auto_1", name: "Morning summary", prompt: "Summarize what changed in my notes since yesterday.", kind: "daily", hour: 7, minute: 30, interval_minutes: null, enabled: true, created_at: sec(600), last_run_at: sec(720) },
+      { id: "auto_2", name: "Inbox triage ideas", prompt: "Draft three quick replies for the invoice thread.", kind: "every", hour: null, minute: null, interval_minutes: 45, enabled: false, created_at: sec(300), last_run_at: null },
+    ],
+    runs: [
+      { automation_id: "auto_1", name: "Morning summary", at: sec(25), ok: true, answer: "Since yesterday: two notes changed — the invoice policy moved to net 45 days, and the meeting notes gained an action item for Omar. INV-1042 is now due December 15.", ms: 6100 },
+      { automation_id: "auto_1", name: "Morning summary", at: sec(60 * 26), ok: true, answer: "No changes since the last run.", ms: 3200 },
+    ],
+  }),
+  automations_save: (args) => ({ automations: [args?.automation].filter(Boolean), runs: [] }),
+  automations_delete: () => ({ automations: [], runs: [] }),
+  automations_run_now: () => true,
   share_status: () => {
     const on = (globalThis as { __shimShareOn?: boolean }).__shimShareOn === true;
     return { on, url: on ? "https://quiet-lake-8f2a.trycloudflare.com" : null, started_at: on ? sec(12) : null, requests: on ? 3 : 0, refused: 0, last_seen: on ? sec(2) : null, cloudflared: { installed: true, path: "C:\tools\cloudflared.exe", version: "2025.11.1", download_bytes: null, available: true } };

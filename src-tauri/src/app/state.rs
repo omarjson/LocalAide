@@ -38,6 +38,8 @@ pub struct AppState {
     pub mcp: Arc<McpManager>,
     /// The chat loop's approvals and what it learned about models.
     pub agent: Arc<AgentState>,
+    /// Scheduled prompts (Automations screen) and their run feed.
+    pub automations: Arc<crate::services::automations::AutomationsService>,
     /// Files the user dropped on the window lately. Chat reads a dropped
     /// file only when its path is in this list, so the window cannot ask
     /// for any path it likes.
@@ -78,6 +80,7 @@ impl AppState {
             engine_loading: Arc::new(AtomicBool::new(false)),
             mcp: Arc::new(McpManager::new()),
             agent: Arc::new(AgentState::new()),
+            automations: Arc::new(crate::services::automations::AutomationsService::load(&crate::app::paths::app_dir())),
             dropped_paths: Arc::new(Mutex::new(Vec::new())),
         }
     }

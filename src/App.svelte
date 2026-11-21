@@ -28,13 +28,14 @@
   import SettingsScreen from "./screens/SettingsScreen.svelte";
   import SearchScreen from "./screens/SearchScreen.svelte";
   import UsageScreen from "./screens/UsageScreen.svelte";
+  import AutomationsScreen from "./screens/AutomationsScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
   import { chats, loadThreads, newChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
   import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
 
-  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage";
-  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage";
+  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage" | "automations";
+  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage" | "automations";
 
   // Null until startup decides: returning users with a downloaded model go
   // straight to chat; first-run users see the setup wizard.
@@ -227,7 +228,7 @@
     document.getElementById(`cmd-${cmdIndex}`)?.scrollIntoView({ block: "nearest" });
   });
 
-  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "usage", "settings"];
+  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "usage", "automations", "settings"];
 
   const refreshProbe = async () => {
     try {
@@ -425,6 +426,7 @@
       {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
       {@render navItem("models", "Models")}
       {@render navItem("usage", "Usage")}
+      {@render navItem("automations", "Automations")}
       {#if showLabels && screen !== "setup"}
         <div class="mt-2 border-t border-ink-800">
           <SidebarChats onOpen={() => navigate("chat")} />
@@ -508,6 +510,8 @@
         <SkillsScreen />
       {:else if screen === "models"}
         <ModelManagerScreen />
+      {:else if screen === "automations"}
+        <AutomationsScreen />
       {:else if screen === "usage"}
         <UsageScreen />
       {:else if screen === "settings"}

@@ -38,6 +38,7 @@
     | "flame"
     | "heart"
     | "clock"
+    | "automations"
     | "external"
     | "scale"
     | "key"
@@ -195,7 +196,7 @@
     <path d="M12 21c-1.7 0-3-1.3-3-3 0-1.5 1-2.5 2-3.5.3 1 1 1.6 2 1.8.6-.9 1-2 1-3.3 1.2 1 2 2.6 2 4.5 0 2-1.6 3.5-4 3.5z" />
   {:else if name === "heart"}
     <path d="M12 20s-7.5-4.5-7.5-10A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 3c0 5.5-7.5 10-7.5 10z" />
-  {:else if name === "clock"}
+  {:else if name === "automations" || name === "clock"}
     <circle cx="12" cy="12" r="9" />
     <path d="M12 7v5l3 2" />
   {:else if name === "external"}

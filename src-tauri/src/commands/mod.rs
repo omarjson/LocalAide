@@ -1,5 +1,6 @@
 pub mod assist;
 pub mod attach;
+pub mod automations;
 pub mod backup;
 pub mod chat;
 pub mod cloud;

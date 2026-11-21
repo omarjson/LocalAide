@@ -514,7 +514,7 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadPage => text("url"),
         ToolKind::SaveNote | ToolKind::SuggestNote => text("title"),
         ToolKind::UseSkill => text("name"),
-        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile => text("path"),
+        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile | ToolKind::MakeDocument => text("path"),
         ToolKind::ListSkills => String::new(),
         ToolKind::RunCommand => text("command"),
         ToolKind::AskUser => text("question"),

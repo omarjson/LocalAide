@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod automations;
 pub mod backup;
 pub mod cloud_audit;
 pub mod engine;

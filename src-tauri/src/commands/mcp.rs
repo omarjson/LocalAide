@@ -272,7 +272,7 @@ fn scan_plugin_cache(configured: &std::collections::HashSet<String>) -> Vec<ArtC
             .collect();
         version_dirs.sort_by(|a, b| b.1.cmp(&a.1));
         let Some((dir, _)) = version_dirs.into_iter().next() else { continue };
-        let version = dir.file_name().to_string_lossy().to_string();
+        let version = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
         let Ok(manifest) = std::fs::read_to_string(dir.join(".zcode-plugin").join("plugin.json")) else {
             continue;
         };

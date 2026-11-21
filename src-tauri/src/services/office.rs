@@ -71,7 +71,7 @@ fn crc32(data: &[u8]) -> u32 {
 }
 
 struct ZipEntry {
-    name: &'static str,
+    name: String,
     data: Vec<u8>,
 }
 
@@ -140,7 +140,7 @@ fn build_zip(entries: &[ZipEntry]) -> Vec<u8> {
 
 fn content_types_docx() -> ZipEntry {
     ZipEntry {
-        name: "[Content_Types].xml",
+        name: "[Content_Types].xml".to_string(),
         data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#.to_vec(),
     }
@@ -148,7 +148,7 @@ fn content_types_docx() -> ZipEntry {
 
 fn root_rels() -> ZipEntry {
     ZipEntry {
-        name: "_rels/.rels",
+        name: "_rels/.rels".to_string(),
         data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#.to_vec(),
     }
@@ -247,7 +247,7 @@ pub fn make_docx(title: &str, blocks: &[DocBlock]) -> Result<Vec<u8>, AppError> 
         content_types_docx(),
         root_rels(),
         ZipEntry {
-            name: "word/document.xml",
+            name: "word/document.xml".to_string(),
             data: document.into_bytes(),
         },
     ]))
@@ -312,7 +312,7 @@ pub fn make_xlsx(sheets: &[Sheet]) -> Result<Vec<u8>, AppError> {
             "<Relationship Id=\"rId{id}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{id}.xml\"/>"
         ));
         entries.push(ZipEntry {
-            name: Box::leak(format!("xl/worksheets/sheet{id}.xml").into_boxed_str()),
+            name: format!("xl/worksheets/sheet{id}.xml"),
             data: sheet_xml(&sheet.rows).into_bytes(),
         });
     }
@@ -332,20 +332,20 @@ pub fn make_xlsx(sheets: &[Sheet]) -> Result<Vec<u8>, AppError> {
     );
     let mut all = vec![
         ZipEntry {
-            name: "[Content_Types].xml",
+            name: "[Content_Types].xml".to_string(),
             data: content_types.into_bytes(),
         },
         ZipEntry {
-            name: "_rels/.rels",
+            name: "_rels/.rels".to_string(),
             data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_vec(),
         },
         ZipEntry {
-            name: "xl/workbook.xml",
+            name: "xl/workbook.xml".to_string(),
             data: workbook.into_bytes(),
         },
         ZipEntry {
-            name: "xl/_rels/workbook.xml.rels",
+            name: "xl/_rels/workbook.xml.rels".to_string(),
             data: workbook_rels.into_bytes(),
         },
     ];
@@ -407,19 +407,12 @@ pub fn make_pptx(title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
         let slide_xml = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>{body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
         );
-        let first_line = if index == 0 && !title.trim().is_empty() {
-            vec![title.to_string(), slide.title.clone()]
-        } else {
-            vec![slide.title.clone()]
-        };
-        let _ = first_line;
         slide_parts.push((
             format!("ppt/slides/slide{n}.xml"),
             slide_xml,
             format!(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>"
             ),
-            n,
         ));
         presentation_ids.push_str(&format!(
             "<p:sldId id=\"{n}\" r:id=\"rId{}\"/>",
@@ -448,65 +441,51 @@ pub fn make_pptx(title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>"#;
     let mut entries = vec![
         ZipEntry {
-            name: "[Content_Types].xml",
+            name: "[Content_Types].xml".to_string(),
             data: content_types.into_bytes(),
         },
         ZipEntry {
-            name: "_rels/.rels",
+            name: "_rels/.rels".to_string(),
             data: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>"#.to_vec(),
         },
         ZipEntry {
-            name: "ppt/presentation.xml",
+            name: "ppt/presentation.xml".to_string(),
             data: presentation.into_bytes(),
         },
         ZipEntry {
-            name: "ppt/_rels/presentation.xml.rels",
+            name: "ppt/_rels/presentation.xml.rels".to_string(),
             data: presentation_rels.into_bytes(),
         },
         ZipEntry {
-            name: "ppt/slideMasters/slideMaster1.xml",
+            name: "ppt/slideMasters/slideMaster1.xml".to_string(),
             data: MASTER.as_bytes().to_vec(),
         },
         ZipEntry {
-            name: "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+            name: "ppt/slideMasters/_rels/slideMaster1.xml.rels".to_string(),
             data: MASTER_RELS.as_bytes().to_vec(),
         },
         ZipEntry {
-            name: "ppt/slideLayouts/slideLayout1.xml",
+            name: "ppt/slideLayouts/slideLayout1.xml".to_string(),
             data: LAYOUT.as_bytes().to_vec(),
         },
         ZipEntry {
-            name: "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+            name: "ppt/slideLayouts/_rels/slideLayout1.xml.rels".to_string(),
             data: LAYOUT_RELS.as_bytes().to_vec(),
         },
         ZipEntry {
-            name: "ppt/theme/theme1.xml",
+            name: "ppt/theme/theme1.xml".to_string(),
             data: THEME1.as_bytes().to_vec(),
         },
     ];
-    for (name, xml_body, rels, _n) in slide_parts {
+    for (name, xml_body, rels) in slide_parts {
+        let rels_name = name.replacen("ppt/slides/", "ppt/slides/_rels/", 1);
         entries.push(ZipEntry {
-            name: Box::leak(name.into_boxed_str()),
+            name,
             data: xml_body.into_bytes(),
         });
-        let rels_name = Box::leak(
-            name.replace("ppt/slides/", "ppt/slides/_rels/")
-                + [".rels"]
-                .iter()
-                .map(|s: &&str| s.to_string())
-                .collect::<String>()
-                .as_str(),
-        );
-        let _ = rels_name;
         entries.push(ZipEntry {
-            name: Box::leak(
-                format!(
-                    "{}",
-                    name.replacen("ppt/slides/", "ppt/slides/_rels/", 1)
-                )
-                .into_boxed_str(),
-            ),
+            name: rels_name,
             data: rels.into_bytes(),
         });
     }
@@ -523,11 +502,11 @@ mod tests {
     fn zip_round_trips_entries() {
         let entries = vec![
             ZipEntry {
-                name: "a.txt",
+                name: "a.txt".to_string(),
                 data: b"hello".to_vec(),
             },
             ZipEntry {
-                name: "b/c.txt",
+                name: "b/c.txt".to_string(),
                 data: vec![0u8; 300],
             },
         ];

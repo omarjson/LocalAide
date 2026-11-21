@@ -94,6 +94,8 @@ import type {
   McpPreset,
   McpServer,
   ArtCraftPreset,
+  Automation,
+  AutomationsState,
   McpServerSaveRequest,
   McpTool,
   LibraryStatus,
@@ -966,6 +968,22 @@ export class ApiClient {
 
   async mcpArtcraftPresets(): Promise<ArtCraftPreset[]> {
     return invoke<ArtCraftPreset[]>("mcp_artcraft_presets");
+  }
+
+  async automationsList(): Promise<AutomationsState> {
+    return invoke<AutomationsState>("automations_list");
+  }
+
+  async automationsSave(automation: Automation): Promise<AutomationsState> {
+    return invoke<AutomationsState>("automations_save", { automation });
+  }
+
+  async automationsDelete(id: string): Promise<AutomationsState> {
+    return invoke<AutomationsState>("automations_delete", { id });
+  }
+
+  async automationsRunNow(id: string): Promise<boolean> {
+    return invoke<boolean>("automations_run_now", { id });
   }
 
   async saveMcpServer(req: McpServerSaveRequest): Promise<McpServer[]> {
