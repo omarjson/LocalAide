@@ -1,4 +1,5 @@
 pub mod approval;
+pub mod read_only;
 pub mod sandbox;
 pub mod shell;
 
@@ -61,6 +62,31 @@ impl ToolPolicy {
             .hooks
             .clone()
     }
+
+    /// Decide a shell command's approval. An explicit rule (Allow or Deny)
+    /// wins; when no rule matches, a fully inert read-only command is allowed
+    /// so it can skip the prompt, and everything else still asks.
+    ///
+    /// Deny is checked first and unconditionally: a user rule that forbids a
+    /// command is never overridden by the read-only fast path.
+    pub fn decide_shell(&self, command: &str) -> ToolDecision {
+        // Both names appear in this app: "shell" is the audit action, while
+        // "execute_command" is the tool name the model calls. A rule on
+        // either one is honoured so a deny cannot be bypassed by spelling.
+        let direct = self.decide("shell", command);
+        let tool = self.decide("execute_command", command);
+        if direct == ToolDecision::Deny || tool == ToolDecision::Deny {
+            return ToolDecision::Deny;
+        }
+        if direct == ToolDecision::Allow || tool == ToolDecision::Allow {
+            return ToolDecision::Allow;
+        }
+        if read_only::can_skip_approval(command) {
+            ToolDecision::Allow
+        } else {
+            ToolDecision::Ask
+        }
+    }
 }
 
 pub struct ToolService {
@@ -89,6 +115,12 @@ impl ToolService {
     /// The shared policy snapshot, for callers that update it directly.
     pub fn policy(&self) -> Arc<ToolPolicy> {
         self.policy.clone()
+    }
+
+    /// The approval decision for a shell command. Explicit deny rules win;
+    /// otherwise an inert read-only command may skip the prompt.
+    pub fn shell_decision(&self, command: &str) -> ToolDecision {
+        self.policy.decide_shell(command)
     }
 
     /// The shared workspace folder's jail.
@@ -426,6 +458,22 @@ impl ToolService {
             );
             return Err(AppError::new("COMMAND_BLOCKED", reason));
         }
+        // Policy: an explicit deny rule wins over the read-only fast path.
+        // This path runs after the caller has asked for approval, so a deny is
+        // a hard refusal rather than another prompt.
+        if matches!(self.policy.decide_shell(command), ToolDecision::Deny) {
+            self.record_event(
+                &format!("{source}:execute_command"),
+                "shell",
+                command,
+                "denied",
+                Some("Blocked by a permission rule"),
+            );
+            return Err(AppError::new(
+                "COMMAND_DENIED",
+                "Command execution denied by a permission rule",
+            ));
+        }
         let folder = match cwd.map(str::trim).filter(|c| !c.is_empty() && *c != ".") {
             Some(dir) => {
                 let path = jail.resolve_path(dir)?;
@@ -634,6 +682,79 @@ mod tests {
         let response = tools.execute(read("a.txt")).unwrap();
         assert!(!response.success);
         assert!(response.error.unwrap().contains("hook"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn inert_shell_commands_skip_approval() {
+        let (tools, dir) = service("shell-inert");
+        assert_eq!(
+            tools.shell_decision("ls -la && git status"),
+            crate::config::ToolDecision::Allow
+        );
+        assert_eq!(
+            tools.shell_decision("pwd; git log --oneline -3"),
+            crate::config::ToolDecision::Allow
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_compound_command_with_rm_still_asks() {
+        let (tools, dir) = service("shell-rm");
+        assert_eq!(
+            tools.shell_decision("ls && rm -f notes.txt"),
+            crate::config::ToolDecision::Ask
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_deny_rule_beats_the_read_only_fast_path() {
+        let (tools, dir) = service("shell-deny");
+        tools.apply_config(&AppConfig {
+            permissions: vec![PermissionRule {
+                action: "shell".into(),
+                resource: "*".into(),
+                decision: PermissionDecision::Deny,
+            }],
+            ..AppConfig::default()
+        });
+        assert_eq!(
+            tools.shell_decision("ls -la && git status"),
+            crate::config::ToolDecision::Deny
+        );
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let err = tools
+            .run_command(
+                "test",
+                "ls -la && git status",
+                None,
+                std::time::Duration::from_secs(5),
+                &cancel,
+                None,
+            )
+            .err()
+            .expect("a deny rule must refuse the command");
+        assert_eq!(err.code, "COMMAND_DENIED");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_deny_rule_on_the_tool_name_also_wins() {
+        let (tools, dir) = service("shell-tool-deny");
+        tools.apply_config(&AppConfig {
+            permissions: vec![PermissionRule {
+                action: "execute_command".into(),
+                resource: "*".into(),
+                decision: PermissionDecision::Deny,
+            }],
+            ..AppConfig::default()
+        });
+        assert_eq!(
+            tools.shell_decision("ls -la && git status"),
+            crate::config::ToolDecision::Deny
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
