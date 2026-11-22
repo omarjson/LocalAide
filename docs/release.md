@@ -93,7 +93,7 @@ Since 0.1.2, LocalAide can update itself, through `tauri-plugin-updater` (ADR-00
 
 User data in `~/.aiassistant/` is not touched by an update or by uninstalling.
 
-A build with no public key (`plugins.updater.pubkey` empty) never offers "Install and restart"; it links to the release page instead, as 0.1.1 did. Versions 0.1.0 and 0.1.1 have no updater, so people on them install 0.1.2 by hand once. On Windows the new installer replaces the old version in place; on macOS drag the new app over the old one.
+A build with no public key (`plugins.updater.pubkey` empty) never offers "Install and restart"; it links to the release page instead, as 0.1.1 did. Versions 0.1.0 and 0.1.1 have no updater, so people on them install 0.1.2 by hand once. On Windows the new installer replaces the old version in place (since 0.2.1 without asking to uninstall first; see "Windows installer template"); on macOS drag the new app over the old one.
 
 ### One-time setup (owner)
 
@@ -112,6 +112,12 @@ With those set, release builds sign their update packages (`scripts/ci/updater-c
 ## Installer look
 
 The Windows installer shows the LocalAide icon, a branded header and sidebar, and the Terms of Use as its license page; it installs for the current user, so no administrator prompt. The macOS disk image has a branded background with an arrow to Applications. The art lives in `src-tauri/installer/` and is made from `public/logo.svg` by `scripts/gen-installer-art.mjs`; app icons are made with `npx tauri icon public/logo.svg -o src-tauri/icons` (the macOS `icon.icns` uses `src-tauri/installer/icon-macos.svg`, which adds Apple's icon padding).
+
+## Windows installer template
+
+Since 0.2.1 the NSIS installer is built from `src-tauri/installer/installer.nsi` (`bundle.windows.nsis.template`), a copy of Tauri's own template for `@tauri-apps/cli` 2.12.4 with a few changes, each marked `LocalAide:`. They make installing over an older LocalAide an in-place upgrade, like the in-app updater: no "uninstall before installing" page, no second wizard from the old uninstaller, and no license, folder or Start menu pages. Reinstalling the same version or downgrading still shows Tauri's usual choice.
+
+When `@tauri-apps/cli` is upgraded, fetch the new upstream template (`crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi` at the matching `tauri-cli-v*` tag), carry the `LocalAide:` changes over, and build the Windows installer once (`[build-all]` in a commit message) to check it compiles.
 
 ## Bundle identifier
 

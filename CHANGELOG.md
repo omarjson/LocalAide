@@ -5,6 +5,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-22
+
+A hotfix for 0.2.0: closing the window on Windows works again, the effort bar and context meter behave, the context count is the model's own, and installing over an older LocalAide is one short wizard. Your chats, notes, models and settings are kept.
+
+### Added
+- **Queue and steer while an answer runs.** The message box stays open during an answer. Enter queues a message, which is sent as soon as the answer ends; Alt+Enter (or **Steer**) hands a note to the running answer, and the model reads it before its next step. Queued messages can be sent now, edited or removed. A note that arrives after the model's last step joins the queue, so nothing you type is lost.
+- **Add an online provider from the chat.** "Add an online provider" in the model menu (and "Use a free provider" on an empty chat) opens the provider form right there. Once it is saved, the chat switches to that provider's model. Adding a provider is the opt-in: its models appear at once, without a second switch in Settings.
+
+### Fixed
+- **Closing, minimizing and maximizing the window on Windows.** The custom title bar's buttons were missing their window permissions, so Close showed "Something went wrong" and left the window open. The buttons now work, and window dragging works too. A failed close falls back to closing the window outright instead of showing an error.
+- **Reopening LocalAide right after closing it** no longer says "already open": a new start waits a few seconds for the closing copy to finish. The Automations scheduler stops when the app starts closing, so no run begins while the engines shut down.
+- **The thinking effort bar responds anywhere on the bar.** Press or drag anywhere on the capsule to move to the nearest level; before, only the knob's top edge took clicks. The knob, its dots and the levels now line up.
+- **The context meter's card opens above the meter** in the message box instead of under it, out of sight.
+- **The context count is the model's own.** After each answer the meter starts from the engine's count of what was really sent (instructions, tool descriptions, history and question) and estimates only what came after. Without a count it uses a better estimate (four characters a token for English, two for other alphabets, one per Chinese, Japanese or Korean character), corrected by how far off the last estimate was. The real size of the instructions and tool descriptions replaces a fixed guess, images count, the room kept for thinking matches the chosen effort, and the breakdown on hover adds up to the meter.
+- **The title bar no longer stacks on another "LocalAide" bar.** The sidebar's own logo row is gone, the narrow-window header folded into the title bar (its menu button opens the navigation), and the sliding sidebar opens below the title bar instead of covering it.
+
+### Changed
+- **Leaner context.** Tool descriptions now count toward the context budget, so long chats with tools no longer overflow small local models. Long arguments of earlier tool calls are shortened before whole turns are dropped. When the history takes more than half the room, files attached to older messages are cut to their first 2,000 characters (the newest four messages keep theirs whole). The current date and time ride on the new message instead of the system prompt, so a local model reuses its cached prompt instead of reading the whole chat again every minute.
+- **Upgrading on Windows is one wizard.** When an older LocalAide is installed, the installer updates it in place, the way the in-app updater does: no "uninstall first?" page, no second uninstall wizard, and no license, folder or Start menu pages to click through. Reinstalling the same version or going back to an older one still asks.
+- **Setup is shorter.** Checking the computer is no longer a step of its own; the recommended model installs in one click (other sizes sit under "Other sizes"); "Use an online provider instead" sets up a provider without leaving setup, and is suggested first when the computer has too little memory for local models; the last step picks Dark or Light. It also explains "For models" and says when the first start downloads the engine.
+- In Settings → Online providers, the main switch can be turned on before any provider exists; doing so opens the form to add one.
+
 ## [0.2.0] - 2026-11-22
 
 The biggest LocalAide release yet: chats run in parallel tabs, the assistant answers on a schedule, it builds real Word, Excel and PowerPoint files, and the Usage screen tells you exactly what every answer cost. Everything below keeps your chats, notes, models and settings.
