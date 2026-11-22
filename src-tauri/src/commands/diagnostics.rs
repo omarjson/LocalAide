@@ -99,7 +99,7 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
         .as_secs();
     let pid = sysinfo::Pid::from_u32(std::process::id());
     let mut sys = System::new();
-    sys.refresh_process(pid);
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
     let rss_bytes = sys.process(pid).map(|p| p.memory()).unwrap_or(0);
     let log_dir = crate::app::paths::app_dir().join("logs");
     let logs_bytes =
