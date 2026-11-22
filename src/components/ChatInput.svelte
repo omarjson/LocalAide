@@ -27,6 +27,10 @@
     onReadFile: () => void;
     onWriteFile?: () => void;
     onCancel?: () => void;
+    /** While an answer runs: keep this message and send it when the answer ends. */
+    onQueue?: () => void;
+    /** While an answer runs: hand this note to the answer before its next step. */
+    onSteer?: () => void;
     pendingImages?: string[];
     onPickImages?: (files: FileList | null) => void;
     onRemoveImage?: (index: number) => void;
@@ -77,6 +81,8 @@
     onReadFile,
     onWriteFile,
     onCancel,
+    onQueue,
+    onSteer,
     pendingImages = [],
     onPickImages,
     onRemoveImage,
@@ -201,6 +207,13 @@
       input = firstSuggestion;
       return;
     }
+    // While an answer runs, Alt+Enter steers it with the draft.
+    if (streaming && onSteer && e.key === "Enter" && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (e.isComposing || e.keyCode === 229 || e.repeat) return;
+      if (input.trim()) onSteer();
+      return;
+    }
     // With "Send with Ctrl+Enter" on, plain Enter adds a new line instead.
     const sendKey = ctrlEnterSends
       ? e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
@@ -211,6 +224,7 @@
       // must not send the message.
       if (e.isComposing || e.keyCode === 229 || e.repeat) return;
       if (!streaming) onSend();
+      else if (onQueue && input.trim()) onQueue();
     } else if (e.key === "Escape" && streaming) {
       e.preventDefault();
       onCancel?.();
@@ -345,8 +359,8 @@
       aria-label="Chat message"
       bind:this={textareaEl}
       bind:value={input}
-      placeholder={streaming ? "Answering… press Esc to stop" : firstSuggestion ? `Tab to use: ${firstSuggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
-      readonly={streaming}
+      placeholder={streaming ? (onQueue ? "Answering… Enter queues a message, Alt+Enter steers this answer, Esc stops" : "Answering… press Esc to stop") : firstSuggestion ? `Tab to use: ${firstSuggestion}` : skills.length ? "Ask anything. Type / for skills" : "Ask anything"}
+      readonly={streaming && !onQueue}
       aria-busy={streaming}
       rows={1}
       onkeydown={handleKeydown}
@@ -451,6 +465,14 @@
         >{#if enhancing}<span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>{:else}<Icon name="wand" class="h-4 w-4" />{/if}</button>
       {/if}
 
+      {#if streaming && input.trim() && (onQueue || onSteer)}
+        {#if onSteer}
+          <button type="button" onclick={onSteer} class="composer-chip ml-1" title="Give this note to the answer before its next step (Alt+Enter)"><Icon name="wand" class="h-3.5 w-3.5" />Steer</button>
+        {/if}
+        {#if onQueue}
+          <button type="button" onclick={onQueue} class="composer-chip ml-1" title="Send this when the answer ends (Enter)"><Icon name="plus" class="h-3.5 w-3.5" />Queue</button>
+        {/if}
+      {/if}
       {#if streaming}
         <button
           type="button"

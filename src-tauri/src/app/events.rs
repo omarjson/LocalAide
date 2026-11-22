@@ -25,6 +25,16 @@ pub enum ChatStreamEvent {
         prompt_tokens: Option<usize>,
         /// Cached prompt tokens the server reported, when it does.
         cache_tokens: Option<usize>,
+        /// The server's prompt count for the first round (system prompt,
+        /// tools, history and the new message), when reported.
+        #[serde(default)]
+        first_prompt_tokens: Option<usize>,
+        /// Estimated tokens of the system prompt and pinned notes.
+        #[serde(default)]
+        system_tokens: usize,
+        /// Estimated tokens of the tool schemas sent with the request.
+        #[serde(default)]
+        tool_tokens: usize,
     },
     Error {
         error: String,
@@ -32,6 +42,10 @@ pub enum ChatStreamEvent {
     /// A piece of the model's thinking, shown in the collapsible
     /// "Thinking" block above the answer.
     Reasoning {
+        text: String,
+    },
+    /// A note the user sent while the answer ran reached the model.
+    Steered {
         text: String,
     },
     /// The model asked for a tool. `group` is "web", "notes", "skills",

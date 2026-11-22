@@ -241,6 +241,11 @@ export class ApiClient {
     return invoke<void>("chat_cancel", { jobId });
   }
 
+  /** A note for a running answer. False when the answer already finished. */
+  async steerChat(jobId: string, text: string): Promise<boolean> {
+    return invoke<boolean>("chat_steer", { req: { job_id: jobId, text } });
+  }
+
   async listChatThreads(): Promise<ChatThread[]> {
     return invoke<ChatThread[]>("chat_thread_list");
   }

@@ -205,6 +205,14 @@ pub struct ToolDecisionRequest {
     pub decision: String,
 }
 
+/// A note the user sends to an answer that is still running. The model
+/// reads it before its next step.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChatSteerRequest {
+    pub job_id: String,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummarizeRequest {
     pub text: String,

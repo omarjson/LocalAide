@@ -1,5 +1,35 @@
 use crate::domain::chat::ChatMessage;
 
+/// Approximate token count of a text, close to what common tokenizers give:
+/// about four characters per token for English and code, about two for
+/// other alphabets (accented Latin, Cyrillic, Arabic, Greek...), and about
+/// one per character for Chinese, Japanese and Korean. The chat's context
+/// meter uses the same rule (`src/lib/contextUsage.ts`), so both sides agree.
+pub fn estimate_text_tokens(text: &str) -> usize {
+    let (mut ascii, mut other, mut wide) = (0usize, 0usize, 0usize);
+    for c in text.chars() {
+        let code = c as u32;
+        if code < 0x80 {
+            ascii += 1;
+        } else if is_wide(code) {
+            wide += 1;
+        } else {
+            other += 1;
+        }
+    }
+    ascii.div_ceil(4) + other.div_ceil(2) + wide
+}
+
+fn is_wide(code: u32) -> bool {
+    matches!(code,
+        0x1100..=0x11FF
+        | 0x2E80..=0x9FFF
+        | 0xAC00..=0xD7AF
+        | 0xF900..=0xFAFF
+        | 0xFF00..=0xFFEF
+        | 0x20000..=0x2FFFF)
+}
+
 pub struct ContextBudget {
     pub max_context_tokens: usize,
     pub generation_tokens: usize,
@@ -29,9 +59,9 @@ impl ContextBudget {
         }
     }
 
-    /// Approximate token count (roughly 4 characters per token).
+    /// Approximate token count. See [`estimate_text_tokens`].
     pub fn estimate_tokens(text: &str) -> usize {
-        text.chars().count().div_ceil(4)
+        estimate_text_tokens(text)
     }
 
     /// Build a bounded prompt from system prompt and chat history.

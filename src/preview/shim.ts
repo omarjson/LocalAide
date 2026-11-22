@@ -368,6 +368,7 @@ const fixtures: Record<string, Handler> = {
   chat_thread_export_save: () => null,
   chat_export_text_save: () => null,
   chat_cancel: () => null,
+  chat_steer: () => true,
   chat_enhance_prompt: (args) => `${args.text} — rewritten with clear steps and a short goal statement.`,
   chat_suggest_next: () => ["Turn this into a checklist I can follow tomorrow.", "Draft an email to the client about the delay.", "What else changed in the invoice terms?"],
   chat_title: () => "Invoice terms and payment dates",

@@ -21,14 +21,16 @@
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Slider from "../components/Slider.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
-  import type { ApprovalMode, ChatAttachment, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, MessagePart, ModelChoice, ModelChoices, Skill, Starter, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
+  import type { ApprovalMode, ChatAttachment, CloudConfigStatus, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, MessagePart, ModelChoice, ModelChoices, Skill, Starter, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
   import Icon from "../components/Icon.svelte";
   import LogoMark from "../components/LogoMark.svelte";
   import ChatInput from "../components/ChatInput.svelte";
   import ModelPicker from "../components/ModelPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
-  import { compactionStart, contextSegments, contextUsage, fits } from "../lib/contextUsage";
+  import Modal from "../components/Modal.svelte";
+  import ProviderForm from "../components/ProviderForm.svelte";
+  import { calibration, compactionStart, contextSegments, contextUsage, fits, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
 
   let messages = $state<ChatMessage[]>([]);
@@ -582,6 +584,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    resetMeasurements();
     suggestions = [];
     void loadStarters();
   };
@@ -625,6 +628,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    resetMeasurements();
     systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(id);
@@ -706,21 +710,42 @@
   // model. It resets with each chat.
   let compactedBefore = $state(0);
   const historyFrom = $derived(Math.min(compactedBefore, messages.length));
-  const answerReserve = $derived(maxTokens + (activeChoice?.reasoning && effort !== "off" ? 4096 : 0));
-  // The server's own prompt count from the last answer beats the chars/4
-  // estimate whenever it reports one.
-  let realPromptTokens = $state<number | null>(null);
+  // The same thinking room the backend keeps for this effort.
+  const answerReserve = $derived(maxTokens + (activeChoice?.reasoning ? thinkingReserve(effort) : 0));
+  // The engine's own count for the first request of the last answer, and
+  // where in the chat it was taken. The meter starts from it and estimates
+  // only what came after. Cleared with each new or loaded chat.
+  let measuredPrompt = $state<MeasuredPrompt | null>(null);
+  // The model the count came from: another model tokenizes differently.
+  let measuredModel = $state<string | null>(null);
+  // How far the text estimate was off last time, for when there is no
+  // fresh count (after a compaction, or for a model that reports none).
+  let estimateRatio = $state(1);
+  // Instructions and tool schemas as the backend counted them last time.
+  let reportedSystem = $state<number | null>(null);
+  let reportedTools = $state<number | null>(null);
   // Cache hit rate of the last answer, when the provider reports cached tokens.
   let lastCacheRate = $state<number | null>(null);
-  const usage = $derived.by(() => {
-    const estimate = contextUsage(messages, activeChoice?.context, { from: historyFrom, draft: input, systemPrompt, reserve: answerReserve });
-    if (realPromptTokens !== null && activeChoice?.context) {
-      return { ...estimate, used: realPromptTokens, percent: Math.min(100, (realPromptTokens / activeChoice.context) * 100) };
-    }
-    return estimate;
-  });
+  const resetMeasurements = () => {
+    measuredPrompt = null;
+    measuredModel = null;
+    lastCacheRate = null;
+  };
+  const usageOptions = (draft: string) => {
+    const sameModel = measuredModel !== null && measuredModel === (activeChoice?.key ?? null);
+    return {
+      from: historyFrom,
+      draft,
+      systemPrompt,
+      reserve: answerReserve,
+      overhead: reportedSystem !== null ? reportedSystem + (reportedTools ?? 0) : null,
+      measured: sameModel ? measuredPrompt : null,
+      ratio: sameModel ? estimateRatio : 1,
+    };
+  };
+  const usage = $derived(contextUsage(messages, activeChoice?.context, usageOptions(input)));
   // What the window is made of, for the hover breakdown: history, tool
-  // schemas, meta context, skills and instructions.
+  // schemas, meta context, skills and instructions, scaled to the meter.
   const segments = $derived(
     contextSegments(messages, {
       from: historyFrom,
@@ -731,6 +756,9 @@
       pinnedNotes: pinnedTitles,
       skills,
       skillsOn: useSkills && moduleOn("skills"),
+      systemTokens: reportedSystem,
+      toolTokens: reportedTools,
+      total: usage.used,
     }),
   );
 
@@ -744,7 +772,7 @@
       compactedBefore = next;
       return true;
     }
-    const next = compactionStart(messages, limit, threshold, { from: historyFrom, draft, systemPrompt, reserve: answerReserve });
+    const next = compactionStart(messages, limit, threshold, usageOptions(draft));
     if (next <= historyFrom) return false;
     compactedBefore = next;
     return true;
@@ -896,21 +924,87 @@
     document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   };
 
-  const send = async (resend = false) => {
+  // Messages written while an answer runs. A queued one is sent when the
+  // answer ends; a steering note goes to the running answer and the model
+  // reads it before its next step. A note the answer had no step left for
+  // joins the queue, so nothing typed is lost.
+  type PendingNote = { id: number; text: string };
+  let queued = $state<PendingNote[]>([]);
+  let steering = $state<PendingNote[]>([]);
+  let noteSeq = 0;
+  const queueDraft = () => {
+    const text = input.trim();
+    if (!text) return;
+    queued.push({ id: ++noteSeq, text });
+    input = "";
+  };
+  const steerText = async (text: string) => {
+    const job = activeJobId;
+    const note = { id: ++noteSeq, text };
+    if (!job || !streaming) {
+      queued.push(note);
+      return;
+    }
+    // Listed first, so a "steered" event that arrives before the reply
+    // still finds it.
+    steering.push(note);
+    let taken = false;
+    try {
+      taken = await api.steerChat(job, text);
+    } catch (e: unknown) {
+      console.warn("The note could not reach the answer", e);
+    }
+    if (!taken) {
+      const at = steering.findIndex((n) => n.id === note.id);
+      if (at >= 0) {
+        steering.splice(at, 1);
+        queued.push(note);
+      }
+    }
+  };
+  const steerDraft = () => {
+    const text = input.trim();
+    if (!text) return;
+    input = "";
+    void steerText(text);
+  };
+  const parkSteers = () => {
+    if (steering.length === 0) return;
+    queued = [...steering, ...queued];
+    steering = [];
+  };
+  const sendNextQueued = () => {
+    if (streaming) return;
+    const next = queued.shift();
+    if (next) void send(false, next.text);
+  };
+  const sendQueuedNow = (id: number) => {
+    const at = queued.findIndex((n) => n.id === id);
+    if (at < 0) return;
+    const [note] = queued.splice(at, 1);
+    if (streaming) void steerText(note.text);
+    else void send(false, note.text);
+  };
+
+  // `queuedText` sends a queued message: its text only, leaving the draft
+  // and any files waiting in the box alone.
+  const send = async (resend = false, queuedText?: string) => {
+    const fromQueue = !resend && queuedText !== undefined;
     const lastUser = resend ? messages.at(-1) : undefined;
     const files = resend
       ? (lastUser?.attachments ?? []).filter((f) => !f.error)
-      : $state.snapshot(pendingFiles).filter((f) => !f.error);
-    const userMsg = resend ? (lastUser?.content ?? "") : input.trim();
+      : fromQueue
+        ? []
+        : $state.snapshot(pendingFiles).filter((f) => !f.error);
+    const userMsg = resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
     const resendImages = resend ? (lastUser?.images ?? []) : [];
-    if ((!userMsg && (resend ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) || streaming) return;
-    if (!resend) {
+    if ((!userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) || streaming) return;
+    if (!resend && !fromQueue) {
       input = "";
     }
     suggestions = [];
     previousDraft = null;
     planReady = false;
-    realPromptTokens = null;
     lastCacheRate = null;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
@@ -919,7 +1013,7 @@
         if (p.type === "question" && !p.answer && !p.dismissed) p.deferred = true;
       }
     }
-    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, { from: historyFrom, draft: userMsg, systemPrompt, reserve: answerReserve }), autoCompactAt)) {
+    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
       if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
     }
 
@@ -937,10 +1031,12 @@
         attachments: m.attachments?.filter((a) => a.kind === "text").map((a) => ({ ...a, data_url: null })),
       }));
 
-    const images = resend ? resendImages : $state.snapshot(pendingImages);
+    const images = resend ? resendImages : fromQueue ? [] : $state.snapshot(pendingImages);
     if (!resend) {
-      pendingImages = [];
-      pendingFiles = [];
+      if (!fromQueue) {
+        pendingImages = [];
+        pendingFiles = [];
+      }
       messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
     }
     streaming = true;
@@ -951,6 +1047,9 @@
     void savePrefs();
 
     const assistantIdx = messages.length;
+    // Where the history this request carries starts, for the engine's count.
+    const sentFrom = historyFrom;
+    const sentModel = activeChoice?.key ?? null;
     messages.push({
       role: "assistant",
       content: "",
@@ -977,6 +1076,7 @@
       activeJobId = null;
       approvals = {};
       liveStatus = "LocalAide could not answer.";
+      parkSteers();
       void persistCurrentThread();
     };
 
@@ -1015,6 +1115,12 @@
             if (firstTokenAt === null) firstTokenAt = now;
             appendText(parts(), event.payload.token, now);
             answer().content = textOf(parts());
+          } else if (event.type === "steered") {
+            const text = event.payload.text;
+            const at = steering.findIndex((n) => n.text === text);
+            if (at >= 0) steering.splice(at, 1);
+            const short = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+            answer().steps = [...(answer().steps ?? []), `Read your note: “${short}”`];
           } else if (event.type === "reasoning") {
             if (firstTokenAt === null) firstTokenAt = now;
             appendReasoning(parts(), event.payload.text, now);
@@ -1049,14 +1155,32 @@
             if (!cur.some((c) => c.index === event.payload.index)) answer().citations = [...cur, event.payload];
           } else if (event.type === "done") {
             settleParts(parts(), now);
-            realPromptTokens = event.payload.prompt_tokens ?? null;
             lastCacheRate = event.payload.prompt_tokens && event.payload.cache_tokens
               ? Math.min(100, (event.payload.cache_tokens / event.payload.prompt_tokens) * 100)
               : null;
+            if (typeof event.payload.system_tokens === "number" && event.payload.system_tokens > 0) {
+              reportedSystem = event.payload.system_tokens;
+              reportedTools = event.payload.tool_tokens ?? 0;
+            }
+            // The question as sent, estimated the way the meter estimates,
+            // against the engine's own count of it.
+            const sentEstimate = contextUsage(messages.slice(0, assistantIdx), null, {
+              from: sentFrom,
+              systemPrompt,
+              overhead: reportedSystem !== null ? reportedSystem + (reportedTools ?? 0) : null,
+            }).used;
+            const first = event.payload.first_prompt_tokens ?? null;
+            if (first && first > 0 && assistantIdx > 0) {
+              measuredPrompt = { tokens: first, upTo: assistantIdx, from: sentFrom, anchor: messages[assistantIdx - 1]?.ts };
+              measuredModel = sentModel;
+              estimateRatio = calibration(first, sentEstimate);
+            } else if (sentModel !== measuredModel) {
+              measuredPrompt = null;
+              measuredModel = null;
+            }
             answer().stats = {
               tokens: event.payload.total_tokens,
-              inputTokens: event.payload.prompt_tokens
-                ?? contextUsage(messages.slice(0, assistantIdx), null, { from: historyFrom, systemPrompt }).used,
+              inputTokens: event.payload.prompt_tokens ?? sentEstimate,
               outputTokens: event.payload.total_tokens,
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
@@ -1065,6 +1189,13 @@
             activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
+            parkSteers();
+            // The next queued message goes once this answer is saved, unless
+            // the user stopped it or the model is waiting on a question.
+            const finish = event.payload.finish_reason;
+            if (queued.length > 0 && finish !== "cancelled" && finish !== "question") {
+              void tick().then(() => sendNextQueued());
+            }
             if (!aiTitle) void generateTitle();
             void persistCurrentThread().then(() => {
               if (messages.length <= 2) void loadStarters();
@@ -1278,6 +1409,36 @@
       if (choices) for (const m of choices.models) m.favorite = starred.includes(m.key);
     } catch (e: unknown) {
       chatError = `The star could not be saved: ${errorMessage(e)}`;
+    }
+  };
+
+  // Adding an online provider from the chat: the same form as Settings,
+  // in a dialog, and the chat switches to the new provider's model once it
+  // is saved, so there is no trip through Settings.
+  let addingProvider = $state(false);
+  let providersBefore: string[] = [];
+  const openAddProvider = async () => {
+    try {
+      providersBefore = (await api.getCloudConfig()).providers.map((p) => p.id);
+    } catch {
+      providersBefore = [];
+    }
+    addingProvider = true;
+  };
+  const providerSaved = async (status: CloudConfigStatus) => {
+    addingProvider = false;
+    const added = status.providers.find((p) => !providersBefore.includes(p.id)) ?? null;
+    await loadChoices();
+    if (!added) return;
+    const pick =
+      choices?.models.find((m) => m.provider_id === added.id && m.model === added.model) ??
+      choices?.models.find((m) => m.provider_id === added.id) ??
+      null;
+    if (pick) {
+      await selectModel(pick);
+      showToast(`${added.label} is ready. This chat now uses ${pick.name}; switch back any time in the model menu.`);
+    } else {
+      showToast(`${added.label} is saved. Pick one of its models in the model menu.`);
     }
   };
 
@@ -1745,7 +1906,7 @@
             <p class="text-[15px] leading-6 text-ink-400">{choices && choices.models.length > 0 ? "Choose one in the model menu under the message box." : "Models run on this computer. Download one, or connect a free online provider such as Kilo Code in Settings."}</p>
             <div class="mt-3 flex flex-wrap justify-center gap-2">
               {#if onOpenModels}<Button variant="primary" class="h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>{/if}
-              {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={() => requestSettings("online")}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
+              {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={openAddProvider}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
             </div>
           {:else}
             <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
@@ -1914,6 +2075,26 @@
           <button type="button" class="underline underline-offset-2 hover:text-ink-100" onclick={() => { input = previousDraft ?? input; previousDraft = null; }}>Undo</button>
         </div>
       {/if}
+      {#if queued.length > 0 || steering.length > 0}
+        <ul class="mb-2 space-y-1" aria-label="Messages waiting to be sent">
+          {#each steering as note (note.id)}
+            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+              <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ember-300" />
+              <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
+              <span class="shrink-0 text-xs text-ink-500">Steering · read at the next step</span>
+            </li>
+          {/each}
+          {#each queued as note, i (note.id)}
+            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+              <span class="shrink-0 text-xs tabular-nums text-ink-500">{i + 1}</span>
+              <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
+              <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
+              <button type="button" class="note-action" onclick={() => { input = note.text; queued = queued.filter((n) => n.id !== note.id); focusComposer(); }} title="Edit it in the box">Edit</button>
+              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (queued = queued.filter((n) => n.id !== note.id))}><Icon name="close" class="h-3 w-3" /></button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
       <ChatInput
         bind:input={input}
         bind:toolPath={toolPath}
@@ -1922,6 +2103,8 @@
         streaming={streaming}
         onSend={send}
         onCancel={stopGenerating}
+        onQueue={queueDraft}
+        onSteer={steerDraft}
         onReadFile={readFile}
         onWriteFile={writeFile}
         pendingImages={pendingImages}
@@ -1972,7 +2155,7 @@
             onToggleFavorite={(key) => void toggleFavorite(key)}
             onRefresh={(id) => void refreshProvider(id)}
             refreshing={refreshingProvider}
-            onManageProviders={moduleOn("online") ? () => requestSettings("online") : undefined}
+            onManageProviders={moduleOn("online") ? openAddProvider : undefined}
             onGetModels={onOpenModels}
           />
         {/snippet}
@@ -1980,6 +2163,13 @@
       <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts.</p>
     </div>
   </div>
+
+  {#if addingProvider}
+    <Modal title="Add an online provider" size="lg" onClose={() => (addingProvider = false)}>
+      <p class="mb-3 text-sm leading-6 text-ink-400">Your messages go to this provider only while the chat uses one of its models. A key is kept on this computer and sent only to the provider's own address.</p>
+      <ProviderForm editing={null} onSaved={(status) => void providerSaved(status)} onCancel={() => (addingProvider = false)} />
+    </Modal>
+  {/if}
 
   {#if dragging}
     <div class="pointer-events-none absolute inset-3 z-40 grid place-items-center rounded-2xl border-2 border-dashed border-ember-500/60 bg-ink-950/80" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(motion.fast) }}>
@@ -2046,6 +2236,28 @@
     font-size: 0.8125rem;
     color: var(--color-ink-300);
     transition: border-color 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .note-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--color-edge);
+    border-radius: 0.6rem;
+    background: var(--color-ink-950);
+    padding: 0.3rem 0.4rem 0.3rem 0.65rem;
+    font-size: 0.8125rem;
+    color: var(--color-ink-200);
+  }
+  .note-action {
+    flex-shrink: 0;
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.45rem;
+    font-size: 0.75rem;
+    color: var(--color-ink-300);
+  }
+  .note-action:hover {
+    background: color-mix(in oklab, var(--color-veil) 7%, transparent);
+    color: var(--color-ink-50);
   }
   .suggest-chip:hover {
     border-style: solid;

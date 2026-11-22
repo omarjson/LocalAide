@@ -54,11 +54,34 @@ pub struct AgentState {
     /// Endpoints and models that refused tools, so the next message skips
     /// straight to the tool-less path.
     no_tools: Mutex<HashSet<String>>,
+    /// Notes the user sent to a running answer, by job id, waiting for the
+    /// model's next step.
+    steers: Mutex<HashMap<String, Vec<String>>>,
 }
 
 impl AgentState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Hands a note to the running answer `job_id`. The model reads it
+    /// before its next step.
+    pub fn steer(&self, job_id: &str, text: String) {
+        self.steers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(job_id.to_string())
+            .or_default()
+            .push(text);
+    }
+
+    /// Takes the notes waiting for `job_id`, oldest first.
+    fn take_steers(&self, job_id: &str) -> Vec<String> {
+        self.steers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(job_id)
+            .unwrap_or_default()
     }
 
     fn knows_no_tools(&self, key: &str) -> bool {
@@ -165,32 +188,59 @@ pub struct RunResult {
     pub prompt_tokens: Option<usize>,
     /// Cached prompt tokens the server reported for the last round.
     pub cache_tokens: Option<usize>,
+    /// The server's prompt count for the first round: the system prompt,
+    /// tools, history and the new message, before any tool round. This is
+    /// what the next message starts from, so the chat's meter uses it.
+    pub first_prompt_tokens: Option<usize>,
+    /// Estimated tokens of the system turns (prompt, pinned notes).
+    pub system_tokens: usize,
+    /// Estimated tokens of the tool schemas sent with each request.
+    pub tool_tokens: usize,
 }
 
+/// Tokens an image takes in the prompt, roughly, for budgeting.
+const IMAGE_TOKENS: usize = 750;
+
 fn estimate_tokens(turns: &[ChatTurn]) -> usize {
-    let chars: usize = turns
+    use crate::services::inference::context::estimate_text_tokens as text_tokens;
+    let tokens: usize = turns
         .iter()
         .map(|t| match t {
-            ChatTurn::System(s) => s.len(),
-            ChatTurn::User { text, images } => text.len() + images.len() * 3000,
+            ChatTurn::System(s) => text_tokens(s),
+            ChatTurn::User { text, images } => text_tokens(text) + images.len() * IMAGE_TOKENS,
             ChatTurn::Assistant { text, tool_calls } => {
-                text.len()
+                text_tokens(text)
                     + tool_calls
                         .iter()
-                        .map(|c| c.arguments.len() + c.name.len() + 16)
+                        .map(|c| text_tokens(&c.arguments) + text_tokens(&c.name) + 4)
                         .sum::<usize>()
             }
-            ChatTurn::Tool { content, .. } => content.len() + 16,
+            ChatTurn::Tool { content, .. } => text_tokens(content) + 4,
         })
         .sum();
-    chars.div_ceil(4) + turns.len() * 4
+    tokens + turns.len() * 4
+}
+
+/// Estimated tokens of the tool schemas, which ride along with every
+/// request and fill the window like any message.
+fn schema_tokens(schemas: &[Value]) -> usize {
+    if schemas.is_empty() {
+        return 0;
+    }
+    serde_json::to_string(schemas)
+        .map(|s| crate::services::inference::context::estimate_text_tokens(&s))
+        .unwrap_or(0)
 }
 
 /// Keep the conversation inside the context: older tool results are
-/// replaced by a short note first, then the oldest history turns go.
-/// The system prompt and the newest user message always stay.
+/// replaced by a short note first, then the long arguments of older tool
+/// calls (a file the model already wrote, say), then the oldest history
+/// turns go. The system prompt and the newest user message always stay.
 pub fn fit_turns(turns: &mut Vec<ChatTurn>, budget: usize) {
     const REMOVED: &str = "[Earlier tool result removed to save space.]";
+    // Still valid JSON, so chat templates that parse arguments keep working.
+    const ARGS_REMOVED: &str = r#"{"note":"arguments removed to save space"}"#;
+    const LONG_ARGS: usize = 1_000;
     let tool_slots: Vec<usize> = turns
         .iter()
         .enumerate()
@@ -206,6 +256,28 @@ pub fn fit_turns(turns: &mut Vec<ChatTurn>, budget: usize) {
             *content = REMOVED.to_string();
         }
     }
+    // Long arguments of tool calls before the newest one.
+    let call_slots: Vec<usize> = turns
+        .iter()
+        .enumerate()
+        .filter(
+            |(_, t)| matches!(t, ChatTurn::Assistant { tool_calls, .. } if !tool_calls.is_empty()),
+        )
+        .map(|(i, _)| i)
+        .collect();
+    for &i in &call_slots[..call_slots.len().saturating_sub(1)] {
+        if estimate_tokens(turns) <= budget {
+            return;
+        }
+        if let ChatTurn::Assistant { tool_calls, .. } = &mut turns[i] {
+            for call in tool_calls
+                .iter_mut()
+                .filter(|c| c.arguments.len() > LONG_ARGS)
+            {
+                call.arguments = ARGS_REMOVED.to_string();
+            }
+        }
+    }
     let last_user = turns
         .iter()
         .rposition(|t| matches!(t, ChatTurn::User { .. }))
@@ -219,8 +291,9 @@ pub fn fit_turns(turns: &mut Vec<ChatTurn>, budget: usize) {
 }
 
 /// The answer limit for one round: the user's answer length plus room to
-/// think, capped by what is left of the context.
-fn round_limit(run: &AgentRun, turns: &[ChatTurn]) -> i32 {
+/// think, capped by what is left of the context after the turns and the
+/// tool schemas.
+fn round_limit(run: &AgentRun, turns: &[ChatTurn], tool_tokens: usize) -> i32 {
     let thinking = if run.thinks {
         run.effort.thinking_allowance()
     } else {
@@ -229,7 +302,7 @@ fn round_limit(run: &AgentRun, turns: &[ChatTurn]) -> i32 {
     let wanted = run.answer_tokens.max(64) + thinking;
     let left = run
         .context_tokens
-        .saturating_sub(estimate_tokens(turns) + 64)
+        .saturating_sub(estimate_tokens(turns) + tool_tokens + 64)
         .min(i32::MAX as usize) as i32;
     wanted.min(left).max(256)
 }
@@ -280,7 +353,11 @@ pub fn run(
         ),
         ChatTarget::Remote(remote) => (remote.model.clone(), remote.label.clone(), false),
     };
+    let job_id = run.job_id.clone();
     let result = run_inner(state, run, cancel, sink);
+    // Notes that came after the model's last step are dropped here; the
+    // chat sends them as the next message instead.
+    let _ = state.agent.take_steers(&job_id);
     if let Ok(done) = &result
         && (source == "chat" || source == "share")
     {
@@ -368,8 +445,19 @@ fn run_inner(
     let mut ttft_ms: Option<u64> = None;
     let mut prompt_tokens: Option<usize> = None;
     let mut cache_tokens: Option<usize> = None;
+    let mut first_prompt_tokens: Option<usize> = None;
     let mut seen_ids: HashSet<String> = HashSet::new();
     let client = engine.chat_client();
+    // What the instructions cost, for the chat's context meter.
+    let system_tokens: usize = run
+        .turns
+        .iter()
+        .map(|t| match t {
+            ChatTurn::System(s) => crate::services::inference::context::estimate_text_tokens(s) + 4,
+            _ => 0,
+        })
+        .sum();
+    let mut tool_tokens = schema_tokens(&opts.tools);
 
     let mut round = 0usize;
     while round < run.max_rounds {
@@ -382,15 +470,35 @@ fn run_inner(
                 ttft_ms,
                 prompt_tokens,
                 cache_tokens,
+                first_prompt_tokens,
+                system_tokens,
+                tool_tokens,
             });
+        }
+        // Notes the user sent while the answer ran join the conversation
+        // before the model's next step.
+        if round > 0 {
+            for note in state.agent.take_steers(&run.job_id) {
+                sink.emit(ChatStreamEvent::Steered { text: note.clone() });
+                run.turns.push(ChatTurn::User {
+                    text: format!("(The user added this while you were working.) {note}"),
+                    images: Vec::new(),
+                });
+            }
         }
         let last_round = round + 1 == run.max_rounds;
         if last_round && !opts.tools.is_empty() {
             opts.forbid_tools = true;
         }
+        // The tool schemas ride along with every request, so they come out
+        // of the budget like any message.
+        tool_tokens = schema_tokens(&opts.tools);
         let reserve = run.answer_tokens.max(256) as usize;
-        fit_turns(&mut run.turns, run.context_tokens.saturating_sub(reserve));
-        opts.max_tokens = round_limit(&run, &run.turns);
+        fit_turns(
+            &mut run.turns,
+            run.context_tokens.saturating_sub(reserve + tool_tokens),
+        );
+        opts.max_tokens = round_limit(&run, &run.turns, tool_tokens);
 
         let result = stream_with_retries(
             client,
@@ -438,6 +546,9 @@ fn run_inner(
         }
         if outcome.prompt_tokens.is_some() {
             prompt_tokens = outcome.prompt_tokens;
+            if round == 0 {
+                first_prompt_tokens = outcome.prompt_tokens;
+            }
         }
         if outcome.cache_tokens.is_some() {
             cache_tokens = outcome.cache_tokens;
@@ -452,6 +563,9 @@ fn run_inner(
                 ttft_ms,
                 prompt_tokens,
                 cache_tokens,
+                first_prompt_tokens,
+                system_tokens,
+                tool_tokens,
             });
         }
         let wants_tools = !outcome.tool_calls.is_empty() && !specs.is_empty() && !opts.forbid_tools;
@@ -585,6 +699,9 @@ fn run_inner(
         ttft_ms,
         prompt_tokens,
         cache_tokens,
+        first_prompt_tokens,
+        system_tokens,
+        tool_tokens,
     })
 }
 

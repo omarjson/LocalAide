@@ -409,9 +409,24 @@ export type ChatStreamEvent =
   | { type: "token"; payload: { token: string } }
   | { type: "citation"; payload: Citation }
   | { type: "status"; payload: { label: string } }
-  | { type: "done"; payload: { finish_reason: string; total_tokens: number; prompt_tokens?: number | null; cache_tokens?: number | null } }
+  | {
+      type: "done";
+      payload: {
+        finish_reason: string;
+        total_tokens: number;
+        prompt_tokens?: number | null;
+        cache_tokens?: number | null;
+        /** The server's prompt count for the first round: instructions, tools, history and the new message. */
+        first_prompt_tokens?: number | null;
+        /** Estimated tokens of the system prompt and pinned notes. */
+        system_tokens?: number;
+        /** Estimated tokens of the tool schemas sent with the request. */
+        tool_tokens?: number;
+      };
+    }
   | { type: "error"; payload: { error: string } }
   | { type: "reasoning"; payload: { text: string } }
+  | { type: "steered"; payload: { text: string } }
   | {
       type: "tool_call";
       payload: { id: string; name: string; title: string; detail: string; group: string; arguments: string };

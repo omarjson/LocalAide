@@ -13,7 +13,8 @@ test("usage counts what is sent: text, attached text, draft, overhead and reserv
   ];
   const u = contextUsage(messages, 10_000, { draft: "z".repeat(40), reserve: 1000 });
   assert.equal(u.output, 104, "the failed answer is not counted");
-  assert.equal(u.input, 104 + 200 + 104 + 10);
+  // The attached file also costs its <attached_file> wrapper (12).
+  assert.equal(u.input, 104 + 200 + 12 + 104 + 10);
   assert.equal(u.overhead, PROMPT_OVERHEAD_TOKENS);
   assert.equal(u.used, u.input + u.overhead);
   assert.equal(u.total, u.used + 1000);

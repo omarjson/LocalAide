@@ -138,10 +138,15 @@ fn test_chat_stream_event_serialization() {
         total_tokens: 42,
         prompt_tokens: None,
         cache_tokens: None,
+        first_prompt_tokens: Some(900),
+        system_tokens: 300,
+        tool_tokens: 1200,
     };
     let json_done = serde_json::to_string(&done_evt).expect("Serialization");
     assert!(json_done.contains(r#""type":"done""#));
     assert!(json_done.contains(r#""total_tokens":42"#));
+    assert!(json_done.contains(r#""first_prompt_tokens":900"#));
+    assert!(json_done.contains(r#""tool_tokens":1200"#));
 }
 
 #[test]

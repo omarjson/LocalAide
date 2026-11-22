@@ -4,8 +4,8 @@ use crate::app::events::ChatStreamEvent;
 use crate::app::paths::conversations_dir;
 use crate::app::state::AppState;
 use crate::domain::chat::{
-    ChatAttachment, ChatMessage, ChatStreamRequest, ChatTargetRequest, ChatThread,
-    SummarizeRequest, SummarizeResponse, ThreadExportRequest, ThreadExportResponse,
+    ChatAttachment, ChatMessage, ChatSteerRequest, ChatStreamRequest, ChatTargetRequest,
+    ChatThread, SummarizeRequest, SummarizeResponse, ThreadExportRequest, ThreadExportResponse,
     ToolDecisionRequest,
 };
 use crate::services::agent::AgentRun;
@@ -174,15 +174,41 @@ pub async fn inference_unload(state: State<'_, AppState>) -> Result<(), AppError
 
 /// A message as the model reads it: the text, then each attached file.
 pub(crate) fn history_text(content: &str, attachments: &[ChatAttachment]) -> String {
+    history_text_within(content, attachments, None)
+}
+
+/// Newest history messages that always keep their attached files whole.
+const KEEP_FULL_FILES: usize = 4;
+/// Characters kept of a file attached to an older message when the history
+/// runs short of room.
+const OLD_FILE_CHARS: usize = 2_000;
+
+/// [`history_text`], with each attached file cut to `cap` characters when
+/// one is given. A cut file says so, so the model knows it saw only the start.
+pub(crate) fn history_text_within(
+    content: &str,
+    attachments: &[ChatAttachment],
+    cap: Option<usize>,
+) -> String {
     let mut out = content.to_string();
     for file in attachments {
         let Some(text) = file.text.as_deref().filter(|_| file.kind == "text") else {
             continue;
         };
         let name = file.name.replace('"', "'");
+        let (text, cut) = match cap {
+            Some(cap) if text.chars().count() > cap => (
+                format!(
+                    "{}\n[The rest of this file was left out to save space. Ask the user to attach it again if you need it.]",
+                    text.chars().take(cap).collect::<String>()
+                ),
+                true,
+            ),
+            _ => (text.to_string(), false),
+        };
         out.push_str(&format!(
             "\n\n<attached_file name=\"{name}\"{}>\n{text}\n</attached_file>",
-            if file.truncated {
+            if file.truncated || cut {
                 " shortened=\"yes\""
             } else {
                 ""
@@ -281,6 +307,9 @@ pub async fn chat_stream(
                     total_tokens: done.tokens,
                     prompt_tokens: done.prompt_tokens,
                     cache_tokens: done.cache_tokens,
+                    first_prompt_tokens: done.first_prompt_tokens,
+                    system_tokens: done.system_tokens,
+                    tool_tokens: done.tool_tokens,
                 });
             }
             Err(e) => {
@@ -377,13 +406,12 @@ pub(crate) fn prepare_run(
         ChatTarget::Remote(_) => caps.context.unwrap_or(16_384).clamp(4096, 262_144) as usize,
     };
 
-    // The system prompt: the user's prompt, the mode, today's date and how
-    // to use the tools this chat has.
+    // The system prompt: the user's prompt, the mode and how to use the
+    // tools this chat has. It stays the same from one message to the next,
+    // so the engine can reuse its cached prompt instead of reading the whole
+    // chat again; the clock, which changes every minute, rides on the new
+    // message instead (below).
     let mut extra = Vec::new();
-    if let Some(now) = req.now.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
-        let now: String = now.chars().take(120).collect();
-        extra.push(format!("The user's current date and time: {now}."));
-    }
     let guidance = tool_guidance(
         ToolGroups {
             web: perms.web,
@@ -411,25 +439,51 @@ pub(crate) fn prepare_run(
     }
     let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
 
-    // History the model reads: failed answers are left out, attached files
-    // are written out.
-    let history: Vec<ChatMessage> = req
-        .history
-        .iter()
-        .filter(|m| m.error != Some(true) && !m.content.trim().is_empty())
-        .map(|m| ChatMessage {
-            role: m.role.clone(),
-            content: history_text(&m.content, m.attachments.as_deref().unwrap_or(&[])),
-            ..Default::default()
-        })
-        .collect();
-    let message = history_text(&req.message, &req.attachments);
     let thinking_room = if thinks {
         effort.thinking_allowance()
     } else {
         0
     };
     let budget = ContextBudget::new(context_tokens, (answer_tokens + thinking_room) as usize);
+
+    // History the model reads: failed answers are left out, attached files
+    // are written out. When the history would take more than half the room,
+    // files attached to older messages are shortened before whole turns
+    // have to go; the newest messages keep their files whole.
+    let sent: Vec<&ChatMessage> = req
+        .history
+        .iter()
+        .filter(|m| m.error != Some(true) && !m.content.trim().is_empty())
+        .collect();
+    let build_history = |cap_old: bool| -> Vec<ChatMessage> {
+        let keep_from = sent.len().saturating_sub(KEEP_FULL_FILES);
+        sent.iter()
+            .enumerate()
+            .map(|(i, m)| ChatMessage {
+                role: m.role.clone(),
+                content: history_text_within(
+                    &m.content,
+                    m.attachments.as_deref().unwrap_or(&[]),
+                    (cap_old && i < keep_from).then_some(OLD_FILE_CHARS),
+                ),
+                ..Default::default()
+            })
+            .collect()
+    };
+    let mut history = build_history(false);
+    let room = context_tokens.saturating_sub((answer_tokens + thinking_room) as usize);
+    let history_tokens: usize = history
+        .iter()
+        .map(|m| ContextBudget::estimate_tokens(&m.content))
+        .sum();
+    if history_tokens > room / 2 {
+        history = build_history(true);
+    }
+    let mut message = history_text(&req.message, &req.attachments);
+    if let Some(now) = req.now.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        let now: String = now.chars().take(120).collect();
+        message.push_str(&format!("\n\n[The user's current date and time: {now}.]"));
+    }
     let turns: Vec<ChatTurn> = budget
         .build_messages(system.as_deref(), &history, &message, &req.images)
         .into_iter()
@@ -523,6 +577,27 @@ pub fn chat_tool_decide(
     let decision = Decision::parse(&req.decision)
         .ok_or_else(|| AppError::invalid_input("Answer allow, allow_chat or deny."))?;
     Ok(state.agent.approvals.decide(&req.approval_id, decision))
+}
+
+/// A note for an answer that is still running; the model reads it before
+/// its next step. False when the answer has already finished, so the chat
+/// sends the note as its next message instead.
+#[tauri::command]
+pub fn chat_steer(state: State<'_, AppState>, req: ChatSteerRequest) -> Result<bool, AppError> {
+    let text = req.text.trim();
+    if text.is_empty() {
+        return Err(AppError::invalid_input("Write the note first."));
+    }
+    let text: String = text.chars().take(8_000).collect();
+    let running = state
+        .jobs
+        .get_job(&req.job_id)
+        .is_some_and(|job| job.state == crate::app::jobs::JobState::Running);
+    if !running {
+        return Ok(false);
+    }
+    state.agent.steer(&req.job_id, text);
+    Ok(true)
 }
 
 #[tauri::command]
