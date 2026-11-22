@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -82,6 +83,174 @@ pub struct AppConfig {
     /// are free and need no entry.
     #[serde(default)]
     pub model_prices: std::collections::BTreeMap<String, ModelPrice>,
+    /// Tool permission rules, evaluated in order; the last matching rule wins.
+    #[serde(default)]
+    pub permissions: Vec<PermissionRule>,
+    /// Optional shell hooks run around tool calls.
+    #[serde(default)]
+    pub hooks: HooksConfig,
+    /// Provider failover order and per-provider API key pools.
+    #[serde(default)]
+    pub routing: RoutingConfig,
+}
+
+/// What a matching permission rule says to do with a tool call.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionDecision {
+    Allow,
+    Ask,
+    Deny,
+}
+
+/// The backend's view of a tool decision. `Ask` keeps the existing
+/// Allow Once / Allow for this session / Deny approval flow in place.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolDecision {
+    Allow,
+    Ask,
+    Deny,
+}
+
+impl From<PermissionDecision> for ToolDecision {
+    fn from(value: PermissionDecision) -> Self {
+        match value {
+            PermissionDecision::Allow => ToolDecision::Allow,
+            PermissionDecision::Ask => ToolDecision::Ask,
+            PermissionDecision::Deny => ToolDecision::Deny,
+        }
+    }
+}
+
+/// One policy rule. `action` and `resource` are glob patterns where `*` matches
+/// any run of characters. Rules are evaluated in order and the last match wins.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PermissionRule {
+    pub action: String,
+    pub resource: String,
+    pub decision: PermissionDecision,
+}
+
+impl PermissionRule {
+    /// True when this rule applies to the given tool action and resource.
+    pub fn matches(&self, action: &str, resource: &str) -> bool {
+        wildcard_match(&self.action, action) && wildcard_match(&self.resource, resource)
+    }
+}
+
+/// Glob-style match: `*` matches zero or more characters, all other characters
+/// match literally. Pure and allocation-light enough for a handful of rules.
+pub fn wildcard_match(pattern: &str, value: &str) -> bool {
+    let p: Vec<char> = pattern.chars().collect();
+    let s: Vec<char> = value.chars().collect();
+    let (mut pi, mut si) = (0usize, 0usize);
+    let mut star: Option<usize> = None;
+    let mut retry = 0usize;
+    while si < s.len() {
+        if pi < p.len() && p[pi] == '*' {
+            star = Some(pi);
+            retry = si;
+            pi += 1;
+        } else if pi < p.len() && p[pi] == s[si] {
+            pi += 1;
+            si += 1;
+        } else if let Some(star_idx) = star {
+            pi = star_idx + 1;
+            retry += 1;
+            si = retry;
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
+/// The last rule that matches, if any. Later entries override earlier ones.
+pub fn matching_rule<'a>(
+    rules: &'a [PermissionRule],
+    action: &str,
+    resource: &str,
+) -> Option<&'a PermissionRule> {
+    rules.iter().rev().find(|r| r.matches(action, resource))
+}
+
+/// Optional shell hooks around a tool call. Commands run from the workspace
+/// root with a timeout; a non-zero pre-tool exit blocks the call.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct HooksConfig {
+    /// Run before a tool call. A non-zero exit (or timeout) blocks it.
+    #[serde(default)]
+    pub pre_tool: Option<String>,
+    /// Run after a tool call. Its result is informational, never a block.
+    #[serde(default)]
+    pub post_tool: Option<String>,
+    /// Seconds before a hook is killed. Defaults to 10 when absent or zero.
+    #[serde(default)]
+    pub timeout_secs: u64,
+}
+
+impl HooksConfig {
+    pub fn timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(if self.timeout_secs == 0 {
+            10
+        } else {
+            self.timeout_secs
+        })
+    }
+}
+
+/// Provider failover order and per-provider key pools. Both are optional, so
+/// configs written before this feature keep their old behaviour.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct RoutingConfig {
+    /// Provider ids to try first, in order. Empty = enabled config order.
+    #[serde(default)]
+    pub provider_priority: Vec<String>,
+    /// Extra keys per provider id, tried after the primary key on 401/429.
+    #[serde(default)]
+    pub key_pools: BTreeMap<String, Vec<String>>,
+}
+
+/// A cursor over one provider's keys. The router rotates to the next key when
+/// the provider answers 401 (bad key) or 429 (rate limited).
+#[derive(Debug, Clone, Default)]
+pub struct CredentialPool {
+    keys: Vec<String>,
+    index: usize,
+}
+
+impl CredentialPool {
+    pub fn new(keys: Vec<String>) -> Self {
+        Self { keys, index: 0 }
+    }
+
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
+    /// The key to use for the next request, if any.
+    pub fn current(&self) -> Option<&str> {
+        self.keys.get(self.index).map(String::as_str)
+    }
+
+    /// Move to the next key after a 401/429. Returns true only when a
+    /// rotation actually happened (two or more keys and a retryable status).
+    pub fn on_auth_failure(&mut self, status: u16) -> bool {
+        if (status == 401 || status == 429) && self.keys.len() > 1 {
+            self.index = (self.index + 1) % self.keys.len();
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// One model's price, USD per 1M tokens. Cache reads are usually cheaper;
@@ -108,6 +277,12 @@ pub struct McpServerConfig {
     /// Run this server's tools without asking each time.
     #[serde(default)]
     pub auto_approve: bool,
+    /// When non-empty, only these tool names are exposed to the model.
+    #[serde(default)]
+    pub enabled_tools: Vec<String>,
+    /// These tool names are never exposed, even if listed in `enabled_tools`.
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
     pub transport: McpTransport,
 }
 
@@ -153,6 +328,69 @@ impl AppConfig {
         self.model_memory_percent
             .unwrap_or(DEFAULT_MODEL_MEMORY_PERCENT)
             .clamp(MIN_MODEL_MEMORY_PERCENT, MAX_MODEL_MEMORY_PERCENT)
+    }
+
+    /// The permission rule that applies to this tool call, if any.
+    pub fn permission_for<'a>(
+        &'a self,
+        action: &str,
+        resource: &str,
+    ) -> Option<&'a PermissionRule> {
+        matching_rule(&self.permissions, action, resource)
+    }
+
+    /// Decide a tool call from the configured rules. With no matching rule the
+    /// decision is `Ask`, preserving the existing approval flow.
+    pub fn decide_tool_call(&self, action: &str, resource: &str) -> ToolDecision {
+        self.permission_for(action, resource)
+            .map(|rule| ToolDecision::from(rule.decision))
+            .unwrap_or(ToolDecision::Ask)
+    }
+
+    /// Provider ids in failover order. Empty priority list falls back to the
+    /// config order of enabled providers, so older configs behave as before.
+    pub fn provider_order(&self) -> Vec<String> {
+        if !self.routing.provider_priority.is_empty() {
+            let ordered: Vec<String> = self
+                .routing
+                .provider_priority
+                .iter()
+                .filter(|id| {
+                    self.cloud_providers
+                        .iter()
+                        .any(|p| &p.id == *id && p.enabled)
+                })
+                .cloned()
+                .collect();
+            if !ordered.is_empty() {
+                return ordered;
+            }
+        }
+        self.cloud_providers
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| p.id.clone())
+            .collect()
+    }
+
+    /// All keys for one provider: the primary key first, then the pool.
+    pub fn credentials_for(&self, provider_id: &str) -> CredentialPool {
+        let mut keys = self
+            .routing
+            .key_pools
+            .get(provider_id)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(provider) = self
+            .cloud_providers
+            .iter()
+            .find(|p| p.id == provider_id)
+            && !provider.api_key.trim().is_empty()
+            && !keys.contains(&provider.api_key)
+        {
+            keys.insert(0, provider.api_key.clone());
+        }
+        CredentialPool::new(keys)
     }
 }
 
@@ -272,6 +510,9 @@ impl Default for AppConfig {
             favorite_models: Vec::new(),
             mcp_servers: Vec::new(),
             model_prices: std::collections::BTreeMap::new(),
+            permissions: Vec::new(),
+            hooks: HooksConfig::default(),
+            routing: RoutingConfig::default(),
         }
     }
 }
@@ -575,5 +816,102 @@ mod tests {
     fn userinfo_in_urls_is_rejected() {
         assert!(validate_base_url("https://user:pass@api.example.com/v1").is_err());
         assert!(validate_base_url("https://user:pass@127.0.0.1:11434/v1").is_err());
+    }
+
+    fn rule(action: &str, resource: &str, decision: PermissionDecision) -> PermissionRule {
+        PermissionRule {
+            action: action.to_string(),
+            resource: resource.to_string(),
+            decision,
+        }
+    }
+
+    #[test]
+    fn wildcards_match_exactly_as_expected() {
+        assert!(wildcard_match("*", "anything"));
+        assert!(wildcard_match("*", ""));
+        assert!(wildcard_match("write_*", "write_file"));
+        assert!(!wildcard_match("write_*", "write"));
+        assert!(!wildcard_match("write_*", "read_file"));
+        assert!(wildcard_match("notes/*", "notes/a/b.txt"));
+        assert!(!wildcard_match("notes/*", "other/a.txt"));
+        assert!(wildcard_match("a*c", "abc"));
+        assert!(wildcard_match("a*c", "ac"));
+        assert!(!wildcard_match("a*c", "ab"));
+    }
+
+    #[test]
+    fn last_matching_rule_wins() {
+        let rules = vec![
+            rule("*", "*", PermissionDecision::Deny),
+            rule("read_*", "*", PermissionDecision::Allow),
+            rule("read_*", "secret/*", PermissionDecision::Deny),
+        ];
+        let cfg = AppConfig {
+            permissions: rules,
+            ..AppConfig::default()
+        };
+        assert_eq!(
+            cfg.decide_tool_call("read_file", "notes/a.txt"),
+            ToolDecision::Allow
+        );
+        assert_eq!(
+            cfg.decide_tool_call("read_file", "secret/key.txt"),
+            ToolDecision::Deny,
+            "the later, more specific deny overrides the earlier allow"
+        );
+        assert_eq!(
+            cfg.decide_tool_call("write_file", "notes/a.txt"),
+            ToolDecision::Deny
+        );
+    }
+
+    #[test]
+    fn no_rule_means_ask() {
+        let cfg = AppConfig::default();
+        assert_eq!(
+            cfg.decide_tool_call("write_file", "anything"),
+            ToolDecision::Ask
+        );
+    }
+
+    #[test]
+    fn credential_pools_rotate_only_on_401_and_429() {
+        let mut pool = CredentialPool::new(vec!["a".into(), "b".into(), "c".into()]);
+        assert_eq!(pool.current(), Some("a"));
+        assert!(!pool.on_auth_failure(500));
+        assert_eq!(pool.current(), Some("a"));
+        assert!(pool.on_auth_failure(401));
+        assert_eq!(pool.current(), Some("b"));
+        assert!(pool.on_auth_failure(429));
+        assert_eq!(pool.current(), Some("c"));
+        assert!(pool.on_auth_failure(401));
+        assert_eq!(pool.current(), Some("a"), "rotation wraps around");
+
+        let mut single = CredentialPool::new(vec!["only".into()]);
+        assert!(!single.on_auth_failure(401));
+        assert_eq!(single.current(), Some("only"));
+        assert!(CredentialPool::new(vec![]).is_empty());
+    }
+
+    #[test]
+    fn routing_pool_and_mcp_gates_round_trip() {
+        let mut cfg = AppConfig::default();
+        cfg.routing.provider_priority = vec!["p1".into(), "p2".into()];
+        cfg.routing
+            .key_pools
+            .insert("p1".into(), vec!["k1".into(), "k2".into()]);
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.routing.provider_priority, vec!["p1", "p2"]);
+        assert_eq!(back.routing.key_pools["p1"], vec!["k1", "k2"]);
+        assert!(back.permissions.is_empty());
+        assert!(back.hooks.pre_tool.is_none());
+        assert!(back.mcp_servers.is_empty());
+
+        let old = r#"{"selected_models":[],"cloud_llm_enabled":false,"mcp_servers":[{"id":"m1","name":"Docs","enabled":true,"auto_approve":false,"transport":{"type":"stdio","command":"npx"}}]}"#;
+        let legacy: AppConfig = serde_json::from_str(old).unwrap();
+        assert!(legacy.mcp_servers[0].enabled_tools.is_empty());
+        assert!(legacy.mcp_servers[0].disabled_tools.is_empty());
     }
 }

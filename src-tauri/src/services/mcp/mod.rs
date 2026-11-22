@@ -202,7 +202,7 @@ impl McpManager {
     /// The server's tools. Connects on first use; the list is kept for the
     /// session.
     pub fn list_tools(&self, cfg: &McpServerConfig) -> Result<Vec<McpTool>, AppError> {
-        self.with_session(cfg, |session| {
+        let tools = self.with_session(cfg, |session| {
             if let Some(tools) = &session.tools {
                 return Ok(tools.clone());
             }
@@ -226,7 +226,9 @@ impl McpManager {
             tools.truncate(MAX_TOOLS_PER_SERVER);
             session.tools = Some(tools.clone());
             Ok(tools)
-        })
+        })?;
+        // Only the tools the user left enabled are offered to the model.
+        Ok(filter_tools(tools, cfg))
     }
 
     /// Call one tool. Output is cut at 100,000 characters.
@@ -236,6 +238,11 @@ impl McpManager {
         tool: &str,
         arguments: Value,
     ) -> Result<McpCallOutput, AppError> {
+        if !tool_enabled(cfg, tool) {
+            return Err(AppError::invalid_input(format!(
+                "The tool '{tool}' is turned off for this MCP server."
+            )));
+        }
         let arguments = if arguments.is_object() {
             arguments
         } else {
@@ -312,6 +319,26 @@ impl McpManager {
             self.disconnect(&id);
         }
     }
+}
+
+/// Whether one tool is exposed for a server. Disabled tools always lose; an
+/// empty `enabled_tools` allows everything, so older configs are unaffected.
+pub fn tool_enabled(cfg: &McpServerConfig, name: &str) -> bool {
+    if cfg.disabled_tools.iter().any(|disabled| disabled == name) {
+        return false;
+    }
+    if cfg.enabled_tools.is_empty() {
+        return true;
+    }
+    cfg.enabled_tools.iter().any(|enabled| enabled == name)
+}
+
+/// Drop tools the user turned off before they are offered to the model.
+pub fn filter_tools(tools: Vec<McpTool>, cfg: &McpServerConfig) -> Vec<McpTool> {
+    tools
+        .into_iter()
+        .filter(|tool| tool_enabled(cfg, &tool.name))
+        .collect()
 }
 
 /// Read a `tools/list` page.
@@ -433,6 +460,8 @@ mod tests {
             name: "Docs".into(),
             enabled: true,
             auto_approve: false,
+            enabled_tools: vec![],
+            disabled_tools: vec![],
             transport: McpTransport::Http {
                 url: "http://example.com/mcp".into(),
                 headers: BTreeMap::new(),
@@ -451,5 +480,38 @@ mod tests {
             cwd: None,
         };
         assert!(validate(&cfg).is_err());
+    }
+
+    #[test]
+    fn tool_gates_filter_what_is_exposed() {
+        let mut cfg = McpServerConfig {
+            id: "m1".into(),
+            name: "Docs".into(),
+            enabled: true,
+            auto_approve: false,
+            enabled_tools: vec![],
+            disabled_tools: vec![],
+            transport: McpTransport::Http {
+                url: "https://mcp.example.com/mcp".into(),
+                headers: BTreeMap::new(),
+            },
+        };
+        let tools = vec!["a", "b", "c"]
+            .into_iter()
+            .map(|name| McpTool {
+                name: name.to_string(),
+                description: String::new(),
+                input_schema: json!({}),
+            })
+            .collect();
+        assert_eq!(filter_tools(tools.clone(), &cfg).len(), 3, "older configs expose all");
+
+        cfg.enabled_tools = vec!["a".into(), "b".into(), "c".into()];
+        cfg.disabled_tools = vec!["b".into()];
+        let kept = filter_tools(tools, &cfg);
+        assert_eq!(kept.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["a", "c"]);
+        assert!(tool_enabled(&cfg, "a"));
+        assert!(!tool_enabled(&cfg, "b"));
+        assert!(!tool_enabled(&cfg, "missing"));
     }
 }

@@ -30,6 +30,10 @@ pub struct McpServerDto {
     pub name: String,
     pub enabled: bool,
     pub auto_approve: bool,
+    /// Tool names explicitly exposed to the model. Empty = all tools.
+    pub enabled_tools: Vec<String>,
+    /// Tool names never exposed to the model.
+    pub disabled_tools: Vec<String>,
     /// "stdio" or "http".
     pub kind: String,
     pub command: String,
@@ -58,6 +62,10 @@ pub struct McpServerSaveRequest {
     pub enabled: bool,
     #[serde(default)]
     pub auto_approve: bool,
+    #[serde(default)]
+    pub enabled_tools: Vec<String>,
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
     pub kind: String,
     #[serde(default)]
     pub command: String,
@@ -134,6 +142,8 @@ fn dto(state: &AppState, s: &McpServerConfig) -> McpServerDto {
             name: s.name.clone(),
             enabled: s.enabled,
             auto_approve: s.auto_approve,
+            enabled_tools: s.enabled_tools.clone(),
+            disabled_tools: s.disabled_tools.clone(),
             kind: "stdio".into(),
             command: command.clone(),
             args: args.clone(),
@@ -148,6 +158,8 @@ fn dto(state: &AppState, s: &McpServerConfig) -> McpServerDto {
             name: s.name.clone(),
             enabled: s.enabled,
             auto_approve: s.auto_approve,
+            enabled_tools: s.enabled_tools.clone(),
+            disabled_tools: s.disabled_tools.clone(),
             kind: "http".into(),
             command: String::new(),
             args: Vec::new(),
@@ -432,6 +444,18 @@ fn save_server(state: &AppState, req: McpServerSaveRequest) -> Result<Vec<McpSer
         name: req.name.trim().to_string(),
         enabled: req.enabled,
         auto_approve: req.auto_approve,
+        // Older clients omit these fields; keep whatever was stored so a
+        // save that only changes the name does not silently drop tool gates.
+        enabled_tools: if req.enabled_tools.is_empty() {
+            existing.as_ref().map(|s| s.enabled_tools.clone()).unwrap_or_default()
+        } else {
+            req.enabled_tools
+        },
+        disabled_tools: if req.disabled_tools.is_empty() {
+            existing.as_ref().map(|s| s.disabled_tools.clone()).unwrap_or_default()
+        } else {
+            req.disabled_tools
+        },
         transport,
     };
     validate(&server)?;
@@ -560,6 +584,8 @@ pub fn mcp_import(state: State<'_, AppState>, text: String) -> Result<McpImportR
             name,
             enabled,
             auto_approve: false,
+            enabled_tools: vec![],
+            disabled_tools: vec![],
             transport,
         };
         if validate(&server).is_err() {

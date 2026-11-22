@@ -11,18 +11,63 @@ pub struct CommandRun {
 }
 
 use crate::app::error::AppError;
+use crate::config::{AppConfig, HooksConfig, PermissionRule, ToolDecision};
 use crate::domain::tool::{
     ToolActionType, ToolAuditEntry, ToolExecutionRequest, ToolExecutionResponse,
 };
 use crate::services::library::db::LibraryDb;
 use approval::ApprovalManager;
 use sandbox::WorkspaceJail;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+/// The policy snapshot used by `ToolService`. It is set from `AppConfig` and
+/// kept behind a mutex so a config save takes effect on the next tool call.
+#[derive(Debug, Default)]
+struct PolicyState {
+    rules: Vec<PermissionRule>,
+    hooks: HooksConfig,
+}
+
+#[derive(Debug, Default)]
+pub struct ToolPolicy {
+    state: Mutex<PolicyState>,
+}
+
+impl ToolPolicy {
+    pub fn new(rules: Vec<PermissionRule>, hooks: HooksConfig) -> Self {
+        Self {
+            state: Mutex::new(PolicyState { rules, hooks }),
+        }
+    }
+
+    pub fn set(&self, rules: Vec<PermissionRule>, hooks: HooksConfig) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.rules = rules;
+        state.hooks = hooks;
+    }
+
+    /// The last matching rule's decision, or `Ask` when no rule matches.
+    pub fn decide(&self, action: &str, resource: &str) -> ToolDecision {
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        crate::config::matching_rule(&state.rules, action, resource)
+            .map(|rule| ToolDecision::from(rule.decision))
+            .unwrap_or(ToolDecision::Ask)
+    }
+
+    pub fn hooks(&self) -> HooksConfig {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .hooks
+            .clone()
+    }
+}
 
 pub struct ToolService {
     jail: Arc<WorkspaceJail>,
     db: Arc<LibraryDb>,
     approval: Arc<ApprovalManager>,
+    policy: Arc<ToolPolicy>,
 }
 
 impl ToolService {
@@ -31,7 +76,19 @@ impl ToolService {
             jail,
             db,
             approval: Arc::new(ApprovalManager::new()),
+            policy: Arc::new(ToolPolicy::default()),
         }
+    }
+
+    /// Apply the current config's permission rules and hooks. Call this after
+    /// loading or changing the config so the next tool call uses it.
+    pub fn apply_config(&self, cfg: &AppConfig) {
+        self.policy.set(cfg.permissions.clone(), cfg.hooks.clone());
+    }
+
+    /// The shared policy snapshot, for callers that update it directly.
+    pub fn policy(&self) -> Arc<ToolPolicy> {
+        self.policy.clone()
     }
 
     /// The shared workspace folder's jail.
@@ -79,14 +136,65 @@ impl ToolService {
             });
         }
 
-        // Approval check
-        if !self.approval.is_approved(&req) {
+        // Policy: the last matching rule decides. An explicit denial above
+        // always wins, so Allow Once / Session / Deny keep their meaning.
+        match self.policy.decide(action_name, &req.action.path) {
+            ToolDecision::Deny => {
+                if let Err(e) = self.db.record_tool_audit(
+                    &req.tool_name,
+                    action_name,
+                    &req.action.path,
+                    false,
+                    "denied",
+                    Some("Blocked by a permission rule"),
+                ) {
+                    log::warn!("Could not record a policy-denied tool action: {e}");
+                }
+                return Ok(ToolExecutionResponse {
+                    success: false,
+                    output: String::new(),
+                    truncated: false,
+                    requires_approval: false,
+                    error: Some("Tool execution denied by a permission rule".to_string()),
+                });
+            }
+            ToolDecision::Ask => {
+                if !self.approval.is_approved(&req) {
+                    return Ok(ToolExecutionResponse {
+                        success: false,
+                        output: String::new(),
+                        truncated: false,
+                        requires_approval: true,
+                        error: Some("Operation requires user approval".to_string()),
+                    });
+                }
+            }
+            ToolDecision::Allow => {
+                // Allowed by policy. Still run the approval check for its side
+                // effect: an approval with a session token grants later calls
+                // "Allow for this session" in the same folder.
+                let _ = self.approval.is_approved(&req);
+            }
+        }
+
+        // Pre-tool hook. Never run hooks for a target outside the jail.
+        if let Some(reason) = self.pre_hook(jail, &req) {
+            if let Err(e) = self.db.record_tool_audit(
+                &req.tool_name,
+                action_name,
+                &req.action.path,
+                false,
+                "blocked",
+                Some(&reason),
+            ) {
+                log::warn!("Could not record a hook-blocked tool action: {e}");
+            }
             return Ok(ToolExecutionResponse {
                 success: false,
                 output: String::new(),
                 truncated: false,
-                requires_approval: true,
-                error: Some("Operation requires user approval".to_string()),
+                requires_approval: false,
+                error: Some(reason),
             });
         }
 
@@ -139,6 +247,10 @@ impl ToolService {
         if let Err(e) = recorded {
             log::warn!("Could not record the outcome of a tool action: {e}");
         }
+
+        // Post-tool hook is informational: a failure here never undoes an
+        // action that already ran, it is only logged.
+        self.post_hook(jail, &req, exec_result.is_ok());
 
         match exec_result {
             Ok((output, truncated)) => Ok(ToolExecutionResponse {
@@ -198,6 +310,63 @@ impl ToolService {
                 Ok((out, false))
             }
         }
+    }
+
+    /// Run the configured pre-tool hook, if any. Returns a block reason when
+    /// the hook refuses the call. Hooks never run for paths outside the jail.
+    fn pre_hook(&self, jail: &WorkspaceJail, req: &ToolExecutionRequest) -> Option<String> {
+        let hooks = self.policy.hooks();
+        let command = hooks.pre_tool.as_deref()?;
+        if command.trim().is_empty() || !Self::hook_target_is_in_jail(jail, req) {
+            return None;
+        }
+        let outcome = jail.run_hook(command, hooks.timeout());
+        if !outcome.blocked {
+            return None;
+        }
+        let reason = if outcome.timed_out {
+            "The pre-tool hook timed out".to_string()
+        } else {
+            let detail = outcome
+                .stderr
+                .trim()
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(200)
+                .collect::<String>();
+            if detail.is_empty() {
+                "A pre-tool hook blocked this action".to_string()
+            } else {
+                format!("A pre-tool hook blocked this action: {detail}")
+            }
+        };
+        Some(reason)
+    }
+
+    /// Run the configured post-tool hook, if any. Never blocks the tool call.
+    fn post_hook(&self, jail: &WorkspaceJail, req: &ToolExecutionRequest, succeeded: bool) {
+        let hooks = self.policy.hooks();
+        let Some(command) = hooks.post_tool.as_deref() else {
+            return;
+        };
+        if command.trim().is_empty() || !Self::hook_target_is_in_jail(jail, req) {
+            return;
+        }
+        let outcome = jail.run_hook(command, hooks.timeout());
+        if outcome.blocked {
+            log::warn!(
+                "Post-tool hook failed (succeeded={succeeded}): {}",
+                outcome.stderr.trim()
+            );
+        }
+    }
+
+    /// An empty path means the workspace root, which is inside the jail.
+    fn hook_target_is_in_jail(jail: &WorkspaceJail, req: &ToolExecutionRequest) -> bool {
+        let path = req.action.path.trim();
+        jail.contains_path(if path.is_empty() { "." } else { path })
     }
 
     /// Record a chat tool that is not a workspace action (web search, notes,
@@ -355,6 +524,7 @@ impl ToolService {
 mod tests {
     use super::ToolService;
     use super::sandbox::WorkspaceJail;
+    use crate::config::{AppConfig, HooksConfig, PermissionDecision, PermissionRule};
     use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
     use crate::services::library::db::LibraryDb;
     use std::sync::Arc;
@@ -406,6 +576,64 @@ mod tests {
         assert_eq!(audits.len(), 1);
         assert_eq!(audits[0].status, "cleared");
         assert_eq!(audits[0].details.as_deref(), Some("1 entries removed"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_deny_rule_blocks_even_an_approved_call() {
+        let (tools, dir) = service("deny-rule");
+        tools.apply_config(&AppConfig {
+            permissions: vec![PermissionRule {
+                action: "*".into(),
+                resource: "*".into(),
+                decision: PermissionDecision::Deny,
+            }],
+            ..AppConfig::default()
+        });
+        let response = tools.execute(read("a.txt")).unwrap();
+        assert!(!response.success);
+        assert!(!response.requires_approval);
+        assert!(response.error.unwrap().contains("permission rule"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_allow_rule_skips_the_approval_prompt() {
+        let (tools, dir) = service("allow-rule");
+        tools.apply_config(&AppConfig {
+            permissions: vec![PermissionRule {
+                action: "write_file".into(),
+                resource: "*".into(),
+                decision: PermissionDecision::Allow,
+            }],
+            ..AppConfig::default()
+        });
+        let mut request = read("a.txt");
+        request.action.action_type = ToolActionType::WriteFile;
+        request.approved = None;
+        let response = tools.execute(request).unwrap();
+        assert!(response.success);
+        assert!(!response.requires_approval);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_blocking_pre_tool_hook_stops_the_call() {
+        let (tools, dir) = service("hook-block");
+        tools.apply_config(&AppConfig {
+            hooks: HooksConfig {
+                pre_tool: Some(if cfg!(windows) {
+                    "exit /b 1".to_string()
+                } else {
+                    "exit 1".to_string()
+                }),
+                ..HooksConfig::default()
+            },
+            ..AppConfig::default()
+        });
+        let response = tools.execute(read("a.txt")).unwrap();
+        assert!(!response.success);
+        assert!(response.error.unwrap().contains("hook"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
