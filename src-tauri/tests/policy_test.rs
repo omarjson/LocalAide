@@ -141,10 +141,8 @@ fn mcp_tool_gates_keep_backward_compatibility() {
     // A deny-list removes tools; an allow-list limits everything else.
     cfg.disabled_tools = vec!["delete".into()];
     cfg.enabled_tools = vec!["search".into(), "fetch".into(), "delete".into()];
-    let kept: Vec<&str> = filter_tools(tools, &cfg)
-        .iter()
-        .map(|t| t.name.as_str())
-        .collect();
+    let filtered = filter_tools(tools, &cfg);
+    let kept: Vec<&str> = filtered.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(kept, vec!["search", "fetch"]);
     assert!(tool_enabled(&cfg, "search"));
     assert!(!tool_enabled(&cfg, "delete"));

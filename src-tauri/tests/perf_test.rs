@@ -26,7 +26,7 @@ fn utf8_leading_continuations_reach_the_next_char_boundary() {
     // A 4-byte emoji (F0 9F 98 80): three continuation bytes after the lead.
     assert_eq!(utf8_leading_continuations(&[0x9F, 0x98, 0x80, b'x']), 3);
     // A clean boundary, a leading byte (not a continuation), and empty input.
-    assert_eq!(utf8_leading_continuations(&[b'A', b'B']), 0);
+    assert_eq!(utf8_leading_continuations(b"AB"), 0);
     assert_eq!(utf8_leading_continuations(&[0xC3, 0xA9, b'x']), 0);
     assert_eq!(utf8_leading_continuations(&[]), 0);
 }
