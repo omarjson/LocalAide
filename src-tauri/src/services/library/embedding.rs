@@ -5,7 +5,9 @@
 
 use crate::app::error::AppError;
 use crate::app::lifecycle;
-use crate::services::inference::sidecar::{free_port, locate_binary, new_api_key, open_log};
+use crate::services::inference::sidecar::{
+    free_port, locate_binary, new_api_key, next_backoff, open_log,
+};
 use crate::services::models::ModelService;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -17,7 +19,9 @@ use std::time::{Duration, Instant};
 /// stays well inside the embedding model's context.
 const BATCH_SIZE: usize = 16;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(120);
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
+/// Health checks start fast and back off exponentially up to a cap.
+const POLL_INITIAL: Duration = Duration::from_millis(50);
+const POLL_MAX: Duration = Duration::from_millis(500);
 const EMBED_TIMEOUT: Duration = Duration::from_secs(120);
 /// Context for the embedding server itself: chunk text plus prompt overhead.
 const EMBED_CONTEXT: i32 = 4096;
@@ -134,6 +138,7 @@ impl EmbeddingEngine {
         };
 
         let deadline = Instant::now() + HEALTH_TIMEOUT;
+        let mut backoff = POLL_INITIAL;
         loop {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(AppError::model_load_failed(
@@ -152,7 +157,8 @@ impl EmbeddingEngine {
                     "llama-server did not become ready in time",
                 ));
             }
-            std::thread::sleep(POLL_INTERVAL);
+            std::thread::sleep(backoff);
+            backoff = next_backoff(backoff, POLL_MAX);
         }
 
         *self.dimension.lock().unwrap_or_else(|e| e.into_inner()) = None;

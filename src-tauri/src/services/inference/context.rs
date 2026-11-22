@@ -144,7 +144,9 @@ impl ContextBudget {
         let latest_tokens = Self::estimate_tokens(latest_message);
         let mut remaining = budget_available.saturating_sub(sys_tokens + latest_tokens);
 
-        let mut kept: Vec<super::PromptMessage> = Vec::new();
+        // At most one turn per history message is kept; reserve once instead
+        // of growing the vector as each kept turn is pushed.
+        let mut kept: Vec<super::PromptMessage> = Vec::with_capacity(history.len());
         for msg in history.iter().rev() {
             if msg.role != "user" && msg.role != "assistant" {
                 continue;

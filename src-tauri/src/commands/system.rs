@@ -1,7 +1,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::system::SystemProbeResult;
-use sysinfo::System;
+use sysinfo::{MemoryRefreshKind, System};
 use tauri::State;
 
 const OS_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GB
@@ -21,8 +21,11 @@ pub async fn system_probe(state: State<'_, AppState>) -> Result<SystemProbeResul
 
 /// Reads RAM figures. sysinfo can take a moment, so this runs off the UI thread.
 fn probe_system(memory_percent: u8) -> Result<SystemProbeResult, AppError> {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    // Only RAM is needed here. `new_all()` + `refresh_all()` would enumerate
+    // every process, CPU, disk and network interface twice; a targeted memory
+    // refresh reads just the total/available figures we actually use.
+    let mut sys = System::new();
+    sys.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
     let total_ram_bytes = sys.total_memory();
     let available_ram_bytes = sys.available_memory();
     let total_ram_gb = total_ram_bytes as f64 / 1024.0 / 1024.0 / 1024.0;

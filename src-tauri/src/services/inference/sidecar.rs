@@ -14,6 +14,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::capabilities::{LocalProps, parse_props};
@@ -25,7 +26,10 @@ use crate::app::lifecycle;
 const ENV_BIN: &str = "LOCALAIDE_LLAMA_SERVER";
 const BIN_NAME: &str = "llama-server";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(180);
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
+/// Health checks start fast and back off exponentially up to a cap, so a
+/// quickly-starting server is detected in ~50 ms instead of a fixed 250 ms.
+const POLL_INITIAL: Duration = Duration::from_millis(50);
+const POLL_MAX: Duration = Duration::from_millis(500);
 /// Whole-request timeout for chat. Generation can run for minutes on a large model.
 const CHAT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 /// How often the reply loop checks the cancel flag while the server is busy.
@@ -35,6 +39,11 @@ const STREAM_POLL: Duration = Duration::from_millis(200);
 const STREAM_STALL_LIMIT: Duration = Duration::from_secs(10 * 60);
 /// The server log is rotated once it passes this size. One old copy is kept.
 const MAX_SERVER_LOG_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Double a polling delay, clamped at `max`. Pure so it can be unit tested.
+pub fn next_backoff(current: Duration, max: Duration) -> Duration {
+    current.saturating_mul(2).min(max)
+}
 
 struct Running {
     child: Child,
@@ -219,6 +228,7 @@ impl InferenceEngine for SidecarEngine {
         };
 
         let deadline = Instant::now() + HEALTH_TIMEOUT;
+        let mut backoff = POLL_INITIAL;
         loop {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(AppError::model_load_failed(
@@ -237,7 +247,8 @@ impl InferenceEngine for SidecarEngine {
                     "llama-server did not become ready in time",
                 ));
             }
-            std::thread::sleep(POLL_INTERVAL);
+            std::thread::sleep(backoff);
+            backoff = next_backoff(backoff, POLL_MAX);
         }
 
         // An unload during this load means the user wants no model: drop the new server.
@@ -285,13 +296,9 @@ impl InferenceEngine for SidecarEngine {
         }
 
         // The server applies the model's own chat template to the message list.
-        let body = json!({
-            "messages": messages.iter().map(wire_message).collect::<Vec<Value>>(),
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": 0.9,
-            "stream": true
-        });
+        // Build the body from borrowed `&str` slices so base64 images are
+        // serialized straight into the HTTP body, not cloned into a Value first.
+        let body = wire_body(messages, max_tokens, temperature);
 
         let start = Instant::now();
         let resp = self
@@ -521,6 +528,7 @@ pub(crate) fn open_log() -> Option<(File, File)> {
 }
 
 /// Convert one chat turn to the OpenAI-style wire format. Images become content parts.
+/// Retained for the shared remote client, which still builds a `Value` body.
 pub(crate) fn wire_message(m: &PromptMessage) -> Value {
     if m.images.is_empty() {
         return json!({ "role": m.role, "content": m.content });
@@ -530,4 +538,86 @@ pub(crate) fn wire_message(m: &PromptMessage) -> Value {
         parts.push(json!({ "type": "image_url", "image_url": { "url": img } }));
     }
     json!({ "role": m.role, "content": parts })
+}
+
+/// Borrowed serializable view of the chat request. Every string here is a
+/// `&str` into the caller's messages, so serializing the body copies each
+/// base64 image once (into the HTTP buffer) instead of once into a `Value`
+/// and again when the `Value` is serialized.
+#[derive(Serialize)]
+struct WireBody<'a> {
+    messages: Vec<WireMessage<'a>>,
+    max_tokens: i32,
+    temperature: f32,
+    top_p: f32,
+    stream: bool,
+}
+
+#[derive(Serialize)]
+struct WireMessage<'a> {
+    role: &'a str,
+    content: WireContent<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum WireContent<'a> {
+    Text(&'a str),
+    Parts(Vec<WirePart<'a>>),
+}
+
+#[derive(Serialize)]
+struct WirePart<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image_url: Option<WireImageUrl<'a>>,
+}
+
+#[derive(Serialize)]
+struct WireImageUrl<'a> {
+    url: &'a str,
+}
+
+fn wire_body(
+    messages: &[PromptMessage],
+    max_tokens: i32,
+    temperature: f32,
+) -> WireBody<'_> {
+    let wire_messages = messages
+        .iter()
+        .map(|m| {
+            let content = if m.images.is_empty() {
+                WireContent::Text(m.content.as_str())
+            } else {
+                let mut parts = Vec::with_capacity(1 + m.images.len());
+                parts.push(WirePart {
+                    kind: "text",
+                    text: Some(m.content.as_str()),
+                    image_url: None,
+                });
+                for img in &m.images {
+                    parts.push(WirePart {
+                        kind: "image_url",
+                        text: None,
+                        image_url: Some(WireImageUrl { url: img.as_str() }),
+                    });
+                }
+                WireContent::Parts(parts)
+            };
+            WireMessage {
+                role: m.role.as_str(),
+                content,
+            }
+        })
+        .collect();
+    WireBody {
+        messages: wire_messages,
+        max_tokens,
+        temperature,
+        top_p: 0.9,
+        stream: true,
+    }
 }

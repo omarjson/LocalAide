@@ -5,6 +5,7 @@ use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::services::inference::InferenceEngine;
 use serde::{Deserialize, Serialize};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -152,24 +153,59 @@ pub async fn engine_fetch() -> Result<crate::services::engine::EngineInfo, AppEr
     Ok(crate::services::engine::info())
 }
 
+/// Byte offset at which the last `cap` bytes of a `file_len`-byte file begin.
+/// Pure math so it can be unit tested without touching the filesystem.
+pub fn tail_window_start(file_len: u64, cap: u64) -> u64 {
+    file_len.saturating_sub(cap)
+}
+
+/// How many leading bytes are UTF-8 continuation bytes (`10xxxxxx`).
+/// Skipping these reaches the next character boundary when a window starts
+/// in the middle of a multi-byte character.
+pub fn utf8_leading_continuations(bytes: &[u8]) -> usize {
+    bytes
+        .iter()
+        .take_while(|&&b| (b & 0xC0) == 0x80)
+        .count()
+}
+
 /// Tail of a local log for the Settings diagnostics panel. `source` "app" is
 /// LocalAide's own log; anything else is the model engine's log.
 #[tauri::command]
 pub fn logs_tail(lines: Option<usize>, source: Option<String>) -> Result<Vec<String>, AppError> {
+    const TAIL_CAP: u64 = 256 * 1024;
     let file = match source.as_deref() {
         Some("app") => "localaide.log",
         _ => "llama-server.log",
     };
     let path = crate::app::paths::app_dir().join("logs").join(file);
-    let data = match std::fs::read(&path) {
-        Ok(data) => data,
+    let mut handle = match std::fs::File::open(&path) {
+        Ok(handle) => handle,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(AppError::storage(format!("Could not read log: {e}"))),
     };
-    // Keep the tail only, so a huge log cannot push megabytes over IPC.
-    const TAIL_CAP: usize = 256 * 1024;
-    let start = data.len().saturating_sub(TAIL_CAP);
-    let text = String::from_utf8_lossy(&data[start..]);
+    // Seek to the tail window instead of reading a whole (up to 5 MB) file.
+    let len = handle
+        .metadata()
+        .map(|m| m.len())
+        .map_err(|e| AppError::storage(format!("Could not read log: {e}")))?;
+    let start = tail_window_start(len, TAIL_CAP);
+    handle
+        .seek(SeekFrom::Start(start))
+        .map_err(|e| AppError::storage(format!("Could not seek log: {e}")))?;
+    // The window length is bounded by TAIL_CAP (+1 byte in case the file grew
+    // between metadata() and read_to_end), so this never buffers the whole file.
+    let mut buf = Vec::with_capacity((len - start) as usize + 1);
+    handle
+        .read_to_end(&mut buf)
+        .map_err(|e| AppError::storage(format!("Could not read log: {e}")))?;
+    if start > 0 {
+        let skip = utf8_leading_continuations(&buf);
+        if skip > 0 {
+            buf.drain(..skip);
+        }
+    }
+    let text = String::from_utf8_lossy(&buf);
     let keep = lines.unwrap_or(200).min(1000);
     let mut collected: Vec<String> = text
         .lines()
