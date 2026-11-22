@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::app::{events::ChatStreamEvent, paths};
+use crate::app::events::ChatStreamEvent;
 
 /// One scheduled prompt. `kind` picks the clock: "daily" fires at
 /// `hour`:`minute` local time, "hourly" on the hour, "every" every
@@ -43,7 +43,7 @@ fn default_true() -> bool {
 }
 
 /// One finished run, for the feed.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutomationRun {
     pub automation_id: String,
     pub name: String,
