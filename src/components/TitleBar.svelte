@@ -36,6 +36,26 @@
   let win: ReturnType<typeof getCurrentWindow> | null = null;
   let maximized = $state(false);
 
+  // Roving tabindex: only one tab is in the tab order, and the arrow keys
+  // move focus between tabs without tabbing through every one of them.
+  const rovingKey = $derived(activeKey ?? tabs[0]?.key ?? null);
+
+  const onTabKeydown = (e: KeyboardEvent, index: number) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      if (tabs.length === 0) return;
+      const step = e.key === "ArrowRight" ? 1 : -1;
+      const next = (index + step + tabs.length) % tabs.length;
+      const list = (e.currentTarget as HTMLElement).closest('[role="tablist"]');
+      const nodes = list?.querySelectorAll<HTMLElement>('[role="tab"]');
+      nodes?.[next]?.focus();
+      onFocus?.(tabs[next].key);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onFocus?.(tabs[index].key);
+    }
+  };
+
   // A window call that fails is logged, never shown as an error toast.
   const act = (what: string, call: (() => Promise<void>) | undefined) => {
     if (!call) return;
@@ -90,39 +110,35 @@
       role="tablist"
       aria-label="Open chats"
     >
-      {#each tabs as tab (tab.key)}
+      {#each tabs as tab, i (tab.key)}
         <div
-          role="tab"
-          tabindex="0"
-          aria-selected={tab.key === activeKey}
-          aria-label={`Chat tab: ${tab.title}${tab.busy ? " (answering)" : ""}`}
-          class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-t-lg border-x border-t px-2.5 text-sm transition-colors ${
+          class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 items-center gap-1 rounded-t-lg border-x border-t px-2 text-sm transition-colors ${
             tab.key === activeKey
               ? "border-ink-700 bg-ink-900 font-medium text-ink-50"
               : "border-transparent text-ink-400 hover:bg-veil/5 hover:text-ink-100"
           }`}
-          onclick={() => onFocus?.(tab.key)}
-          onkeydown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onFocus?.(tab.key);
-            }
-          }}
         >
-          {#if tab.busy}
-            <span class="busy-dot" aria-hidden="true"></span>
-          {:else}
-            <LogoMark class="h-3.5 w-3.5 shrink-0 opacity-70" />
-          {/if}
-          <span class="min-w-0 flex-1 truncate">{tab.title}</span>
+          <div
+            role="tab"
+            tabindex={tab.key === rovingKey ? 0 : -1}
+            aria-selected={tab.key === activeKey}
+            aria-label={`Chat tab: ${tab.title}${tab.busy ? " (answering)" : ""}`}
+            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
+            onclick={() => onFocus?.(tab.key)}
+            onkeydown={(e) => onTabKeydown(e, i)}
+          >
+            {#if tab.busy}
+              <span class="busy-dot" aria-hidden="true"></span>
+            {:else}
+              <LogoMark class="h-3.5 w-3.5 shrink-0 opacity-70" />
+            {/if}
+            <span class="min-w-0 flex-1 truncate">{tab.title}</span>
+          </div>
           <button
             type="button"
             class="grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-500 opacity-0 transition-[opacity,color] group-hover/tab:opacity-100 hover:bg-veil/10 hover:text-ink-50 focus-visible:opacity-100"
             aria-label={`Close the tab ${tab.title}`}
-            onclick={(e) => {
-              e.stopPropagation();
-              onClose?.(tab.key);
-            }}
+            onclick={() => onClose?.(tab.key)}
           >
             <Icon name="close" class="h-3 w-3" />
           </button>

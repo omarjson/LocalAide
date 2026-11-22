@@ -114,6 +114,16 @@ import type {
   VoiceCleanup,
   ShareStatus,
   ShareStarted,
+  SessionHit,
+  RunTarget,
+  RunAnswer,
+  DoctorReport,
+  Agent,
+  ContextFileHit,
+  ContextFilesResult,
+  RefResult,
+  PolicySettings,
+  PolicyUpdate,
 } from "./bindings";
 
 export class ApiClient {
@@ -1010,6 +1020,77 @@ export class ApiClient {
 
   async importMcpServers(text: string): Promise<McpImportResult> {
     return invoke<McpImportResult>("mcp_import", { text });
+  }
+
+  // Local session search, reindexing and side-by-side model runs (session.rs).
+
+  /** FTS hits over saved chats. The index is created on demand; run reindex to fill it. */
+  async sessionSearch(query: string, limit?: number): Promise<SessionHit[]> {
+    return invoke<SessionHit[]>("session_search", { query, limit: limit ?? null });
+  }
+
+  /** Rebuild the thread index from the conversations folder; returns the count. */
+  async sessionReindex(): Promise<number> {
+    return invoke<number>("session_reindex");
+  }
+
+  /** Send one prompt to several OpenAI-compatible endpoints at once. */
+  async multiRunChat(targets: RunTarget[], prompt: string): Promise<RunAnswer[]> {
+    return invoke<RunAnswer[]>("multi_run_chat", { targets, prompt });
+  }
+
+  // Read-only local setup doctor (doctor.rs).
+  async doctorRun(): Promise<DoctorReport> {
+    return invoke<DoctorReport>("doctor_run");
+  }
+
+  // Saved agent personas (policy.rs).
+  async agentsList(): Promise<Agent[]> {
+    return invoke<Agent[]>("agents_list");
+  }
+
+  /** Add or update an agent (a matching name is overwritten in place). */
+  async agentsSave(
+    name: string,
+    model?: string | null,
+    tools?: string[],
+    prompt?: string,
+  ): Promise<Agent> {
+    return invoke<Agent>("agents_save", {
+      name,
+      model: model ?? null,
+      tools: tools ?? [],
+      prompt: prompt ?? "",
+    });
+  }
+
+  // Workspace instruction files and @path references (context.rs).
+  async contextFilesList(roots?: string[], maxBytes?: number): Promise<ContextFilesResult> {
+    return invoke<ContextFilesResult>("context_files_list", {
+      roots: roots ?? null,
+      maxBytes: maxBytes ?? null,
+    });
+  }
+
+  async contextRefsResolve(
+    reference: string,
+    roots?: string[],
+    maxBytes?: number,
+  ): Promise<RefResult> {
+    return invoke<RefResult>("context_refs_resolve", {
+      reference,
+      roots: roots ?? null,
+      maxBytes: maxBytes ?? null,
+    });
+  }
+
+  // Policy / configuration (policy.rs).
+  async policyConfigGet(): Promise<PolicySettings> {
+    return invoke<PolicySettings>("policy_config_get");
+  }
+
+  async policyConfigSet(update: PolicyUpdate): Promise<PolicySettings> {
+    return invoke<PolicySettings>("policy_config_set", { update });
   }
 }
 

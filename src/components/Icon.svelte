@@ -77,7 +77,17 @@
     | "help"
     | "chart"
     | "folder-open"
-    | "wand";
+    | "wand"
+    | "compare"
+    | "calendar"
+    | "puzzle"
+    | "route"
+    | "shield_check"
+    | "keychain"
+    | "stethoscope"
+    | "panel"
+    | "history"
+    | "merge";
 
   interface Props {
     name: IconName;
@@ -309,5 +319,40 @@
   {:else if name === "volume"}
     <path d="M11 5 6 9H3v6h3l5 4V5Z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+  {:else if name === "compare"}
+    <rect x="3" y="5" width="8" height="14" rx="1" />
+    <rect x="13" y="5" width="8" height="14" rx="1" />
+    <path d="M6 9h2M16 9h2M6 15h2M16 15h2" />
+  {:else if name === "calendar"}
+    <rect x="3" y="5" width="18" height="16" rx="2" />
+    <path d="M3 10h18M8 3v4M16 3v4" />
+  {:else if name === "puzzle"}
+    <path d="M10 4a2 2 0 1 1 4 0v1h4a1 1 0 0 1 1 1v4h-1a2 2 0 1 0 0 4h1v4a1 1 0 0 1-1 1h-4v-1a2 2 0 1 0-4 0v1H6a1 1 0 0 1-1-1v-4h1a2 2 0 1 0 0-4H5V6a1 1 0 0 1 1-1h4z" />
+  {:else if name === "route"}
+    <circle cx="6" cy="6" r="2" />
+    <circle cx="18" cy="18" r="2" />
+    <path d="M8 6h5a3 3 0 0 1 0 6h-2a3 3 0 0 0 0 6h5" />
+  {:else if name === "shield_check"}
+    <path d="M12 3 5 6v5c0 4.4 3 8.4 7 10 4-1.6 7-5.6 7-10V6l-7-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  {:else if name === "keychain"}
+    <circle cx="8" cy="16" r="3" />
+    <circle cx="6" cy="6" r="2" />
+    <path d="m9.5 13.5 7-7M14 6l3 3M16 8l2 2" />
+  {:else if name === "stethoscope"}
+    <path d="M6 3v6a6 6 0 0 0 12 0V3" />
+    <path d="M12 15v2a4 4 0 0 0 8 0v-1" />
+    <circle cx="20" cy="14" r="2" />
+  {:else if name === "panel"}
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  {:else if name === "history"}
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 4v4h4M12 7v5l3 2" />
+  {:else if name === "merge"}
+    <circle cx="6" cy="5" r="2" />
+    <circle cx="6" cy="19" r="2" />
+    <circle cx="18" cy="12" r="2" />
+    <path d="M6 7v10M8 6c6 0 6 6 8 6M8 18c6 0 6-6 8-6" />
   {/if}
 </svg>

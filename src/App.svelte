@@ -29,9 +29,11 @@
   import UsageScreen from "./screens/UsageScreen.svelte";
   import AutomationsScreen from "./screens/AutomationsScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
-  import { chats, loadThreads, newChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
+  import ChatSearchModal from "./components/ChatSearchModal.svelte";
+  import MultiRunModal from "./components/MultiRunModal.svelte";
+  import { chats, loadThreads, newChat, openChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
-  import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
+  import type { EngineDownloadEvent, SessionHit, UpdateCheckResponse } from "./lib/api/bindings";
 
   type Screen = ScreenId | "setup" | "skills";
   type NavId = ScreenId | "skills";
@@ -46,6 +48,9 @@
   let cmdOpen = $state(false);
   let cmdQuery = $state("");
   let cmdInput = $state<HTMLInputElement>();
+  // Palette actions that open their own dialogs.
+  let chatSearchOpen = $state(false);
+  let compareOpen = $state(false);
   let mobileNav = $state(false);
   // The sidebar can shrink to icons. Remembered for the next launch.
   const SIDEBAR_KEY = "localaide-sidebar";
@@ -181,6 +186,8 @@
     { id: "skills", label: "Skills", icon: "skills", group: "Go to", run: () => navigate("skills") },
     { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) newChat(chats.activeFolder); } },
     { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
+    { id: "search-chats", label: "Search chats", icon: "history", group: "Actions", run: () => { chatSearchOpen = true; } },
+    { id: "compare-models", label: "Compare models", icon: "compare", group: "Actions", run: () => { compareOpen = true; } },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
     { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
     { id: "updates", label: "Check for updates", icon: "download", group: "Actions", run: () => { if (navigate("settings")) requestSettings("about", true); } },
@@ -206,6 +213,21 @@
   const runCommand = (c: Command) => {
     closePalette();
     c.run();
+  };
+
+  /** A chat-search hit opens a real tab via the shared chats helper. */
+  const openChatHit = (hit: SessionHit) => {
+    chatSearchOpen = false;
+    if (!navigate("chat")) return;
+    const saved = chats.threads.find((t) => t.id === hit.thread_id);
+    openChat(saved ?? {
+      id: hit.thread_id,
+      title: hit.title,
+      created_at: 0,
+      updated_at: 0,
+      message_count: 0,
+      folder: null,
+    });
   };
 
   const paletteKeydown = (e: KeyboardEvent) => {
@@ -656,6 +678,12 @@
         </FocusTrap>
       </div>
     </div>
+  {/if}
+  {#if chatSearchOpen}
+    <ChatSearchModal onClose={() => (chatSearchOpen = false)} onOpen={openChatHit} />
+  {/if}
+  {#if compareOpen}
+    <MultiRunModal onClose={() => (compareOpen = false)} />
   {/if}
   {#if legal.open}
     {@const doc = LEGAL_DOCS[legal.open]}

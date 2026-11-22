@@ -1212,3 +1212,108 @@ export interface ShareStarted {
   pair_code: string;
   qr_svg: string;
 }
+
+// Local session search, reindexing and multi-run (commands/session.rs).
+/** One hit from the local chat-thread index. */
+export interface SessionHit {
+  thread_id: string;
+  title: string;
+  /** Match-centred excerpt with `[` and `]` around the term. */
+  snippet: string;
+  /** Path of the JSON file the hit came from. */
+  path: string;
+}
+
+/** One OpenAI-compatible endpoint to query in a side-by-side run. */
+export interface RunTarget {
+  label: string;
+  endpoint: string;
+  model: string;
+  api_key?: string | null;
+  max_tokens?: number | null;
+}
+
+/** Answer (or per-target error) from one target of a multi-run. */
+export interface RunAnswer {
+  label: string;
+  text: string;
+  error?: string | null;
+}
+
+// The read-only setup doctor (services/doctor.rs).
+export interface DoctorCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface DoctorReport {
+  /** All required checks passed; the best-effort keychain probe is excluded. */
+  ok: boolean;
+  checks: DoctorCheck[];
+}
+
+// Saved agent personas (services/agents.rs, commands/policy.rs).
+export interface Agent {
+  name: string;
+  model: string;
+  tools: string[];
+  prompt: string;
+  /** Absolute path of the backing markdown file. */
+  path: string;
+}
+
+// Workspace instruction files and @path references (commands/context.rs).
+export interface ContextFileHit {
+  path: string;
+  bytes: number;
+}
+
+export interface ContextFilesResult {
+  text: string;
+  files: ContextFileHit[];
+  truncated: boolean;
+}
+
+export interface RefResult {
+  path: string;
+  text: string;
+  start_line: number;
+  end_line: number;
+  total_lines: number;
+  truncated: boolean;
+}
+
+// Policy / configuration (commands/policy.rs, config.rs).
+export type PermissionDecision = "allow" | "ask" | "deny";
+
+export interface PermissionRule {
+  action: string;
+  resource: string;
+  decision: PermissionDecision;
+}
+
+export interface HooksConfig {
+  pre_tool?: string | null;
+  post_tool?: string | null;
+  timeout_secs: number;
+}
+
+export interface RoutingConfig {
+  provider_priority: string[];
+  key_pools: Record<string, string[]>;
+}
+
+export interface PolicySettings {
+  permissions: PermissionRule[];
+  hooks: HooksConfig;
+  routing: RoutingConfig;
+  provider_order: string[];
+}
+
+/** Null/absent fields are left untouched by a partial policy update. */
+export interface PolicyUpdate {
+  permissions?: PermissionRule[] | null;
+  hooks?: HooksConfig | null;
+  routing?: RoutingConfig | null;
+}

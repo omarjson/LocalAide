@@ -33,6 +33,8 @@
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
+  import AgentsPanel from "../components/AgentsPanel.svelte";
+  import DoctorPanel from "../components/DoctorPanel.svelte";
   import { applyAccent, applyDensity, applyFont, applyTheme, currentAccent, currentDensity, currentFont, currentTheme, type Accent, type AppFont, type Density } from "../lib/theme";
   import type {
     BackupConfigDto,
@@ -1095,6 +1097,7 @@
         </div>
       {:else if activeTab === "tools"}
         <McpSettings />
+        <div class="mt-8"><AgentsPanel /></div>
       {:else if activeTab === "web"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Web search</h2>
@@ -1327,6 +1330,7 @@
           <h2 class="text-xl font-semibold text-ink-50">About</h2>
           <p class="mt-1 text-sm text-ink-400">LocalAide keeps chat, models and files on this computer by default.</p>
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><div><h3 class="font-semibold text-ink-50">LocalAide</h3><p class="mt-1 text-sm text-ink-400">Version {appVersion || "unknown"}</p></div><StatusBadge label="Local by default" tone="ok" dot /></div></div>
+          <div class="mt-6"><DoctorPanel /></div>
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Updates</h3>
           <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
