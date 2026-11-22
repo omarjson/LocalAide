@@ -35,8 +35,5 @@ pub async fn usage_list(
     thread_id: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<UsageLedgerEntry>, AppError> {
-    run_blocking(move || {
-        usage_ledger::list(thread_id.as_deref(), limit.unwrap_or(200))
-    })
-    .await
+    run_blocking(move || usage_ledger::list(thread_id.as_deref(), limit.unwrap_or(200))).await
 }

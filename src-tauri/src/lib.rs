@@ -373,6 +373,12 @@ pub fn run() {
             commands::agents_list,
             commands::agents_read,
             commands::agents_save,
+            commands::goal_start,
+            commands::goal_status,
+            commands::goal_step,
+            commands::goal_complete,
+            commands::usage_record,
+            commands::usage_list,
         ])
         // Pages the model draws in chat, each with its own strict policy.
         .register_uri_scheme_protocol("mockup", |_ctx, request| {

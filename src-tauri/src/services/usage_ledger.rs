@@ -191,9 +191,7 @@ pub fn list_at(
         .map_err(|e| AppError::storage(format!("Could not list usage: {e}")))?;
     let mut entries = Vec::new();
     for row in rows {
-        entries.push(
-            row.map_err(|e| AppError::storage(format!("Could not list usage: {e}")))?,
-        );
+        entries.push(row.map_err(|e| AppError::storage(format!("Could not list usage: {e}")))?);
     }
     Ok(entries)
 }
@@ -219,8 +217,14 @@ mod tests {
     #[test]
     fn cost_never_invents_a_price_and_clamps_bad_inputs() {
         assert_eq!(estimate_cost_usd(1_000, 1_000, 0.0), 0.0);
-        assert_eq!(estimate_cost_usd(-5, 100, 1.0), estimate_cost_usd(0, 100, 1.0));
-        assert_eq!(estimate_cost_usd(100, -5, 1.0), estimate_cost_usd(100, 0, 1.0));
+        assert_eq!(
+            estimate_cost_usd(-5, 100, 1.0),
+            estimate_cost_usd(0, 100, 1.0)
+        );
+        assert_eq!(
+            estimate_cost_usd(100, -5, 1.0),
+            estimate_cost_usd(100, 0, 1.0)
+        );
         assert_eq!(estimate_cost_usd(100, 100, -1.0), 0.0);
     }
 
@@ -239,8 +243,9 @@ mod tests {
         // fallback rate is the documented flat default.
         let second = add_at(&db, "cloud", "gpt-x", 100, 100, "t2", None).unwrap();
         assert!(
-            (second.estimated_cost_usd - estimate_cost_usd(100, 100, DEFAULT_FLAT_RATE_PER_MILLION_USD))
-                .abs()
+            (second.estimated_cost_usd
+                - estimate_cost_usd(100, 100, DEFAULT_FLAT_RATE_PER_MILLION_USD))
+            .abs()
                 < 1e-12
         );
 

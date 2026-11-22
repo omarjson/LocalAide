@@ -99,7 +99,9 @@ pub fn apply_complete(goal: &Goal) -> Result<Goal, AppError> {
             return Err(AppError::invalid_input("This goal is already completed."));
         }
         GoalStatus::Abandoned => {
-            return Err(AppError::invalid_input("An abandoned goal cannot be completed."));
+            return Err(AppError::invalid_input(
+                "An abandoned goal cannot be completed.",
+            ));
         }
     }
     let mut next = goal.clone();
@@ -188,12 +190,19 @@ fn required(conn: &Connection, id: &str) -> Result<Goal, AppError> {
 }
 
 /// Start a goal. `budget` is the number of steps it may take.
-pub fn start_at(path: &Path, thread_id: &str, objective: &str, budget: i64) -> Result<Goal, AppError> {
+pub fn start_at(
+    path: &Path,
+    thread_id: &str,
+    objective: &str,
+    budget: i64,
+) -> Result<Goal, AppError> {
     if objective.trim().is_empty() {
         return Err(AppError::invalid_input("A goal needs an objective."));
     }
     if budget < 0 {
-        return Err(AppError::invalid_input("A goal's budget cannot be negative."));
+        return Err(AppError::invalid_input(
+            "A goal's budget cannot be negative.",
+        ));
     }
     let goal = Goal {
         id: new_id(),

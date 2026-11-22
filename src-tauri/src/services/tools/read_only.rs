@@ -34,11 +34,7 @@ pub fn classify(command: &str) -> ReadOnly {
     let inert = segments(trimmed)
         .iter()
         .all(|segment| segment_is_inert(segment.as_str()));
-    if inert {
-        ReadOnly::Yes
-    } else {
-        ReadOnly::No
-    }
+    if inert { ReadOnly::Yes } else { ReadOnly::No }
 }
 
 /// Shell constructs whose effect cannot be read from the literal command.
@@ -111,7 +107,11 @@ fn words_and_redirect(segment: &str) -> (Vec<String>, bool) {
     let mut writes_file = false;
     let mut chars = segment.chars().peekable();
 
-    let finish_word = |word: &mut String, in_word: &mut bool, redirect_target: &mut bool, writes_file: &mut bool, words: &mut Vec<String>| {
+    let finish_word = |word: &mut String,
+                       in_word: &mut bool,
+                       redirect_target: &mut bool,
+                       writes_file: &mut bool,
+                       words: &mut Vec<String>| {
         if !*in_word {
             return;
         }
@@ -249,9 +249,7 @@ fn reaches_outside(word: &str) -> bool {
         || w.starts_with('%')
         || w.starts_with("\\\\")
         || w.split(['/', '\\']).any(|part| part == "..")
-        || (w.len() >= 2
-            && w.as_bytes()[1] == b':'
-            && w.as_bytes()[0].is_ascii_alphabetic())
+        || (w.len() >= 2 && w.as_bytes()[1] == b':' && w.as_bytes()[0].is_ascii_alphabetic())
 }
 
 /// Programs that only read, whatever their arguments. Output redirection and
@@ -384,10 +382,12 @@ fn segment_is_inert(segment: &str) -> bool {
                 .unwrap_or("");
             match sub {
                 s if GIT_READ.contains(&s) => true,
-                "branch" => args
-                    .iter()
-                    .skip(1)
-                    .all(|a| matches!(a.as_str(), "-a" | "-v" | "-vv" | "--list" | "-r" | "--all" | "--show-current")),
+                "branch" => args.iter().skip(1).all(|a| {
+                    matches!(
+                        a.as_str(),
+                        "-a" | "-v" | "-vv" | "--list" | "-r" | "--all" | "--show-current"
+                    )
+                }),
                 "remote" => args
                     .iter()
                     .skip(1)
@@ -401,11 +401,22 @@ fn segment_is_inert(segment: &str) -> bool {
         "find" => !args.iter().any(|a| {
             matches!(
                 a.as_str(),
-                "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir" | "-fprint" | "-fprintf" | "-fls"
+                "-delete"
+                    | "-exec"
+                    | "-execdir"
+                    | "-ok"
+                    | "-okdir"
+                    | "-fprint"
+                    | "-fprintf"
+                    | "-fls"
             )
         }),
-        "sed" => !args.iter().any(|a| a.starts_with("-i") || a == "--in-place"),
-        "awk" | "gawk" => !args.iter().any(|a| a.contains("system(") || a.contains('>')),
+        "sed" => !args
+            .iter()
+            .any(|a| a.starts_with("-i") || a == "--in-place"),
+        "awk" | "gawk" => !args
+            .iter()
+            .any(|a| a.contains("system(") || a.contains('>')),
         p if READ_ONLY.contains(&p) => true,
         _ => false,
     }
@@ -413,7 +424,7 @@ fn segment_is_inert(segment: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, can_skip_approval, ReadOnly};
+    use super::{ReadOnly, can_skip_approval, classify};
 
     fn skips(c: &str) {
         assert_eq!(classify(c), ReadOnly::Yes, "{c} should skip approval");

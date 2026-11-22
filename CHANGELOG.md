@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **One window chrome row.** The title bar and chat tabs are merged into a single 40px row. macOS uses an overlay title bar with native traffic lights; Windows and Linux keep the custom minimize/maximize/close buttons.
 - **Local diagnostics.** Settings → About shows uptime, resident memory, backend-call timings and local log/database sizes, plus a **Copy diagnostics** button that assembles a redacted, review-first report. Nothing is uploaded.
 - **OS keychain for provider keys.** API keys move to the macOS Keychain, Windows Credential Manager or Linux Secret Service; `config.json` keeps only a `keyring:` marker. A headless machine with no native store keeps the owner-only file fallback rather than losing the key.
+- **Session search, doctor, agents, multi-run and context references.** Search old chats with FTS5, run a local health report, manage Markdown agents, compare answers from several providers and resolve safe `@file:line` references.
+- **Permission rules, tool hooks and provider routing.** Durable allow/ask/deny rules, pre/post tool hooks, MCP tool gating, provider priority and key pools.
+- **Goals and usage ledger.** Goal state with a step budget and a documented flat-rate usage ledger for online calls.
 
 ### Fixed
 - **Library index watcher** now has automated coverage for 500ms debouncing, ignored extensions and removal forwarding.
