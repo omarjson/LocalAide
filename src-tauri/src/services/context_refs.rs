@@ -41,19 +41,22 @@ pub fn parse_reference(input: &str) -> Result<PathRef, AppError> {
         let tail = &rest[colon + 1..];
         if let Some((a, b)) = tail.split_once('-') {
             let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
-            if digits(a) && digits(b) {
-                let start: usize = a
-                    .parse()
-                    .map_err(|_| AppError::invalid_input("Invalid start line."))?;
-                let end: usize = b
-                    .parse()
-                    .map_err(|_| AppError::invalid_input("Invalid end line."))?;
-                if start == 0 || end == 0 || start > end {
-                    return Err(AppError::invalid_input("Invalid line range."));
-                }
-                range = Some((start, end));
-                path_part = &rest[..colon];
+            if !digits(a) || !digits(b) {
+                return Err(AppError::invalid_input(
+                    "Line ranges need two numbers, like @file.md:2-10.",
+                ));
             }
+            let start: usize = a
+                .parse()
+                .map_err(|_| AppError::invalid_input("Invalid start line."))?;
+            let end: usize = b
+                .parse()
+                .map_err(|_| AppError::invalid_input("Invalid end line."))?;
+            if start == 0 || end == 0 || start > end {
+                return Err(AppError::invalid_input("Invalid line range."));
+            }
+            range = Some((start, end));
+            path_part = &rest[..colon];
         }
     }
     if path_part.is_empty() {

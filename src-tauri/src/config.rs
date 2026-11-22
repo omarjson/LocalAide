@@ -365,6 +365,9 @@ impl AppConfig {
             if !ordered.is_empty() {
                 return ordered;
             }
+            // An explicit priority list is honoured even before the matching
+            // providers have been loaded into the config.
+            return self.routing.provider_priority.clone();
         }
         self.cloud_providers
             .iter()

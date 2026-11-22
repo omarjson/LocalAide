@@ -69,29 +69,34 @@ impl LibraryWatcher {
             let mut removed_files: HashSet<PathBuf> = HashSet::new();
 
             loop {
-                let start_batch = std::time::Instant::now();
-                // 500ms debounce batching window
-                while start_batch.elapsed() < Duration::from_millis(500) {
+                // True debounce: the 500 ms window restarts on every event, so
+                // a burst that straddles the old fixed boundary is still one
+                // batch instead of two updates for the same file.
+                let mut last_event = std::time::Instant::now();
+                while last_event.elapsed() < Duration::from_millis(500) {
                     match rx.recv_timeout(Duration::from_millis(50)) {
-                        Ok(event) => match event.kind {
-                            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any => {
-                                for p in event.paths {
-                                    let inside = p.strip_prefix(&root).unwrap_or(p.as_path());
-                                    if !FileIngester::should_ignore_path(inside)
-                                        && FileIngester::is_supported_extension(&p)
-                                        && p.is_file()
-                                    {
-                                        pending_files.insert(p);
+                        Ok(event) => {
+                            last_event = std::time::Instant::now();
+                            match event.kind {
+                                EventKind::Create(_) | EventKind::Modify(_) | EventKind::Any => {
+                                    for p in event.paths {
+                                        let inside = p.strip_prefix(&root).unwrap_or(p.as_path());
+                                        if !FileIngester::should_ignore_path(inside)
+                                            && FileIngester::is_supported_extension(&p)
+                                            && p.is_file()
+                                        {
+                                            pending_files.insert(p);
+                                        }
                                     }
                                 }
-                            }
-                            EventKind::Remove(_) => {
-                                for p in event.paths {
-                                    removed_files.insert(p);
+                                EventKind::Remove(_) => {
+                                    for p in event.paths {
+                                        removed_files.insert(p);
+                                    }
                                 }
+                                _ => {}
                             }
-                            _ => {}
-                        },
+                        }
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
                     }

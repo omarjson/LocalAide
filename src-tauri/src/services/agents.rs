@@ -258,7 +258,7 @@ fn parse_tools(value: &str) -> Vec<String> {
         .trim_start_matches('[')
         .trim_end_matches(']')
         .split(',')
-        .map(|t| one_line(t.trim_matches(['"', '\''])))
+        .map(|t| one_line(t.trim().trim_matches(['"', '\''])))
         .filter(|t| !t.is_empty())
         .collect()
 }
