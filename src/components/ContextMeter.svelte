@@ -68,7 +68,7 @@
     <span class="meter" style={`--usage:${known ? usage.percent : 0}%;--tone:${tone}`} aria-hidden="true"></span>
   </button>
   {#if open}
-    <div class={`meter-popover ${direction === "down" ? "meter-popover-down" : ""}`} role="dialog" aria-label="Context window" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+    <div class={`meter-popover ${direction === "down" ? "meter-popover-down" : ""}`} role="dialog" aria-label="Context window" in:fly={{ y: direction === "down" ? -6 : 6, duration: dur(motion.base), easing: motion.enter }}>
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-semibold text-ink-50">Context window</span>
         <span class="tabular-nums text-ink-300">{known ? `~${fmt(usage.used)} / ${contextLabel(usage.limit)}` : "Size unknown"}</span>
@@ -106,7 +106,7 @@
         </dl>
       {/if}
       <p class="mt-3 text-xs leading-5 text-ink-500">
-        Estimated from text length; the model's own count can differ. Cached tokens are not reported by this engine.
+        {usage.measured ? "Counted by the model after the last answer, plus an estimate for what came since." : "Estimated from the text until the model reports its own count after the next answer."}
         {streaming ? "The answer is still growing." : known ? `At ${autoCompactAt}%, older messages stop being sent.` : ""}
       </p>
       {#if onCompact}
@@ -122,7 +122,8 @@
   .meter-button { display: grid; height: 1.75rem; width: 1.75rem; place-items: center; border-radius: 9999px; transition: background-color 150ms ease-out; }
   .meter-button:hover, .meter-button[aria-expanded="true"] { background: color-mix(in oklab, var(--color-veil) 7%, transparent); }
   .meter { height: 1.15rem; width: 1.15rem; border-radius: 9999px; background: conic-gradient(var(--tone) var(--usage), var(--color-ink-700) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); transition: background 300ms ease-out; }
-  .meter-popover { position: absolute; right: 0; z-index: 45; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: var(--shadow-elev); }
-  .meter-popover-down { top: calc(100% + 0.5rem); right: auto; left: -0.75rem; width: 16.5rem; }
+  /* Opens upward from the composer by default; the rail's copy opens down. */
+  .meter-popover { position: absolute; right: 0; bottom: calc(100% + 0.5rem); z-index: 45; max-height: min(28rem, 70vh); overflow-y: auto; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: var(--shadow-elev); }
+  .meter-popover-down { top: calc(100% + 0.5rem); bottom: auto; right: auto; left: -0.75rem; width: 16.5rem; }
   .segment-dot { height: 0.4rem; width: 0.4rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-ember-400); }
 </style>

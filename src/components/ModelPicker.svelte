@@ -149,6 +149,42 @@
   const noModels = $derived(!!choices && choices.models.length === 0);
   const chipLabel = $derived(busy ? "Loading…" : active ? active.name : noModels ? "Add a model" : "Choose a model");
   const fill = $derived(levels.length > 1 ? (level / (levels.length - 1)) * 100 : 0);
+
+  // Effort bar pointer handling. The knob's centre runs from one cap's centre
+  // to the other (half the capsule height in from each end), so the same
+  // geometry maps a press to the nearest rung.
+  let effortTrack = $state<HTMLElement | null>(null);
+  let effortInput = $state<HTMLInputElement | null>(null);
+  let dragging = $state(false);
+  const setRung = (index: number) => {
+    const next = levels[Math.min(levels.length - 1, Math.max(0, index))];
+    if (next && next !== levels[level]) onEffort?.(next);
+  };
+  const rungAt = (clientX: number): number => {
+    if (!effortTrack) return level;
+    const rect = effortTrack.getBoundingClientRect();
+    const cap = rect.height / 2;
+    const span = rect.width - 2 * cap;
+    if (span <= 0) return level;
+    const at = Math.min(1, Math.max(0, (clientX - rect.left - cap) / span));
+    return Math.round(at * (levels.length - 1));
+  };
+  const effortDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    effortInput?.focus({ preventScroll: true });
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragging = true;
+    setRung(rungAt(e.clientX));
+  };
+  const effortMove = (e: PointerEvent) => {
+    if (dragging) setRung(rungAt(e.clientX));
+  };
+  const effortUp = (e: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
 </script>
 
 <svelte:document onpointerdown={onDocumentPointer} />
@@ -184,7 +220,7 @@
           {#if onManageProviders}
             <button type="button" class="prov-row" onclick={() => { open = false; onManageProviders?.(); }}>
               <span class="prov-icon"><Icon name="plus" class="h-3.5 w-3.5" /></span>
-              <span class="flex-1 text-sm text-ink-100">{choices.online_allowed ? "New provider" : "Online models are off"}</span>
+              <span class="flex-1 text-sm text-ink-100">Add an online provider</span>
               <span class="badge">API</span>
             </button>
           {/if}
@@ -259,9 +295,22 @@
               <span class={`font-semibold ${level === levels.length - 1 ? "text-ember-300" : "text-ink-50"}`}>{effortLabel(levels[level])}</span>
               <kbd class="ml-auto rounded bg-ink-800 px-1.5 py-0.5 text-xs text-ink-400">Ctrl+T</kbd>
             </div>
-            <div class="effort mt-2" class:effort-max={level === levels.length - 1} style={`--fill:${fill}%`}>
-              <input type="range" min="0" max={levels.length - 1} step="1" value={level} aria-label="Thinking effort" aria-valuetext={effortLabel(levels[level])} oninput={(e) => onEffort?.(levels[Number((e.currentTarget as HTMLInputElement).value)])} />
-              <span class="effort-track" aria-hidden="true"><span class="effort-fill"></span>{#each levels.slice(1, -1) as _, j (j)}<span class="effort-dot" style={`left:${((j + 1) / (levels.length - 1)) * 100}%`}></span>{/each}</span>
+            <!-- The whole capsule takes the pointer: press anywhere to jump to
+                 the nearest rung, drag to slide. The range input stays for
+                 the keyboard and screen readers. -->
+            <div
+              class="effort mt-2"
+              class:effort-max={level === levels.length - 1}
+              class:effort-dragging={dragging}
+              style={`--f:${fill / 100}`}
+              role="presentation"
+              onpointerdown={effortDown}
+              onpointermove={effortMove}
+              onpointerup={effortUp}
+              onpointercancel={effortUp}
+            >
+              <input bind:this={effortInput} type="range" min="0" max={levels.length - 1} step="1" value={level} aria-label="Thinking effort" aria-valuetext={effortLabel(levels[level])} oninput={(e) => setRung(Number((e.currentTarget as HTMLInputElement).value))} />
+              <span class="effort-track" bind:this={effortTrack} aria-hidden="true"><span class="effort-fill"></span>{#each levels.slice(1, -1) as _, j (j)}<span class="effort-dot" style={`--at:${(j + 1) / (levels.length - 1)}`}></span>{/each}</span>
             </div>
           </div>
         {/if}
@@ -421,15 +470,21 @@
   .effort {
     position: relative;
     height: 2.9rem;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
   }
+  /* Kept for the keyboard and screen readers; the capsule itself takes the
+     pointer (see effortDown), so the input never steals a press. */
   .effort input {
     position: absolute;
     inset: 0;
     z-index: 2;
     width: 100%;
+    height: 100%;
     margin: 0;
     opacity: 0;
-    cursor: pointer;
+    pointer-events: none;
   }
   .effort-track {
     position: absolute;
@@ -445,9 +500,9 @@
   .effort-fill {
     position: absolute;
     inset: 0 auto 0 0;
-    width: calc(var(--fill) + 1.15rem);
-    min-width: 2.3rem;
-    max-width: 100%;
+    /* One cap wide at the lowest rung, the whole capsule at the top; the
+       knob's centre sits exactly on the rung (and on its dot). */
+    width: calc(2.3rem + var(--f) * (100% - 2.3rem));
     overflow: hidden;
     border-radius: 9999px;
     background: linear-gradient(90deg, var(--color-ember-600), var(--color-ember-400));
@@ -456,7 +511,7 @@
   .effort-fill::after {
     content: "";
     position: absolute;
-    right: 0.125rem;
+    right: 0.275rem;
     top: 50%;
     height: 1.75rem;
     width: 1.75rem;
@@ -473,8 +528,12 @@
     transform: translateY(-50%) scale(1.12);
     box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 5px color-mix(in oklab, var(--color-ember-500) 30%, transparent);
   }
+  .effort-dragging .effort-fill {
+    transition-duration: 120ms;
+  }
   .effort-dot {
     position: absolute;
+    left: calc(1.15rem + var(--at) * (100% - 2.3rem));
     top: 50%;
     height: 0.3rem;
     width: 0.3rem;
