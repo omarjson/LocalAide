@@ -13,15 +13,23 @@ Thank you for your interest in contributing. LocalAide is a local-first AI deskt
 ## Development Setup
 
 Requirements:
-* Rust 1.90+ (stable toolchain)
-* Node 20+
-* Tauri prerequisites for your platform
+* Rust 1.100.0 — the version pinned in `rust-toolchain.toml`, with `rustfmt` and `clippy`
+* Node 24+ (see `.nvmrc` and `package.json`; run `nvm use 24`)
+* Tauri prerequisites for your platform (see the build-from-source section of `README.md`)
 
 ```bash
-git clone https://github.com/<user>/localaide.git
-cd localaide
+git clone https://github.com/omarjson/LocalAide.git
+cd LocalAide
+nvm use 24
 npm ci
 npx tauri dev
+```
+
+Before opening a PR, run the same gates CI runs:
+
+```bash
+make all   # svelte-check, cargo check, Rust tests, frontend unit tests, build + smoke test
+make lint  # cargo clippy --all-targets -- -D warnings
 ```
 
 ## Project Structure
