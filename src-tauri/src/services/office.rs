@@ -410,9 +410,7 @@ pub fn make_pptx(_title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
         slide_parts.push((
             format!("ppt/slides/slide{n}.xml"),
             slide_xml,
-            format!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>"
-            ),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>".to_string(),
         ));
         presentation_ids.push_str(&format!(
             "<p:sldId id=\"{n}\" r:id=\"rId{}\"/>",
