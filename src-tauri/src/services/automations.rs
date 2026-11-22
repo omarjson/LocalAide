@@ -7,6 +7,8 @@
 //! commands or asks for approvals, because nobody is watching at 7 AM.
 
 use std::path::PathBuf;
+
+use tauri::Emitter;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
