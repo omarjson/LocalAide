@@ -3,12 +3,13 @@
   import { listen } from "@tauri-apps/api/event";
   import { fade, fly, scale } from "svelte/transition";
   import { api, errorMessage } from "./lib/api/client";
-  import { dur, enterDialog, enterScreen, leaveDialog, motion } from "./lib/motion";
+  import { dur, enterDialog, enterScreen, leaveDialog, motion, slideUp } from "./lib/motion";
   import { formatBytes } from "./lib/format";
   import { applyTheme, currentTheme } from "./lib/theme";
   import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
   import { requestSettings, screenRequest } from "./lib/nav.svelte";
-  import { loadDev, moduleOn } from "./lib/dev.svelte";
+  import { loadDev, moduleOn, activeEffectFlags } from "./lib/dev.svelte";
+  import { SCREEN_REGISTRY, screenForKey, type ScreenId } from "./lib/screens";
   import { loadVoice } from "./lib/voice.svelte";
   import { refreshShare, share } from "./lib/share.svelte";
   import MarkdownDoc from "./components/MarkdownDoc.svelte";
@@ -32,8 +33,9 @@
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
   import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
 
-  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage" | "automations";
-  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage" | "automations";
+  type Screen = ScreenId | "setup" | "skills";
+  type NavId = ScreenId | "skills";
+  const activeFlags = $derived(activeEffectFlags());
 
   // Null until startup decides: returning users with a downloaded model go
   // straight to chat; first-run users see the setup wizard.
@@ -166,12 +168,17 @@
   const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";
 
   const commands = $derived<Command[]>([
-    { id: "chat", label: "Chat", hint: `${mod}1`, icon: "chat", group: "Go to", run: () => navigate("chat") },
-    { id: "search", label: "Search", hint: `${mod}2`, icon: "search", group: "Go to", run: () => navigate("search") },
-    { id: "memory", label: "Memory", hint: `${mod}3`, icon: "memory", group: "Go to", run: () => navigate("memory") },
-    { id: "skills", label: "Skills", hint: `${mod}4`, icon: "skills", group: "Go to", run: () => navigate("skills") },
-    { id: "models", label: "Models", hint: `${mod}5`, icon: "models", group: "Go to", run: () => navigate("models") },
-    { id: "settings", label: "Settings", hint: `${mod}6`, icon: "settings", group: "Go to", run: () => navigate("settings") },
+    // All "Go to" entries come from the one registry, so the hint is always
+    // the key that opens that screen. Skills is a module with no number.
+    ...SCREEN_REGISTRY.map((s) => ({
+      id: s.id as string,
+      label: s.label,
+      hint: `${mod}${s.key}`,
+      icon: s.icon,
+      group: "Go to" as const,
+      run: () => { navigate(s.id); },
+    })),
+    { id: "skills", label: "Skills", icon: "skills", group: "Go to", run: () => navigate("skills") },
     { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) newChat(chats.activeFolder); } },
     { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
@@ -225,8 +232,6 @@
     if (!cmdOpen) return;
     document.getElementById(`cmd-${cmdIndex}`)?.scrollIntoView({ block: "nearest" });
   });
-
-  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "usage", "automations", "settings"];
 
   const refreshProbe = async () => {
     try {
@@ -328,10 +333,10 @@
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         navigate("settings");
-      } else if ((e.metaKey || e.ctrlKey) && /^[1-6]$/.test(e.key)) {
+      } else if ((e.metaKey || e.ctrlKey) && /^[1-7]$/.test(e.key)) {
         e.preventDefault();
-        const targetScreen = shortcutScreens[Number(e.key) - 1];
-        if (targetScreen && navVisible(targetScreen)) navigate(targetScreen);
+        const target = screenForKey(Number(e.key));
+        if (target && navVisible(target.id)) navigate(target.id);
       } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
         e.preventDefault();
         navigate("search");
@@ -428,13 +433,10 @@
       </button>
     {/snippet}
     <nav class="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pt-1" aria-label="Screens">
-      {@render navItem("chat", "Chat")}
-      {#if navVisible("search")}{@render navItem("search", "Search")}{/if}
-      {#if navVisible("memory")}{@render navItem("memory", "Memory")}{/if}
+      {#each SCREEN_REGISTRY as s (s.id)}
+        {#if s.id !== "settings" && navVisible(s.id)}{@render navItem(s.id, s.label)}{/if}
+      {/each}
       {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
-      {@render navItem("models", "Models")}
-      {@render navItem("usage", "Usage")}
-      {@render navItem("automations", "Automations")}
       {#if showLabels && screen !== "setup"}
         <div class="mt-2 border-t border-ink-800">
           <SidebarChats onOpen={() => navigate("chat")} />
@@ -553,6 +555,9 @@
     <span class="ml-auto hidden sm:flex items-center gap-2">
       <button type="button" onclick={() => (showHelp = true)} class="flex items-center gap-2 rounded px-1.5 py-0.5 text-ink-500 transition-colors hover:text-ink-200" title="Keyboard shortcuts (?)">Keyboard shortcuts <kbd class="rounded border border-ink-700 bg-veil/5 px-1.5 py-0.5 font-mono text-xs text-ink-400">?</kbd></button>
     </span>
+    {#if activeFlags.length > 0}
+      <span class="debug-chip" title={`Developer effects on: ${activeFlags.join(", ")}`}><Icon name="flask" class="h-3.5 w-3.5" />{activeFlags.length} debug {activeFlags.length === 1 ? "flag" : "flags"}</span>
+    {/if}
   </footer>
 
   {#if cmdOpen}
@@ -603,7 +608,7 @@
   {/if}
 
   {#if engineDownload && engineDownload.state === "downloading"}
-    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:fly={{ y: 8, duration: dur(motion.base), easing: motion.enter }} out:fade={{ duration: dur(motion.fast) }}>
+    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:slideUp={{ y: 8 }} out:fade={{ duration: dur(motion.fast) }}>
       <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ember-300" />Getting the model engine</div>
       <p class="mt-1 text-xs leading-5 text-ink-400">Once only: the llama.cpp build for this processor, from github.com.</p>
       <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.max(3, engineDownload.percent)}%`}></div></div>
@@ -635,7 +640,7 @@
         <div class="space-y-2.5 text-sm">
           <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="kbd">{mod}K</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="kbd">{mod}N</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, … 7: Settings)</span><kbd class="kbd">{mod}1 – {mod}7</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens ({SCREEN_REGISTRY.map((s) => `${s.key}: ${s.label}`).join(", ")})</span><kbd class="kbd">{mod}1 – {mod}7</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="kbd">{mod},</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Show or hide the sidebar</span><kbd class="kbd">{mod}B</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Search this chat (in Chat)</span><kbd class="kbd">{mod}F</kbd></div>
@@ -687,5 +692,16 @@
     border-radius: 9999px;
     background: var(--color-ember-500);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 25%, transparent);
+  }
+  .debug-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    border-radius: 9999px;
+    padding: 0 9px;
+    font-weight: 600;
+    background: color-mix(in oklab, var(--color-ink-500) 16%, transparent);
+    color: var(--color-ink-300);
   }
 </style>

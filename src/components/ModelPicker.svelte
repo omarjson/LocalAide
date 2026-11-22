@@ -8,7 +8,7 @@
   import { dur, motion } from "../lib/motion";
   import { contextLabel, effortLabel } from "../lib/chatParts";
   import { formatGb } from "../lib/format";
-  import { matchesModel, NO_FILTERS, parseFilters, providerKey, providerList, providerModels, type PickerFilters } from "../lib/modelPicker";
+  import { anyFilterOn, matchesModel, NO_FILTERS, parseFilters, providerKey, providerList, providerModels, sectionOrder, type PickerFilters } from "../lib/modelPicker";
   import type { ModelChoice, ModelChoices } from "../lib/api/bindings";
 
   interface Props {
@@ -46,7 +46,6 @@
 
   const isChatActive = (m: ModelChoice) => (activeKey ? m.key === activeKey : m.active);
   const active = $derived(choices?.models.find(isChatActive) ?? null);
-  const providers = $derived(providerList(choices));
   // The provider whose models are listed; starts at the active model's.
   let viewing = $state<string | null>(null);
   let view = $state<"models" | "providers">("models");
@@ -65,7 +64,17 @@
       return { ...NO_FILTERS };
     }
   })());
-  const anyFilter = $derived(filters.reasoning || filters.vision || filters.free);
+  const anyFilter = $derived(anyFilterOn(filters));
+
+  // pickerSections() is the one source of truth for menu order: Starred,
+  // On this computer, then enabled providers. Both the provider switcher and
+  // the rows follow it, so a model never appears above its own section.
+  const sections = $derived(sectionOrder(choices, query, filters));
+  const rank = (key: string) => {
+    const at = sections.indexOf(key);
+    return at < 0 ? sections.length : at;
+  };
+  const providers = $derived(providerList(choices).slice().sort((a, b) => rank(a.key) - rank(b.key)));
 
   $effect(() => {
     try {
@@ -82,7 +91,7 @@
 
   const shown = $derived(viewing ?? (active ? providerKey(active) : providers[0]?.key ?? "local"));
   const provider = $derived(providers.find((p) => p.key === shown) ?? null);
-  const list = $derived(providerModels(choices, shown, query, filters));
+  const list = $derived(providerModels(choices, shown, query, filters).slice().sort((a, b) => rank(providerKey(a)) - rank(providerKey(b))));
   const elsewhere = $derived(query.trim() && list.length === 0 ? (choices?.models ?? []).filter((m) => providerKey(m) !== shown && matchesModel(m, query, filters)).slice(0, 8) : []);
   const rows = $derived([...list, ...elsewhere]);
 
@@ -253,6 +262,7 @@
         <div class="flex items-center gap-1.5 px-3 pb-1" role="group" aria-label="Filter models">
           <button type="button" aria-pressed={filters.reasoning} onclick={() => toggleFilter("reasoning")} class={`fchip ${filters.reasoning ? "fchip-on" : ""}`}>Thinks</button>
           <button type="button" aria-pressed={filters.vision} onclick={() => toggleFilter("vision")} class={`fchip ${filters.vision ? "fchip-on" : ""}`}>Vision</button>
+          <button type="button" aria-pressed={filters.tools} onclick={() => toggleFilter("tools")} class={`fchip ${filters.tools ? "fchip-on" : ""}`}>Tools</button>
           <button type="button" aria-pressed={filters.free} onclick={() => toggleFilter("free")} class={`fchip ${filters.free ? "fchip-on" : ""}`}>Free</button>
           {#if anyFilter}
             <span class="ml-auto flex items-center gap-1.5">
@@ -269,6 +279,8 @@
             <p class="px-3 py-5 text-center text-sm text-ink-400">{query.trim() ? `No model matches “${query.trim()}”.` : provider?.needsRefresh ? "Press Load to see this provider's models." : "No models here yet."}</p>
           {/if}
           {#each rows as m, index (m.key)}
+            {#if m.favorite && (index === 0 || !rows[index - 1].favorite)}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Starred</div>{/if}
+            {#if !m.favorite && index > 0 && rows[index - 1].favorite}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">{provider?.label ?? "Models"}</div>{/if}
             {#if index === list.length && elsewhere.length > 0}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Other providers</div>{/if}
             <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={isChatActive(m)} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""} ${isChatActive(m) ? "row-active" : ""}`}>
               <span class="min-w-0 flex-1">

@@ -12,6 +12,11 @@ export interface PickerFilters {
 
 export const NO_FILTERS: PickerFilters = { reasoning: false, vision: false, tools: false, free: false };
 
+/** True when at least one capability filter is on (including saved Tools). */
+export function anyFilterOn(f: PickerFilters): boolean {
+  return f.reasoning || f.vision || f.tools || f.free;
+}
+
 export interface PickerSection {
   id: string;
   label: string;
@@ -66,6 +71,12 @@ export function pickerSections(choices: ModelChoices | null, query: string, filt
     }
   }
   return out;
+}
+
+/** The canonical section order: Starred, On this computer, then providers.
+ * The menu uses this to order both its provider switcher and its rows. */
+export function sectionOrder(choices: ModelChoices | null, query: string, filters: PickerFilters): string[] {
+  return pickerSections(choices, query, filters).map((s) => s.id);
 }
 
 /** "local" for models on this computer, else the provider id. */
