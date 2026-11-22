@@ -21,7 +21,6 @@
   import TabStrip from "./components/TabStrip.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
-  import LogoMark from "./components/LogoMark.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
   import SkillsScreen from "./screens/SkillsScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
@@ -374,16 +373,18 @@
 </script>
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
-  <TitleBar />
+  <TitleBar onMenu={() => (mobileNav = true)} />
   <div class="flex flex-1 min-h-0">
   {#if mobileNav}
-    <div role="presentation" class="fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
+    <!-- Starts under the title bar (h-9), so the window buttons stay reachable. -->
+    <div role="presentation" class="fixed inset-x-0 bottom-0 top-9 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
   {/if}
-  <aside class={`fixed lg:relative inset-y-0 left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
-    <div class={`h-12 flex items-center gap-2.5 shrink-0 ${showLabels ? 'px-3' : 'px-0 justify-center'}`}>
-      <LogoMark class="w-6 h-6 shrink-0" />
-      {#if showLabels}<span class="text-sm font-semibold tracking-tight text-ink-50" in:fade={{ duration: dur(motion.fast) }}>LocalAide</span>{/if}
-      <button aria-label="Close navigation" onclick={() => mobileNav = false} class="lg:hidden ml-auto p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
+  <!-- The title bar above already carries the logo and name, so the sidebar
+       starts with its actions; on narrow windows it slides in under the
+       title bar rather than over it. -->
+  <aside class={`fixed lg:relative top-9 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
+    <div class="lg:hidden flex h-9 shrink-0 items-center justify-end px-1">
+      <button aria-label="Close navigation" onclick={() => mobileNav = false} class="p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
     {#if showLabels}
       <button
@@ -450,11 +451,6 @@
   </aside>
 
   <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
-    <div class="lg:hidden sticky top-0 z-30 shrink-0 bg-ink-950 p-3 border-b border-edge flex items-center gap-3">
-      <button aria-label="Open navigation" onclick={() => mobileNav = true} class="p-2 rounded-md hover:bg-veil/5 text-ink-300"><Icon name="menu" class="w-4 h-4" /></button>
-      <LogoMark class="w-6 h-6 shrink-0" />
-      <span class="font-semibold">LocalAide</span>
-    </div>
     {#if chatMounted && !startupError}
       <div class="min-h-0 flex-1 flex flex-col" class:hidden={screen !== "chat"}>
         <TabStrip

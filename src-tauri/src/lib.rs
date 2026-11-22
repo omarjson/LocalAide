@@ -200,6 +200,7 @@ pub fn run() {
             commands::inference_status,
             commands::chat_stream,
             commands::chat_cancel,
+            commands::chat_steer,
             commands::automations_list,
             commands::automations_save,
             commands::automations_delete,
@@ -366,8 +367,18 @@ pub fn run() {
                 let scheduler_state = scheduler_state.clone();
                 let scheduler_handle = setup_app.handle().clone();
                 std::thread::spawn(move || {
+                    // Sleeps in short steps, so a closing app never starts a
+                    // run while the engines are being stopped.
                     loop {
-                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        for _ in 0..30 {
+                            if lifecycle::shutting_down() {
+                                return;
+                            }
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                        }
+                        if lifecycle::shutting_down() {
+                            return;
+                        }
                         scheduler_state
                             .automations
                             .tick(&scheduler_state, &scheduler_handle);
@@ -424,7 +435,11 @@ pub fn run() {
             lifecycle::fatal_startup_error(&format!("The app window could not open: {e}"))
         })
         .run(move |_app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                lifecycle::begin_shutdown();
+            }
             if matches!(event, tauri::RunEvent::Exit) {
+                lifecycle::begin_shutdown();
                 // Stop the engines. The job object ends any child that is left.
                 let _ = shutdown_state.inference_engine.unload();
                 shutdown_state.embedding_engine.stop();

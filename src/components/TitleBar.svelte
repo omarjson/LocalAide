@@ -11,6 +11,29 @@
   let win: ReturnType<typeof getCurrentWindow> | null = null;
   let maximized = $state(false);
 
+  interface Props {
+    /** Opens the navigation on narrow windows, where the sidebar is hidden. */
+    onMenu?: () => void;
+  }
+  let { onMenu }: Props = $props();
+
+  // A window call that fails is logged, never shown as an error toast.
+  const act = (what: string, call: (() => Promise<void>) | undefined) => {
+    if (!call) return;
+    call().catch((e: unknown) => console.warn(`Window ${what} failed`, e));
+  };
+  // Close asks the window to close (so the app shuts down cleanly); if
+  // that is refused, the window is destroyed instead of leaving the user
+  // with a button that does nothing.
+  const closeWindow = () => {
+    const current = win;
+    if (!current) return;
+    current.close().catch((e: unknown) => {
+      console.warn("Window close failed, destroying it instead", e);
+      current.destroy().catch((err: unknown) => console.warn("Window destroy failed", err));
+    });
+  };
+
   onMount(() => {
     const current = getCurrentWindow();
     win = current;
@@ -33,10 +56,15 @@
   data-tauri-drag-region
   aria-label="Window"
 >
+  {#if onMenu}
+    <button type="button" class="menu-btn lg:hidden" aria-label="Open navigation" title="Menu" onclick={onMenu}>
+      <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+    </button>
+  {/if}
   <span class="flex shrink-0 items-center" data-tauri-drag-region><LogoMark class="h-4 w-4" /></span>
   <span class="text-xs font-semibold text-ink-200" data-tauri-drag-region>LocalAide</span>
   <span class="min-w-0 flex-1" data-tauri-drag-region></span>
-  <button type="button" class="win-btn" aria-label="Minimize the window" title="Minimize" onclick={() => void win?.minimize()}>
+  <button type="button" class="win-btn" aria-label="Minimize the window" title="Minimize" onclick={() => act("minimize", win ? () => win!.minimize() : undefined)}>
     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14" /></svg>
   </button>
   <button
@@ -44,7 +72,7 @@
     class="win-btn"
     aria-label={maximized ? "Restore the window size" : "Maximize the window"}
     title={maximized ? "Restore" : "Maximize"}
-    onclick={() => void win?.toggleMaximize()}
+    onclick={() => act("maximize", win ? () => win!.toggleMaximize() : undefined)}
   >
     {#if maximized}
       <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -57,7 +85,7 @@
       </svg>
     {/if}
   </button>
-  <button type="button" class="win-btn win-close" aria-label="Close the window" title="Close" onclick={() => void win?.close()}>
+  <button type="button" class="win-btn win-close" aria-label="Close the window" title="Close" onclick={closeWindow}>
     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
   </button>
 </header>
@@ -76,6 +104,19 @@
     transition: background-color 120ms ease-out, color 120ms ease-out;
   }
   .win-btn:hover {
+    background: color-mix(in oklab, var(--color-veil) 10%, transparent);
+    color: var(--color-ink-50);
+  }
+  .menu-btn {
+    display: grid;
+    height: 1.75rem;
+    width: 1.75rem;
+    margin-left: -0.375rem;
+    place-items: center;
+    border-radius: 0.375rem;
+    color: var(--color-ink-300);
+  }
+  .menu-btn:hover {
     background: color-mix(in oklab, var(--color-veil) 10%, transparent);
     color: var(--color-ink-50);
   }

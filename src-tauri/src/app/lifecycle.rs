@@ -3,9 +3,29 @@
 
 use std::process::{Child, Command};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Holds the single-instance lock for as long as this process runs.
 static INSTANCE_LOCK: OnceLock<std::fs::File> = OnceLock::new();
+
+/// Set once the app starts to close. Background threads check it and stop
+/// instead of starting new work while the engines shut down.
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Marks the app as closing.
+pub fn begin_shutdown() {
+    SHUTTING_DOWN.store(true, Ordering::SeqCst);
+}
+
+/// True once the app has started to close.
+pub fn shutting_down() -> bool {
+    SHUTTING_DOWN.load(Ordering::SeqCst)
+}
+
+/// How long a new start waits for a closing copy to let go of the lock,
+/// for example when LocalAide is reopened right after closing it, or the
+/// installer starts it while the old copy is still shutting down.
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Takes the single-instance lock. Returns false when another copy holds it,
 /// after telling the user. The OS releases the lock when a process ends, even
@@ -27,13 +47,23 @@ pub fn claim_single_instance() -> bool {
             return true;
         }
     };
-    match file.try_lock() {
+    let started = std::time::Instant::now();
+    let mut result = file.try_lock();
+    while matches!(result, Err(std::fs::TryLockError::WouldBlock)) && started.elapsed() < LOCK_WAIT
+    {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        result = file.try_lock();
+    }
+    match result {
         Ok(()) => {
             let _ = INSTANCE_LOCK.set(file);
             true
         }
         Err(std::fs::TryLockError::WouldBlock) => {
-            show_message_box("LocalAide", "LocalAide is already open.");
+            show_message_box(
+                "LocalAide",
+                "LocalAide is already open. Look for its window on the taskbar.",
+            );
             false
         }
         Err(std::fs::TryLockError::Error(e)) => {
