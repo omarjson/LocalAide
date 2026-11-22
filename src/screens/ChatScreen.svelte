@@ -29,6 +29,7 @@
   import ModelPicker from "../components/ModelPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
   import Modal from "../components/Modal.svelte";
+  import { A2uiChat, provideA2ui } from "../lib/a2ui.svelte";
   import ProviderForm from "../components/ProviderForm.svelte";
   import { calibration, compactionStart, contextSegments, contextUsage, fits, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
@@ -726,6 +727,20 @@
   let reportedTools = $state<number | null>(null);
   // Cache hit rate of the last answer, when the provider reports cached tokens.
   let lastCacheRate = $state<number | null>(null);
+  // A2UI forms in this chat's answers: built once per finished block, in
+  // chat order, so a later answer can update a form an earlier one drew.
+  const a2ui = provideA2ui(new A2uiChat());
+  $effect(() => {
+    const texts = messages.filter((m) => m.role === "assistant").map((m) => m.content);
+    untrack(() => a2ui.sync(texts));
+  });
+  // A pressed form button is the user's next message; while an answer
+  // runs it waits in the queue.
+  const sendA2uiAction = (message: string) => {
+    if (streaming) queued.push({ id: ++noteSeq, text: message });
+    else void send(false, message);
+  };
+
   const resetMeasurements = () => {
     measuredPrompt = null;
     measuredModel = null;
@@ -1982,6 +1997,7 @@
             approvals={idx === messages.length - 1 ? approvals : {}}
             onDecide={(toolId, decision) => void decideTool(toolId, decision)}
             onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
+            onA2uiAction={msg.role === "assistant" ? sendA2uiAction : undefined}
             onAnswerDeferred={!streaming ? (text, id) => answerQuestion(text, id) : undefined}
             onDismissQuestion={dismissQuestion}
             onUndoSkill={(id) => void undoSkill(id)}

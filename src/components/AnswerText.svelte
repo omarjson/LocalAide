@@ -4,6 +4,7 @@
   import ChartBlock from "./ChartBlock.svelte";
   import MermaidBlock from "./MermaidBlock.svelte";
   import HtmlFrame from "./HtmlFrame.svelte";
+  import A2uiSurface from "./A2uiSurface.svelte";
 
   interface Props {
     text: string;
@@ -13,10 +14,12 @@
     visuals?: boolean;
     /** A pick from a mockup, sent as the user's reply. */
     onChoose?: (text: string) => void;
+    /** A button pressed on an A2UI form, sent as the user's next message. */
+    onA2uiAction?: (message: string) => void;
   }
 
-  let { text, caret = false, visuals = true, onChoose }: Props = $props();
-  const VISUAL = new Set(["chart", "mermaid", "html"]);
+  let { text, caret = false, visuals = true, onChoose, onA2uiAction }: Props = $props();
+  const VISUAL = new Set(["chart", "mermaid", "html", "a2ui"]);
 
   let copiedBlock = $state<number | null>(null);
   let copyError = $state(false);
@@ -64,11 +67,13 @@
         <ChartBlock source={seg.code} />
       {:else if seg.lang.toLowerCase() === "mermaid"}
         <MermaidBlock source={seg.code} />
+      {:else if seg.lang.toLowerCase() === "a2ui"}
+        <A2uiSurface source={seg.code} onAction={onA2uiAction} />
       {:else}
         <HtmlFrame source={seg.code} {onChoose} />
       {/if}
     {:else if visuals && !seg.closed && VISUAL.has(seg.lang.toLowerCase())}
-      <div class="flex items-center gap-2 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2.5 text-sm text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500"></span>Drawing the {seg.lang.toLowerCase() === "html" ? "mockup" : seg.lang.toLowerCase() === "chart" ? "chart" : "diagram"}…</div>
+      <div class="flex items-center gap-2 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2.5 text-sm text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500"></span>Drawing the {seg.lang.toLowerCase() === "a2ui" ? "form" : seg.lang.toLowerCase() === "html" ? "mockup" : seg.lang.toLowerCase() === "chart" ? "chart" : "diagram"}…</div>
     {:else}
       <div class="overflow-hidden rounded-xl border border-ink-700 bg-ink-950">
         <div class="flex items-center justify-between border-b border-ink-800 bg-ink-900/70 px-3 py-1.5 font-mono text-xs text-ink-400">

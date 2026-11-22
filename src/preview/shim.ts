@@ -570,8 +570,36 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
     { type: "citation", payload: { index: 1, title: "Invoice policy", source: "C:\\Users\\Omar\\.aiassistant\\memory\\invoice.md", snippet: "Payment is due net 30 days after the invoice date.", score: 0.42 } },
     { type: "token", payload: { token: "" } },
   ];
-  const answer =
-    "Payment terms follow your **invoice policy**: invoices are due **net 30 days** after the invoice date.\n\nThat means for invoice `INV-1042` dated November 1, the due date is December 1.\n\n```text\nINV-1042 · issued 2026-11-01 · due 2026-12-01\n```";
+  // Ask for a "form" in the preview to see the A2UI renderer.
+  const wantsForm = /form/i.test(String(req.message ?? ""));
+  const answer = wantsForm
+    ? "Here is a booking form.\n\n```a2ui\n" +
+      JSON.stringify({
+        version: "1.0",
+        createSurface: {
+          surfaceId: "booking_1",
+          catalogId: "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+          sendDataModel: true,
+          components: [
+            { id: "root", component: "Card", child: "col" },
+            { id: "col", component: "Column", children: ["title", "name", "row", "size", "extras", "nights", "agree", "send"] },
+            { id: "title", component: "Text", text: "## Book a room" },
+            { id: "name", component: "TextField", label: "Your name", value: { "@path": "/form/name" }, placeholder: "Ada Lovelace", "@checks": [{ condition: { "@call": "required", args: { value: { "@path": "/form/name" } } }, message: "Enter your name." }] },
+            { id: "row", component: "Row", children: ["date", "email"] },
+            { id: "date", component: "DateTimeInput", label: "Arrival", value: { "@path": "/form/date" }, enableDate: true, weight: 1 },
+            { id: "email", component: "TextField", label: "Email", value: { "@path": "/form/email" }, weight: 1 },
+            { id: "size", component: "ChoicePicker", label: "Room", options: [{ label: "Single", value: "single" }, { label: "Double", value: "double" }, { label: "Suite", value: "suite" }], value: { "@path": "/form/room" }, displayStyle: "chips" },
+            { id: "extras", component: "ChoicePicker", label: "Extras", variant: "multipleSelection", options: [{ label: "Breakfast", value: "breakfast" }, { label: "Parking", value: "parking" }], value: { "@path": "/form/extras" } },
+            { id: "nights", component: "Slider", label: "Nights", min: 1, max: 14, value: { "@path": "/form/nights" } },
+            { id: "agree", component: "CheckBox", label: "I accept the house rules", value: { "@path": "/form/agree" } },
+            { id: "send", component: "Button", variant: "primary", child: "send_label", action: { event: { name: "book", userMessage: { "@call": "formatString", args: { value: "Book ${/form/nights} nights for ${/form/name}" } }, context: { name: { "@path": "/form/name" }, room: { "@path": "/form/room" } } } }, "@checks": [{ condition: { "@call": "and", args: { values: [{ "@call": "required", args: { value: { "@path": "/form/name" } } }, { "@path": "/form/agree" }] } }, message: "Add your name and accept the rules." }] },
+            { id: "send_label", component: "Text", text: "Book" },
+          ],
+          dataModel: { form: { name: "", room: ["double"], extras: [], nights: 2, agree: false } },
+        },
+      }) +
+      "\n```"
+    : "Payment terms follow your **invoice policy**: invoices are due **net 30 days** after the invoice date.\n\nThat means for invoice `INV-1042` dated November 1, the due date is December 1.\n\n```text\nINV-1042 · issued 2026-11-01 · due 2026-12-01\n```";
   let i = 0;
   let index = 0;
   const push = (event: Record<string, unknown>) => {

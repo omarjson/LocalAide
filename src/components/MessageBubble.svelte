@@ -10,6 +10,7 @@
   import TodoList from "./TodoList.svelte";
   import { questionItems } from "../lib/chatParts";
   import { parseQuestion } from "../lib/questions";
+  import { splitEventMessage } from "../lib/a2ui";
   import { openInBrowser } from "../lib/links";
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
@@ -51,6 +52,8 @@
     onDecide?: (toolId: string, decision: "allow" | "allow_chat" | "deny") => void;
     /** Set on the newest answer: send a tapped option as the reply. */
     onAnswer?: (text: string, questionId: string | null) => void;
+    /** A button pressed on an A2UI form in this answer. */
+    onA2uiAction?: (message: string) => void;
     /** "Other…": put the cursor in the chat box. */
     onOther?: () => void;
     /** Dismiss an ask_user question without answering. */
@@ -87,6 +90,7 @@
     approvals = {},
     onDecide,
     onAnswer,
+    onA2uiAction,
     onOther,
     onDismissQuestion,
     onUndoSkill,
@@ -100,8 +104,11 @@
   const LONG_QUESTION = 240;
   let questionExpanded = $state(false);
   const longQuestion = $derived(role === "user" && collapseLong && content.length > LONG_QUESTION);
+  // A message sent from an A2UI form shows its readable line; the A2UI
+  // envelope that rides along for the model shows as a small tag.
+  const sentFromForm = $derived(role === "user" ? splitEventMessage(content) : { text: content, event: false });
   const shownContent = $derived(
-    longQuestion && !questionExpanded ? content.slice(0, LONG_QUESTION).trimEnd() + "…" : content,
+    longQuestion && !questionExpanded ? sentFromForm.text.slice(0, LONG_QUESTION).trimEnd() + "…" : sentFromForm.text,
   );
 
   // A question at the end of a plain answer gets buttons too, when the
@@ -226,7 +233,7 @@
           </div>
         {/if}
         {#if content}
-          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ember-500/25 bg-ember-500/12 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}</div>
+          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ember-500/25 bg-ember-500/12 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}{#if sentFromForm.event}<span class="mt-1 flex items-center gap-1 text-xs text-ember-200/80"><Icon name="sparkle" class="h-3 w-3" />Sent from the form</span>{/if}</div>
           {#if longQuestion && !questionExpanded}
             <button type="button" onclick={() => (questionExpanded = true)} class="mt-0.5 text-xs font-medium text-ember-300 transition-colors hover:text-ember-200">Show full question</button>
           {/if}
@@ -312,7 +319,7 @@
               />
             {:else if part.type === "text" && part.text.trim()}
               <div class={i > 0 ? "pt-1" : ""}>
-                <AnswerText text={part.text} caret={streaming && i === parts.length - 1} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} />
+                <AnswerText text={part.text} caret={streaming && i === parts.length - 1} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} {onA2uiAction} />
               </div>
             {/if}
           {/each}
@@ -321,7 +328,7 @@
           {/if}
         </div>
       {:else}
-        <AnswerText text={content} caret={streaming && !!content.trim()} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} />
+        <AnswerText text={content} caret={streaming && !!content.trim()} onChoose={isLast && !streaming && onAnswer ? (text) => onAnswer?.(text, null) : undefined} {onA2uiAction} />
       {/if}
 
       {#if parsedQuestion}
