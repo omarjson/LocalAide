@@ -10,17 +10,21 @@
   import { enterScreen } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
   import LogoMark from "../components/LogoMark.svelte";
+  import ProviderForm from "../components/ProviderForm.svelte";
+  import { moduleOn } from "../lib/dev.svelte";
+  import { applyTheme, currentTheme, type Theme } from "../lib/theme";
+  import type { CloudConfigStatus } from "../lib/api/bindings";
 
-  type Step = "detect" | "preset" | "confirm" | "download" | "done";
+  type Step = "detect" | "preset" | "confirm" | "online" | "download" | "done";
 
+  // Checking the computer takes a moment and needs nothing from the user,
+  // so it is not a step of its own: it is the start of "Choose a model".
   const stepList: { id: Step; label: string }[] = [
-    { id: "detect", label: "Check this computer" },
-    { id: "preset", label: "Choose a size" },
+    { id: "preset", label: "Choose a model" },
     { id: "download", label: "Install" },
     { id: "done", label: "Ready" },
   ];
-  // "confirm" shares the "Choose a size" dot.
-  const stepIndex = (value: Step): number => (value === "confirm" ? 1 : stepList.findIndex((item) => item.id === value));
+  const stepIndex = (value: Step): number => (value === "download" ? 1 : value === "done" ? 2 : 0);
 
   type Preset = {
     id: string;
@@ -66,7 +70,22 @@
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));
-  const recommended = $derived(fittingPresets[fittingPresets.length - 1] ?? presets[0]);
+  const recommended = $derived<Preset | undefined>(fittingPresets[fittingPresets.length - 1] ?? presets[0]);
+  // Nothing fits the memory set aside for models: an online provider is
+  // the better first suggestion.
+  const tightMemory = $derived(presets.length > 0 && fittingPresets.length === 0);
+  const onlineAvailable = $derived(moduleOn("online"));
+  const otherPresets = $derived(presets.filter((p) => p.id !== recommended?.id));
+  let theme = $state<Theme>(currentTheme());
+  const chooseTheme = async (value: Theme) => {
+    theme = value;
+    applyTheme(value);
+    try {
+      await api.setTheme(value);
+    } catch (e: unknown) {
+      console.warn("The theme could not be saved", e);
+    }
+  };
 
   const detect = async () => {
     setupError = null;
@@ -94,7 +113,9 @@
       }));
       presetError = false;
       step = "preset";
-      status = `Recommended: ${recommended.name} preset fits your ${probe.budget_gb.toFixed(1)} GB budget.`;
+      status = recommended
+        ? `Recommended: ${recommended.name} fits the ${probe.budget_gb.toFixed(1)} GB this computer can give to models.`
+        : "No model sizes are available right now.";
     } catch (e: unknown) {
       detectError = true;
       presetError = true;
@@ -103,7 +124,20 @@
     }
   };
 
-  const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name} preset (~${p.ram})?`; };
+  const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name} (${p.ram})?`; };
+  // The recommended size installs in one click; other sizes confirm first.
+  const installRecommended = () => {
+    if (!recommended) return;
+    selected = recommended;
+    void install();
+  };
+  const onlineSaved = (saved: CloudConfigStatus) => {
+    const provider = saved.providers.at(-1);
+    status = provider
+      ? `${provider.label} is connected. Pick one of its models in the chat's model menu. Messages go to it only while the chat uses one of its models.`
+      : "The provider is connected.";
+    step = "done";
+  };
   const install = async () => {
     if (!selected) return;
     setupError = null;
@@ -114,9 +148,11 @@
       await api.downloadModelPreset(preset.id, (evt) => {
         if (evt.status === "failed") return;
         progress = Math.round(evt.percent);
-        status = `Downloading ${preset.name} models (${evt.model_id})...`;
+        status = progress >= 100
+          ? "Starting the model. The first start also downloads the engine for this processor, so it can take a minute."
+          : `Downloading ${preset.name} (${evt.model_id})...`;
       });
-      step = "done"; status = `${preset.name} preset installed.`;
+      step = "done"; status = `${preset.name} is installed and ready to chat. You can switch models any time on the Models screen.`;
     } catch (e: unknown) {
       const message = errorMessage(e);
       setupError = /cancel/i.test(message) ? null : message;
@@ -294,36 +330,60 @@
           <span class="text-ember-200">{formatBytes(budget)}</span>
         </div>
       </div>
-      <p class="text-sm text-ink-400 mb-4">
-        {#if presetError}
-          Presets could not be loaded; retry detection.
-        {:else}
-          Presets that fit your budget:
-        {/if}
-      </p>
-      <div class="space-y-2">
-        {#each presets as p}
-          {@const fits = p.ramGb <= budgetGb}
-          {@const isRec = p.id === recommended.id}
-          <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'} ${isRec && fits ? 'ring-1 ring-ember-500/40' : ''}`}>
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="font-medium text-ink-100 flex items-center gap-2">
-                  {p.name}
-                  {#if isRec && fits}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-ember-500/20 text-ember-300 border border-ember-500/30">Recommended</span>
-                  {/if}
-                </div>
-                <div class="text-xs text-ink-400">{p.ram} · {p.fits} · {fits ? 'Fits' : 'Too large'}</div>
+      <p class="-mt-3 mb-5 text-xs text-ink-500">"For models" is the share of memory LocalAide lets a model use, so the rest of the computer stays quick. You can change it later in Settings → General.</p>
+      {#if presetError || !recommended}
+        <p class="mb-4 text-sm text-ink-400">Model sizes could not be loaded. Retry, or connect an online provider below.</p>
+      {:else}
+        <!-- The one-click path: the largest size that fits this computer. -->
+        <div class={`rounded-lg border p-4 ${tightMemory ? "border-edge bg-ink-950" : "border-ember-500/40 bg-ember-500/10"}`}>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 font-medium text-ink-50">
+                {recommended.name}
+                {#if !tightMemory}<span class="rounded border border-ember-500/30 bg-ember-500/20 px-1.5 py-0.5 text-xs text-ember-300">Recommended</span>{/if}
               </div>
-              <div class="text-xs text-ink-400">{#if !fits}<Icon name="close" class="w-3.5 h-3.5" />{/if}</div>
+              <div class="mt-0.5 text-xs text-ink-400">{recommended.ram} · {recommended.models.join(", ")}</div>
+              {#if tightMemory}
+                <p class="mt-2 text-xs text-amber-300">This computer has less memory for models than this size needs. It may run slowly; an online provider below is the smoother start.</p>
+              {/if}
             </div>
-            <ul class="mt-2 text-xs text-ink-400 list-disc list-inside">
-              {#each p.models as m}<li>{m}</li>{/each}
-            </ul>
-          </button>
-        {/each}
-      </div>
+            <button onclick={installRecommended} class="shrink-0 rounded-lg bg-ember-600 px-4 py-2 text-sm font-medium text-on-ember transition-colors hover:bg-ember-500">Install {recommended.name}</button>
+          </div>
+        </div>
+        {#if otherPresets.length > 0}
+          <details class="mt-3 group">
+            <summary class="cursor-pointer select-none text-sm text-ink-400 hover:text-ink-200">Other sizes</summary>
+            <div class="mt-2 space-y-2">
+              {#each otherPresets as p (p.id)}
+                {@const fits = p.ramGb <= budgetGb}
+                <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'}`}>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="font-medium text-ink-100">{p.name}</div>
+                      <div class="text-xs text-ink-400">{p.ram} · {p.fits} · {fits ? 'Fits' : 'Too large'}</div>
+                    </div>
+                    <div class="text-xs text-ink-400">{#if !fits}<Icon name="close" class="w-3.5 h-3.5" />{/if}</div>
+                  </div>
+                  <ul class="mt-2 text-xs text-ink-400 list-disc list-inside">
+                    {#each p.models as m}<li>{m}</li>{/each}
+                  </ul>
+                </button>
+              {/each}
+            </div>
+          </details>
+        {/if}
+      {/if}
+
+      {#if onlineAvailable}
+        <button onclick={() => { setupError = null; step = "online"; }} class={`mt-4 flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition hover:bg-veil/[0.02] ${tightMemory ? "border-ember-500/40 bg-ember-500/10" : "border-edge hover:border-ember-500/50"}`}>
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-200"><Icon name="cloud" class="h-4 w-4" /></span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-ink-100">Use an online provider instead{#if tightMemory} <span class="ml-1 rounded border border-ember-500/30 bg-ember-500/20 px-1.5 py-0.5 text-xs text-ember-300">Recommended</span>{/if}</span>
+            <span class="block text-xs text-ink-400">Nothing to download. Some providers are free and need no key. Messages go to the provider you choose.</span>
+          </span>
+          <Icon name="chevron-right" class="h-4 w-4 shrink-0 text-ink-500" />
+        </button>
+      {/if}
 
       <div class="mt-6 border-t border-edge pt-4">
         {#if !communityOpen}
@@ -408,6 +468,9 @@
           </p>
         {/if}
       </div>
+    {:else if step === "online"}
+      <p class="mb-3 text-sm leading-6 text-ink-400">Choose a provider. Its models appear in the chat's model menu; a message goes online only while the chat uses one of them. A key stays on this computer and is sent only to that provider.</p>
+      <ProviderForm editing={null} onSaved={onlineSaved} onCancel={() => (step = "preset")} />
     {:else if step === "confirm"}
       <div class="bg-ink-950 rounded-lg p-4 mb-6 border border-edge">
         <div class="font-medium text-ink-100">{selected?.name} preset</div>
@@ -439,6 +502,15 @@
           <div class="font-medium text-ink-100">Setup complete</div>
           <div class="text-sm text-ink-400">{status}</div>
         </div>
+      </div>
+      <div class="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-ink-950 px-4 py-3">
+        <span class="text-sm text-ink-300">Look</span>
+        <div class="flex gap-1.5" role="radiogroup" aria-label="Theme">
+          {#each [{ id: "dark", label: "Dark" }, { id: "light", label: "Light" }] as option (option.id)}
+            <button type="button" role="radio" aria-checked={theme === option.id} onclick={() => void chooseTheme(option.id as Theme)} class={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${theme === option.id ? "border-ember-500/50 bg-ember-500/15 text-ember-200" : "border-edge text-ink-300 hover:bg-veil/5"}`}>{option.label}</button>
+          {/each}
+        </div>
+        <span class="text-xs text-ink-500">Colors, fonts and size are in Settings → General → Appearance.</span>
       </div>
       <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium transition-colors hover:bg-ember-500">Open app</button>
     {/if}

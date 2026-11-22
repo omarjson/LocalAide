@@ -998,7 +998,7 @@
               {/snippet}
             </SettingsRow>
           </SettingsGroup>
-          <p class="mt-3 text-sm text-ink-400">Online providers are off until you add one. When they are on, a message goes online only when you pick an online model in the chat.</p>
+          <p class="mt-3 text-sm text-ink-400">Online providers are off until you add one. You can also add one straight from the chat's model menu. When they are on, a message goes online only when you pick an online model in the chat.</p>
         </div>
       {:else if activeTab === "online"}
         <div>
@@ -1014,7 +1014,7 @@
           <SettingsGroup>
             <SettingsRow icon="cloud" title="Chat can use online models" description={cloud?.online_allowed ? "On. The providers switched on below appear in the chat's model menu. Pick one of their models there to use it." : "Off. Chat uses the model on this computer, and the providers below are not available."}>
               {#snippet control()}
-                <Switch checked={cloud?.online_allowed ?? false} label="Chat can use online models" disabled={cloudBusy || !cloud || cloud.providers.length === 0} onchange={(on) => void setOnline(on)} />
+                <Switch checked={cloud?.online_allowed ?? false} label="Chat can use online models" disabled={cloudBusy || !cloud} onchange={(on) => { if (on && cloud && cloud.providers.length === 0) openAddProvider(); void setOnline(on); }} />
               {/snippet}
             </SettingsRow>
           </SettingsGroup>

@@ -616,8 +616,14 @@ pub fn cloud_provider_save(
         }
     };
 
+    // Adding a provider is the user's opt-in to online models: its models
+    // appear in the model menu at once, without a second switch elsewhere.
+    // Chat still stays on this computer until the user picks one of them.
+    if req.id.is_none() {
+        cfg.online_allowed = Some(true);
+    }
     // A first provider becomes the active one, but cloud mode stays off until
-    // the user switches it on explicitly.
+    // the user picks one of its models.
     if cfg.active_cloud_provider.is_none() {
         cfg.active_cloud_provider = Some(id);
     }
