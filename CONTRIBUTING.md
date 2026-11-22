@@ -13,8 +13,8 @@ Thank you for your interest in contributing. LocalAide is a local-first AI deskt
 ## Development Setup
 
 Requirements:
-* Rust 1.90+ (stable toolchain)
-* Node 20+
+* Rust 1.100.0, the version pinned in `rust-toolchain.toml`, with `rustfmt` and `clippy`
+* Node 24+ (`.nvmrc` and `package.json`; run `nvm use 24`)
 * Tauri prerequisites for your platform
 
 ```bash
