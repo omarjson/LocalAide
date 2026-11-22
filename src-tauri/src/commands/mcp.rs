@@ -447,12 +447,18 @@ fn save_server(state: &AppState, req: McpServerSaveRequest) -> Result<Vec<McpSer
         // Older clients omit these fields; keep whatever was stored so a
         // save that only changes the name does not silently drop tool gates.
         enabled_tools: if req.enabled_tools.is_empty() {
-            existing.as_ref().map(|s| s.enabled_tools.clone()).unwrap_or_default()
+            existing
+                .as_ref()
+                .map(|s| s.enabled_tools.clone())
+                .unwrap_or_default()
         } else {
             req.enabled_tools
         },
         disabled_tools: if req.disabled_tools.is_empty() {
-            existing.as_ref().map(|s| s.disabled_tools.clone()).unwrap_or_default()
+            existing
+                .as_ref()
+                .map(|s| s.disabled_tools.clone())
+                .unwrap_or_default()
         } else {
             req.disabled_tools
         },

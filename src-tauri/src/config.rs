@@ -381,10 +381,7 @@ impl AppConfig {
             .get(provider_id)
             .cloned()
             .unwrap_or_default();
-        if let Some(provider) = self
-            .cloud_providers
-            .iter()
-            .find(|p| p.id == provider_id)
+        if let Some(provider) = self.cloud_providers.iter().find(|p| p.id == provider_id)
             && !provider.api_key.trim().is_empty()
             && !keys.contains(&provider.api_key)
         {

@@ -8,9 +8,7 @@ use tauri::State;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::commands::cloud::{load_config, save_config};
-use crate::config::{
-    AppConfig, HooksConfig, PermissionRule, RoutingConfig, ToolDecision,
-};
+use crate::config::{AppConfig, HooksConfig, PermissionRule, RoutingConfig, ToolDecision};
 use crate::services::agents::{Agent, AgentsService};
 
 /// Everything the UI needs to show and edit the policy.
@@ -87,11 +85,7 @@ pub fn policy_config_set(
 
 /// Preview the decision a tool call would get, without running it.
 #[tauri::command]
-pub fn policy_decide(
-    state: State<'_, AppState>,
-    action: String,
-    resource: String,
-) -> ToolDecision {
+pub fn policy_decide(state: State<'_, AppState>, action: String, resource: String) -> ToolDecision {
     let cfg = load_config(&state).unwrap_or_default();
     cfg.decide_tool_call(&action, &resource)
 }

@@ -504,12 +504,19 @@ mod tests {
                 input_schema: json!({}),
             })
             .collect();
-        assert_eq!(filter_tools(tools.clone(), &cfg).len(), 3, "older configs expose all");
+        assert_eq!(
+            filter_tools(tools.clone(), &cfg).len(),
+            3,
+            "older configs expose all"
+        );
 
         cfg.enabled_tools = vec!["a".into(), "b".into(), "c".into()];
         cfg.disabled_tools = vec!["b".into()];
         let kept = filter_tools(tools, &cfg);
-        assert_eq!(kept.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["a", "c"]);
+        assert_eq!(
+            kept.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
+            ["a", "c"]
+        );
         assert!(tool_enabled(&cfg, "a"));
         assert!(!tool_enabled(&cfg, "b"));
         assert!(!tool_enabled(&cfg, "missing"));

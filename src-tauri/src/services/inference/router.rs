@@ -68,7 +68,10 @@ impl RouterEngine {
     /// Apply the routing settings from config. `provider_id` selects whose
     /// key pool to use; pass None to clear the pool. Safe to call at any time.
     pub fn apply_routing(&self, cfg: &AppConfig, provider_id: Option<&str>) {
-        *self.provider_order.lock().unwrap_or_else(|e| e.into_inner()) = cfg.provider_order();
+        *self
+            .provider_order
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = cfg.provider_order();
         let pool = provider_id
             .map(|id| cfg.credentials_for(id))
             .filter(|pool| !pool.is_empty());

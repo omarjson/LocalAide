@@ -581,11 +581,7 @@ struct WireImageUrl<'a> {
     url: &'a str,
 }
 
-fn wire_body(
-    messages: &[PromptMessage],
-    max_tokens: i32,
-    temperature: f32,
-) -> WireBody<'_> {
+fn wire_body(messages: &[PromptMessage], max_tokens: i32, temperature: f32) -> WireBody<'_> {
     let wire_messages = messages
         .iter()
         .map(|m| {

@@ -163,10 +163,7 @@ pub fn tail_window_start(file_len: u64, cap: u64) -> u64 {
 /// Skipping these reaches the next character boundary when a window starts
 /// in the middle of a multi-byte character.
 pub fn utf8_leading_continuations(bytes: &[u8]) -> usize {
-    bytes
-        .iter()
-        .take_while(|&&b| (b & 0xC0) == 0x80)
-        .count()
+    bytes.iter().take_while(|&&b| (b & 0xC0) == 0x80).count()
 }
 
 /// Tail of a local log for the Settings diagnostics panel. `source` "app" is

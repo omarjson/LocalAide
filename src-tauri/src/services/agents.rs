@@ -94,7 +94,10 @@ impl AgentsService {
         std::fs::create_dir_all(&self.dir)
             .map_err(|e| AppError::storage(format!("Failed to create agents folder: {e}")))?;
 
-        let existing = self.list()?.into_iter().find(|a| a.name.eq_ignore_ascii_case(&name));
+        let existing = self
+            .list()?
+            .into_iter()
+            .find(|a| a.name.eq_ignore_ascii_case(&name));
         let path = match &existing {
             Some(agent) => PathBuf::from(&agent.path),
             None => {
@@ -116,7 +119,11 @@ impl AgentsService {
         let agent = Agent {
             name,
             model: one_line(model),
-            tools: tools.into_iter().map(|t| one_line(&t)).filter(|t| !t.is_empty()).collect(),
+            tools: tools
+                .into_iter()
+                .map(|t| one_line(&t))
+                .filter(|t| !t.is_empty())
+                .collect(),
             prompt: prompt.to_string(),
             path: path.display().to_string(),
         };
@@ -203,10 +210,7 @@ pub fn split_frontmatter(raw: &str) -> (BTreeMap<String, String>, String) {
         }
         let body_start = end + 4; // past "\n---"
         let body = after.get(body_start..).unwrap_or("");
-        return (
-            front,
-            body.trim_start_matches(['\n', '\r']).to_string(),
-        );
+        return (front, body.trim_start_matches(['\n', '\r']).to_string());
     }
     (front, raw.to_string())
 }

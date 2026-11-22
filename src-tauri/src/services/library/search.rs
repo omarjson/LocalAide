@@ -310,11 +310,7 @@ impl TopK {
     /// arrival order. This is the same ranking the sorted-buffer approach gave.
     pub fn into_sorted(self) -> Vec<(f32, String)> {
         let mut items: Vec<Candidate> = self.heap.into_iter().collect();
-        items.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-                .then_with(|| a.seq.cmp(&b.seq))
-        });
+        items.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.seq.cmp(&b.seq)));
         items.into_iter().map(|c| (c.score, c.id)).collect()
     }
 }

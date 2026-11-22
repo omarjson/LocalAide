@@ -93,6 +93,12 @@ pub fn run() {
     if let Ok(store) = app_state.config_store.lock()
         && let Ok(cfg) = store.load()
     {
+        // Durable tool rules, hooks and provider routing are applied before
+        // any chat tool or model request can run.
+        app_state.tools.apply_config(&cfg);
+        app_state
+            .inference_engine
+            .apply_routing(&cfg, cfg.active_cloud_provider.as_deref());
         if cfg.cloud_llm_enabled && cfg.online_allowed() {
             let active = cfg
                 .active_cloud_provider
@@ -354,6 +360,19 @@ pub fn run() {
             commands::mcp_server_delete,
             commands::mcp_server_test,
             commands::mcp_import,
+            commands::mcp_server_set_tools,
+            commands::session_search,
+            commands::session_reindex,
+            commands::multi_run_chat,
+            commands::doctor_run,
+            commands::context_files_list,
+            commands::context_refs_resolve,
+            commands::policy_config_get,
+            commands::policy_config_set,
+            commands::policy_decide,
+            commands::agents_list,
+            commands::agents_read,
+            commands::agents_save,
         ])
         // Pages the model draws in chat, each with its own strict policy.
         .register_uri_scheme_protocol("mockup", |_ctx, request| {
