@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [0.2.1] - 2026-11-22
 
-A hotfix for 0.2.0: closing the window on Windows works again, the effort bar and context meter behave, the context count is the model's own, and installing over an older LocalAide is one short wizard. Your chats, notes, models and settings are kept.
+Interactive forms in the chat, messages you can queue or steer while an answer runs, and online providers you add without leaving the chat. This release also fixes closing the window on Windows, the effort bar and the context meter, and makes installing over an older LocalAide one short wizard. Your chats, notes, models and settings are kept.
 
 ### Added
 - **Interactive forms in the chat (A2UI 1.0).** When a form helps (a booking, a checklist, a quiz, settings to pick), the model can draw one with Google's open A2UI protocol, and LocalAide draws it with its own controls: text fields, checkboxes, choice chips, sliders, date pickers, tabs, cards, dialogs and buttons. Buttons stay disabled until the form's checks pass. Pressing one sends what you filled in back to the model as your next message (shown as "Sent from the form"), and a later answer can update the same form. Nothing on a form loads from the internet; a web image shows as a link you can open. If a form has a problem, the chat says what and offers "Ask to fix it". See `docs/adr/0013-a2ui-forms.md`.
