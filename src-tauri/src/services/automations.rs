@@ -302,10 +302,10 @@ impl crate::services::agent::Sink for AnswerSink {
     }
 }
 
-struct Answer {
-    ok: bool,
-    text: String,
-    ms: u64,
+pub(crate) struct Answer {
+    pub ok: bool,
+    pub text: String,
+    pub ms: u64,
 }
 
 /// Run one prompt through the normal agent loop: no tools, no approvals,

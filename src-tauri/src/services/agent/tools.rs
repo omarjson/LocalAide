@@ -665,7 +665,7 @@ fn make_document(
         ok: true,
         for_model,
         summary: format!("Made {name}"),
-        for_user: format!("{name} — {kind}, {} KB", (written + 1023) / 1024),
+        for_user: format!("{name} — {kind}, {} KB", written.div_ceil(1024)),
         citations: Vec::new(),
     }
 }

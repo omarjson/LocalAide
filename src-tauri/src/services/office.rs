@@ -393,7 +393,7 @@ pub fn make_pptx(_title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
     );
     for (index, slide) in slides.iter().enumerate() {
         let n = index + 1;
-        let mut body = slide_text(457200, 274638, 7772400, 1325563, 40, true, &[slide.title.clone()]);
+        let mut body = slide_text(457200, 274638, 7772400, 1325563, 40, true, std::slice::from_ref(&slide.title));
         let bullets: Vec<String> = if slide.bullets.is_empty() {
             vec![String::new()]
         } else {
