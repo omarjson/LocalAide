@@ -117,6 +117,14 @@ impl RouterEngine {
         // different model is loaded next.
     }
 
+    /// Switch the router to cloud mode without configuring a target yet.
+    /// Used when the UI toggle is on but no provider is selected: chat then
+    /// reports "no model" instead of silently falling back to the local one.
+    pub fn set_cloud_mode(&self) {
+        self.remote.clear();
+        *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = EngineMode::Cloud;
+    }
+
     /// Switch back to the local engine. A model must be loaded before chat works.
     pub fn set_local(&self) {
         *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = EngineMode::Local;

@@ -250,6 +250,12 @@ const fixtures: Record<string, Handler> = {
     embedding: { ready: false, model_id: null, dimension: null, total_chunks: 184, embedded_chunks: 0 },
     rerank: { ready: false, model_id: null },
     library: { doc_count: 12 },
+    performance: {
+      uptime_secs: 3600,
+      rss_bytes: 184549376,
+      logs_bytes: 4096,
+      library_db_bytes: 262144,
+    },
     config_ok: true,
   }),
   developer_get: () => ({
@@ -257,7 +263,7 @@ const fixtures: Record<string, Handler> = {
     flags: {},
     modules: {},
     flag_list: [
-      { id: "request_log", label: "Request log", description: "Time every backend call.", default: false },
+      { id: "request_log", label: "Request log panel", description: "Show backend timings in Developer.", default: false },
       { id: "no_motion", label: "Turn off animations", description: "Skip transitions everywhere.", default: false },
       { id: "compact", label: "Compact layout", description: "Tighter spacing.", default: false },
       { id: "answer_stats", label: "Answer statistics", description: "Tokens, time and speed under each answer.", default: false },

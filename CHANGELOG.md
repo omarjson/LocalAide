@@ -5,6 +5,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+- **One window chrome row.** The title bar and chat tabs are merged into a single 40px row. macOS uses an overlay title bar with native traffic lights; Windows and Linux keep the custom minimize/maximize/close buttons.
+- **Local diagnostics.** Settings → About shows uptime, resident memory, backend-call timings and local log/database sizes, plus a **Copy diagnostics** button that assembles a redacted, review-first report. Nothing is uploaded.
+- **OS keychain for provider keys.** API keys move to the macOS Keychain, Windows Credential Manager or Linux Secret Service; `config.json` keeps only a `keyring:` marker. A headless machine with no native store keeps the owner-only file fallback rather than losing the key.
+
+### Fixed
+- **Library index watcher** now has automated coverage for 500ms debouncing, ignored extensions and removal forwarding.
+- **Online provider router and SSE engine** have loopback HTTP tests for clean and truncated streams, mid-stream errors, 401 hints, no-follow redirects and cancellation.
+
+### Changed
+- Contrast checks now recompute WCAG ratios from the shipped CSS tokens in CI for both themes; the a11y evidence table carries the current palette values.
+
 ## [0.2.1] - 2026-11-22
 
 Interactive forms in the chat, messages you can queue or steer while an answer runs, and online providers you add without leaving the chat. This release also fixes closing the window on Windows, the effort bar and the context meter, and makes installing over an older LocalAide one short wizard. Your chats, notes, models and settings are kept.

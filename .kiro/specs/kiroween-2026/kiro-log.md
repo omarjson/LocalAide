@@ -130,3 +130,12 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Hooks:** `.kiro/hooks/rust-and-catalog-checks.json` (current v1 hook format) runs clippy with `-D warnings` when Rust code or `Cargo.toml` is saved, and the catalog parity test plus the Hugging Face pin check when the catalog is saved.
 - **MCP:** `.kiro/settings/mcp.json` connects the official Hugging Face MCP server. A new conditional steering file, `.kiro/steering/catalog.md` (`inclusion: fileMatch`), loads only for catalog work and tells the agent to use that server for model research, and the hook and CI for pins.
 - **Not yet verified:** the new hooks and the MCP connection have not been run. The review session's sandbox blocks huggingface.co and has no Rust 1.100.0 toolchain. Check both in the Kiro IDE before recording the demo.
+
+## 2026-11-22 — Post-submission hardening batch (Hermes, not Kiro)
+
+- **Transparency:** this batch was implemented by Hermes Agent at the operator's request. It is recorded here so the log distinguishes Kiro-driven work from other tool-driven work; no Kiro session is claimed for it.
+- **Window chrome:** the title bar and chat-tab strip became one 40px row; macOS uses an overlay title bar with native traffic lights, Windows/Linux keep custom controls. Covered by `tests/unit/window-chrome.test.ts`.
+- **Diagnostics:** `system_health` now returns uptime, resident memory and local log/database sizes. Backend calls are measured in memory at all times and a redacted, review-first report can be copied from Settings → About. Pure helpers covered by `tests/unit/diagnostics.test.ts`.
+- **Watcher:** `src-tauri/tests/library_watch_test.rs` proves 500ms debouncing, ignore rules and removal forwarding without touching SQLite.
+- **Online providers:** `services/secrets.rs` moves API keys to the OS keychain and leaves only `keyring:` markers in config.json, with a deliberate owner-only-file fallback when no native store exists. Loopback HTTP tests for `RemoteEngine` and router mode switching close tasks 8–10 of the online-providers spec.
+- **Evidence:** `tests/unit/contrast.test.ts` recomputes WCAG ratios from the shipped CSS tokens for both themes; `tests/unit/readme-links.test.ts` fails on broken README links. The a11y evidence table now carries the current palette numbers. The on-screen re-measure remains open and is not claimed as done.

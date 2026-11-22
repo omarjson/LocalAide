@@ -950,6 +950,13 @@ export interface SystemHealthResponse {
   library: {
     doc_count: number;
   };
+  /** Cheap process counters for the About → Performance panel. */
+  performance: {
+    uptime_secs: number;
+    rss_bytes: number;
+    logs_bytes: number;
+    library_db_bytes: number;
+  };
   config_ok: boolean;
 }
 

@@ -354,17 +354,59 @@ impl ConfigStore {
             return Ok(AppConfig::default());
         }
         let data = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&data).map_err(|e| e.to_string())
+        let mut cfg: AppConfig = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+        // Hydrate references from the OS keychain. Keys written by older
+        // versions are migrated on the next save (below), which keeps load
+        // cheap and never loses a key if the keychain is unavailable.
+        let mut needs_migration = false;
+        for provider in &mut cfg.cloud_providers {
+            if crate::services::secrets::is_reference(&provider.api_key) {
+                match crate::services::secrets::load(&provider.id) {
+                    Ok(Some(key)) => provider.api_key = key,
+                    Ok(None) => {
+                        log::warn!("No OS keychain entry for provider {}", provider.id);
+                        provider.api_key.clear();
+                    }
+                    Err(e) => {
+                        log::warn!("Could not read provider key from OS keychain: {e}");
+                        provider.api_key.clear();
+                    }
+                }
+            } else if !provider.api_key.is_empty() {
+                needs_migration = true;
+            }
+        }
+        if needs_migration {
+            let _ = self.save(&cfg);
+        }
+        Ok(cfg)
     }
 
-    /// Writes the config atomically. The new file is written to a temp file in
-    /// full, then renamed over the real one, so a crash mid-write keeps the old
-    /// config. The file holds API keys, so it is owner-only on Unix.
+    /// Writes the config atomically. API keys are moved to the OS keychain
+    /// and replaced with `keyring:` markers, so the file no longer holds
+    /// plain-text secrets. If the keychain is unreachable the key stays in
+    /// the file, which is still owner-only on Unix.
     pub fn save(&self, cfg: &AppConfig) -> Result<(), String> {
+        let mut on_disk = cfg.clone();
+        for provider in &mut on_disk.cloud_providers {
+            if crate::services::secrets::is_reference(&provider.api_key) {
+                continue;
+            }
+            if provider.api_key.is_empty() {
+                let _ = crate::services::secrets::delete(&provider.id);
+                continue;
+            }
+            match crate::services::secrets::save(&provider.id, &provider.api_key) {
+                Ok(()) => provider.api_key = crate::services::secrets::reference(&provider.id),
+                Err(e) => {
+                    log::warn!("OS keychain unavailable, keeping provider key in config: {e}")
+                }
+            }
+        }
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let data = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+        let data = serde_json::to_string_pretty(&on_disk).map_err(|e| e.to_string())?;
         let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, data).map_err(|e| e.to_string())?;
         #[cfg(unix)]

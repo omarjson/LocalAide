@@ -27,6 +27,8 @@
   import { settingsRequest, settingsView, type SettingsSectionId } from "../lib/nav.svelte";
   import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
+  import { buildDiagnosticReport, requestStats } from "../lib/diagnostics";
+  import { platform } from "../lib/platform";
   import type { EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
@@ -564,6 +566,31 @@
       logLines = logs;
     } catch (e: unknown) {
       settingsNotice = errorMessage(e);
+    } finally {
+      diagBusy = false;
+    }
+  };
+
+  // Copies a local report: health counters, backend timings and both log
+  // tails. The user reviews it before sharing; nothing is uploaded.
+  const copyDiagnostics = async () => {
+    diagBusy = true;
+    try {
+      const [appLog, engineLog] = await Promise.all([
+        api.getLogTail(120, "app").catch(() => [] as string[]),
+        api.getLogTail(120, "engine").catch(() => [] as string[]),
+      ]);
+      const report = buildDiagnosticReport({
+        health,
+        platform: platform(),
+        entries: requestLog.entries,
+        appLog,
+        engineLog,
+      });
+      await navigator.clipboard.writeText(report);
+      settingsNotice = "Diagnostics copied. Review before sharing.";
+    } catch (e: unknown) {
+      settingsNotice = `Could not copy diagnostics: ${errorMessage(e)}`;
     } finally {
       diagBusy = false;
     }
@@ -1396,6 +1423,25 @@
               <SettingsRow icon="file" title="Documents" description={`${health.library.doc_count} in your library`} class="border-t border-ink-800" />
               <SettingsRow icon="check" title="Settings" description={health.config_ok ? "Saved correctly" : "Could not read settings"} class="border-t border-ink-800" />
             </SettingsGroup>
+          {/if}
+          {#if health && health.performance}
+            {@const perf = requestStats(requestLog.entries)}
+            <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="font-semibold text-ink-50">Performance</h3>
+                <Button variant="subtle" disabled={diagBusy} onclick={() => void copyDiagnostics()}>Copy diagnostics</Button>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div><span class="block text-ink-500">Uptime</span><span class="font-medium text-ink-100">{health.performance.uptime_secs}s</span></div>
+                <div><span class="block text-ink-500">App memory</span><span class="font-medium text-ink-100">{formatBytes(health.performance.rss_bytes)}</span></div>
+                <div><span class="block text-ink-500">Calls · p95</span><span class="font-medium text-ink-100">{perf.count} · {perf.p95Ms.toFixed(0)} ms</span></div>
+                <div><span class="block text-ink-500">Logs on disk</span><span class="font-medium text-ink-100">{formatBytes(health.performance.logs_bytes)}</span></div>
+              </div>
+              {#if perf.slowest}
+                <p class="mt-3 text-xs text-ink-400">Slowest call: <code class="text-ink-200">{perf.slowest.command}</code> · {perf.slowest.ms.toFixed(0)} ms</p>
+              {/if}
+              <p class="mt-2 text-xs text-ink-500">Measured on this machine. Copy produces a report you can review before sharing; nothing is uploaded.</p>
+            </div>
           {/if}
           <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><h3 class="font-semibold text-ink-50">Local log</h3><div class="flex items-center gap-2"><Tabs items={logTabs} value={logSource} onChange={(value) => { if (value === "app" || value === "engine") { logSource = value; void loadDiagnostics(); } }} ariaLabel="Which log" /><Button variant="subtle" disabled={diagBusy} onclick={() => void loadDiagnostics()}>Refresh</Button></div></div>{#if logLines.length === 0}<p class="mt-3 text-sm text-ink-400">No log output yet.</p>{:else}<pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{logLines.join("\n")}</pre>{/if}</div>
         </div>

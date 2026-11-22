@@ -49,8 +49,8 @@ pub const FLAGS: &[Toggle] = &[
     },
     Toggle {
         id: "request_log",
-        label: "Request log",
-        description: "Record every call between the window and the app core, with timings, in this section.",
+        label: "Request log panel",
+        description: "Show backend timings here. Calls are measured in memory even when this is off.",
         default: false,
     },
     Toggle {

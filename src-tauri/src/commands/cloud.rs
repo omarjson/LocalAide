@@ -657,6 +657,9 @@ pub fn cloud_provider_delete(
     if cfg.cloud_providers.len() == before {
         return Err(AppError::invalid_input("That provider no longer exists."));
     }
+    // The config save only sees the providers that remain, so remove the
+    // deleted one's key from the OS keychain explicitly.
+    let _ = crate::services::secrets::delete(&provider_id);
     if cfg.active_cloud_provider.as_deref() == Some(provider_id.as_str()) {
         cfg.active_cloud_provider = cfg.cloud_providers.first().map(|p| p.id.clone());
         // Chat pointed at the deleted provider. Turn cloud mode off instead of

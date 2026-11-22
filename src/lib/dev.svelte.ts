@@ -2,7 +2,6 @@
 // and after every change in Settings → Developer.
 import { api } from "./api/client";
 import type { ChatModeInfo, DeveloperSettings, DeveloperUpdate } from "./api/bindings";
-import { requestLog } from "./requestLog.svelte";
 
 export const dev = $state<{ settings: DeveloperSettings | null }>({ settings: null });
 
@@ -23,7 +22,6 @@ export function chatModes(): ChatModeInfo[] {
 
 function apply(settings: DeveloperSettings): void {
   dev.settings = settings;
-  requestLog.enabled = flag("request_log");
   const root = document.documentElement;
   root.dataset.motion = flag("no_motion") ? "off" : "on";
   // The developer flag forces compact; otherwise the Appearance → Density

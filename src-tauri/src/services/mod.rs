@@ -12,6 +12,7 @@ pub mod memory;
 pub mod models;
 pub mod office;
 pub mod opencode;
+pub mod secrets;
 pub mod share;
 pub mod skills;
 pub mod tools;

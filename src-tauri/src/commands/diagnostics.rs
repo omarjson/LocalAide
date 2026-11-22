@@ -5,7 +5,33 @@ use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::services::inference::InferenceEngine;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::sync::OnceLock;
+use std::time::Instant;
+use sysinfo::System;
 use tauri::State;
+
+/// Set on the first health call, so uptime describes this process, not the
+/// time since the machine booted.
+static FIRST_HEALTH_CALL: OnceLock<Instant> = OnceLock::new();
+
+fn file_len(path: &Path) -> u64 {
+    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
+/// Cheap counters for the Settings → About performance panel. These are
+/// byte counts and seconds only: no paths, model names or user data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceHealth {
+    /// Seconds since the app's first health snapshot.
+    pub uptime_secs: u64,
+    /// Resident memory of the LocalAide process, in bytes.
+    pub rss_bytes: u64,
+    /// Combined size of the app and engine log files, in bytes.
+    pub logs_bytes: u64,
+    /// Size of the local library database, in bytes.
+    pub library_db_bytes: u64,
+}
 
 /// Aggregate health snapshot of every local subsystem, for the Settings
 /// diagnostics panel and the fatal-error screen's "Copy Diagnostics".
@@ -17,6 +43,8 @@ pub struct SystemHealthResponse {
     pub embedding: EmbeddingHealth,
     pub rerank: RerankHealth,
     pub library: LibraryHealth,
+    /// Counters for the performance panel; no user-visible strings.
+    pub performance: PerformanceHealth,
     /// True when config.json parsed on this call.
     pub config_ok: bool,
 }
@@ -65,6 +93,18 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
             .map_err(|e| AppError::internal(e.to_string()))?;
         store.load().is_ok()
     };
+    let uptime_secs = FIRST_HEALTH_CALL
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_secs();
+    let pid = sysinfo::Pid::from_u32(std::process::id());
+    let mut sys = System::new();
+    sys.refresh_process(pid);
+    let rss_bytes = sys.process(pid).map(|p| p.memory()).unwrap_or(0);
+    let log_dir = crate::app::paths::app_dir().join("logs");
+    let logs_bytes =
+        file_len(&log_dir.join("localaide.log")) + file_len(&log_dir.join("llama-server.log"));
+    let library_db_bytes = file_len(&crate::app::paths::index_dir().join("library.db"));
 
     Ok(SystemHealthResponse {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -88,6 +128,12 @@ pub fn system_health(state: State<'_, AppState>) -> Result<SystemHealthResponse,
         },
         library: LibraryHealth {
             doc_count: stats.doc_count as usize,
+        },
+        performance: PerformanceHealth {
+            uptime_secs,
+            rss_bytes,
+            logs_bytes,
+            library_db_bytes,
         },
         config_ok,
     })

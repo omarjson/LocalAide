@@ -35,7 +35,7 @@ Requirement ids refer to `requirements.md`. Tasks 1 to 7 shipped on 2026-11-13; 
   - `cloud_provider_presets` from the 9Router registry, plus Ollama on loopback.
   - _Requirements: R2.3, R4.3, R4.4, R4.5_ · presets in `59794c4`; key-follows-site in `248085f` (audit-2026-11-14 SEC-10)
 
-- [ ] 8. Test `RemoteEngine` over loopback HTTP
+- [x] 8. Test `RemoteEngine` over loopback HTTP
   - Start a `std::net::TcpListener` on 127.0.0.1 that serves canned SSE bodies, as the tests in `services/websearch/mod.rs` do.
   - 8.1 A normal stream ending in `[DONE]` returns every token, with `cancelled = false`.
   - 8.2 A stream that closes without `[DONE]` returns the "closed the stream before completion" error with the token count.
@@ -43,14 +43,16 @@ Requirement ids refer to `requirements.md`. Tasks 1 to 7 shipped on 2026-11-13; 
   - 8.4 A 401 reply produces the "API key looks wrong" hint.
   - 8.5 A 302 reply is not followed: the server counts the requests it gets, and the redirect target receives none.
   - 8.6 Setting the cancel flag after the first token ends generation with `cancelled = true` and no error.
+  - Implemented in `src-tauri/tests/remote_engine_test.rs`; a 401 with no key also checks the "needs an API key" hint.
   - _Requirements: R3.4, R5.2, R5.3, R5.4, R5.5_
 
-- [ ] 9. Move API keys to the OS keychain
+- [x] 9. Move API keys to the OS keychain
   - Store keys under a per-provider entry; keep only a reference in `config.json`.
   - Migrate existing plain-text keys on first launch, then remove them from the file.
+  - `services/secrets.rs` uses the macOS Keychain, Windows Credential Manager or Linux Secret Service. When no native store is reachable (headless Linux), the key stays in the owner-only config file rather than being lost — that fallback is deliberate, not keychain storage.
   - _Requirements: R4.1; the secret storage NFR_
 
-- [ ] 10. Test the router's mode switching
+- [x] 10. Test the router's mode switching
   - `load()` after `set_cloud_target()` returns `EngineMode::Local`.
-  - `status()` in cloud mode with no target reports `loaded: false`.
+  - `status()` in cloud mode with no target reports `loaded: false` (`RouterEngine::set_cloud_mode`).
   - _Requirements: R1.3, R1.4_
