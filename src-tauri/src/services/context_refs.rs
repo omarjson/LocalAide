@@ -102,10 +102,10 @@ fn is_sensitive(path: &Path) -> bool {
         return true;
     }
     const DENY_EXT: [&str; 5] = ["pem", "key", "p12", "pfx", "p8"];
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        if DENY_EXT.contains(&ext.to_ascii_lowercase().as_str()) {
-            return true;
-        }
+    if let Some(ext) = path.extension().and_then(|e| e.to_str())
+        && DENY_EXT.contains(&ext.to_ascii_lowercase().as_str())
+    {
+        return true;
     }
     const DENY_NAMES: [&str; 7] = [
         "id_rsa",
@@ -263,11 +263,11 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("note.txt"), "one\ntwo\nthree\nfour\n").unwrap();
-        let r = resolve("@note.txt:2-3", &[dir.clone()], 1024).unwrap();
+        let r = resolve("@note.txt:2-3", std::slice::from_ref(&dir), 1024).unwrap();
         assert_eq!(r.text, "two\nthree\n");
         assert_eq!(r.total_lines, 4);
-        assert!(resolve("@/etc/passwd", &[dir.clone()], 1024).is_err());
-        assert!(resolve("@.env", &[dir.clone()], 1024).is_err());
+        assert!(resolve("@/etc/passwd", std::slice::from_ref(&dir), 1024).is_err());
+        assert!(resolve("@.env", std::slice::from_ref(&dir), 1024).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 }

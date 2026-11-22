@@ -1152,8 +1152,8 @@ impl LibraryDb {
 pub fn decode_embedding_into(blob: &[u8], out: &mut Vec<f32>) {
     out.clear();
     out.reserve(blob.len() / 4);
-    for chunk in blob.chunks_exact(4) {
-        out.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+    for chunk in blob.as_chunks::<4>().0 {
+        out.push(f32::from_le_bytes(*chunk));
     }
 }
 

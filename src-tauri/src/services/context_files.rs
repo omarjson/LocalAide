@@ -169,11 +169,11 @@ mod tests {
         fs::create_dir_all(dir.join("sub")).unwrap();
         fs::write(dir.join("AGENTS.md"), "be kind").unwrap();
         fs::write(dir.join("sub").join(".cursorrules"), "use tabs").unwrap();
-        let result = collect(&[dir.clone()], 1024).unwrap();
+        let result = collect(std::slice::from_ref(&dir), 1024).unwrap();
         assert_eq!(result.files.len(), 2);
         assert!(result.text.contains("be kind"));
         assert!(!result.truncated);
-        let small = collect(&[dir.clone()], 12).unwrap();
+        let small = collect(std::slice::from_ref(&dir), 12).unwrap();
         assert!(small.truncated);
         let _ = fs::remove_dir_all(&dir);
     }

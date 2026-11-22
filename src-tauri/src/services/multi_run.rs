@@ -73,10 +73,10 @@ fn call_one(target: RunTarget, prompt: String) -> RunAnswer {
         }
 
         let mut request = client.post(&url).json(&body);
-        if let Some(key) = target.api_key.as_deref() {
-            if !key.is_empty() {
-                request = request.bearer_auth(key);
-            }
+        if let Some(key) = target.api_key.as_deref()
+            && !key.is_empty()
+        {
+            request = request.bearer_auth(key);
         }
         let response = request.send().map_err(|e| format!("Request failed: {e}"))?;
         if !response.status().is_success() {

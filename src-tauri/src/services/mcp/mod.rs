@@ -20,7 +20,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::app::error::AppError;
-use crate::config::{McpServerConfig, McpTransport};
+pub use crate::config::{McpServerConfig, McpTransport};
 use transport::{HttpTransport, StdioTransport, Transport};
 
 /// Protocol revision offered in `initialize`.
