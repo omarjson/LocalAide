@@ -114,7 +114,11 @@ pub fn pair_code_from(token: &str) -> String {
     // 5 bytes = exactly 8 five-bit groups.
     let chars: Vec<char> = code.chars().collect();
     let (a, b) = (&chars[0..4], &chars[4..8]);
-    format!("{}-{}", a.iter().collect::<String>(), b.iter().collect::<String>())
+    format!(
+        "{}-{}",
+        a.iter().collect::<String>(),
+        b.iter().collect::<String>()
+    )
 }
 
 /// The pair info of the running share session, QR included.
@@ -281,13 +285,22 @@ mod tests {
         assert_eq!(code.len(), 9);
         assert_eq!(code.as_bytes()[4], b'-');
         for c in code.chars().filter(|c| *c != '-') {
-            assert!(c.is_ascii_digit() || c.is_ascii_uppercase(), "{c} is not readable");
+            assert!(
+                c.is_ascii_digit() || c.is_ascii_uppercase(),
+                "{c} is not readable"
+            );
             assert!(!"IOU".contains(c), "{c} reads like another letter");
         }
         // The same token always makes the same code.
-        assert_eq!(pair_code_from("abcdef0123456789abcdef0123456789abcdef0123456789ab"), code);
+        assert_eq!(
+            pair_code_from("abcdef0123456789abcdef0123456789abcdef0123456789ab"),
+            code
+        );
         // Different tokens differ.
-        assert_ne!(pair_code_from("ffffffff0123456789abcdef0123456789abcdef0123456789ab"), code);
+        assert_ne!(
+            pair_code_from("ffffffff0123456789abcdef0123456789abcdef0123456789ab"),
+            code
+        );
     }
     use std::sync::Arc as A;
 

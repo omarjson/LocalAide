@@ -243,7 +243,12 @@ fn scan_plugin_cache(configured: &std::collections::HashSet<String>) -> Vec<ArtC
     else {
         return Vec::new();
     };
-    let cache = home.join(".zcode").join("cli").join("plugins").join("cache").join("zcode-plugins-official");
+    let cache = home
+        .join(".zcode")
+        .join("cli")
+        .join("plugins")
+        .join("cache")
+        .join("zcode-plugins-official");
     let Ok(entries) = std::fs::read_dir(&cache) else {
         return Vec::new();
     };
@@ -253,16 +258,15 @@ fn scan_plugin_cache(configured: &std::collections::HashSet<String>) -> Vec<ArtC
         let plugin_name = entry.file_name().to_string_lossy().to_string();
         // Newest version folder wins; versions sort like 0.2.10 vs 0.2.9,
         // which string sort gets wrong, so compare numerically.
-        let Ok(versions) = std::fs::read_dir(&plugin_dir) else { continue };
+        let Ok(versions) = std::fs::read_dir(&plugin_dir) else {
+            continue;
+        };
         let mut version_dirs: Vec<(std::path::PathBuf, (u64, u64, u64))> = versions
             .flatten()
             .filter(|v| v.path().join(".zcode-plugin").join("plugin.json").is_file())
             .filter_map(|v| {
                 let name = v.file_name().to_string_lossy().to_string();
-                let parts: Vec<u64> = name
-                    .split('.')
-                    .map(|p| p.parse().unwrap_or(0))
-                    .collect();
+                let parts: Vec<u64> = name.split('.').map(|p| p.parse().unwrap_or(0)).collect();
                 if parts.len() == 3 {
                     Some((v.path(), (parts[0], parts[1], parts[2])))
                 } else {
@@ -271,20 +275,33 @@ fn scan_plugin_cache(configured: &std::collections::HashSet<String>) -> Vec<ArtC
             })
             .collect();
         version_dirs.sort_by_key(|a| std::cmp::Reverse(a.1));
-        let Some((dir, _)) = version_dirs.into_iter().next() else { continue };
-        let version = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
-        let Ok(manifest) = std::fs::read_to_string(dir.join(".zcode-plugin").join("plugin.json")) else {
+        let Some((dir, _)) = version_dirs.into_iter().next() else {
+            continue;
+        };
+        let version = dir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let Ok(manifest) = std::fs::read_to_string(dir.join(".zcode-plugin").join("plugin.json"))
+        else {
             continue;
         };
         let Ok(json) = serde_json::from_str::<serde_json::Value>(&manifest) else {
             continue;
         };
-        let Some(servers) = json.get("mcpServers").and_then(|m| m.as_object()) else { continue };
+        let Some(servers) = json.get("mcpServers").and_then(|m| m.as_object()) else {
+            continue;
+        };
         let (server_name, server) = match servers.iter().next() {
             Some(pair) => pair,
             None => continue,
         };
-        let command = server.get("command").and_then(|c| c.as_str()).unwrap_or("node").to_string();
+        let command = server
+            .get("command")
+            .and_then(|c| c.as_str())
+            .unwrap_or("node")
+            .to_string();
         let raw_args: Vec<String> = server
             .get("args")
             .and_then(|a| a.as_array())
@@ -304,19 +321,30 @@ fn scan_plugin_cache(configured: &std::collections::HashSet<String>) -> Vec<ArtC
             .and_then(|e| e.as_object())
             .map(|e| {
                 e.iter()
-                    .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.replace("${ZCODE_PROJECT_DIR}", ""))))
+                    .filter_map(|(k, v)| {
+                        v.as_str()
+                            .map(|v| (k.clone(), v.replace("${ZCODE_PROJECT_DIR}", "")))
+                    })
                     .collect()
             })
             .unwrap_or_default();
         // The server entry must exist for the preset to be ready to run.
         let entry = raw_args.iter().find(|a| a.ends_with(".mjs"));
-        let ready = entry.map(|e| std::path::Path::new(e).is_file()).unwrap_or(false);
+        let ready = entry
+            .map(|e| std::path::Path::new(e).is_file())
+            .unwrap_or(false);
         let id = format!("artcraft-{plugin_name}");
         let name = json
             .get("description")
             .and_then(|d| d.as_str())
             .map(|d| {
-                let plugin = plugin_name.chars().next().unwrap_or('a').to_uppercase().collect::<String>() + &plugin_name[1..];
+                let plugin = plugin_name
+                    .chars()
+                    .next()
+                    .unwrap_or('a')
+                    .to_uppercase()
+                    .collect::<String>()
+                    + &plugin_name[1..];
                 format!("{plugin} — {}", d.split('.').next().unwrap_or(d))
             })
             .unwrap_or_else(|| format!("ArtCraft {plugin_name}"));

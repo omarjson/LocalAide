@@ -80,7 +80,9 @@ impl AppState {
             engine_loading: Arc::new(AtomicBool::new(false)),
             mcp: Arc::new(McpManager::new()),
             agent: Arc::new(AgentState::new()),
-            automations: Arc::new(crate::services::automations::AutomationsService::load(&crate::app::paths::app_dir())),
+            automations: Arc::new(crate::services::automations::AutomationsService::load(
+                &crate::app::paths::app_dir(),
+            )),
             dropped_paths: Arc::new(Mutex::new(Vec::new())),
         }
     }

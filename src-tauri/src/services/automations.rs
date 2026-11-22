@@ -8,15 +8,15 @@
 
 use std::path::PathBuf;
 
-use tauri::Emitter;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 
 use serde::{Deserialize, Serialize};
 
 use crate::app::error::AppError;
-use crate::app::state::AppState;
 use crate::app::events::ChatStreamEvent;
+use crate::app::state::AppState;
 
 /// One scheduled prompt. `kind` picks the clock: "daily" fires at
 /// `hour`:`minute` local time, "hourly" on the hour, "every" every
@@ -165,14 +165,17 @@ impl AutomationsService {
             let guard = self.store.lock().unwrap_or_else(|e| e.into_inner());
             guard.automations.iter().find(|a| a.id == id).cloned()
         };
-        let Some(automation) = automation else { return false };
+        let Some(automation) = automation else {
+            return false;
+        };
         let state = state.clone();
         let service = self.clone();
         std::thread::spawn(move || {
             let answer = run_prompt(&state, &automation.prompt);
             let runs = {
                 let mut guard = service.store.lock().unwrap_or_else(|e| e.into_inner());
-                if let Some(existing) = guard.automations.iter_mut().find(|a| a.id == automation.id) {
+                if let Some(existing) = guard.automations.iter_mut().find(|a| a.id == automation.id)
+                {
                     existing.last_run_at = Some(now_secs());
                 }
                 guard.runs.insert(
@@ -296,8 +299,7 @@ impl crate::services::agent::Sink for AnswerSink {
                 guard.push_str(&token);
             }
         } else if let ChatStreamEvent::Done { .. } = event {
-            self.ok
-                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.ok.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }

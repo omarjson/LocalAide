@@ -56,6 +56,10 @@ pub async fn automations_delete(
 /// Run one automation right now. The answer lands in the feed when the
 /// model finishes; the screen hears about it through `automations-changed`.
 #[tauri::command]
-pub fn automations_run_now(state: State<'_, AppState>, handle: tauri::AppHandle, id: String) -> bool {
+pub fn automations_run_now(
+    state: State<'_, AppState>,
+    handle: tauri::AppHandle,
+    id: String,
+) -> bool {
     state.automations.run_now(&state, handle, &id)
 }

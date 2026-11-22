@@ -74,7 +74,11 @@ impl ToolKind {
             Self::ListSkills | Self::UseSkill | Self::SaveSkill => "skills",
             Self::Todos => "todos",
             Self::Subagent => "subagent",
-            Self::ListFiles | Self::ReadFile | Self::SearchFiles | Self::WriteFile | Self::MakeDocument => "files",
+            Self::ListFiles
+            | Self::ReadFile
+            | Self::SearchFiles
+            | Self::WriteFile
+            | Self::MakeDocument => "files",
             Self::RunCommand => "shell",
             Self::AskUser => "question",
             Self::Mcp => "mcp",
@@ -83,7 +87,10 @@ impl ToolKind {
 
     /// Tools that change something wait for the user.
     pub fn changes_something(self) -> bool {
-        matches!(self, Self::SaveNote | Self::WriteFile | Self::MakeDocument | Self::Mcp)
+        matches!(
+            self,
+            Self::SaveNote | Self::WriteFile | Self::MakeDocument | Self::Mcp
+        )
     }
 }
 
@@ -514,7 +521,9 @@ pub fn describe(spec: &ToolSpec, args: &Value) -> (String, String) {
         ToolKind::ReadPage => text("url"),
         ToolKind::SaveNote | ToolKind::SuggestNote => text("title"),
         ToolKind::UseSkill => text("name"),
-        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile | ToolKind::MakeDocument => text("path"),
+        ToolKind::ListFiles | ToolKind::ReadFile | ToolKind::WriteFile | ToolKind::MakeDocument => {
+            text("path")
+        }
         ToolKind::ListSkills => String::new(),
         ToolKind::RunCommand => text("command"),
         ToolKind::AskUser => text("question"),
@@ -650,11 +659,7 @@ fn make_document(
         "written",
         Some(&format!("{kind}, {written} bytes")),
     );
-    let name = path
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(&path)
-        .to_string();
+    let name = path.rsplit(['\\', '/']).next().unwrap_or(&path).to_string();
     let (for_model, _truncated) = cut(
         &format!(
             "The document {name} is on disk: {kind}, {written} bytes, in the chat's folder. Tell the user the file name."

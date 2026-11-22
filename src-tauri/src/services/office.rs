@@ -165,9 +165,7 @@ fn docx_paragraph(text: &str, bold: bool, half_points: u32, before: u32, after: 
         rpr.push_str(&format!("<w:sz w:val=\"{half_points}\"/>"));
     }
     let spacing = if before > 0 || after > 0 {
-        format!(
-            "<w:spacing w:before=\"{before}\" w:after=\"{after}\"/>"
-        )
+        format!("<w:spacing w:before=\"{before}\" w:after=\"{after}\"/>")
     } else {
         String::new()
     };
@@ -223,7 +221,13 @@ pub fn make_docx(title: &str, blocks: &[DocBlock]) -> Result<Vec<u8>, AppError> 
                     body.push_str(&docx_paragraph(&format!("•  {item}"), false, 0, 0, 60));
                 }
                 if block.items.is_empty() && !block.text.is_empty() {
-                    body.push_str(&docx_paragraph(&format!("•  {}", block.text), false, 0, 0, 60));
+                    body.push_str(&docx_paragraph(
+                        &format!("•  {}", block.text),
+                        false,
+                        0,
+                        0,
+                        60,
+                    ));
                 }
             }
             "table" => {
@@ -393,17 +397,23 @@ pub fn make_pptx(_title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
     );
     for (index, slide) in slides.iter().enumerate() {
         let n = index + 1;
-        let mut body = slide_text(457200, 274638, 7772400, 1325563, 40, true, std::slice::from_ref(&slide.title));
+        let mut body = slide_text(
+            457200,
+            274638,
+            7772400,
+            1325563,
+            40,
+            true,
+            std::slice::from_ref(&slide.title),
+        );
         let bullets: Vec<String> = if slide.bullets.is_empty() {
             vec![String::new()]
         } else {
-            slide
-                .bullets
-                .iter()
-                .map(|b| format!("•  {b}"))
-                .collect()
+            slide.bullets.iter().map(|b| format!("•  {b}")).collect()
         };
-        body.push_str(&slide_text(457200, 1828800, 7772400, 4114800, 18, false, &bullets));
+        body.push_str(&slide_text(
+            457200, 1828800, 7772400, 4114800, 18, false, &bullets,
+        ));
         let slide_xml = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>{body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
         );
@@ -412,10 +422,7 @@ pub fn make_pptx(_title: &str, slides: &[Slide]) -> Result<Vec<u8>, AppError> {
             slide_xml,
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>".to_string(),
         ));
-        presentation_ids.push_str(&format!(
-            "<p:sldId id=\"{n}\" r:id=\"rId{}\"/>",
-            n + 1
-        ));
+        presentation_ids.push_str(&format!("<p:sldId id=\"{n}\" r:id=\"rId{}\"/>", n + 1));
         presentation_rels.push_str(&format!(
             "<Relationship Id=\"rId{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{n}.xml\"/>",
             n + 1
@@ -519,10 +526,34 @@ mod tests {
     #[test]
     fn docx_builds_with_blocks() {
         let blocks = vec![
-            DocBlock { kind: "heading".into(), text: "Chapter".into(), items: vec![], rows: vec![], level: 1 },
-            DocBlock { kind: "paragraph".into(), text: "Words & <marks>".into(), items: vec![], rows: vec![], level: 0 },
-            DocBlock { kind: "bullet".into(), text: String::new(), items: vec!["one".into(), "two".into()], rows: vec![], level: 0 },
-            DocBlock { kind: "table".into(), text: String::new(), items: vec![], rows: vec![vec!["a".into(), "b".into()], vec!["1".into(), "2".into()]], level: 0 },
+            DocBlock {
+                kind: "heading".into(),
+                text: "Chapter".into(),
+                items: vec![],
+                rows: vec![],
+                level: 1,
+            },
+            DocBlock {
+                kind: "paragraph".into(),
+                text: "Words & <marks>".into(),
+                items: vec![],
+                rows: vec![],
+                level: 0,
+            },
+            DocBlock {
+                kind: "bullet".into(),
+                text: String::new(),
+                items: vec!["one".into(), "two".into()],
+                rows: vec![],
+                level: 0,
+            },
+            DocBlock {
+                kind: "table".into(),
+                text: String::new(),
+                items: vec![],
+                rows: vec![vec!["a".into(), "b".into()], vec!["1".into(), "2".into()]],
+                level: 0,
+            },
         ];
         let zip = make_docx("Report", &blocks).unwrap();
         assert!(zip.len() > 400);
@@ -533,7 +564,10 @@ mod tests {
     fn xlsx_builds_and_numbers_stay_numbers() {
         let sheets = vec![Sheet {
             name: "Q1".into(),
-            rows: vec![vec!["item".into(), "qty".into()], vec!["nails".into(), "42".into()]],
+            rows: vec![
+                vec!["item".into(), "qty".into()],
+                vec!["nails".into(), "42".into()],
+            ],
         }];
         let zip = make_xlsx(&sheets).unwrap();
         assert!(zip.len() > 400);
@@ -543,7 +577,10 @@ mod tests {
 
     #[test]
     fn pptx_builds_a_deck() {
-        let slides = vec![Slide { title: "Overview".into(), bullets: vec!["First".into(), "Second".into()] }];
+        let slides = vec![Slide {
+            title: "Overview".into(),
+            bullets: vec!["First".into(), "Second".into()],
+        }];
         let zip = make_pptx("Deck", &slides).unwrap();
         assert!(zip.len() > 1000);
         assert!(make_pptx("Deck", &[]).is_err());

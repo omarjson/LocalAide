@@ -479,7 +479,10 @@ mod tests {
         let now = 86_400 + 45_000; // day 2, 12:30
         write_log(
             &path,
-            &[rec(now, "local-model", 100), rec(now - 49_800, "local-model", 500)],
+            &[
+                rec(now, "local-model", 100),
+                rec(now - 49_800, "local-model", 500),
+            ],
         );
         let today = summary_at(&path, 1, now, None).unwrap();
         assert_eq!(today.answers, 1);
@@ -565,7 +568,13 @@ mod tests {
         let path = dir.join("usage.jsonl");
         let now = 1_960_000_000;
         // Active today and three days back, nothing between: streak is 1.
-        write_log(&path, &[rec(now, "local-model", 10), rec(now - 3 * 86_400, "local-model", 10)]);
+        write_log(
+            &path,
+            &[
+                rec(now, "local-model", 10),
+                rec(now - 3 * 86_400, "local-model", 10),
+            ],
+        );
         let sum = summary_at(&path, 7, now, None).unwrap();
         assert_eq!(sum.active_days, 2);
         assert_eq!(sum.longest_streak, 1);

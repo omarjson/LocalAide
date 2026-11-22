@@ -5,14 +5,8 @@
 /// The QR for `text`, as a compact SVG with quiet zones. Squares merge into
 /// one path so the image stays small and scales cleanly.
 pub fn svg(text: &str) -> Result<String, crate::app::error::AppError> {
-    let qr = qrcodegen::QrCode::encode_text(
-        text,
-        qrcodegen::QrCodeEcc::Medium,
-    )
-    .map_err(|_| {
-        crate::app::error::AppError::invalid_input(
-            "This link is too long to fit in a QR code.",
-        )
+    let qr = qrcodegen::QrCode::encode_text(text, qrcodegen::QrCodeEcc::Medium).map_err(|_| {
+        crate::app::error::AppError::invalid_input("This link is too long to fit in a QR code.")
     })?;
     let size = qr.size();
     // One-module border (the norm is four, but the SVG sits on a card with
@@ -38,7 +32,9 @@ mod tests {
 
     #[test]
     fn qr_builds_for_a_share_link() {
-        let svg = svg("http://127.0.0.1:8080/#k=abcdef0123456789abcdef0123456789abcdef0123456789ab").unwrap();
+        let svg =
+            svg("http://127.0.0.1:8080/#k=abcdef0123456789abcdef0123456789abcdef0123456789ab")
+                .unwrap();
         assert!(svg.starts_with("<svg"));
         assert!(svg.contains("aria-label"));
         assert!(svg.contains("<path d=\"M"));

@@ -360,16 +360,20 @@ pub fn run() {
         })
         .setup(move |setup_app| {
             crate::services::engine::init(setup_app.handle().clone());
-    // The Automations scheduler: checks every half minute for due prompts
-    // and answers them quietly in the background.
-    {
-        let scheduler_state = scheduler_state.clone();
-        let scheduler_handle = setup_app.handle().clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(30));
-            scheduler_state.automations.tick(&scheduler_state, &scheduler_handle);
-        });
-    }
+            // The Automations scheduler: checks every half minute for due prompts
+            // and answers them quietly in the background.
+            {
+                let scheduler_state = scheduler_state.clone();
+                let scheduler_handle = setup_app.handle().clone();
+                std::thread::spawn(move || {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        scheduler_state
+                            .automations
+                            .tick(&scheduler_state, &scheduler_handle);
+                    }
+                });
+            }
             // The interface scale from Settings → Appearance.
             let scale = commands::assist::saved_scale();
             if (scale - 1.0).abs() > f64::EPSILON
