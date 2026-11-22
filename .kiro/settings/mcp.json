@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "huggingface": {
+      "url": "https://huggingface.co/mcp",
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

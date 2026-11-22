@@ -13,8 +13,8 @@ inclusion: always
 - `scripts/`: smoke test (`smoke-test.mjs`), catalog tools, and `ci/` (`cargo-annotate.mjs` turns cargo failures into annotations; `check-versions.mjs` is the version gate; `updater-config.mjs` and `make-latest-json.mjs` sign update packages and write the update feed), and `gen-installer-art.mjs` (installer images from the logo).
 - `tests/unit/`: frontend unit tests, run by Node's own test runner (`npm run test:unit`).
 - `public/`: files served as they are, including `theme-init.js`, which sets the theme before the first paint.
-- `.github/`: workflows (`ci.yml`, `audit.yml`), `dependabot.yml`, issue templates.
-- `.kiro/`: Kiro project files: `skills/impeccable/`, `skills/ui-ux-pro-max/` (MIT, vendored from nextlevelbuilder/ui-ux-pro-max-skill; run `python3 .kiro/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux`), this `steering/` folder, and `specs/` (`engine-upgrade`, `kiroween-2026`).
+- `.github/`: workflows (`ci.yml`, `llama-server.yml`, `audit.yml`), `dependabot.yml`, issue templates.
+- `.kiro/`: Kiro project files: `skills/impeccable/`, `skills/ui-ux-pro-max/` (MIT, vendored from nextlevelbuilder/ui-ux-pro-max-skill; run `python3 .kiro/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux`), this `steering/` folder (`catalog.md` loads only for catalog files), `specs/` (`engine-upgrade`, `kiroween-2026`, `online-providers`), `hooks/` (svelte-check, clippy, catalog checks) and `settings/mcp.json` (Hugging Face MCP server).
 - `PRIVACY.md`, `TERMS.md`: legal pages, bundled into the app and the installer.
 - `src-tauri/installer/`: installer art (NSIS header and sidebar, DMG background, macOS icon source).
 - `README.md`, `ARCHITECTURE.md`, `docs/scope.md`, `THIRD_PARTY_NOTICES.md`: product, design and license docs. They aim to match the code; if you find a mismatch, fix the doc and note it (see `tech.md` — verify before you claim).
