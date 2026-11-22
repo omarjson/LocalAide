@@ -3,14 +3,28 @@
 // file, so the number shown next to a screen is always the screen that key
 // opens. Skills and Setup are separate: Skills is a switchable module with no
 // number, and Setup only exists during first run.
-import type { IconName } from "../components/Icon.svelte";
-
 export type ScreenId = "chat" | "search" | "memory" | "models" | "automations" | "usage" | "settings";
+
+export type ScreenIcon =
+  | "chat"
+  | "search"
+  | "memory"
+  | "models"
+  | "automations"
+  | "usage"
+  | "settings"
+  | "sun"
+  | "cloud"
+  | "wrench"
+  | "plug"
+  | "lock"
+  | "info"
+  | "flask";
 
 export interface ScreenDef {
   id: ScreenId;
   label: string;
-  icon: IconName;
+  icon: ScreenIcon;
   /** 1-based number used by Cmd/Ctrl+N. */
   key: number;
 }
@@ -41,7 +55,7 @@ export type SettingsGroupId = "general" | "online" | "tools" | "integrations" | 
 export interface SettingsGroupDef {
   id: SettingsGroupId;
   label: string;
-  icon: IconName;
+  icon: ScreenIcon;
 }
 
 export const SETTINGS_GROUPS: readonly SettingsGroupDef[] = [
