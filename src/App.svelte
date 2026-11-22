@@ -18,7 +18,6 @@
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
-  import TabStrip from "./components/TabStrip.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
@@ -373,16 +372,24 @@
 </script>
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
-  <TitleBar onMenu={() => (mobileNav = true)} />
+  <TitleBar
+    onMenu={() => (mobileNav = true)}
+    tabs={chats.tabs}
+    activeKey={chats.activeTabKey}
+    visible={screen === "chat"}
+    onFocus={focusTab}
+    onClose={closeTab}
+    onNew={() => newChat(chats.activeFolder)}
+  />
   <div class="flex flex-1 min-h-0">
   {#if mobileNav}
-    <!-- Starts under the title bar (h-9), so the window buttons stay reachable. -->
-    <div role="presentation" class="fixed inset-x-0 bottom-0 top-9 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
+    <!-- Starts under the chrome bar (h-10), so the window buttons stay reachable. -->
+    <div role="presentation" class="fixed inset-x-0 bottom-0 top-10 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
   {/if}
   <!-- The title bar above already carries the logo and name, so the sidebar
        starts with its actions; on narrow windows it slides in under the
        title bar rather than over it. -->
-  <aside class={`fixed lg:relative top-9 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
+  <aside class={`fixed lg:relative top-10 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
     <div class="lg:hidden flex h-9 shrink-0 items-center justify-end px-1">
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
@@ -453,14 +460,6 @@
   <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
     {#if chatMounted && !startupError}
       <div class="min-h-0 flex-1 flex flex-col" class:hidden={screen !== "chat"}>
-        <TabStrip
-          tabs={chats.tabs}
-          activeKey={chats.activeTabKey}
-          visible={screen === "chat"}
-          onFocus={focusTab}
-          onClose={closeTab}
-          onNew={() => newChat(chats.activeFolder)}
-        />
         {#each chats.tabs as tab (tab.key)}
           <div class="min-h-0 flex-1" class:hidden={tab.key !== chats.activeTabKey}>
             <ChatScreen
