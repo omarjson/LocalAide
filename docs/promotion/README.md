@@ -9,7 +9,9 @@ rules below.
 1. [Launch checklist](launch-checklist.md) — do these before posting anywhere.
 2. [Pitch](pitch.md) — the one-liner, 30-second pitch, audiences and honest limits.
 3. [Show HN](show-hn.md) — draft post for news.ycombinator.com.
-4. [Reddit](reddit.md) — drafts for r/LocalLLaMA and r/selfhosted.
+4. [Reddit](reddit.md) — drafts for r/LocalLLaMA and r/selfhosted, plus a
+   [final ready-to-paste r/LocalLLaMA post](reddit-localllama-final.md) with
+   reply snippets.
 5. [Social](social.md) — short thread for X / Mastodon / Bluesky.
 6. [Contributors](contributors.md) — where to find them, good-first-issue ideas,
    and an outreach template.
