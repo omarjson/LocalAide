@@ -496,7 +496,7 @@ mod tests {
                 headers: BTreeMap::new(),
             },
         };
-        let tools = vec!["a", "b", "c"]
+        let tools: Vec<McpTool> = vec!["a", "b", "c"]
             .into_iter()
             .map(|name| McpTool {
                 name: name.to_string(),

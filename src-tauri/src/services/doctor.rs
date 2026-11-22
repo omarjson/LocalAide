@@ -10,8 +10,6 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags, params};
 use serde::{Deserialize, Serialize};
 
-use crate::app::error::AppError;
-
 /// Name of the keychain probe check. It is best-effort: an unreachable OS
 /// keychain does not make the overall report fail (headless Linux often has
 /// no Secret Service, and the app still works with keys kept in config).
