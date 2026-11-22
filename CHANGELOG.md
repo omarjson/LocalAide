@@ -5,6 +5,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+The biggest LocalAide release yet: chats run in parallel tabs, the assistant answers on a schedule, it builds real Word, Excel and PowerPoint files, and the Usage screen tells you exactly what every answer cost. Everything below keeps your chats, notes, models and settings.
+
+### Added
+- **Parallel chat tabs.** Every chat is a tab; several answers stream at the same time. The tab strip shows live dots for the chats that are answering, tabs keep their titles, and reopening LocalAide brings the tabs back with their conversations.
+- **Automations.** Schedule a prompt for every day at 7:00, every hour, or every N minutes. Runs are read-only — nothing is written while you are away — and the run feed keeps the last 50 answers to read when you are back. "Run now" answers immediately.
+- **Office Maker.** The chat can build real .docx, .xlsx and .pptx files inside the project folder: reports with headings, bullets and tables, spreadsheets with sheets of rows and real numbers, slide decks with titles and bullets. Writes ask first, like any file write.
+- **ArtCraft Connect.** The ArtCraft panels already on this computer — documents, slides, sheets, images — appear in Tools and MCP as one-click servers, discovered from ZCode's own plugin cache. Nothing is downloaded.
+- **Usage, told properly.** Sessions, prompts, tokens (in, out and cached), cost from your own price table, active days and the longest streak. A token-composition bar, an efficiency grid (cache hit rate, cost per session and per 1M tokens), Models seen as Tokens / Cost / Steps, tool calls on demand, windows from Today to All time, and a per-project filter with its own Projects card.
+- **Context, on hover.** Rest the pointer on the context meter and it breaks the window down — messages, system tools, meta context, skills, system prompt — with the cache hit rate when the model reports one.
+- **Phone pairing.** Sharing gains a QR code of the remote link and a short XXXX-XXXX code. The phone shows the same code; matching codes mean the phone and this computer are the same session.
+- **Appearance.** Accent colors beyond Deep Ember (Ocean, Violet, Forest, Rose, Gold — each keeps the contrast audit), a font choice (System, Serif, Mono) and a Compact density. Applied before the first paint, so nothing flashes.
+- **Plan cards.** The model's to-do list now shows item by item in the panel rail: done ticks ember, the step in progress carries the spinner.
+- **Model costs.** Settings → General takes USD-per-1M prices per model (with a cache-read price); the Usage screen turns them into cost figures. Local models are free.
+
+### Changed
+- Three reply suggestions sit beside each other on one row; the stop button grew into a clearly pulsing stop circle; the wand got its sparkle back; sidebar icons each greet the pointer in their own way and pop when their screen opens.
+- Light mode gained soft warm shadows instead of the dark theme's near-black depth, and all popovers share one elevation.
+- The status bar quietly checks GitHub for a new release shortly after launch and offers to install from an ember chip; 0.1.9 already ships this, and 0.2.0 keeps it.
+
+### Fixed
+- Editing an old message keeps the future: the discarded tail parks on a checkpoint chip and can be restored — both paths stay flippable, and branches survive a restart.
+- Model names for chats are AI-generated after the first answer, editable inline, regenerable.
+- The chat's tool-call guard keeps models that emit `<tool_call>` as text from leaking tags into the transcript; the calls still run.
+- Rate-limit (429 and friends) answers retry themselves with the server's wait or a growing backoff, ten tries, and the chat shows the stage.
+- Deleting a project deletes its chats and closes their tabs; the sidebar no longer blocks switching while an answer streams.
+- The window wears a custom title bar — drag region, real window controls — and the update chip, titles and suggestions from 0.1.x keep working with it.
+
 ## [0.1.10] - 2026-11-21
 
 The model menu grows up: capability filters come back, the thinking bar becomes a thick ember gauge that breathes at Max, and a saved online provider now offers every model it has, not just one. This pass also clears the small stumbles found in a hard audit of the installed 0.1.9. Your chats, notes, models and settings are kept.
