@@ -12,6 +12,7 @@ use crate::commands::cloud::{apply_engine_mode, load_config, save_config};
 use crate::config::{AppConfig, CloudProvider, is_local_host};
 use crate::domain::chat::ChatTargetRequest;
 use crate::domain::cloud::{ModelChoice, ModelChoices, ModelGroup};
+use crate::services::inference::InferenceEngine;
 use crate::services::inference::capabilities::{self, Capabilities};
 use crate::services::inference::provider_models::ProviderModel;
 
