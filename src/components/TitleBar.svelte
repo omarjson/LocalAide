@@ -1,7 +1,14 @@
 <script lang="ts">
-  // One chrome row for the whole window: identity, chat tabs and window
-  // controls. Native decorations are off on Windows and Linux, so the custom
-  // buttons stay there; macOS keeps its own traffic lights and hides them.
+  // One chrome row for the whole window: the logo, the drag area and the
+  // window controls. The logo is the window menu (Minimize / Restore /
+  // Close): the old title-bar menu button duplicated the sidebar control
+  // and, on wide windows, did nothing visible. The project name is gone
+  // from the bar; the logo alone is the identity.
+  //
+  // macOS keeps its own traffic lights and hides the custom buttons. Its
+  // chat tabs live in a row of their own below the chrome, so they no
+  // longer crowd the title bar or the traffic lights. Windows and Linux
+  // keep the tabs in the chrome row, which already reads right there.
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "./Icon.svelte";
@@ -10,9 +17,7 @@
   import type { ChatTab } from "../lib/chats.svelte";
 
   interface Props {
-    /** Opens the navigation on narrow windows, where the sidebar is hidden. */
-    onMenu?: () => void;
-    /** Chat tabs are rendered in this same row when the chat screen is showing. */
+    /** Chat tabs are rendered in the chrome row, or below it on macOS. */
     tabs?: ChatTab[];
     activeKey?: string | null;
     visible?: boolean;
@@ -21,7 +26,6 @@
     onNew?: () => void;
   }
   let {
-    onMenu,
     tabs = [],
     activeKey = null,
     visible = false,
@@ -31,10 +35,14 @@
   }: Props = $props();
 
   const isMac = platform() === "mac";
+  // macOS tabs get their own row below the chrome; everywhere else they
+  // stay in the chrome row.
+  const tabsBelow = isMac;
   // Resolved in onMount: the shim installs before the app boots, and a
   // module-level call here would run before that in the browser preview.
   let win: ReturnType<typeof getCurrentWindow> | null = null;
   let maximized = $state(false);
+  let menuOpen = $state(false);
 
   // Roving tabindex: only one tab is in the tab order, and the arrow keys
   // move focus between tabs without tabbing through every one of them.
@@ -72,6 +80,16 @@
       current.destroy().catch((err: unknown) => console.warn("Window destroy failed", err));
     });
   };
+  const minimizeWindow = () => act("minimize", win ? () => win!.minimize() : undefined);
+  const toggleMaximizeWindow = () => act("maximize", win ? () => win!.toggleMaximize() : undefined);
+
+  // Double-clicking empty chrome zooms the window, like a native title
+  // bar. Clicks on buttons, tabs and links are left alone.
+  const onChromeDblClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, [role='tab'], input, a")) return;
+    toggleMaximizeWindow();
+  };
 
   onMount(() => {
     const current = getCurrentWindow();
@@ -90,102 +108,135 @@
   });
 </script>
 
-<header
-  class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-b border-edge bg-ink-950 ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
-  aria-label="Window and open chats"
->
-  {#if onMenu}
-    <button type="button" class="menu-btn lg:hidden" aria-label="Open navigation" title="Menu" onclick={onMenu}>
-      <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-    </button>
-  {/if}
-  <span class="flex shrink-0 items-center gap-1.5" data-tauri-drag-region>
-    <LogoMark class="h-4 w-4" />
-    <span class="hidden text-xs font-semibold text-ink-200 sm:inline" data-tauri-drag-region>LocalAide</span>
-  </span>
+<svelte:window onkeydown={(e) => { if (e.key === "Escape") menuOpen = false; }} />
 
-  {#if visible && tabs.length > 0}
-    <div
-      class="surface-enter tab-strip flex min-w-0 flex-1 items-end gap-1 self-stretch overflow-x-auto pt-1.5"
-      role="tablist"
-      aria-label="Open chats"
-    >
-      {#each tabs as tab, i (tab.key)}
-        <div
-          class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 items-center gap-1 rounded-t-lg border-x border-t px-2 text-sm transition-colors ${
-            tab.key === activeKey
-              ? "border-ink-700 bg-ink-900 font-medium text-ink-50"
-              : "border-transparent text-ink-400 hover:bg-veil/5 hover:text-ink-100"
-          }`}
-        >
-          <div
-            role="tab"
-            tabindex={tab.key === rovingKey ? 0 : -1}
-            aria-selected={tab.key === activeKey}
-            aria-label={`Chat tab: ${tab.title}${tab.busy ? " (answering)" : ""}`}
-            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
-            onclick={() => onFocus?.(tab.key)}
-            onkeydown={(e) => onTabKeydown(e, i)}
-          >
-            {#if tab.busy}
-              <span class="busy-dot" aria-hidden="true"></span>
-            {:else}
-              <LogoMark class="h-3.5 w-3.5 shrink-0 opacity-70" />
-            {/if}
-            <span class="min-w-0 flex-1 truncate">{tab.title}</span>
-          </div>
-          <button
-            type="button"
-            class="tab-close grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-500 opacity-40 transition-[opacity,color] group-hover/tab:opacity-100 hover:bg-veil/10 hover:text-ink-50 hover:opacity-100 focus-visible:opacity-100"
-            aria-label={`Close the tab ${tab.title}`}
-            onclick={() => onClose?.(tab.key)}
-          >
-            <Icon name="close" class="h-3 w-3" />
-          </button>
-        </div>
-      {/each}
+<div class="relative">
+  {#if menuOpen}
+    <!-- Clicking anywhere else closes the window menu. -->
+    <button type="button" aria-hidden="true" tabindex="-1" class="fixed inset-0 z-40 cursor-default" onclick={() => (menuOpen = false)}></button>
+  {/if}
+  <!-- svelte-ignore a11y_no_static_element_interactions -- Double-clicking
+       empty chrome zooms the window, like a native title bar; the header
+       itself is not interactive content. -->
+  <header
+    class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-b border-edge bg-ink-950 ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
+    aria-label="Window and open chats"
+    ondblclick={onChromeDblClick}
+  >
+    <div class="relative shrink-0">
       <button
         type="button"
-        class="mb-1 ml-0.5 flex h-7 shrink-0 items-center gap-1 self-center rounded-md px-2 text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
-        title="New chat tab (Ctrl+N)"
-        aria-label="Open a new chat tab"
-        onclick={() => onNew?.()}
+        class="logo-btn grid h-7 w-7 place-items-center rounded-md hover:bg-veil/10"
+        aria-label="Window menu"
+        title="Window menu"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onclick={() => (menuOpen = !menuOpen)}
       >
-        <Icon name="plus" class="h-3.5 w-3.5" />
+        <LogoMark class="h-4 w-4" />
       </button>
+      {#if menuOpen}
+        <div role="menu" aria-label="Window" class="absolute left-0 top-9 z-50 w-44 overflow-hidden rounded-lg border border-edge bg-ink-900 py-1 shadow-2xl">
+          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; minimizeWindow(); }}>Minimize</button>
+          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; toggleMaximizeWindow(); }}>{maximized ? "Restore" : "Maximize"}</button>
+          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; closeWindow(); }}>Close</button>
+        </div>
+      {/if}
     </div>
-    <span class="h-full w-4 shrink-0" data-tauri-drag-region aria-hidden="true"></span>
-  {:else}
-    <span class="min-w-0 flex-1" data-tauri-drag-region aria-hidden="true"></span>
-  {/if}
 
-  {#if !isMac}
-    <button type="button" class="win-btn" aria-label="Minimize the window" title="Minimize" onclick={() => act("minimize", win ? () => win!.minimize() : undefined)}>
-      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14" /></svg>
-    </button>
+    {#if !tabsBelow && visible && tabs.length > 0}
+      {@render tabStrip()}
+      <span class="h-full w-4 shrink-0" data-tauri-drag-region aria-hidden="true"></span>
+    {:else}
+      <span class="min-w-0 flex-1" data-tauri-drag-region aria-hidden="true"></span>
+    {/if}
+
+    {#if !isMac}
+      <button type="button" class="win-btn" aria-label="Minimize the window" title="Minimize" onclick={minimizeWindow}>
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14" /></svg>
+      </button>
+      <button
+        type="button"
+        class="win-btn"
+        aria-label={maximized ? "Restore the window size" : "Maximize the window"}
+        title={maximized ? "Restore" : "Maximize"}
+        onclick={toggleMaximizeWindow}
+      >
+        {#if maximized}
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <rect x="8" y="5" width="11" height="11" rx="1" />
+            <path d="M5 9v9a1 1 0 0 0 1 1h9" />
+          </svg>
+        {:else}
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <rect x="6" y="6" width="12" height="12" rx="1" />
+          </svg>
+        {/if}
+      </button>
+      <button type="button" class="win-btn win-close" aria-label="Close the window" title="Close" onclick={closeWindow}>
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    {/if}
+  </header>
+
+  {#if tabsBelow && visible && tabs.length > 0}
+    <div class="flex h-10 shrink-0 items-stretch gap-2 border-b border-edge bg-ink-950 px-2">
+      {@render tabStrip()}
+    </div>
+  {/if}
+</div>
+
+{#snippet tabStrip()}
+  <div
+    class="surface-enter tab-strip flex min-w-0 flex-1 items-end gap-1 self-stretch overflow-x-auto pt-1.5"
+    role="tablist"
+    aria-label="Open chats"
+  >
+    {#each tabs as tab, i (tab.key)}
+      <div
+        class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 items-center gap-1 rounded-t-lg border-x border-t px-2 text-sm transition-colors ${
+          tab.key === activeKey
+            ? "border-ink-700 bg-ink-900 font-medium text-ink-50"
+            : "border-transparent text-ink-400 hover:bg-veil/5 hover:text-ink-100"
+        }`}
+      >
+        <div
+          role="tab"
+          tabindex={tab.key === rovingKey ? 0 : -1}
+          aria-selected={tab.key === activeKey}
+          aria-label={`Chat tab: ${tab.title}${tab.busy ? " (answering)" : ""}`}
+          class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
+          onclick={() => onFocus?.(tab.key)}
+          onkeydown={(e) => onTabKeydown(e, i)}
+        >
+          {#if tab.busy}
+            <span class="busy-dot" aria-hidden="true"></span>
+          {:else}
+            <LogoMark class="h-3.5 w-3.5 shrink-0 opacity-70" />
+          {/if}
+          <span class="min-w-0 flex-1 truncate">{tab.title}</span>
+        </div>
+        <button
+          type="button"
+          class="tab-close grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-500 opacity-40 transition-[opacity,color] group-hover/tab:opacity-100 hover:bg-veil/10 hover:text-ink-50 hover:opacity-100 focus-visible:opacity-100"
+          aria-label={`Close the tab ${tab.title}`}
+          onclick={() => onClose?.(tab.key)}
+        >
+          <Icon name="close" class="h-3 w-3" />
+        </button>
+      </div>
+    {/each}
     <button
       type="button"
-      class="win-btn"
-      aria-label={maximized ? "Restore the window size" : "Maximize the window"}
-      title={maximized ? "Restore" : "Maximize"}
-      onclick={() => act("maximize", win ? () => win!.toggleMaximize() : undefined)}
+      class="mb-1 ml-0.5 flex h-7 shrink-0 items-center gap-1 self-center rounded-md px-2 text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
+      title="New chat tab (Ctrl+N)"
+      aria-label="Open a new chat tab"
+      onclick={() => onNew?.()}
     >
-      {#if maximized}
-        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <rect x="8" y="5" width="11" height="11" rx="1" />
-          <path d="M5 9v9a1 1 0 0 0 1 1h9" />
-        </svg>
-      {:else}
-        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <rect x="6" y="6" width="12" height="12" rx="1" />
-        </svg>
-      {/if}
+      <Icon name="plus" class="h-3.5 w-3.5" />
     </button>
-    <button type="button" class="win-btn win-close" aria-label="Close the window" title="Close" onclick={closeWindow}>
-      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-    </button>
-  {/if}
-</header>
+  </div>
+{/snippet}
 
 <style>
   .win-btn {
@@ -200,16 +251,21 @@
     background: color-mix(in oklab, var(--color-veil) 10%, transparent);
     color: var(--color-ink-50);
   }
-  .menu-btn {
-    display: grid;
-    height: 1.75rem;
-    width: 1.75rem;
-    margin-left: -0.375rem;
-    place-items: center;
-    border-radius: 0.375rem;
+  .logo-btn {
     color: var(--color-ink-300);
   }
-  .menu-btn:hover {
+  .logo-btn:hover {
+    color: var(--color-ink-50);
+  }
+  .menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--color-ink-200);
+  }
+  .menu-item:hover {
     background: color-mix(in oklab, var(--color-veil) 10%, transparent);
     color: var(--color-ink-50);
   }

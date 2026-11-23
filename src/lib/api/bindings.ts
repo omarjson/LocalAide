@@ -706,6 +706,8 @@ export interface ToolAuditEntry {
 /** What the app shell reads at startup. Empty `selected_models` means first run. */
 export interface AppConfigDto {
   selected_models: string[];
+  setup_complete: boolean;
+  has_online_providers: boolean;
 }
 
 export interface DownloadProgressEvent {

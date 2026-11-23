@@ -85,3 +85,24 @@ are *reported by the operator*, not captured by Hermes.
    one provider, or a saved duplicate in `config.json`?
 4. Which process is hot: LocalAide WebView, `llama-server`, embedding/rerank
    sidecars, or the index watcher?
+
+## 6. Fixes shipped on `dev` — 2026-11-23 (Batch 1 + queue/update UX)
+
+One commit on `dev` (after `b7581de`). Verified locally: `npm run test:unit` 125 pass, `npm run check` 0 errors, `cargo fmt --check` clean, `cargo test` / `cargo clippy` via CI on push (see the `dev` run). No merge to `main`, no release publish — Omar tests on `dev` first.
+
+| ID | What was wrong (from code, not guessed) | Fix |
+|---|---|---|
+| Send repeats previous prompt | `ChatInput` passed `send` bare as the click handler, so the MouseEvent landed in `send(resend, …)` as truthy. Enter calls `send()` and worked. | Button calls `() => onSend()`; `send` only resends on an explicit `true`. `onSteer`/`onQueue` wrapped the same way. |
+| W1 setup repeats | `decideStartScreen` gated on `selected_models` only; online-only config has none. | Durable `setup_complete` flag in `config.json`, set when the wizard finishes or is skipped (`config_setup_complete`); startup also counts saved online providers. |
+| U1–U4 title bar | Dead menu button duplicated the sidebar control; tabs shared the chrome row with the traffic lights; no double-click zoom; project name in the bar. | Logo opens a Minimize / Restore / Close menu; menu button removed; project name removed; macOS tabs moved to their own row below the chrome (Windows keeps them in the row); double-click on empty chrome zooms. Narrow windows: Ctrl+B now opens the sidebar drawer instead of toggling an invisible collapse. |
+| W3 Kilo x3 | Same provider (same address + name) could be added repeatedly with different default models; each entry rendered its own picker group. | Save refuses a same-address + same-name provider; `ConfigStore::load` merges duplicates (first id kept, models unioned, active provider and favourites remapped); picker de-duplicates models by key and groups by provider id. |
+| Kilo "Ultra" | Unknown online models got the full effort ladder (… max, ultra); Kilo's gateway accepts a `reasoning` parameter for nearly all its models, so every one looked like a thinking model with an Ultra rung. | Unknown online models now offer only low/medium/high. Known families keep their own ladders. |
+| Steer not working | Steers are only read at the top of a later tool round; a plain answer has no later round, so the note was dropped and parked as a new message. | When a note is waiting after a round with no tool calls, the loop runs one more round with it instead of breaking. |
+| Queue unclear | Edit moved the text back to the composer; no reorder; no confirmation that queueing worked. | Inline edit in the row, up/down reorder buttons, toasts on queue and on a note that arrived too late (queued as the next message). |
+| Motion | Settings sections replayed a fly-in on every switch (`{#key activeTab}`); chat search scaled in; queued notes flew in. | Section fly + key removed; chat-search modal opens instantly (`motion={false}`); queued/steering rows render without animation. |
+| W2 update UX | The footer chip installed immediately, with no changelog shown. | The chip opens a dialog with the release notes first, then Install (download → install → restart, data kept). Settings → About already showed the notes; the chip did not. |
+
+Still open, not guessed at:
+
+- **P1/P2 performance (420–450 MB, 95 °C, 6000 RPM).** No Activity Monitor `sample` of LocalAide and `llama-server` has been supplied, so nothing was "optimized" blind. Needs Omar's sample (or a diagnostics capture) before any change; the diagnostics panel and request log already exist for this.
+- **W2, second half.** The v0.2.2 release is still a draft and signing keys may be absent, so the chip may still not appear until publish/signing even though the flow itself now shows notes first. The draft release must be rebuilt from the new `dev` head before Omar retests the update path.

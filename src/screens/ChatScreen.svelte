@@ -952,6 +952,7 @@
     if (!text) return;
     queued.push({ id: ++noteSeq, text });
     input = "";
+    showToast("Queued — it sends when this answer ends.");
   };
   const steerText = async (text: string) => {
     const job = activeJobId;
@@ -974,6 +975,7 @@
       if (at >= 0) {
         steering.splice(at, 1);
         queued.push(note);
+        showToast("The answer had already finished — your note is queued as the next message.");
       }
     }
   };
@@ -1001,9 +1003,46 @@
     else void send(false, note.text);
   };
 
+  // Inline queue editing and reordering. Editing happens in the row itself
+  // (the old Edit moved the text back to the composer, which read as the
+  // queue not working); the up/down buttons move a note earlier or later.
+  let editingNoteId = $state<number | null>(null);
+  let editingNoteText = $state("");
+  const startNoteEdit = (id: number) => {
+    const note = queued.find((n) => n.id === id);
+    if (!note) return;
+    editingNoteId = id;
+    editingNoteText = note.text;
+  };
+  const saveNoteEdit = () => {
+    if (editingNoteId === null) return;
+    const text = editingNoteText.trim();
+    if (!text) return;
+    const note = queued.find((n) => n.id === editingNoteId);
+    if (note) note.text = text;
+    editingNoteId = null;
+    editingNoteText = "";
+  };
+  const cancelNoteEdit = () => {
+    editingNoteId = null;
+    editingNoteText = "";
+  };
+  const moveNote = (id: number, dir: -1 | 1) => {
+    const at = queued.findIndex((n) => n.id === id);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= queued.length) return;
+    const [note] = queued.splice(at, 1);
+    queued.splice(to, 0, note);
+  };
+
   // `queuedText` sends a queued message: its text only, leaving the draft
   // and any files waiting in the box alone.
-  const send = async (resend = false, queuedText?: string) => {
+  // The first parameter is a strict boolean on purpose: passing this
+  // function bare as a click handler once fed it a MouseEvent, which is
+  // truthy, and every Send click resent the previous message instead of
+  // the text just typed. Only an explicit `true` resends.
+  const send = async (resendArg = false, queuedText?: string) => {
+    const resend = resendArg === true;
     const fromQueue = !resend && queuedText !== undefined;
     const lastUser = resend ? messages.at(-1) : undefined;
     const files = resend
@@ -2094,19 +2133,33 @@
       {#if queued.length > 0 || steering.length > 0}
         <ul class="mb-2 space-y-1" aria-label="Messages waiting to be sent">
           {#each steering as note (note.id)}
-            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+            <li class="note-row">
               <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ember-300" />
               <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
               <span class="shrink-0 text-xs text-ink-500">Steering · read at the next step</span>
             </li>
           {/each}
           {#each queued as note, i (note.id)}
-            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+            <li class="note-row">
               <span class="shrink-0 text-xs tabular-nums text-ink-500">{i + 1}</span>
-              <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
-              <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
-              <button type="button" class="note-action" onclick={() => { input = note.text; queued = queued.filter((n) => n.id !== note.id); focusComposer(); }} title="Edit it in the box">Edit</button>
-              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (queued = queued.filter((n) => n.id !== note.id))}><Icon name="close" class="h-3 w-3" /></button>
+              {#if editingNoteId === note.id}
+                <input
+                  type="text"
+                  bind:value={editingNoteText}
+                  aria-label="Edit this queued message"
+                  class="min-w-0 flex-1 rounded-md border border-edge bg-ink-950 px-2 py-1 text-sm text-ink-100 outline-none focus:border-ember-500"
+                  onkeydown={(e) => { if (e.key === "Enter") saveNoteEdit(); else if (e.key === "Escape") cancelNoteEdit(); }}
+                />
+                <button type="button" class="note-action" onclick={saveNoteEdit} disabled={!editingNoteText.trim()}>Save</button>
+                <button type="button" class="note-action" onclick={cancelNoteEdit}>Cancel</button>
+              {:else}
+                <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
+                <button type="button" class="note-action" onclick={() => moveNote(note.id, -1)} disabled={i === 0} aria-label="Move this queued message earlier" title="Move earlier">↑</button>
+                <button type="button" class="note-action" onclick={() => moveNote(note.id, 1)} disabled={i === queued.length - 1} aria-label="Move this queued message later" title="Move later">↓</button>
+                <button type="button" class="note-action" onclick={() => startNoteEdit(note.id)} title="Edit this queued message here">Edit</button>
+                <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
+              {/if}
+              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => { if (editingNoteId === note.id) cancelNoteEdit(); queued = queued.filter((n) => n.id !== note.id); }}><Icon name="close" class="h-3 w-3" /></button>
             </li>
           {/each}
         </ul>

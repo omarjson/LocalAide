@@ -78,6 +78,14 @@
     }
   })());
   const toggleSidebar = () => {
+    // On narrow windows the sidebar is off-canvas, so the same shortcut
+    // opens the drawer instead of toggling a collapse nobody can see.
+    // (The title bar no longer carries its own menu button: it did nothing
+    // on wide windows and duplicated this control.)
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      mobileNav = !mobileNav;
+      return;
+    }
     collapsed = !collapsed;
     try {
       localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
@@ -288,7 +296,14 @@
     startupError = null;
     try {
       const cfg = await api.loadConfig();
-      screen = cfg.selected_models?.length ? "chat" : "setup";
+      // Setup is done when the wizard finished (or was skipped), when a
+      // local model is chosen, or when an online provider is saved. The
+      // local-models case alone sent online-only users back to setup on
+      // every launch, including after an update.
+      screen =
+        cfg.setup_complete || cfg.selected_models?.length || cfg.has_online_providers
+          ? "chat"
+          : "setup";
     } catch (e: unknown) {
       startupError = errorMessage(e);
     }
@@ -298,6 +313,9 @@
   let autoUpdate = $state<UpdateCheckResponse | null>(null);
   let updateStage = $state<"idle" | "running" | "done" | "failed">("idle");
   let updatePercent = $state(0);
+  // The chip opens this first: the release notes, then Install. Installing
+  // straight from the chip gave no chance to read what changes.
+  let updateModalOpen = $state(false);
   const installFromChip = async () => {
     if (!autoUpdate || updateStage === "running") return;
     if (!autoUpdate.can_install) {
@@ -420,7 +438,6 @@
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
   <TitleBar
-    onMenu={() => (mobileNav = true)}
     tabs={chats.tabs}
     activeKey={chats.activeTabKey}
     visible={screen === "chat"}
@@ -538,7 +555,7 @@
           <p class="text-sm text-ink-400">Starting LocalAide…</p>
         </div>
       {:else if screen === "setup"}
-        <SetupWizard onFinished={() => { setupBusy = false; navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => navigate("chat")} />
+        <SetupWizard onFinished={() => { setupBusy = false; void api.markSetupComplete().catch((e: unknown) => showToast(`Setup could not be saved as finished: ${errorMessage(e)}`, "error")); navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => { void api.markSetupComplete().catch((e: unknown) => showToast(`Setup could not be saved as finished: ${errorMessage(e)}`, "error")); navigate("chat"); }} />
       {:else if screen === "chat"}
         <!-- The chat lives outside this block, so it is not reloaded. -->
       {:else if screen === "search"}
@@ -575,10 +592,9 @@
     {#if autoUpdate?.update_available}
       <button
         type="button"
-        onclick={() => void installFromChip()}
-        disabled={updateStage === "running"}
+        onclick={() => (updateModalOpen = true)}
         class={`flex items-center gap-2 rounded px-1.5 py-0.5 font-medium transition-colors ${updateStage === "failed" ? "text-rose-300 hover:text-rose-200" : "text-ember-200 hover:text-ember-100"}`}
-        title={autoUpdate.can_install ? "Download and install the new version" : autoUpdate.release_url}
+        title={autoUpdate.can_install ? "See what's new, then install" : autoUpdate.release_url}
       >
         <span class="h-1.5 w-1.5 rounded-full bg-ember-400" aria-hidden="true"></span>
         {#if updateStage === "running"}
@@ -586,11 +602,9 @@
         {:else if updateStage === "done"}
           Installed — restarting
         {:else if updateStage === "failed"}
-          Update failed — try again
-        {:else if autoUpdate.can_install}
-          LocalAide {autoUpdate.latest_version ?? ""} is ready — install
+          Update failed — see what's new
         {:else}
-          Update available — see what's new
+          LocalAide {autoUpdate.latest_version ?? ""} is ready — see what's new
         {/if}
       </button>
     {/if}
@@ -601,6 +615,37 @@
       <span class="debug-chip" title={`Developer effects on: ${activeFlags.join(", ")}`}><Icon name="flask" class="h-3.5 w-3.5" />{activeFlags.length} debug {activeFlags.length === 1 ? "flag" : "flags"}</span>
     {/if}
   </footer>
+
+  {#if updateModalOpen && autoUpdate?.update_available}
+    {@const update = autoUpdate}
+    <Modal title={`LocalAide ${update.latest_version ?? ""} is ready`} size="lg" onClose={() => (updateModalOpen = false)}>
+      <p class="text-sm leading-6 text-ink-400">You have {update.current_version}. Updates keep your chats, notes, models and preferences.</p>
+      {#if update.notes}
+        <div class="mt-4 max-h-64 overflow-y-auto rounded-md border border-ink-800 bg-ink-950 p-3">
+          <MarkdownDoc source={update.notes} />
+        </div>
+      {:else}
+        <p class="mt-4 text-sm text-ink-400">No release notes were published for this version.</p>
+      {/if}
+      {#if updateStage === "running"}
+        <p class="mt-4 text-sm text-ink-300" aria-live="polite">Updating… {updatePercent}%</p>
+      {:else if updateStage === "done"}
+        <p class="mt-4 text-sm text-emerald-300">Installed — restarting LocalAide…</p>
+      {:else if updateStage === "failed"}
+        <p class="mt-4 text-sm text-rose-300">The update failed. Your current version still works — try again.</p>
+      {/if}
+      {#snippet footer()}
+        <button type="button" onclick={() => (updateModalOpen = false)} class="rounded-lg px-4 py-2 text-sm text-ink-300 hover:bg-veil/5">Later</button>
+        {#if update.can_install}
+          <button type="button" onclick={() => void installFromChip()} disabled={updateStage === "running" || updateStage === "done"} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400 disabled:opacity-50">
+            {updateStage === "running" ? `Updating… ${updatePercent}%` : updateStage === "done" ? "Installed — restarting" : "Install and restart"}
+          </button>
+        {:else}
+          <button type="button" onclick={() => void api.openLink(update.release_url)} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400">Open the download page</button>
+        {/if}
+      {/snippet}
+    </Modal>
+  {/if}
 
   {#if cmdOpen}
     <div role="presentation" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[18vh] px-4 z-50" onclick={closePalette} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); }}>

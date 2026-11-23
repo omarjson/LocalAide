@@ -84,6 +84,15 @@ impl AgentState {
             .unwrap_or_default()
     }
 
+    /// True when a note is waiting for `job_id`.
+    fn has_steers(&self, job_id: &str) -> bool {
+        self.steers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(job_id)
+            .is_some_and(|notes| !notes.is_empty())
+    }
+
     fn knows_no_tools(&self, key: &str) -> bool {
         self.no_tools
             .lock()
@@ -569,7 +578,7 @@ fn run_inner(
             });
         }
         let wants_tools = !outcome.tool_calls.is_empty() && !specs.is_empty() && !opts.forbid_tools;
-        if !wants_tools {
+        if !wants_tools && !state.agent.has_steers(&run.job_id) {
             finish_reason = outcome
                 .finish_reason
                 .clone()
@@ -585,6 +594,12 @@ fn run_inner(
             }
             break;
         }
+        // A note sent while this round streamed has no tool round to ride
+        // in on: steers are only read at the top of a later round, so
+        // breaking here dropped the note (the chat then parked it as a new
+        // message, which is why Steer looked like it did nothing). Falling
+        // through runs one more round instead: the assistant turn is kept
+        // below, and the next round reads the note before answering.
 
         // Call ids must be unique across the whole answer; small local
         // models reuse "call_0" every round.

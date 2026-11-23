@@ -14,7 +14,7 @@ and plugin panels. Settings are re-ordered, the model picker keeps the
 conversation when switching models, and config writes skip unchanged saves.
 
 ### Added
-- **One window chrome row.** The title bar and chat tabs are merged into a single 40px row. macOS uses an overlay title bar with native traffic lights; Windows and Linux keep the custom minimize/maximize/close buttons.
+- **One window chrome row.** The title bar and chat tabs are merged into a single 40px row on Windows and Linux. On macOS the tabs sit in their own row below the chrome, so they no longer crowd the title bar or the traffic lights. macOS uses an overlay title bar with native traffic lights; Windows and Linux keep the custom minimize/maximize/close buttons. The logo opens a small window menu (Minimize / Restore / Close); double-clicking empty chrome zooms the window.
 - **Local diagnostics.** Settings → About shows uptime, resident memory, backend-call timings and local log/database sizes, plus a **Copy diagnostics** button that assembles a redacted, review-first report. Nothing is uploaded.
 - **OS keychain for provider keys.** API keys move to the macOS Keychain, Windows Credential Manager or Linux Secret Service; `config.json` keeps only a `keyring:` marker. A headless machine with no native store keeps the owner-only file fallback rather than losing the key.
 - **Session search, doctor, agents, multi-run and context references.** Search old chats with FTS5, run a local health report, manage Markdown agents, compare answers from several providers and resolve safe `@file:line` references.
@@ -25,6 +25,13 @@ conversation when switching models, and config writes skip unchanged saves.
 - **Local notifications and sounds.** Opt-in desktop notifications with a short chime when a goal completes, a background turn finishes, a tool approval is needed, or the model asks a question. No network calls.
 
 ### Fixed
+- **The Send button sent the previous message again.** Clicking Send passed the click event into `send`'s `resend` parameter, so it resent the last message instead of the text just typed (Enter worked, because it calls `send()` with no argument). The button now calls `send()` with no argument, and `send` only resends on an explicit `true`.
+- **Setup repeated after every update.** Startup only skipped setup when a local model was chosen, so online-only users saw the wizard on every launch. Setup is now recorded with a durable `setup_complete` flag when the wizard finishes or is skipped, and startup also counts saved online providers.
+- **Steer did nothing on a plain answer.** Steering notes were only read at the top of a later tool round, and a plain answer has none, so the note was dropped and parked as a new message. A waiting note now runs one more round instead, so the model reads it before answering again.
+- **Kilo Code listed three times, all models on Ultra.** Adding the same provider (same address and name) twice is now refused, an existing config merges the duplicates on load (keeping the first entry's id, models and favourites), and the picker de-duplicates by key. Unknown online models now offer only low/medium/high effort: the full ladder put an Ultra rung on models that do not have one.
+- **Queued messages can be edited in place and reordered.** Edit now edits the row itself (it used to move the text back to the composer), with up/down buttons to reorder. Queueing and steering now confirm with a short message, so it is clear they worked.
+- **Update flow shows what's new first.** The footer chip now opens a dialog with the release notes and an Install button, instead of installing straight from the chip. Install still downloads, verifies, installs and restarts, keeping chats, notes, models and preferences.
+- **Extra motion is gone where it annoyed.** Chat search opens instantly, Settings sections no longer fly in on every switch, and queued notes appear without animation.
 - **Library index watcher** now has automated coverage for 500ms debouncing, ignored extensions and removal forwarding.
 - Open chat tabs are capped live at 8 with least-recently-used eviction; the contrast gate reads the shipped focus token; tab close stays visible on touch.
 - Provider keys rotate on real 401/429 responses, doctor can repair safe local scaffolding, and repeated identical config saves are skipped.

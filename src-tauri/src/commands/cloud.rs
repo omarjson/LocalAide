@@ -572,13 +572,23 @@ pub fn cloud_provider_save(
     let mut cfg = load_config(&state)?;
 
     // Two entries for the same endpoint and model are always a mistake; the
-    // entry being edited is exempt from its own match.
+    // entry being edited is exempt from its own match. So is the same
+    // address under the same name with a different default model: that is
+    // how "Kilo Code" ended up listed three times in the model menu.
+    let same_address = |a: &str, b: &str| {
+        a.trim()
+            .trim_end_matches('/')
+            .eq_ignore_ascii_case(b.trim().trim_end_matches('/'))
+    };
     let duplicate = cfg.cloud_providers.iter().any(|p| {
-        p.base_url == base_url && p.model == model && req.id.as_deref() != Some(p.id.as_str())
+        req.id.as_deref() != Some(p.id.as_str())
+            && ((p.base_url == base_url && p.model == model)
+                || (same_address(&p.base_url, &base_url)
+                    && p.label.trim().eq_ignore_ascii_case(label.trim())))
     });
     if duplicate {
         return Err(AppError::invalid_input(
-            "A provider with this base URL and model already exists.",
+            "A provider with this address already exists. Edit the existing one instead of adding it again.",
         ));
     }
 

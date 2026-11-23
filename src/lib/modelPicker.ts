@@ -102,7 +102,11 @@ export function providerList(choices: ModelChoices | null): PickerProvider[] {
     { key: "local", providerId: null, label: "This computer", badge: "Private", router: false, needsRefresh: false },
   ];
   if (choices.online_allowed === false) return out;
+  const seen = new Set<string>();
   for (const g of choices.groups.filter((g) => g.enabled)) {
+    // The same provider saved twice must still appear once.
+    if (seen.has(g.provider_id)) continue;
+    seen.add(g.provider_id);
     const models = choices.models.filter((m) => m.provider_id === g.provider_id);
     out.push({
       key: g.provider_id,

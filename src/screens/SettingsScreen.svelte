@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { fly, slide } from "svelte/transition";
+  import { slide } from "svelte/transition";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
@@ -22,7 +22,7 @@
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
   import { openInBrowser } from "../lib/links";
-  import { dur, enterScreen } from "../lib/motion";
+  import { dur } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
   import { settingsRequest, settingsView, type SettingsSectionId } from "../lib/nav.svelte";
   import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
@@ -902,8 +902,10 @@
         <div class="mb-4"><ErrorBanner message={settingsNotice} onRetry={() => selectSection(activeTab)} onDismiss={() => settingsNotice = null} /></div>
       {/if}
 
-      {#key activeTab}
-      <div in:fly={enterScreen()}>
+      <!-- No entrance animation here: switching sections used to replay a
+           fly-in every time, which read as the panel flipping to a new
+           screen. The branches below already swap the content. -->
+      <div>
       {#if activeTab === "general"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">General</h2>
@@ -1393,7 +1395,7 @@
               </Button>
             </div>
             {#if updateInfo?.update_available}
-              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4" in:slide={{ duration: dur(180) }}>
+              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div class="font-semibold text-ink-50">Version {updateInfo.latest_version} is ready</div>
@@ -1500,7 +1502,6 @@
         </div>
       {/if}
       </div>
-      {/key}
     </div>
   </div>
 </div>

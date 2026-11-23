@@ -247,6 +247,7 @@ pub fn run() {
             commands::tool_audits_list,
             commands::tool_audits_clear,
             commands::config_load,
+            commands::config_setup_complete,
             commands::settings_context,
             commands::settings_set_context,
             commands::settings_context_info,

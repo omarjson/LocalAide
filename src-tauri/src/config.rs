@@ -12,6 +12,11 @@ pub struct AppConfig {
     // used them, so they are no longer read; serde skips unknown fields.
     pub selected_models: Vec<String>,
     pub cloud_llm_enabled: bool,
+    /// True once the setup wizard has finished or been skipped. The startup
+    /// gate must not depend on `selected_models` alone: an online-only user
+    /// has no local models and would otherwise see setup on every launch.
+    #[serde(default)]
+    pub setup_complete: bool,
     /// Opt-in OpenAI-compatible providers. Empty unless the user adds one.
     #[serde(default)]
     pub cloud_providers: Vec<CloudProvider>,
@@ -533,6 +538,7 @@ impl Default for AppConfig {
         Self {
             selected_models: vec![],
             cloud_llm_enabled: false,
+            setup_complete: false,
             cloud_providers: vec![],
             online_allowed: None,
             active_cloud_provider: None,
@@ -622,6 +628,64 @@ pub fn snapshot_is_dirty(last_written: Option<&str>, next: &str) -> bool {
     last_written != Some(next)
 }
 
+/// Merge provider entries that are the same provider added twice: same
+/// address and same name. The Kilo preset, added once per setup run, came
+/// back as three "Kilo Code" rows in the model menu, each with its own
+/// model list. The first entry keeps its id, so the active provider,
+/// favourites and keychain references stay valid; a later entry contributes
+/// only models the first one lacks, and the first non-empty key wins. Two
+/// routers on the same address keep separate entries when their names
+/// differ (9Router vs OmniRoute). Returns true when anything merged.
+pub fn dedupe_cloud_providers(cfg: &mut AppConfig) -> bool {
+    let mut kept: Vec<CloudProvider> = Vec::new();
+    let mut dropped: Vec<(String, String)> = Vec::new();
+    for provider in cfg.cloud_providers.drain(..) {
+        let key = (
+            provider
+                .base_url
+                .trim()
+                .trim_end_matches('/')
+                .to_ascii_lowercase(),
+            provider.label.trim().to_ascii_lowercase(),
+        );
+        if let Some(existing) = kept.iter_mut().find(|p: &&mut CloudProvider| {
+            (
+                p.base_url.trim().trim_end_matches('/').to_ascii_lowercase(),
+                p.label.trim().to_ascii_lowercase(),
+            ) == key
+        }) {
+            for model in provider.models {
+                if !existing.models.iter().any(|m| m.id == model.id) {
+                    existing.models.push(model);
+                }
+            }
+            if existing.api_key.trim().is_empty() {
+                existing.api_key = provider.api_key.clone();
+            }
+            existing.enabled = existing.enabled || provider.enabled;
+            dropped.push((provider.id, existing.id.clone()));
+        } else {
+            kept.push(provider);
+        }
+    }
+    if dropped.is_empty() {
+        cfg.cloud_providers = kept;
+        return false;
+    }
+    for (old, kept_id) in &dropped {
+        if cfg.active_cloud_provider.as_deref() == Some(old.as_str()) {
+            cfg.active_cloud_provider = Some(kept_id.clone());
+        }
+        for fav in cfg.favorite_models.iter_mut() {
+            if let Some(model) = fav.strip_prefix(&format!("{old}:")) {
+                *fav = format!("{kept_id}:{model}");
+            }
+        }
+    }
+    cfg.cloud_providers = kept;
+    true
+}
+
 pub struct ConfigStore {
     path: PathBuf,
     /// Serialized snapshot last written to disk. `save` skips the atomic
@@ -674,6 +738,18 @@ impl ConfigStore {
                 }
             } else if !provider.api_key.is_empty() {
                 needs_migration = true;
+            }
+        }
+        // The same provider added twice (same address and name) shows up
+        // twice in the picker. Merge on load, so an existing config heals
+        // itself the next time the app starts.
+        let before: Vec<String> = cfg.cloud_providers.iter().map(|p| p.id.clone()).collect();
+        if dedupe_cloud_providers(&mut cfg) {
+            needs_migration = true;
+            for id in before {
+                if !cfg.cloud_providers.iter().any(|p| p.id == id) {
+                    let _ = crate::services::secrets::delete(&id);
+                }
             }
         }
         if needs_migration {
@@ -789,6 +865,65 @@ mod tests {
         assert_eq!(back.cloud_providers.len(), 1);
         assert_eq!(back.cloud_providers[0].api_key, "sk-test");
         assert_eq!(back.active_cloud_provider.as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn duplicate_providers_merge_on_the_same_address_and_name() {
+        let provider = |id: &str, model: &str| CloudProvider {
+            id: id.into(),
+            label: "Kilo Code (free, no key)".into(),
+            base_url: "https://api.kilo.ai/api/openrouter".into(),
+            model: model.into(),
+            api_key: String::new(),
+            enabled: true,
+            models: vec![crate::services::inference::provider_models::ProviderModel {
+                id: model.into(),
+                name: None,
+                owned_by: None,
+                context_length: None,
+                free: true,
+                reasoning: None,
+                vision: None,
+                tools: None,
+            }],
+            check: None,
+        };
+        let mut cfg = AppConfig::default();
+        cfg.cloud_providers.push(provider("cp-1", "kilo-auto/free"));
+        cfg.cloud_providers
+            .push(provider("cp-2", "other-model/free"));
+        cfg.cloud_providers.push(provider("cp-3", "kilo-auto/free"));
+        cfg.active_cloud_provider = Some("cp-2".into());
+        cfg.favorite_models.push("cp-2:other-model/free".into());
+        assert!(dedupe_cloud_providers(&mut cfg));
+        assert_eq!(cfg.cloud_providers.len(), 1);
+        assert_eq!(cfg.cloud_providers[0].id, "cp-1");
+        assert_eq!(cfg.cloud_providers[0].models.len(), 2);
+        // The active provider and the favourite follow the kept entry.
+        assert_eq!(cfg.active_cloud_provider.as_deref(), Some("cp-1"));
+        assert_eq!(cfg.favorite_models, vec!["cp-1:other-model/free"]);
+        assert!(!dedupe_cloud_providers(&mut cfg));
+    }
+
+    #[test]
+    fn same_address_different_names_stay_separate() {
+        let provider = |id: &str, label: &str| CloudProvider {
+            id: id.into(),
+            label: label.into(),
+            base_url: "http://localhost:20128/v1".into(),
+            model: String::new(),
+            api_key: String::new(),
+            enabled: true,
+            models: Vec::new(),
+            check: None,
+        };
+        let mut cfg = AppConfig::default();
+        cfg.cloud_providers
+            .push(provider("cp-1", "9Router (on this computer)"));
+        cfg.cloud_providers
+            .push(provider("cp-2", "OmniRoute (on this computer)"));
+        assert!(!dedupe_cloud_providers(&mut cfg));
+        assert_eq!(cfg.cloud_providers.len(), 2);
     }
 
     #[test]

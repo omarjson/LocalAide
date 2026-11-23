@@ -24,14 +24,23 @@ test("macOS uses the native traffic lights, not custom window buttons", () => {
   }
 });
 
-test("the chrome row carries both the window identity and the chat tabs", () => {
+test("the chrome row carries the window identity; tabs sit below it on macOS", () => {
   const bar = read("src/components/TitleBar.svelte");
   assert.match(bar, /platform\(\) === "mac"/);
   assert.match(bar, /\{#if !isMac\}/, "custom buttons are hidden on macOS");
-  assert.match(bar, /role="tablist"/, "chat tabs live in the same row");
+  assert.match(bar, /role="tablist"/, "chat tabs are rendered");
   assert.match(bar, /data-tauri-drag-region/, "the row is still draggable");
+  // macOS tabs moved out of the chrome row: they crowded the title bar
+  // and the traffic lights. Windows keeps them in the row.
+  assert.match(bar, /tabsBelow/, "macOS renders the tabs in their own row below the chrome");
+  assert.match(bar, /ondblclick/, "double-clicking empty chrome zooms the window");
+  assert.doesNotMatch(bar, /onMenu/, "the dead title-bar menu button is gone");
+  assert.doesNotMatch(bar, /LocalAide<\/span>/, "the project name is gone from the title bar");
+  assert.match(bar, /Window menu/, "the logo opens a window menu instead");
+  assert.match(bar, /Minimize/, "the window menu offers Minimize");
+  assert.match(bar, /Close/, "the window menu offers Close");
 
   const app = read("src/App.svelte");
   assert.doesNotMatch(app, /import TabStrip/, "the old separate tab strip is gone");
-  assert.match(app, /<TitleBar[\s\S]*tabs=\{chats\.tabs\}/, "tabs are passed into the chrome row");
+  assert.match(app, /<TitleBar[\s\S]*tabs=\{chats\.tabs\}/, "tabs are passed into the chrome");
 });

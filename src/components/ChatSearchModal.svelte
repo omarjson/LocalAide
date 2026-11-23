@@ -58,7 +58,7 @@
   };
 </script>
 
-<Modal title="Search chats" onClose={onClose} size="lg">
+<Modal title="Search chats" onClose={onClose} size="lg" motion={false}>
   <form class="flex items-center gap-2" onsubmit={(e) => { e.preventDefault(); void search(); }}>
     <label class="sr-only" for="chat-search-query">Search saved chats</label>
     <input

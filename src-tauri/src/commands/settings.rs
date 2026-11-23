@@ -14,7 +14,22 @@ pub fn config_load(state: State<'_, AppState>) -> Result<AppConfigDto, AppError>
     let cfg = store.load().map_err(AppError::internal)?;
     Ok(AppConfigDto {
         selected_models: cfg.selected_models,
+        setup_complete: cfg.setup_complete,
+        has_online_providers: !cfg.cloud_providers.is_empty(),
     })
+}
+
+/// The setup wizard finished, or the user chose to set up later. Either way
+/// setup must not appear again on the next launch.
+#[tauri::command]
+pub fn config_setup_complete(state: State<'_, AppState>) -> Result<(), AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.setup_complete = true;
+    store.save(&cfg).map_err(AppError::internal)
 }
 
 /// Current engine context window setting (tokens).

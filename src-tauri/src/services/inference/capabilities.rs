@@ -171,7 +171,9 @@ pub fn guess_context(id: &str) -> Option<u64> {
 
 /// The effort levels offered for a model that thinks, by family. The full
 /// ladder is minimal < low < medium < high < xhigh < max < ultra; a family
-/// that answers to fewer rungs lists only those.
+/// that answers to fewer rungs lists only those. An unknown online model
+/// gets only low/medium/high: offering the whole ladder there put an Ultra
+/// rung on models that do not have one.
 pub fn effort_levels(id: &str, local: bool) -> Vec<String> {
     let id = id.to_ascii_lowercase();
     let owned = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -195,9 +197,13 @@ pub fn effort_levels(id: &str, local: bool) -> Vec<String> {
         // Hybrid local models (Qwen3, GLM, Granite) switch thinking on or off.
         return owned(&["off", "on"]);
     }
-    // An unknown online model: offer the whole ladder and let the provider
-    // clamp what it does not know.
-    owned(&["minimal", "low", "medium", "high", "xhigh", "max", "ultra"])
+    // An unknown online model: offer only the common low/medium/high set.
+    // The full ladder (minimal … ultra) was offered to every unknown model,
+    // so gateways that accept a `reasoning` parameter for nearly all their
+    // models — Kilo's OpenRouter gateway does — showed every model with an
+    // Ultra rung it does not actually have. A family known to support wider
+    // rungs lists them above; anything else stays at low/medium/high.
+    owned(&["low", "medium", "high"])
 }
 
 /// Capabilities from the name alone.
@@ -333,10 +339,10 @@ mod tests {
             effort_levels("grok-4", false),
             ["minimal", "low", "medium", "high", "xhigh"]
         );
-        // Unknown online models get the whole ladder, medium in the middle.
+        // Unknown online models get only the common set, never Ultra.
         assert_eq!(
             effort_levels("some-router-model", false),
-            ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+            ["low", "medium", "high"]
         );
     }
 

@@ -467,10 +467,10 @@
 
       {#if streaming && input.trim() && (onQueue || onSteer)}
         {#if onSteer}
-          <button type="button" onclick={onSteer} class="composer-chip ml-1" title="Give this note to the answer before its next step (Alt+Enter)"><Icon name="wand" class="h-3.5 w-3.5" />Steer</button>
+          <button type="button" onclick={() => onSteer?.()} class="composer-chip ml-1" title="Give this note to the answer before its next step (Alt+Enter)"><Icon name="wand" class="h-3.5 w-3.5" />Steer</button>
         {/if}
         {#if onQueue}
-          <button type="button" onclick={onQueue} class="composer-chip ml-1" title="Send this when the answer ends (Enter)"><Icon name="plus" class="h-3.5 w-3.5" />Queue</button>
+          <button type="button" onclick={() => onQueue?.()} class="composer-chip ml-1" title="Send this when the answer ends (Enter)"><Icon name="plus" class="h-3.5 w-3.5" />Queue</button>
         {/if}
       {/if}
       {#if streaming}
@@ -482,9 +482,13 @@
           class="stop-btn ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950"
         ><Icon name="stop" class="h-5 w-5" /></button>
       {:else}
+        <!-- Never pass the handler bare: a click's MouseEvent would land in
+             `send`'s first parameter (`resend`) and resend the last message
+             instead of the text just typed. Enter calls `onSend()` with no
+             argument, which is why only the button mis-sent. -->
         <button
           type="button"
-          onclick={onSend}
+          onclick={() => onSend()}
           disabled={!canSend}
           aria-label="Send"
           title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}

@@ -645,6 +645,11 @@ export class ApiClient {
     return invoke<AppConfigDto>("config_load");
   }
 
+  /** The setup wizard finished or was skipped; setup must not reappear. */
+  async markSetupComplete(): Promise<void> {
+    return invoke<void>("config_setup_complete");
+  }
+
   // Engine context window
 
   async getContext(): Promise<number> {

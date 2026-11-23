@@ -152,6 +152,10 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
     };
 
     let mut models = Vec::new();
+    // A config that still lists the same provider twice (or the same model
+    // under two entries) must not show the model twice in the picker. The
+    // config loader merges duplicate providers; this is the backstop.
+    let mut seen_keys: HashSet<String> = HashSet::new();
     for entry in state.model_service.all_entries() {
         if !matches!(entry.kind.as_str(), "chat" | "code")
             || !state.model_service.is_installed(&entry.id)
@@ -162,6 +166,9 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         let is_loaded = loaded_path.as_ref() == Some(&path);
         let caps = local_caps(state, cfg, &entry.id, is_loaded);
         let key = local_key(&entry.id);
+        if !seen_keys.insert(key.clone()) {
+            continue;
+        }
         models.push(ModelChoice {
             active: active_key.as_deref() == Some(key.as_str()),
             favorite: favorites.contains(key.as_str()),
@@ -200,6 +207,9 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         for m in provider_models(p, chosen) {
             let caps = remote_caps(&m);
             let key = remote_key(&p.id, &m.id);
+            if !seen_keys.insert(key.clone()) {
+                continue;
+            }
             models.push(ModelChoice {
                 active: active_key.as_deref() == Some(key.as_str()),
                 favorite: favorites.contains(key.as_str()),
