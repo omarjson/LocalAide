@@ -214,6 +214,9 @@
 
   {#if open && choices}
     <div role="dialog" aria-label="Choose a model" tabindex="-1" onkeydown={onKeydown} class="picker" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+      {#if choices.budget_note}
+        <p class="border-b border-ink-800 px-3 py-2 text-xs leading-5 text-ink-400" role="status">{choices.budget_note}</p>
+      {/if}
       {#if view === "providers"}
         <div class="p-1.5" role="listbox" aria-label="Providers">
           {#each providers as p (p.key)}

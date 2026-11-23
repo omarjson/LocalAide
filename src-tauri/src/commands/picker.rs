@@ -225,6 +225,7 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         active_key,
         local_loaded: local_ep.is_some(),
         online_allowed: online,
+        budget_note: None,
     }
 }
 
@@ -247,6 +248,7 @@ pub async fn chat_target_set(
     state: State<'_, AppState>,
     req: ChatTargetRequest,
 ) -> Result<ModelChoices, AppError> {
+    let previous_context = state.inference_engine.status().context_size.max(0) as usize;
     match req.provider_id.as_deref() {
         None => {
             let path = state.model_service.model_file_path(&req.model);
@@ -289,11 +291,18 @@ pub async fn chat_target_set(
             apply_engine_mode(&state, &cfg);
         }
     }
-    with_app_state(&state, |owned| {
+    let mut choices = with_app_state(&state, |owned| {
         let cfg = load_config(&owned)?;
         Ok(build_choices(&owned, &cfg))
     })
-    .await
+    .await?;
+    let new_context = state.inference_engine.status().context_size.max(0) as usize;
+    if previous_context != new_context && previous_context > 0 {
+        choices.budget_note = Some(format!(
+            "Context budget recalculated for the new model: {previous_context} → {new_context} tokens. This conversation was kept."
+        ));
+    }
+    Ok(choices)
 }
 
 /// Star or unstar a model in the picker. Returns the starred keys.

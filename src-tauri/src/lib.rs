@@ -379,6 +379,7 @@ pub fn run() {
             commands::goal_complete,
             commands::usage_record,
             commands::usage_list,
+            commands::plugin_list,
         ])
         // Pages the model draws in chat, each with its own strict policy.
         .register_uri_scheme_protocol("mockup", |_ctx, request| {

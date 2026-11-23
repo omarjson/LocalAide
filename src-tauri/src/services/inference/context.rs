@@ -305,12 +305,16 @@ mod tests {
         assert!(tight.note.contains("recalculated"));
 
         // No previous model (or the same window) means no visible change.
-        assert!(recalc_budget_for_model(None, 8192, 512, None, &history, "q")
-            .note
-            .is_empty());
-        assert!(recalc_budget_for_model(Some(8192), 8192, 512, None, &history, "q")
-            .note
-            .is_empty());
+        assert!(
+            recalc_budget_for_model(None, 8192, 512, None, &history, "q")
+                .note
+                .is_empty()
+        );
+        assert!(
+            recalc_budget_for_model(Some(8192), 8192, 512, None, &history, "q")
+                .note
+                .is_empty()
+        );
     }
 
     #[test]

@@ -174,11 +174,7 @@ pub fn status() -> ShareStatus {
 /// Start sharing. `tunnel = false` serves on 127.0.0.1 only (for trying the
 /// page on this computer). `lan = true` binds on 0.0.0.0 so a device on the
 /// same network can reach it; the pairing token is required either way.
-pub fn start(
-    state: AppState,
-    with_tunnel: bool,
-    lan: bool,
-) -> Result<ShareStarted, AppError> {
+pub fn start(state: AppState, with_tunnel: bool, lan: bool) -> Result<ShareStarted, AppError> {
     let mut guard = SHARE.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
         return Err(AppError::invalid_input(

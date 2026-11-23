@@ -439,6 +439,24 @@ pub(crate) fn prepare_run(
         // Interactive forms (A2UI) come with the other visuals.
         extra.push(A2UI_GUIDANCE.to_string());
     }
+    // Project rules from AGENTS.md / CLAUDE.md / .hermes.md / .cursorrules,
+    // best-effort and capped. Users can switch this module off in Developer.
+    let context_files_on = state
+        .config_store
+        .lock()
+        .ok()
+        .and_then(|store| store.load().ok())
+        .map(|cfg| cfg.developer.module_on("context_files"))
+        .unwrap_or(true);
+    if context_files_on {
+        let mut roots = vec![crate::app::paths::workspace_dir()];
+        roots.extend(crate::services::context_files::indexed_roots(
+            &crate::app::paths::index_dir().join("library.db"),
+        ));
+        if let Some(rules) = crate::services::inference::context::project_rules(&roots, 8192) {
+            extra.push(rules);
+        }
+    }
     let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
 
     let thinking_room = if thinks {

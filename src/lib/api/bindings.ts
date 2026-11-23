@@ -233,6 +233,8 @@ export interface ModelChoices {
   local_loaded: boolean;
   /** Online providers are switched on in Settings. Off: none are listed. */
   online_allowed: boolean;
+  /** Set after a model switch recalculated the prompt budget. */
+  budget_note: string | null;
 }
 
 /** Settings → Tools and MCP. */

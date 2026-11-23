@@ -50,5 +50,8 @@ fn pairing_url_carries_one_token_query_parameter() {
 
     assert_eq!(token_from_query("http://x/p?t=abc"), None);
     assert_eq!(token_from_query("http://x/p"), None);
-    assert_eq!(token_from_query(&format!("http://x/p?token={token}#frag")).as_deref(), Some(token.as_str()));
+    assert_eq!(
+        token_from_query(&format!("http://x/p?token={token}#frag")).as_deref(),
+        Some(token.as_str())
+    );
 }

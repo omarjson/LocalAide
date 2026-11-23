@@ -793,7 +793,7 @@ fn same_origin(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_key_change, key_change, same_origin, uuid_v4, KeyChange};
+    use super::{KeyChange, apply_key_change, key_change, same_origin, uuid_v4};
 
     #[test]
     fn an_empty_key_clears_but_an_omitted_one_keeps_the_stored_key() {

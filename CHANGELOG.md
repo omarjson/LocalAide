@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Session search, doctor, agents, multi-run and context references.** Search old chats with FTS5, run a local health report, manage Markdown agents, compare answers from several providers and resolve safe `@file:line` references.
 - **Permission rules, tool hooks and provider routing.** Durable allow/ask/deny rules, pre/post tool hooks, MCP tool gating, provider priority and key pools.
 - **Goals and usage ledger.** Goal state with a step budget and a documented flat-rate usage ledger for online calls.
+- **Paired sharing, skins and plugins.** Shared sessions now need a one-time pairing token; portable skins can be imported/exported; local HTML plugin panels are listed safely and shown in a sandbox.
+- **Project rules and model-switch notes.** `AGENTS.md`-style files are injected into chat prompts when enabled, and switching models reports the recalculated context budget without losing the conversation.
 
 ### Fixed
 - **Library index watcher** now has automated coverage for 500ms debouncing, ignored extensions and removal forwarding.

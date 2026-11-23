@@ -68,6 +68,9 @@ pub struct ModelChoices {
     pub local_loaded: bool,
     /// Online providers are switched on in Settings. Off: none are listed.
     pub online_allowed: bool,
+    /// Set by chat_target_set when switching models recalculated the prompt
+    /// budget; the conversation itself is kept.
+    pub budget_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

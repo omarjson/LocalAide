@@ -18,6 +18,7 @@ pub mod models;
 pub mod multi_run;
 pub mod office;
 pub mod opencode;
+pub mod plugins;
 pub mod secrets;
 pub mod session_index;
 pub mod share;

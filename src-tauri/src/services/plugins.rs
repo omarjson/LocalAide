@@ -161,10 +161,7 @@ mod tests {
     fn path_validation_keeps_children_out_rejects_escape_and_self() {
         let base = Path::new("/home/me/.aiassistant/plugins");
         assert!(contained(base, &base.join("a.html")));
-        assert!(contained(
-            base,
-            &base.join("nested").join("b.html")
-        ));
+        assert!(contained(base, &base.join("nested").join("b.html")));
         assert!(!contained(base, base), "the folder itself is not a plugin");
         assert!(!contained(
             base,
