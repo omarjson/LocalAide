@@ -297,7 +297,7 @@ mod tests {
             128,
             64,
             Some("keep this system prompt"),
-            &vec![msg("user", 4000), msg("assistant", 4000)],
+            &[msg("user", 4000), msg("assistant", 4000)],
             "new question",
         );
         assert!(tight.available_tokens < small.available_tokens);

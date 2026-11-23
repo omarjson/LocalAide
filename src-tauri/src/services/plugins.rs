@@ -37,6 +37,9 @@ pub fn plugins_dir() -> PathBuf {
 /// anything else collapsed to one hyphen. Non-ASCII names get no id here;
 /// the caller skips those files so ids stay predictable across machines.
 pub fn id_from_stem(stem: &str) -> String {
+    // Callers pass a stem, but accepting the filename too keeps ids stable if
+    // a caller forgets to strip the extension.
+    let stem = stem.strip_suffix(".html").unwrap_or(stem);
     if !stem.is_ascii() {
         return String::new();
     }
