@@ -730,9 +730,7 @@ fn oauth_start(state: &AppState, server_id: &str) -> Result<McpOAuthStartDto, Ap
 /// put the access token in the OS keychain under a stable key id. Returns
 /// only a safe status — the token is never logged or sent to the window.
 #[tauri::command]
-pub async fn mcp_oauth_finish(
-    req: McpOAuthFinishRequest,
-) -> Result<McpOAuthStatusDto, AppError> {
+pub async fn mcp_oauth_finish(req: McpOAuthFinishRequest) -> Result<McpOAuthStatusDto, AppError> {
     run_blocking(move || oauth_finish(&req)).await
 }
 

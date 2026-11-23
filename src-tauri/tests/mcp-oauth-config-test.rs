@@ -132,7 +132,10 @@ fn pure_pkce_helpers_carry_the_expected_parameters() {
     let form: Vec<(String, String)> = url::form_urlencoded::parse(request.body.as_bytes())
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
-    assert!(form.iter().any(|(k, v)| k == "code_verifier" && v == verifier));
+    assert!(
+        form.iter()
+            .any(|(k, v)| k == "code_verifier" && v == verifier)
+    );
     assert!(form.iter().any(|(k, v)| k == "code" && v == "code-1"));
 
     let token = parse_token_response(r#"{"access_token":"tok","token_type":"Bearer"}"#).unwrap();

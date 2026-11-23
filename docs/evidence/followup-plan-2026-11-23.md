@@ -44,3 +44,13 @@ integration pass, and adds a local notification/sound system.
 - Verify each child commit with a line-count guard before cherry-picking.
 - Wire new Rust modules/commands in one integration commit.
 - Push once; collect all CI failures from a single run before fixing.
+
+## Closure (2026-11-23)
+
+Both previously deferred caveats are now closed:
+
+- MCP OAuth PKCE is wired into `McpServerConfig`, save commands, the keychain
+  and a Settings sign-in panel; tokens are never returned or logged.
+- Goal mode has a bounded autonomous runner in `GoalPanel` that sends the next
+  step prompt through the existing chat stream, records the answer as progress,
+  and stops on blocked, completion, error, cancellation or budget exhaustion.
