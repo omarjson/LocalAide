@@ -449,6 +449,15 @@ pub struct DeveloperConfig {
     pub modules: std::collections::BTreeMap<String, bool>,
 }
 
+impl DeveloperConfig {
+    /// A module that has no stored entry is on. Used by the chat prompt
+    /// assembly to skip optional work (project context files, recall, ...)
+    /// when that module has been switched off in Settings → Developer.
+    pub fn module_on(&self, id: &str) -> bool {
+        self.modules.get(id).copied().unwrap_or(true)
+    }
+}
+
 /// One user-configured OpenAI-compatible provider (OpenAI, OpenRouter,
 /// Together, a localhost proxy such as Ollama or LM Studio, and so on).
 ///
@@ -913,5 +922,15 @@ mod tests {
         let legacy: AppConfig = serde_json::from_str(old).unwrap();
         assert!(legacy.mcp_servers[0].enabled_tools.is_empty());
         assert!(legacy.mcp_servers[0].disabled_tools.is_empty());
+    }
+
+    #[test]
+    fn an_unlisted_module_is_on_and_a_listed_one_can_be_off() {
+        let dev = DeveloperConfig::default();
+        assert!(dev.module_on("context_files"), "missing means on");
+        let mut dev = DeveloperConfig::default();
+        dev.modules.insert("context_files".into(), false);
+        assert!(!dev.module_on("context_files"));
+        assert!(dev.module_on("memory"), "other modules are unaffected");
     }
 }

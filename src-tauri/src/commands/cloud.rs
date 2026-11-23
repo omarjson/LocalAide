@@ -339,6 +339,33 @@ fn is_loopback_http(base_url: &str) -> bool {
     url::Url::parse(base_url).is_ok_and(|u| u.scheme() == "http" && is_local_host(&u))
 }
 
+/// How a save request changes a stored API key. `None` (the field omitted)
+/// keeps the saved key, an explicitly empty string clears it, and any other
+/// string replaces it. Kept out of the command so the three cases are testable
+/// without a config store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyChange<'a> {
+    Keep,
+    Clear,
+    Set(&'a str),
+}
+
+fn key_change(requested: Option<&str>) -> KeyChange<'_> {
+    match requested {
+        None => KeyChange::Keep,
+        Some(k) if k.trim().is_empty() => KeyChange::Clear,
+        Some(k) => KeyChange::Set(k.trim()),
+    }
+}
+
+fn apply_key_change(stored: &mut String, change: KeyChange<'_>) {
+    match change {
+        KeyChange::Keep => {}
+        KeyChange::Clear => stored.clear(),
+        KeyChange::Set(key) => *stored = key.to_string(),
+    }
+}
+
 /// Short hint of a stored key for the frontend: fixed dots plus the last four
 /// characters for longer keys.
 fn key_hint(key: &str) -> String {
@@ -561,14 +588,12 @@ pub fn cloud_provider_save(
             let Some(provider) = provider else {
                 return Err(AppError::invalid_input("That provider no longer exists."));
             };
-            let new_key = req
-                .api_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty());
+            let change = key_change(req.api_key.as_deref());
             // A saved key goes only to the address it was entered for. When
-            // the address moves to another site, the key must be entered again.
-            if new_key.is_none()
+            // the address moves to another site, a save that keeps the key
+            // must be entered again. An explicit new key (or a clear) is
+            // intentional and does not trip this guard.
+            if change == KeyChange::Keep
                 && !provider.api_key.is_empty()
                 && !same_origin(&provider.base_url, &base_url)
             {
@@ -587,17 +612,16 @@ pub fn cloud_provider_save(
             }
             provider.base_url = base_url;
             provider.model = model;
-            if let Some(key) = new_key {
-                provider.api_key = key.to_string();
-            }
+            // Empty string clears the stored key and removes it from the
+            // OS keychain on save; omitting the field keeps it untouched.
+            apply_key_change(&mut provider.api_key, change);
             provider.id.clone()
         }
         None => {
-            let key = req
-                .api_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty());
+            let key = match key_change(req.api_key.as_deref()) {
+                KeyChange::Set(k) => k.to_string(),
+                KeyChange::Keep | KeyChange::Clear => String::new(),
+            };
             // The key is optional: keyless services (Pollinations) and routers
             // on this computer work without one. A provider that needs a key
             // answers chat with a clear "needs an API key" message.
@@ -607,7 +631,7 @@ pub fn cloud_provider_save(
                 label,
                 base_url,
                 model,
-                api_key: key.unwrap_or_default().to_string(),
+                api_key: key,
                 enabled: true,
                 models: Vec::new(),
                 check: None,
@@ -769,7 +793,20 @@ fn same_origin(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{same_origin, uuid_v4};
+    use super::{apply_key_change, key_change, same_origin, uuid_v4, KeyChange};
+
+    #[test]
+    fn an_empty_key_clears_but_an_omitted_one_keeps_the_stored_key() {
+        let mut stored = "sk-secret".to_string();
+        apply_key_change(&mut stored, key_change(None));
+        assert_eq!(stored, "sk-secret", "omitting the field keeps the key");
+        apply_key_change(&mut stored, key_change(Some("   ")));
+        assert_eq!(stored, "", "an explicit empty string clears the key");
+        apply_key_change(&mut stored, key_change(Some("  sk-new  ")));
+        assert_eq!(stored, "sk-new", "pasted whitespace is trimmed");
+        assert_eq!(key_change(Some("")), KeyChange::Clear);
+        assert_eq!(key_change(None), KeyChange::Keep);
+    }
 
     #[test]
     fn a_key_stays_with_its_site() {

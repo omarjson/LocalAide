@@ -181,3 +181,141 @@ impl ContextBudget {
         out
     }
 }
+
+/// What changed when a chat switches model mid-conversation. The history and
+/// system prompt are kept; only the token budget for the new model's context
+/// window is recalculated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BudgetRecalc {
+    pub previous_context: Option<usize>,
+    pub context: usize,
+    pub generation_tokens: usize,
+    pub available_tokens: usize,
+    pub kept_turns: usize,
+    pub dropped_turns: usize,
+    /// A short, human-readable note the UI can show. Empty when nothing changed.
+    pub note: String,
+}
+
+/// Recompute a prompt budget for a newly chosen model without touching the
+/// conversation. Pure: no state, no I/O, so it can be tested in isolation and
+/// called from either the command layer or the UI binding layer.
+pub fn recalc_budget_for_model(
+    previous_context: Option<usize>,
+    context: usize,
+    generation_tokens: usize,
+    system_prompt: Option<&str>,
+    history: &[ChatMessage],
+    latest: &str,
+) -> BudgetRecalc {
+    let budget = ContextBudget::new(context, generation_tokens);
+    let messages = budget.build_messages(system_prompt, history, latest, &[]);
+    // The message list is system + kept history + latest. The system prompt
+    // defaults to a non-empty one, so subtract those two fixed slots.
+    let kept_turns = messages.len().saturating_sub(2);
+    let eligible = history
+        .iter()
+        .filter(|m| m.role == "user" || m.role == "assistant")
+        .count();
+    let dropped_turns = eligible.saturating_sub(kept_turns);
+    let available_tokens = context.saturating_sub(generation_tokens);
+    let note = match previous_context {
+        Some(prev) if prev != context => format!(
+            "Context budget recalculated for the new model: {prev} → {context} tokens ({available_tokens} available for the prompt, {kept_turns} turns kept, {dropped_turns} trimmed). This conversation was kept."
+        ),
+        _ => String::new(),
+    };
+    BudgetRecalc {
+        previous_context,
+        context,
+        generation_tokens,
+        available_tokens,
+        kept_turns,
+        dropped_turns,
+        note,
+    }
+}
+
+/// Prefix for auto-injected project instruction files in the system prompt.
+pub const PROJECT_RULES_HEADING: &str = "## Project rules";
+
+/// Collect project instruction files under `roots` and format them as a
+/// system-prompt section. Best-effort: unreadable roots simply contribute no
+/// rules, and the caller decides whether the module is enabled. Never fails
+/// the chat.
+pub fn project_rules(roots: &[std::path::PathBuf], max_bytes: usize) -> Option<String> {
+    let files = crate::services::context_files::collect(roots, max_bytes).ok()?;
+    if files.files.is_empty() || files.text.trim().is_empty() {
+        return None;
+    }
+    let shorten = if files.truncated {
+        "\n\n(Project rules were shortened to fit the model's context.)"
+    } else {
+        ""
+    };
+    Some(format!(
+        "{PROJECT_RULES_HEADING}\n{}{shorten}",
+        files.text.trim()
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn msg(role: &str, chars: usize) -> ChatMessage {
+        ChatMessage {
+            role: role.to_string(),
+            content: "x".repeat(chars),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn switching_model_recalculates_the_budget_without_dropping_the_conversation() {
+        let history = vec![msg("user", 40), msg("assistant", 40)];
+        let small = recalc_budget_for_model(
+            Some(2048),
+            8192,
+            512,
+            Some("keep this system prompt"),
+            &history,
+            "new question",
+        );
+        assert_eq!(small.previous_context, Some(2048));
+        assert_eq!(small.context, 8192);
+        assert_eq!(small.available_tokens, 7680);
+        assert_eq!(small.kept_turns, 2, "both turns survive a larger window");
+        assert_eq!(small.dropped_turns, 0);
+        assert!(small.note.contains("2048"));
+        assert!(small.note.contains("8192"));
+        assert!(small.note.contains("kept"));
+
+        // A smaller window may trim turns, but never the system or latest.
+        let tight = recalc_budget_for_model(
+            Some(8192),
+            128,
+            64,
+            Some("keep this system prompt"),
+            &vec![msg("user", 4000), msg("assistant", 4000)],
+            "new question",
+        );
+        assert!(tight.available_tokens < small.available_tokens);
+        assert!(tight.dropped_turns > 0);
+        assert!(tight.note.contains("recalculated"));
+
+        // No previous model (or the same window) means no visible change.
+        assert!(recalc_budget_for_model(None, 8192, 512, None, &history, "q")
+            .note
+            .is_empty());
+        assert!(recalc_budget_for_model(Some(8192), 8192, 512, None, &history, "q")
+            .note
+            .is_empty());
+    }
+
+    #[test]
+    fn project_rules_are_capped_and_missing_roots_add_nothing() {
+        let missing = std::path::PathBuf::from("/no/such/root/for/context/files");
+        assert!(project_rules(std::slice::from_ref(&missing), 1024).is_none());
+    }
+}
