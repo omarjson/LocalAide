@@ -1213,6 +1213,10 @@ export interface ShareStarted {
   remote_link: string;
   pair_code: string;
   qr_svg: string;
+  /** One-time link with the server password in the query string. */
+  pairing_url: string;
+  /** The same password, shown once for manual entry. */
+  pairing_token: string;
 }
 
 // Local session search, reindexing and multi-run (commands/session.rs).

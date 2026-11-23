@@ -503,8 +503,8 @@ export class ApiClient {
     return invoke<ShareStatus>("share_status");
   }
 
-  async shareStart(tunnel = true): Promise<ShareStarted> {
-    return invoke<ShareStarted>("share_start", { tunnel });
+  async shareStart(tunnel = true, lan = false): Promise<ShareStarted> {
+    return invoke<ShareStarted>("share_start", { tunnel, lan });
   }
 
   async shareStop(): Promise<ShareStatus> {
