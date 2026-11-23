@@ -8,7 +8,6 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
 
 use app_lib::config::{AppConfig, ConfigStore, snapshot_is_dirty};
 use app_lib::services::doctor::RepairPaths;
@@ -50,25 +49,18 @@ struct Server {
 fn serve_sequence(responses: Vec<(String, String)>) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
     let addr = listener.local_addr().unwrap();
-    listener.set_nonblocking(true).unwrap();
+    // Blocking accept matches the proven loopback helper in
+    // remote_engine_test.rs; the client always connects in these two tests,
+    // and a stuck client fails quickly on the next assert instead of spinning.
     let requests = Arc::new(AtomicUsize::new(0));
     let auths = Arc::new(Mutex::new(Vec::new()));
     let counted = requests.clone();
     let seen = auths.clone();
     let done = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(10);
         for (status, body) in responses {
-            let (mut stream, _) = loop {
-                match listener.accept() {
-                    Ok(pair) => break pair,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            return;
-                        }
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Err(_) => return,
-                }
+            let (mut stream, _) = match listener.accept() {
+                Ok(pair) => pair,
+                Err(_) => return,
             };
             counted.fetch_add(1, Ordering::SeqCst);
             let mut buf = [0u8; 8192];
