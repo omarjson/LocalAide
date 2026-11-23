@@ -5,6 +5,19 @@
 (() => {
   "use strict";
   const root = document.getElementById("root");
+  // The server also gates every request with a one-time pairing token. It
+  // arrives in the URL query; keep it for this tab and send it as a header.
+  const pairing =
+    new URLSearchParams(location.search).get("token") ||
+    sessionStorage.getItem("localaide-pairing") ||
+    "";
+  if (pairing) sessionStorage.setItem("localaide-pairing", pairing);
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    headers.set("X-LocalAide-Token", pairing);
+    return realFetch(input, { ...init, headers });
+  };
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get("k")) {
     sessionStorage.setItem("localaide-share-token", hash.get("k"));

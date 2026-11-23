@@ -13,6 +13,7 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 use super::Shared;
 use super::auth::{Role, bearer};
+use super::pairing;
 use crate::app::error::AppError;
 use crate::app::events::ChatStreamEvent;
 use crate::app::state::AppState;
@@ -131,9 +132,16 @@ impl Sink for ChannelSink {
     }
 }
 
-/// Start listening on a free local port. Returns the port.
-pub fn start(state: AppState, shared: Arc<Shared>, stop: Arc<AtomicBool>) -> Result<u16, AppError> {
-    let server = Server::http("127.0.0.1:0")
+/// Start listening on a free port. By default only the loopback interface is
+/// bound; `lan` opts into 0.0.0.0. The pairing token is required either way.
+pub fn start(
+    state: AppState,
+    shared: Arc<Shared>,
+    stop: Arc<AtomicBool>,
+    lan: bool,
+) -> Result<u16, AppError> {
+    let bind = if lan { "0.0.0.0:0" } else { "127.0.0.1:0" };
+    let server = Server::http(bind)
         .map_err(|e| AppError::internal(format!("The share server did not start: {e}")))?;
     let port = server
         .server_addr()
@@ -189,13 +197,50 @@ fn read_body(req: &mut Request) -> Result<Value, &'static str> {
 }
 
 fn handle(mut req: Request, state: &AppState, shared: &Shared, stop: &AtomicBool) {
-    let path = req.url().split('?').next().unwrap_or("/").to_string();
+    let url = req.url().to_string();
+    let path = url.split('?').next().unwrap_or("/").to_string();
     let method = req.method().clone();
 
-    // The page itself holds no data; everything under /api needs a token.
+    // A small public health check: no token, no data, just "we are up".
+    if method == Method::Get && path == "/health" {
+        let _ = req.respond(json_response(
+            &json!({ "ok": true, "service": "localaide-share" }),
+            200,
+        ));
+        return;
+    }
+
+    // Every other request needs the one-time pairing token. It travels in
+    // ?token= or the X-LocalAide-Token header, is checked against the hash
+    // kept in memory, and is never sent anywhere by this server.
+    let header_token = req
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv(pairing::HEADER))
+        .map(|h| h.value.as_str().to_string());
+    let presented = pairing::token_from_query(&url)
+        .or(header_token)
+        .unwrap_or_default();
+    if !pairing::token_matches(&shared.pairing_hash, &presented) {
+        shared.refused.fetch_add(1, Ordering::Relaxed);
+        note_failure();
+        let _ = req.respond(error(
+            401,
+            "This server needs its one-time pairing token. Open the pairing link shown on your computer.",
+        ));
+        return;
+    }
+
+    // The page holds no data. Give its script request the same token so the
+    // browser can load it without needing to know the password separately.
     if method == Method::Get && (path == "/" || path == "/index.html") {
+        let page = PAGE.replacen(
+            "/app.js",
+            &format!("/app.js?{}={}", pairing::QUERY, presented),
+            1,
+        );
         let _ = req.respond(secure(
-            boxed(PAGE.as_bytes().to_vec(), 200),
+            boxed(page.into_bytes(), 200),
             "text/html; charset=utf-8",
         ));
         return;

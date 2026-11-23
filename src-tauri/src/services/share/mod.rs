@@ -9,6 +9,8 @@
 //! Stopping sharing ends the tunnel and the server, so old links die.
 
 pub mod auth;
+/// The one-time pairing password that gates the whole local server.
+pub mod pairing;
 pub mod qr;
 mod server;
 mod tunnel;
@@ -42,6 +44,8 @@ struct Running {
 /// What the server threads share with the app.
 pub(crate) struct Shared {
     pub tokens: Tokens,
+    /// SHA-256 of the one-time pairing token; the plain value is shown once.
+    pub pairing_hash: [u8; 32],
     pub requests: AtomicU64,
     pub refused: AtomicU64,
     /// Chat jobs started through the link; only these can be approved or
@@ -82,6 +86,11 @@ pub struct ShareStarted {
     pub pair_code: String,
     /// The remote link as a QR, ready to drop into the page.
     pub qr_svg: String,
+    /// One-time link that opens the paired assistant with its password in
+    /// the query string. Shown once, then only its hash is kept in memory.
+    pub pairing_url: String,
+    /// The same password, for copying/entering by hand. Returned once.
+    pub pairing_token: String,
 }
 
 /// What Settings → Share needs to pair a phone.
@@ -163,8 +172,13 @@ pub fn status() -> ShareStatus {
 }
 
 /// Start sharing. `tunnel = false` serves on 127.0.0.1 only (for trying the
-/// page on this computer).
-pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppError> {
+/// page on this computer). `lan = true` binds on 0.0.0.0 so a device on the
+/// same network can reach it; the pairing token is required either way.
+pub fn start(
+    state: AppState,
+    with_tunnel: bool,
+    lan: bool,
+) -> Result<ShareStarted, AppError> {
     let mut guard = SHARE.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
         return Err(AppError::invalid_input(
@@ -186,15 +200,20 @@ pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppErro
     let tokens = Tokens::generate()?;
     let viewer = tokens.viewer_plain.clone();
     let remote = tokens.remote_plain.clone();
+    // The password for the whole server. Only its hash survives this call;
+    // the plain value is returned once in the DTO and never stored.
+    let pairing_token = pairing::generate_token()?;
+    let pairing_hash = pairing::hash_token(&pairing_token);
     let shared = Arc::new(Shared {
         tokens: tokens.forget_plain(),
+        pairing_hash,
         requests: AtomicU64::new(0),
         refused: AtomicU64::new(0),
         jobs: Mutex::new(HashSet::new()),
         last_seen: AtomicU64::new(0),
     });
     let stop = Arc::new(AtomicBool::new(false));
-    let port = server::start(state.clone(), shared.clone(), stop.clone())?;
+    let port = server::start(state.clone(), shared.clone(), stop.clone(), lan)?;
     let local = format!("http://127.0.0.1:{port}");
     let (url, tunnel) = match cloudflared {
         Some(bin) => match tunnel::Tunnel::open(&bin, port) {
@@ -216,6 +235,7 @@ pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppErro
     let remote_link = format!("{url}/#k={remote}");
     let pair_code = pair_code_from(&remote);
     let qr_svg = qr::svg(&remote_link)?;
+    let pairing_url = pairing::pairing_url(&url, &pairing_token);
     *guard = Some(Running {
         stop,
         port,
@@ -233,6 +253,8 @@ pub fn start(state: AppState, with_tunnel: bool) -> Result<ShareStarted, AppErro
         remote_link,
         pair_code,
         qr_svg,
+        pairing_url,
+        pairing_token,
     })
 }
 
@@ -336,13 +358,16 @@ mod tests {
     #[ignore]
     fn real_share_server_enforces_tokens_and_roles() {
         let st = state();
-        let started = start(st.clone(), false).unwrap();
+        let started = start(st.clone(), false, false).unwrap();
         let base = started.status.url.clone().unwrap();
+        let pairing = started.pairing_token.clone();
         let token = |link: &str| link.split("#k=").nth(1).unwrap().to_string();
         let (viewer, remote) = (token(&started.viewer_link), token(&started.remote_link));
         let c = reqwest::blocking::Client::new();
         let get = |path: &str, tok: Option<&str>| {
-            let mut r = c.get(format!("{base}{path}"));
+            let mut r = c
+                .get(format!("{base}{path}"))
+                .header(pairing::HEADER, pairing.as_str());
             if let Some(t) = tok {
                 r = r.bearer_auth(t);
             }
@@ -350,6 +375,7 @@ mod tests {
         };
         let post = |path: &str, tok: &str, body: serde_json::Value| {
             c.post(format!("{base}{path}"))
+                .header(pairing::HEADER, pairing.as_str())
                 .bearer_auth(tok)
                 .json(&body)
                 .send()
