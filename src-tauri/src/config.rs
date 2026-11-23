@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::config_path;
 
@@ -307,6 +308,31 @@ pub enum McpTransport {
     },
 }
 
+/// OAuth 2.1 / PKCE sign-in settings for an MCP server (ADR-0012). Kept as a
+/// standalone record rather than a field on `McpServerConfig` so older config
+/// files and every existing struct literal keep working unchanged. The
+/// redirect is a loopback address the app listens on during sign-in; no
+/// secret is stored here, only public client metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct McpOAuthConfig {
+    /// The MCP server id this sign-in belongs to.
+    pub server_id: String,
+    /// Public OAuth client id issued by the authorization server.
+    pub client_id: String,
+    /// Authorization endpoint the user's browser is opened to.
+    pub authorize_url: String,
+    /// Token endpoint used for the code exchange.
+    pub token_url: String,
+    /// Loopback redirect URI registered with the authorization server.
+    pub redirect_uri: String,
+    /// Optional scopes to request.
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    /// Optional resource/audience hint some authorization servers require.
+    #[serde(default)]
+    pub audience: Option<String>,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -582,8 +608,18 @@ impl Default for VoiceConfig {
     }
 }
 
+/// Pure dirty check for config writes. True when `next` differs from the
+/// last serialized snapshot; `None` means nothing has been written yet.
+pub fn snapshot_is_dirty(last_written: Option<&str>, next: &str) -> bool {
+    last_written != Some(next)
+}
+
 pub struct ConfigStore {
     path: PathBuf,
+    /// Serialized snapshot last written to disk. `save` skips the atomic
+    /// rename when the snapshot is unchanged, so debounced settings changes
+    /// do not rewrite an identical config file on every keystroke.
+    last_written: Mutex<Option<String>>,
 }
 
 impl Default for ConfigStore {
@@ -594,8 +630,14 @@ impl Default for ConfigStore {
 
 impl ConfigStore {
     pub fn new() -> Self {
+        Self::at(config_path())
+    }
+
+    /// A store pointed at an explicit path, for isolated tests and migrations.
+    pub fn at(path: PathBuf) -> Self {
         Self {
-            path: config_path(),
+            path,
+            last_written: Mutex::new(None),
         }
     }
 
@@ -657,14 +699,23 @@ impl ConfigStore {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let data = serde_json::to_string_pretty(&on_disk).map_err(|e| e.to_string())?;
+        // Skip a redundant write. The cache is only an optimisation: it never
+        // changes what a changed config serializes to, and the first save in
+        // a fresh store always writes.
+        let mut last = self.last_written.lock().unwrap_or_else(|e| e.into_inner());
+        if !snapshot_is_dirty(last.as_deref(), &data) {
+            return Ok(());
+        }
         let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, data).map_err(|e| e.to_string())?;
+        fs::write(&tmp, data.as_bytes()).map_err(|e| e.to_string())?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
         }
-        fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
+        fs::rename(&tmp, &self.path).map_err(|e| e.to_string())?;
+        *last = Some(data);
+        Ok(())
     }
 }
 
@@ -806,12 +857,17 @@ mod tests {
     }
 
     #[test]
+    fn dirty_check_skips_identical_snapshots() {
+        assert!(snapshot_is_dirty(None, "{}"));
+        assert!(!snapshot_is_dirty(Some("{}"), "{}"));
+        assert!(snapshot_is_dirty(Some("previous"), "next"));
+    }
+
+    #[test]
     fn save_replaces_the_file_and_leaves_no_temp_file() {
         let dir = std::env::temp_dir().join(format!("la-config-save-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let store = ConfigStore {
-            path: dir.join("config.json"),
-        };
+        let store = ConfigStore::at(dir.join("config.json"));
         let mut cfg = AppConfig::default();
         store.save(&cfg).unwrap();
         cfg.context_tokens = 4096;

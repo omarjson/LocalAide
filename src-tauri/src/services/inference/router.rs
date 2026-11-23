@@ -29,8 +29,10 @@ pub struct RouterEngine {
     /// followed: a redirect would carry the conversation and the key to an
     /// address the user never entered.
     chat_client: reqwest::blocking::Client,
-    /// API keys for the active remote provider, with a rotation cursor.
-    credentials: Mutex<Option<CredentialPool>>,
+    /// API keys for the active remote provider, with a rotation cursor. An
+    /// Arc so the remote engine's rotation hook can share it without keeping
+    /// a reference to the router (and without any ownership cycle).
+    credentials: Arc<Mutex<Option<CredentialPool>>>,
     /// Provider ids in failover order, from config.
     provider_order: Mutex<Vec<String>>,
 }
@@ -51,12 +53,28 @@ impl RouterEngine {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
+        // The rotation hook shares the pool with the router through an Arc:
+        // it captures no `&self`, so there is no ownership cycle. A 401/429
+        // from a real RemoteEngine request now advances the cursor and the
+        // engine retries once with the next key.
+        let credentials = Arc::new(Mutex::new(None));
+        let mut remote = RemoteEngine::new();
+        let pool = credentials.clone();
+        remote.set_key_supplier(Arc::new(move |status| {
+            let mut guard = pool.lock().unwrap_or_else(|e| e.into_inner());
+            match guard.as_mut() {
+                Some(keys) if keys.on_auth_failure(status) => {
+                    keys.current().map(str::to_string)
+                }
+                _ => None,
+            }
+        }));
         Self {
             local: SidecarEngine::new(),
-            remote: RemoteEngine::new(),
+            remote,
             mode: Mutex::new(EngineMode::Local),
             chat_client,
-            credentials: Mutex::new(None),
+            credentials,
             provider_order: Mutex::new(Vec::new()),
         }
     }

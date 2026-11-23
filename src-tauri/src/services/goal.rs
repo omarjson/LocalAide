@@ -109,6 +109,114 @@ pub fn apply_complete(goal: &Goal) -> Result<Goal, AppError> {
     Ok(next)
 }
 
+/// Why a bounded goal loop stopped. `Blocked` is the independent check the
+/// caller makes before deciding a goal is finished.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StopReason {
+    BudgetExhausted,
+    Blocked,
+    Completed,
+    Abandoned,
+}
+
+/// What the frontend should do on the next turn. On `Continue` it runs
+/// `prompt` through the model, then feeds the result back with `goal_step`,
+/// which consumes one unit of budget. This module never calls a model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum StepDecision {
+    Continue { prompt: String, budget_left: i64 },
+    Stop(StopReason),
+}
+
+/// Result of driving a goal over queued progress lines.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DriveResult {
+    pub goal: Goal,
+    pub applied: usize,
+    pub decision: StepDecision,
+}
+
+/// Pure prompt builder for one step: the objective, the progress so far and
+/// the remaining budget. No database, model or clock is involved.
+pub fn step_prompt(goal: &Goal, steps: &[GoalStep]) -> String {
+    let mut out = format!("Goal: {}\n", goal.objective);
+    if steps.is_empty() {
+        out.push_str("No progress recorded yet.\n");
+    } else {
+        out.push_str("Progress so far:\n");
+        for step in steps {
+            out.push_str(&format!("- {}\n", step.progress));
+        }
+    }
+    out.push_str(&format!(
+        "Steps left: {}. Take the next step, or say the goal is done.",
+        goal.budget
+    ));
+    out
+}
+
+/// Decide the next action from a goal's state. A blocked report or a finished
+/// goal stops the loop even when budget remains, so completion is never
+/// inferred from budget alone.
+pub fn decide_next(goal: &Goal, steps: &[GoalStep], blocked: bool) -> StepDecision {
+    match goal.status {
+        GoalStatus::Completed => return StepDecision::Stop(StopReason::Completed),
+        GoalStatus::Abandoned => return StepDecision::Stop(StopReason::Abandoned),
+        GoalStatus::Active => {}
+    }
+    if blocked {
+        return StepDecision::Stop(StopReason::Blocked);
+    }
+    if goal.budget <= 0 {
+        return StepDecision::Stop(StopReason::BudgetExhausted);
+    }
+    StepDecision::Continue {
+        prompt: step_prompt(goal, steps),
+        budget_left: goal.budget,
+    }
+}
+
+/// Bounded step loop. Applies at most one queued progress line per remaining
+/// budget unit to a clone of the goal, stopping at once when the caller
+/// reports a blocker. The loop is bounded by `queued.len()` and by `budget`,
+/// so it cannot run forever, and it never touches the database: the caller
+/// persists each accepted step with `step`/`goal_step`.
+pub fn drive(goal: &Goal, queued: &[String], blocked: bool) -> DriveResult {
+    let mut current = goal.clone();
+    let mut applied = 0usize;
+    let mut steps: Vec<GoalStep> = Vec::new();
+    if !blocked {
+        for progress in queued {
+            match apply_step(&current) {
+                Ok(next) => {
+                    current = next;
+                    applied += 1;
+                    steps.push(GoalStep {
+                        id: applied as i64,
+                        goal_id: current.id.clone(),
+                        seq: applied as i64,
+                        progress: progress.clone(),
+                        created_at: 0,
+                    });
+                }
+                // Budget exhausted or the goal is no longer active.
+                Err(_) => break,
+            }
+        }
+    }
+    let decision = if blocked {
+        StepDecision::Stop(StopReason::Blocked)
+    } else {
+        decide_next(&current, &steps, false)
+    };
+    DriveResult {
+        goal: current,
+        applied,
+        decision,
+    }
+}
+
 fn now_secs() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -393,6 +501,58 @@ mod tests {
         assert_eq!(done.budget, 2);
         assert!(apply_complete(&done).is_err());
         assert!(apply_step(&done).is_err());
+    }
+
+    #[test]
+    fn drive_stops_at_budget() {
+        let start = goal(2, GoalStatus::Active);
+        let queued = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
+        let result = drive(&start, &queued, false);
+        assert_eq!(result.applied, 2, "no more steps than budget");
+        assert_eq!(result.goal.budget, 0);
+        assert_eq!(
+            result.decision,
+            StepDecision::Stop(StopReason::BudgetExhausted)
+        );
+    }
+
+    #[test]
+    fn drive_stops_when_blocked() {
+        let start = goal(3, GoalStatus::Active);
+        let queued = vec!["a".to_string(), "b".to_string()];
+        let result = drive(&start, &queued, true);
+        assert_eq!(result.applied, 0);
+        assert_eq!(result.goal.budget, 3, "a blocked turn spends no budget");
+        assert_eq!(result.decision, StepDecision::Stop(StopReason::Blocked));
+    }
+
+    #[test]
+    fn decide_next_offers_a_prompt_while_work_remains() {
+        let start = goal(1, GoalStatus::Active);
+        let steps = vec![GoalStep {
+            id: 1,
+            goal_id: start.id.clone(),
+            seq: 1,
+            progress: "drafted the outline".into(),
+            created_at: 0,
+        }];
+        match decide_next(&start, &steps, false) {
+            StepDecision::Continue { prompt, budget_left } => {
+                assert_eq!(budget_left, 1);
+                assert!(prompt.contains("ship it"), "{prompt}");
+                assert!(prompt.contains("drafted the outline"), "{prompt}");
+            }
+            other => panic!("expected a prompt, got {other:?}"),
+        }
+        assert_eq!(
+            decide_next(&start, &steps, true),
+            StepDecision::Stop(StopReason::Blocked)
+        );
+        let done = goal(1, GoalStatus::Completed);
+        assert_eq!(
+            decide_next(&done, &[], false),
+            StepDecision::Stop(StopReason::Completed)
+        );
     }
 
     #[test]
