@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" context="module">
   // One icon set: 24px grid, 1.75 stroke, rounded caps and joins, drawn inline so it
   // takes the surrounding text color and needs no icon font or extra package.
   // Every name maps to one SVG fragment string; a single <svg> renders the chosen
@@ -342,7 +342,9 @@
 
   /** Every icon name is a registry key, so the two can never drift. */
   export type IconName = keyof typeof iconPaths;
+</script>
 
+<script lang="ts">
   interface Props {
     name: IconName;
     class?: string;

@@ -57,7 +57,7 @@ impl RouterEngine {
         // it captures no `&self`, so there is no ownership cycle. A 401/429
         // from a real RemoteEngine request now advances the cursor and the
         // engine retries once with the next key.
-        let credentials = Arc::new(Mutex::new(None));
+        let credentials = Arc::new(Mutex::new(None::<CredentialPool>));
         let mut remote = RemoteEngine::new();
         let pool = credentials.clone();
         remote.set_key_supplier(Arc::new(move |status| {

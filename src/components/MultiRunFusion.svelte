@@ -11,7 +11,7 @@
 
   let { onClose }: { onClose: () => void } = $props();
 
-  type Draft = { id: number; endpoint: string; model: string; apiKey: *** };
+  type Draft = { id: number; endpoint: string; model: string; apiKey: string };
   let nextId = 1;
   const blank = (): Draft => ({ id: nextId++, endpoint: "", model: "", apiKey: "" });
 
