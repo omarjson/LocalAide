@@ -9,13 +9,17 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::app::blocking::with_app_state;
+use crate::app::blocking::{run_blocking, with_app_state};
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::commands::cloud::{load_config, save_config};
-use crate::config::{McpServerConfig, McpTransport};
+use crate::config::{McpOAuthConfig, McpServerConfig, McpTransport};
+use crate::services::mcp::import::parse_import;
 use crate::services::mcp::presets::{McpPreset, PRESETS};
-use crate::services::mcp::{import::parse_import, validate};
+use crate::services::mcp::{
+    DEFAULT_OAUTH_REDIRECT_URI, authorize_url, begin_sign_in, exchange_code, new_pkce,
+    oauth_token_key, take_sign_in, validate, verify_state,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct KeyValueHint {
@@ -42,6 +46,8 @@ pub struct McpServerDto {
     pub url: String,
     pub env: Vec<KeyValueHint>,
     pub headers: Vec<KeyValueHint>,
+    /// OAuth client metadata. Never contains a token; empty when unset.
+    pub oauth: Option<McpOAuthConfig>,
     /// A session is open right now.
     pub connected: bool,
 }
@@ -79,6 +85,45 @@ pub struct McpServerSaveRequest {
     pub env: Vec<KeyValueInput>,
     #[serde(default)]
     pub headers: Vec<KeyValueInput>,
+    /// Omit (or send null) on an edit to keep the stored OAuth settings.
+    #[serde(default)]
+    pub oauth: Option<McpOAuthConfig>,
+}
+
+/// OAuth 2.1 PKCE sign-in. The window only ever sees public client metadata,
+/// the authorization URL, the state and a safe status — never a token.
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpOAuthStartRequest {
+    pub server_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct McpOAuthStartDto {
+    /// Open this in the user's browser.
+    pub authorize_url: String,
+    /// Echoed back by the authorization server; passed to `mcp_oauth_finish`.
+    pub state: String,
+    /// The loopback address the code is sent to.
+    pub redirect_uri: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpOAuthFinishRequest {
+    pub server_id: String,
+    pub state: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct McpOAuthStatusDto {
+    pub server_id: String,
+    pub signed_in: bool,
+    /// Plain words for the UI. No token, verifier or header is ever returned.
+    pub message: String,
+    /// From the token response; "Bearer" in practice. Safe to display.
+    pub token_type: String,
+    /// From the token response; safe to display.
+    pub expires_in: Option<u64>,
 }
 
 fn yes() -> bool {
@@ -151,6 +196,7 @@ fn dto(state: &AppState, s: &McpServerConfig) -> McpServerDto {
             url: String::new(),
             env: hints(env),
             headers: Vec::new(),
+            oauth: s.oauth.clone(),
             connected,
         },
         McpTransport::Http { url, headers } => McpServerDto {
@@ -167,6 +213,7 @@ fn dto(state: &AppState, s: &McpServerConfig) -> McpServerDto {
             url: url.clone(),
             env: Vec::new(),
             headers: hints(headers),
+            oauth: s.oauth.clone(),
             connected,
         },
     }
@@ -387,6 +434,27 @@ pub async fn mcp_server_save(
     with_app_state(&state, move |owned| save_server(&owned, req)).await
 }
 
+/// Normalize and check OAuth settings before they reach config.json. Only
+/// public client metadata is stored here; the token lives in the keychain.
+/// Both endpoints follow the same HTTPS-or-loopback rule as other providers.
+fn prepare_oauth(mut oauth: McpOAuthConfig, server_id: &str) -> Result<McpOAuthConfig, AppError> {
+    oauth.server_id = server_id.to_string();
+    if oauth.redirect_uri.trim().is_empty() {
+        oauth.redirect_uri = DEFAULT_OAUTH_REDIRECT_URI.to_string();
+    }
+    oauth.client_id = oauth.client_id.trim().to_string();
+    oauth.authorize_url = oauth.authorize_url.trim().to_string();
+    oauth.token_url = oauth.token_url.trim().to_string();
+    oauth.redirect_uri = oauth.redirect_uri.trim().to_string();
+    if oauth.client_id.is_empty() {
+        return Err(AppError::invalid_input("Enter the OAuth client id."));
+    }
+    crate::config::validate_base_url(&oauth.authorize_url).map_err(AppError::invalid_input)?;
+    crate::config::validate_base_url(&oauth.token_url).map_err(AppError::invalid_input)?;
+    crate::config::validate_base_url(&oauth.redirect_uri).map_err(AppError::invalid_input)?;
+    Ok(oauth)
+}
+
 fn save_server(state: &AppState, req: McpServerSaveRequest) -> Result<Vec<McpServerDto>, AppError> {
     let mut cfg = load_config(state)?;
     let existing = req
@@ -436,11 +504,26 @@ fn save_server(state: &AppState, req: McpServerSaveRequest) -> Result<Vec<McpSer
             ));
         }
     };
+    let id = existing
+        .as_ref()
+        .map(|s| s.id.clone())
+        .unwrap_or_else(new_id);
+    // OAuth belongs to HTTP servers only. A client that omits it keeps the
+    // stored settings, so a name-only edit cannot silently drop sign-in.
+    let oauth = if req.kind == "http" {
+        match req
+            .oauth
+            .clone()
+            .or_else(|| existing.as_ref().and_then(|s| s.oauth.clone()))
+        {
+            Some(config) => Some(prepare_oauth(config, &id)?),
+            None => None,
+        }
+    } else {
+        None
+    };
     let server = McpServerConfig {
-        id: existing
-            .as_ref()
-            .map(|s| s.id.clone())
-            .unwrap_or_else(new_id),
+        id,
         name: req.name.trim().to_string(),
         enabled: req.enabled,
         auto_approve: req.auto_approve,
@@ -463,6 +546,7 @@ fn save_server(state: &AppState, req: McpServerSaveRequest) -> Result<Vec<McpSer
             req.disabled_tools
         },
         transport,
+        oauth,
     };
     validate(&server)?;
     if cfg
@@ -593,6 +677,7 @@ pub fn mcp_import(state: State<'_, AppState>, text: String) -> Result<McpImportR
             enabled_tools: vec![],
             disabled_tools: vec![],
             transport,
+            oauth: None,
         };
         if validate(&server).is_err() {
             skipped += 1;
@@ -606,6 +691,71 @@ pub fn mcp_import(state: State<'_, AppState>, text: String) -> Result<McpImportR
         added,
         skipped,
         servers: list(&state, &cfg),
+    })
+}
+
+/// Begin a PKCE sign-in. Reads the saved OAuth metadata, creates a fresh
+/// verifier/state pair, and hands the browser an authorization URL. The
+/// verifier stays in this process; only the URL and state go to the window.
+#[tauri::command]
+pub async fn mcp_oauth_start(
+    state: State<'_, AppState>,
+    req: McpOAuthStartRequest,
+) -> Result<McpOAuthStartDto, AppError> {
+    with_app_state(&state, move |owned| oauth_start(&owned, &req.server_id)).await
+}
+
+fn oauth_start(state: &AppState, server_id: &str) -> Result<McpOAuthStartDto, AppError> {
+    let cfg = load_config(state)?;
+    let server = cfg
+        .mcp_servers
+        .iter()
+        .find(|s| s.id == server_id)
+        .ok_or_else(|| AppError::invalid_input("That server no longer exists."))?;
+    let oauth = server.oauth.as_ref().ok_or_else(|| {
+        AppError::invalid_input("Save an authorization URL and token URL for this server first.")
+    })?;
+    let pkce = new_pkce()?;
+    let authorize = authorize_url(oauth, &pkce.state, &pkce.challenge)?;
+    let redirect_uri = oauth.redirect_uri.clone();
+    begin_sign_in(oauth.clone(), pkce.clone());
+    Ok(McpOAuthStartDto {
+        authorize_url: authorize,
+        state: pkce.state,
+        redirect_uri,
+    })
+}
+
+/// Finish a PKCE sign-in: check the one-time state, exchange the code, and
+/// put the access token in the OS keychain under a stable key id. Returns
+/// only a safe status — the token is never logged or sent to the window.
+#[tauri::command]
+pub async fn mcp_oauth_finish(
+    req: McpOAuthFinishRequest,
+) -> Result<McpOAuthStatusDto, AppError> {
+    run_blocking(move || oauth_finish(&req)).await
+}
+
+fn oauth_finish(req: &McpOAuthFinishRequest) -> Result<McpOAuthStatusDto, AppError> {
+    let (cfg, pkce) = take_sign_in(&req.server_id)?;
+    verify_state(&pkce.state, req.state.trim())?;
+    let code = req.code.trim();
+    if code.is_empty() {
+        return Err(AppError::invalid_input(
+            "Paste the code from the callback address.",
+        ));
+    }
+    let token = exchange_code(&cfg, code, &pkce.verifier)?;
+    // Only the key id is derived from the server id; the token itself is
+    // never used in a log line or a DTO.
+    crate::services::secrets::save(&oauth_token_key(&req.server_id), &token.access_token)?;
+    Ok(McpOAuthStatusDto {
+        server_id: req.server_id.clone(),
+        signed_in: true,
+        message: "Signed in. The access token is kept in your OS keychain, not in the config file."
+            .to_string(),
+        token_type: token.token_type,
+        expires_in: token.expires_in,
     })
 }
 
@@ -642,5 +792,27 @@ mod tests {
         assert!(!merged.contains_key("MISSING"));
         assert_eq!(hint("secret-value-1234"), "••••1234");
         assert_eq!(hint("short"), "••••");
+    }
+
+    #[test]
+    fn oauth_endpoints_must_be_https_or_loopback() {
+        let base = McpOAuthConfig {
+            client_id: "client-1".into(),
+            authorize_url: "https://auth.example.com/authorize".into(),
+            token_url: "https://auth.example.com/token".into(),
+            ..McpOAuthConfig::default()
+        };
+        let saved = prepare_oauth(base.clone(), "mcp-1").unwrap();
+        assert_eq!(saved.server_id, "mcp-1");
+        assert_eq!(saved.redirect_uri, DEFAULT_OAUTH_REDIRECT_URI);
+
+        let mut plain = base.clone();
+        plain.token_url = "http://auth.example.com/token".into();
+        assert!(prepare_oauth(plain, "mcp-1").is_err());
+
+        let mut loopback = base;
+        loopback.authorize_url = "http://127.0.0.1:9000/authorize".into();
+        loopback.token_url = "http://localhost:9000/token".into();
+        assert!(prepare_oauth(loopback, "mcp-1").is_ok());
     }
 }

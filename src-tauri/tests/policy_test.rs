@@ -129,6 +129,7 @@ fn mcp_tool_gates_keep_backward_compatibility() {
             url: "https://mcp.example.com".into(),
             headers: BTreeMap::new(),
         },
+        oauth: None,
     };
     let mk = |name: &str| McpTool {
         name: name.to_string(),

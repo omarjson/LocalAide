@@ -285,6 +285,11 @@ pub struct McpServerConfig {
     #[serde(default)]
     pub disabled_tools: Vec<String>,
     pub transport: McpTransport,
+    /// OAuth 2.1 / PKCE sign-in settings for an HTTP server. Optional so
+    /// config files written before this feature keep loading unchanged; the
+    /// access token itself never lives here, only public client metadata.
+    #[serde(default)]
+    pub oauth: Option<McpOAuthConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -308,12 +313,15 @@ pub enum McpTransport {
     },
 }
 
-/// OAuth 2.1 / PKCE sign-in settings for an MCP server (ADR-0012). Kept as a
-/// standalone record rather than a field on `McpServerConfig` so older config
-/// files and every existing struct literal keep working unchanged. The
-/// redirect is a loopback address the app listens on during sign-in; no
-/// secret is stored here, only public client metadata.
+/// OAuth 2.1 / PKCE sign-in settings for an MCP server (ADR-0012). Stored on
+/// `McpServerConfig` as an optional field, so older config files and every
+/// existing struct literal keep working. The redirect is a loopback address
+/// the user copies the code from during sign-in; no secret is stored here,
+/// only public client metadata. Missing fields default to empty so a client
+/// that omits them cannot break config parsing; `mcp_server_save` validates
+/// them before anything is persisted.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
 pub struct McpOAuthConfig {
     /// The MCP server id this sign-in belongs to.
     pub server_id: String,

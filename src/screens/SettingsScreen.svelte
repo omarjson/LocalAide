@@ -33,6 +33,7 @@
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
+  import McpOAuthPanel from "../components/McpOAuthPanel.svelte";
   import AgentsPanel from "../components/AgentsPanel.svelte";
   import DoctorPanel from "../components/DoctorPanel.svelte";
   import { applyAccent, applyDensity, applyFont, applyTheme, currentAccent, currentDensity, currentFont, currentTheme, type Accent, type AppFont, type Density } from "../lib/theme";
@@ -1139,6 +1140,7 @@
         </div>
       {:else if activeTab === "tools"}
         <McpSettings />
+        <McpOAuthPanel />
         <div class="mt-8"><AgentsPanel /></div>
         <PolicyPanel />
       {:else if activeTab === "web"}

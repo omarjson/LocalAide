@@ -94,6 +94,9 @@ import type {
   McpImportResult,
   McpPreset,
   McpServer,
+  McpOAuthFinishRequest,
+  McpOAuthStartDto,
+  McpOAuthStatusDto,
   ArtCraftPreset,
   Automation,
   AutomationsState,
@@ -1035,6 +1038,18 @@ export class ApiClient {
 
   async importMcpServers(text: string): Promise<McpImportResult> {
     return invoke<McpImportResult>("mcp_import", { text });
+  }
+
+  /** Start PKCE sign-in: returns the browser URL and the one-time state. */
+  async mcpOAuthStart(serverId: string): Promise<McpOAuthStartDto> {
+    return invoke<McpOAuthStartDto>("mcp_oauth_start", {
+      req: { server_id: serverId },
+    });
+  }
+
+  /** Exchange the pasted callback code. Returns status only, never a token. */
+  async mcpOAuthFinish(req: McpOAuthFinishRequest): Promise<McpOAuthStatusDto> {
+    return invoke<McpOAuthStatusDto>("mcp_oauth_finish", { req });
   }
 
   // Local session search, reindexing and side-by-side model runs (session.rs).

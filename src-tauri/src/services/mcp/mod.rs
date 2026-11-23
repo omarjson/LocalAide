@@ -14,8 +14,8 @@ pub mod presets;
 mod transport;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -326,6 +326,63 @@ pub fn exchange_code(
     parse_token_response(&text)
 }
 
+/// How long an unfinished sign-in stays usable. A state older than this is
+/// dropped, so an attacker cannot finish a flow hours after the user began.
+const OAUTH_STATE_TTL: Duration = Duration::from_secs(10 * 60);
+/// Default loopback redirect when the client did not register one. The app
+/// shows the callback address; the user pastes the code from it.
+pub const DEFAULT_OAUTH_REDIRECT_URI: &str = "http://127.0.0.1:8765/callback";
+
+/// One unfinished sign-in. The verifier is a secret, so this type has no
+/// `Debug` impl and never crosses the IPC boundary.
+struct PendingSignIn {
+    cfg: McpOAuthConfig,
+    pkce: Pkce,
+    started_at: Instant,
+}
+
+fn pending_signins() -> &'static Mutex<HashMap<String, PendingSignIn>> {
+    static PENDING: OnceLock<Mutex<HashMap<String, PendingSignIn>>> = OnceLock::new();
+    PENDING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Stable keychain account id for one server's access token. Derived only
+/// from the server id, so the token is found again after a restart and is
+/// never used as an id itself.
+pub fn oauth_token_key(server_id: &str) -> String {
+    format!("mcp-oauth:{server_id}")
+}
+
+/// Begin a sign-in: remember the PKCE verifier and state for this server.
+/// A second attempt replaces the first, so stale states cannot be finished.
+pub fn begin_sign_in(cfg: McpOAuthConfig, pkce: Pkce) {
+    let pending = PendingSignIn {
+        cfg,
+        pkce,
+        started_at: Instant::now(),
+    };
+    let mut map = pending_signins().lock().unwrap_or_else(|e| e.into_inner());
+    map.insert(pending.cfg.server_id.clone(), pending);
+}
+
+/// Take a pending sign-in, but only while it is fresh. Removing it here makes
+/// every state single-use, including one that fails verification.
+pub fn take_sign_in(server_id: &str) -> Result<(McpOAuthConfig, Pkce), AppError> {
+    let removed = pending_signins()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(server_id);
+    let pending = removed.ok_or_else(|| {
+        AppError::invalid_input("That sign-in has expired. Please start signing in again.")
+    })?;
+    if pending.started_at.elapsed() > OAUTH_STATE_TTL {
+        return Err(AppError::invalid_input(
+            "That sign-in took too long. Please start signing in again.",
+        ));
+    }
+    Ok((pending.cfg, pending.pkce))
+}
+
 impl McpManager {
     pub fn new() -> Self {
         Self::default()
@@ -362,7 +419,18 @@ impl McpManager {
                 cwd.as_deref(),
             )?),
             McpTransport::Http { url, headers } => {
-                Box::new(HttpTransport::new(url.trim(), headers)?)
+                // A signed-in server keeps its token in the OS keychain, not
+                // in config.json. Add the bearer header at connect time so
+                // the existing HTTP transport and stdio path stay untouched.
+                let mut effective = headers.clone();
+                if cfg.oauth.is_some() {
+                    let key = oauth_token_key(&cfg.id);
+                    if let Ok(Some(token)) = crate::services::secrets::load(&key) {
+                        let (name, value) = bearer_header(&token);
+                        effective.entry(name).or_insert(value);
+                    }
+                }
+                Box::new(HttpTransport::new(url.trim(), &effective)?)
             }
         };
         let mut session = Session {
@@ -745,6 +813,7 @@ mod tests {
                 url: "http://example.com/mcp".into(),
                 headers: BTreeMap::new(),
             },
+            oauth: None,
         };
         assert!(validate(&cfg).is_err(), "plain HTTP only on this computer");
         cfg.transport = McpTransport::Http {
@@ -774,6 +843,7 @@ mod tests {
                 url: "https://mcp.example.com/mcp".into(),
                 headers: BTreeMap::new(),
             },
+            oauth: None,
         };
         let tools: Vec<McpTool> = vec!["a", "b", "c"]
             .into_iter()
@@ -799,5 +869,40 @@ mod tests {
         assert!(tool_enabled(&cfg, "a"));
         assert!(!tool_enabled(&cfg, "b"));
         assert!(!tool_enabled(&cfg, "missing"));
+    }
+
+    #[test]
+    fn pending_signins_are_single_use_and_expire() {
+        let mut cfg = oauth_cfg();
+        cfg.server_id = "mcp-pending-test".into();
+        let pkce = new_pkce().unwrap();
+        let state = pkce.state.clone();
+        begin_sign_in(cfg.clone(), pkce);
+        let (loaded, taken) = take_sign_in(&cfg.server_id).unwrap();
+        assert_eq!(loaded, cfg);
+        assert_eq!(taken.state, state);
+        assert!(
+            take_sign_in(&cfg.server_id).is_err(),
+            "a state cannot be finished twice"
+        );
+
+        let mut stale = cfg.clone();
+        stale.server_id = "mcp-stale-test".into();
+        pending_signins()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                stale.server_id.clone(),
+                PendingSignIn {
+                    cfg: stale.clone(),
+                    pkce: new_pkce().unwrap(),
+                    started_at: Instant::now() - OAUTH_STATE_TTL - Duration::from_secs(1),
+                },
+            );
+        assert!(
+            take_sign_in(&stale.server_id).is_err(),
+            "an expired state is refused"
+        );
+        assert_eq!(oauth_token_key("mcp-1"), "mcp-oauth:mcp-1");
     }
 }

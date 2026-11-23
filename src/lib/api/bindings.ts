@@ -249,6 +249,18 @@ export interface KeyValueInput {
   value?: string;
 }
 
+/** Public OAuth 2.1 / PKCE client metadata. A token is never part of this. */
+export interface McpOAuthConfig {
+  /** The MCP server id this sign-in belongs to. */
+  server_id: string;
+  client_id: string;
+  authorize_url: string;
+  token_url: string;
+  redirect_uri: string;
+  scopes: string[];
+  audience: string | null;
+}
+
 export interface McpServer {
   id: string;
   name: string;
@@ -261,6 +273,8 @@ export interface McpServer {
   url: string;
   env: KeyValueHint[];
   headers: KeyValueHint[];
+  /** Public client metadata, or null when this server has no sign-in. */
+  oauth: McpOAuthConfig | null;
   connected: boolean;
 }
 
@@ -276,6 +290,30 @@ export interface McpServerSaveRequest {
   url: string;
   env: KeyValueInput[];
   headers: KeyValueInput[];
+  /** Omit or send null to keep the stored settings on an edit. */
+  oauth?: McpOAuthConfig | null;
+}
+
+/** Returned by mcp_oauth_start. The verifier stays on the backend. */
+export interface McpOAuthStartDto {
+  authorize_url: string;
+  state: string;
+  redirect_uri: string;
+}
+
+export interface McpOAuthFinishRequest {
+  server_id: string;
+  state: string;
+  code: string;
+}
+
+/** Safe status from mcp_oauth_finish: no token, verifier or code. */
+export interface McpOAuthStatusDto {
+  server_id: string;
+  signed_in: boolean;
+  message: string;
+  token_type: string;
+  expires_in: number | null;
 }
 
 export interface McpTool {
