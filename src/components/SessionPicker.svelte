@@ -159,6 +159,7 @@
     border-radius: 9999px;
     background: var(--color-ember-400, #fb923c);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 22%, transparent);
+    will-change: opacity;
     animation: session-pulse 1.4s ease-in-out infinite;
   }
   @keyframes session-pulse {

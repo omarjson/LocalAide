@@ -292,6 +292,7 @@ select option {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
+  will-change: transform;
   background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-veil) 7%, transparent), transparent);
   animation: skeleton-shimmer var(--dur-loop) ease-in-out infinite;
 }
@@ -301,8 +302,11 @@ select option {
   }
 }
 
-/* A soft ember glow behind hero areas (empty states, setup). */
+/* A soft ember glow behind hero areas (empty states, setup). Own layer, so
+ * the big radial gradient is rasterized once and composited, not repainted
+ * every frame while anything above it animates. */
 .ember-glow {
+  transform: translateZ(0);
   background-image: radial-gradient(60% 80% at 50% 0%, color-mix(in oklab, var(--color-ember-500) 12%, transparent), transparent 70%);
 }
 
@@ -328,6 +332,7 @@ select option {
 
 /* A progress bar with no known total. */
 .progress-indeterminate {
+  will-change: transform;
   animation: progress-slide var(--dur-loop) ease-in-out infinite;
 }
 @keyframes progress-slide {

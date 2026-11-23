@@ -1743,7 +1743,7 @@
 
 <div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
-  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
+  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900 px-3 md:px-5">
     <div class="flex min-w-0 items-center gap-2 px-1">
       {#if editingTitle}
         <!-- svelte-ignore a11y_autofocus -->

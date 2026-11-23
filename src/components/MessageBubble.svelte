@@ -475,6 +475,7 @@
     width: 0.45rem;
     border-radius: 9999px;
     background: var(--color-ink-400);
+    will-change: transform, opacity;
     animation: typing-dot 1.2s ease-in-out infinite;
   }
   .typing span:nth-child(2) {

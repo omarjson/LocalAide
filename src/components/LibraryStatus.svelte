@@ -333,6 +333,7 @@
     width: 35%;
     border-radius: 9999px;
     background: var(--color-ember-500);
+    will-change: transform;
     animation: sweep 1.3s ease-in-out infinite;
   }
   @keyframes sweep {

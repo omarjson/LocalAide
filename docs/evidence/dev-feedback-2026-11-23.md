@@ -106,3 +106,52 @@ Still open, not guessed at:
 
 - **P1/P2 performance (420–450 MB, 95 °C, 6000 RPM).** No Activity Monitor `sample` of LocalAide and `llama-server` has been supplied, so nothing was "optimized" blind. Needs Omar's sample (or a diagnostics capture) before any change; the diagnostics panel and request log already exist for this.
 - **W2, second half.** The v0.2.2 release is still a draft and signing keys may be absent, so the chip may still not appear until publish/signing even though the flow itself now shows notes first. The draft release must be rebuilt from the new `dev` head before Omar retests the update path.
+
+## 7. Idle heat on macOS, profiled — 2026-11-23 (Batch 2)
+
+Omar's MacBook Pro A2251 (Intel i7-1068NG7, 32 GB) sat at 95 °C with the fans
+at full speed while LocalAide idled. He ran a 60 s logger (see the diag zip)
+and then `sample` captures of the WebView processes while hot.
+
+What the profile proved (not guessed):
+
+- LocalAide's own process: 6–17% CPU after a 1 s startup spike; RSS 61 → 91 MB
+  over 55 s. No `llama-server` ran at all — local inference is not the cause.
+- WebKit GPU process: 30–80% CPU sustained. WebContent: 13–33%.
+  WindowServer: 32–48% sustained.
+- WebContent main thread: ~13% of samples in a repeating
+  `RemoteLayerTreeDrawingArea::updateRendering` timer → full flexbox layout
+  of the whole page (`RenderFlexibleBox::layoutBlock`, `computeFlexBaseSize`)
+  on every frame.
+- GPU process `CA::CG::Queue`: `fill_shading` → `Mosaic::draw` → Metal
+  `waitUntilCompleted` — the big radial-gradient backgrounds re-rasterized
+  into an IOSurface every frame, saturating the on-die Iris GPU.
+- Console: only macOS TextInputUI candidate chatter while typing. No panics,
+  no LocalAide errors.
+
+Root cause: the frame loop never stopped at idle. The always-on infinite
+animations kept WebKit scheduling a rendering update every frame, and the
+pulsing logo eye is an SVG `<circle>` — SVG animations run on WebKit's main
+thread, so each frame did style + layout + paint of the page instead of a
+cheap composited transform. The full-viewport gradients then re-rasterized
+on every one of those frames.
+
+Fix (this commit, `dev` only):
+
+- `LogoMark`: the eye pulses once on mount, then stays still.
+- `EmptyState`: the floating icon no longer loops forever on the idle screen.
+- `ember-glow` panels: own layer (`translateZ(0)`), rasterized once.
+- Chat header: solid background; the `backdrop-blur` (re-sampled every
+  frame) is gone.
+- Activity-only animations (typing dots, thinking label, index sweep, effort
+  sheen, session pulse, skeleton shimmer, progress slide) get `will-change`
+  so they run on the compositor.
+- Left alone on purpose: the `box-shadow` breathers (stop button,
+  effort glow, share pulse) — small elements, only while active. The
+  `.app-canvas` root gradients were NOT promoted: a transform there would
+  make it the containing block for `position: fixed` descendants (modals,
+  popovers).
+
+Re-measure: run the 60 s logger again on the new build and compare GPU %
+and temperature. If `fill_shading` persists, the next step is replacing the
+root radial gradients with a pre-rendered static image.

@@ -574,6 +574,7 @@
     border-radius: inherit;
     background: linear-gradient(105deg, transparent 32%, rgb(255 243 224 / 0.5) 50%, transparent 68%);
     transform: translateX(-110%);
+    will-change: transform;
     animation: effort-sheen 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
   .effort-max .effort-fill::after {

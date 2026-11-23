@@ -84,6 +84,7 @@
   /* A soft breathing label while the model thinks. */
   .shimmer {
     color: var(--color-ink-100);
+    will-change: opacity;
     animation: breathe 1.6s ease-in-out infinite;
   }
   @keyframes breathe {
