@@ -90,10 +90,7 @@ impl RemoteEngine {
     /// The router installs one backed by its credential pool; callers that
     /// do not want rotation can leave it unset. Safe to replace at any time.
     pub fn set_key_supplier(&self, supplier: KeySupplier) {
-        *self
-            .key_supplier
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(supplier);
+        *self.key_supplier.lock().unwrap_or_else(|e| e.into_inner()) = Some(supplier);
     }
 
     /// One generation against the provider's `/chat/completions` endpoint,
@@ -256,9 +253,8 @@ impl RemoteEngine {
                 cancelled = true;
                 break;
             }
-            let line = line.map_err(|e| {
-                (0, AppError::internal(format!("stream read failed: {e}")))
-            })?;
+            let line =
+                line.map_err(|e| (0, AppError::internal(format!("stream read failed: {e}"))))?;
             // The SSE spec allows the space after "data:" to be omitted.
             let data = match line.strip_prefix("data:") {
                 Some(d) => d.strip_prefix(' ').unwrap_or(d),

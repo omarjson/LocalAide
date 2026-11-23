@@ -256,10 +256,7 @@ pub fn repair_at(paths: &RepairPaths, bundled_catalog: &str) -> DoctorFixReport 
 
     if !paths.log_dir.is_dir() {
         match fs::create_dir_all(&paths.log_dir) {
-            Ok(()) => fixed.push(format!(
-                "created log directory {}",
-                paths.log_dir.display()
-            )),
+            Ok(()) => fixed.push(format!("created log directory {}", paths.log_dir.display())),
             Err(e) => remaining.push(format!("could not create the log directory: {e}")),
         }
     }

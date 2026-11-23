@@ -255,7 +255,9 @@ pub fn token_request(
 /// Parse a token response, including OAuth error responses. Pure.
 pub fn parse_token_response(body: &str) -> Result<TokenResponse, AppError> {
     let value: Value = serde_json::from_str(body).map_err(|e| {
-        AppError::internal(format!("The authorization server sent an unreadable response: {e}"))
+        AppError::internal(format!(
+            "The authorization server sent an unreadable response: {e}"
+        ))
     })?;
     if let Some(error) = value.get("error") {
         let reason = value

@@ -63,9 +63,7 @@ impl RouterEngine {
         remote.set_key_supplier(Arc::new(move |status| {
             let mut guard = pool.lock().unwrap_or_else(|e| e.into_inner());
             match guard.as_mut() {
-                Some(keys) if keys.on_auth_failure(status) => {
-                    keys.current().map(str::to_string)
-                }
+                Some(keys) if keys.on_auth_failure(status) => keys.current().map(str::to_string),
                 _ => None,
             }
         }));

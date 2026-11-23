@@ -14,9 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Goals and usage ledger.** Goal state with a step budget and a documented flat-rate usage ledger for online calls.
 - **Paired sharing, skins and plugins.** Shared sessions now need a one-time pairing token; portable skins can be imported/exported; local HTML plugin panels are listed safely and shown in a sandbox.
 - **Project rules and model-switch notes.** `AGENTS.md`-style files are injected into chat prompts when enabled, and switching models reports the recalculated context budget without losing the conversation.
+- **Local notifications and sounds.** Opt-in desktop notifications with a short chime when a goal completes, a background turn finishes, a tool approval is needed, or the model asks a question. No network calls.
 
 ### Fixed
 - **Library index watcher** now has automated coverage for 500ms debouncing, ignored extensions and removal forwarding.
+- Open chat tabs are capped live at 8 with least-recently-used eviction; the contrast gate reads the shipped focus token; tab close stays visible on touch.
+- Provider keys rotate on real 401/429 responses, doctor can repair safe local scaffolding, and repeated identical config saves are skipped.
 - **Online provider router and SSE engine** have loopback HTTP tests for clean and truncated streams, mid-stream errors, 401 hints, no-follow redirects and cancellation.
 
 ### Changed

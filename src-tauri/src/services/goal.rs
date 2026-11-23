@@ -506,7 +506,12 @@ mod tests {
     #[test]
     fn drive_stops_at_budget() {
         let start = goal(2, GoalStatus::Active);
-        let queued = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
+        let queued = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
         let result = drive(&start, &queued, false);
         assert_eq!(result.applied, 2, "no more steps than budget");
         assert_eq!(result.goal.budget, 0);
@@ -537,7 +542,10 @@ mod tests {
             created_at: 0,
         }];
         match decide_next(&start, &steps, false) {
-            StepDecision::Continue { prompt, budget_left } => {
+            StepDecision::Continue {
+                prompt,
+                budget_left,
+            } => {
                 assert_eq!(budget_left, 1);
                 assert!(prompt.contains("ship it"), "{prompt}");
                 assert!(prompt.contains("drafted the outline"), "{prompt}");

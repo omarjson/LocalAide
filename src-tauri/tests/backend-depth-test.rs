@@ -26,7 +26,10 @@ fn rotation_helper_only_retries_on_auth_status_with_a_new_key() {
         401 => Some("second".to_string()),
         _ => None,
     };
-    assert_eq!(rotated_key("first", 401, &supply).as_deref(), Some("second"));
+    assert_eq!(
+        rotated_key("first", 401, &supply).as_deref(),
+        Some("second")
+    );
     assert_eq!(rotated_key("first", 429, &supply), None);
     assert_eq!(rotated_key("first", 500, &supply), None);
     let same = |_status: u16| Some("first".to_string());
@@ -73,7 +76,8 @@ fn serve_sequence(responses: Vec<(String, String)>) -> Server {
             let request = String::from_utf8_lossy(&buf[..n]).into_owned();
             let header = request.lines().find_map(|line| {
                 if line.to_ascii_lowercase().starts_with("authorization:") {
-                    line.split_once(':').map(|(_, value)| value.trim().to_string())
+                    line.split_once(':')
+                        .map(|(_, value)| value.trim().to_string())
                 } else {
                     None
                 }
@@ -194,9 +198,24 @@ fn doctor_repair_creates_safe_files_and_never_deletes_user_data() {
     assert!(paths.log_dir.is_dir());
     assert!(paths.catalog_cache.is_file());
     assert!(paths.library_db.is_file());
-    assert!(report.fixed.iter().any(|line| line.contains("log directory")));
-    assert!(report.fixed.iter().any(|line| line.contains("catalog cache")));
-    assert!(report.fixed.iter().any(|line| line.contains("library database")));
+    assert!(
+        report
+            .fixed
+            .iter()
+            .any(|line| line.contains("log directory"))
+    );
+    assert!(
+        report
+            .fixed
+            .iter()
+            .any(|line| line.contains("catalog cache"))
+    );
+    assert!(
+        report
+            .fixed
+            .iter()
+            .any(|line| line.contains("library database"))
+    );
 
     // An existing cache is user data from the app's point of view: repair
     // leaves it exactly as it found it.
@@ -205,7 +224,10 @@ fn doctor_repair_creates_safe_files_and_never_deletes_user_data() {
     let second = app_lib::services::doctor::repair_at(&paths, &bundled);
     assert_eq!(fs::read_to_string(&paths.catalog_cache).unwrap(), sentinel);
     assert!(
-        !second.fixed.iter().any(|line| line.contains("catalog cache")),
+        !second
+            .fixed
+            .iter()
+            .any(|line| line.contains("catalog cache")),
         "{:?}",
         second.fixed
     );
@@ -243,7 +265,10 @@ fn goal_loop_stops_at_budget_and_when_blocked() {
         ..goal.clone()
     };
     match decide_next(&one, &[], false) {
-        StepDecision::Continue { prompt, budget_left } => {
+        StepDecision::Continue {
+            prompt,
+            budget_left,
+        } => {
             assert_eq!(budget_left, 1);
             assert!(prompt.contains("ship it"), "{prompt}");
         }
@@ -279,7 +304,11 @@ fn config_dirty_check_and_save_cache_behave_as_expected() {
     assert_eq!(fs::read_to_string(&path).unwrap(), first);
     cfg.context_tokens = 4096;
     store.save(&cfg).unwrap();
-    assert_ne!(fs::read_to_string(&path).unwrap(), first, "a change still writes");
+    assert_ne!(
+        fs::read_to_string(&path).unwrap(),
+        first,
+        "a change still writes"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 

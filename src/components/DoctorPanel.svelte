@@ -4,9 +4,10 @@
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
   import { api, errorMessage } from "../lib/api/client";
-  import type { DoctorReport } from "../lib/api/bindings";
+  import type { DoctorFixReport, DoctorReport } from "../lib/api/bindings";
 
   let report = $state<DoctorReport | null>(null);
+  let fixed = $state<DoctorFixReport | null>(null);
   let busy = $state(false);
   let error = $state<string | null>(null);
 
@@ -15,6 +16,20 @@
     busy = true;
     error = null;
     try {
+      report = await api.doctorRun();
+    } catch (e: unknown) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  };
+
+  const repair = async () => {
+    if (busy) return;
+    busy = true;
+    error = null;
+    try {
+      fixed = await api.doctorFix();
       report = await api.doctorRun();
     } catch (e: unknown) {
       error = errorMessage(e);
@@ -39,11 +54,17 @@
       <h3 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="stethoscope" class="h-4 w-4 text-ember-300" />Setup doctor</h3>
       <p class="mt-0.5 text-sm text-ink-400">Checks your local setup. Nothing is changed or sent anywhere.</p>
     </div>
-    <Button variant="secondary" disabled={busy} onclick={() => void run()}>
-      <Icon name="stethoscope" class="h-4 w-4" />{busy ? "Running…" : "Run doctor"}
-    </Button>
+    <div class="flex gap-2">
+      <Button variant="secondary" disabled={busy} onclick={() => void run()}>
+        <Icon name="stethoscope" class="h-4 w-4" />{busy ? "Running…" : "Run doctor"}
+      </Button>
+      <Button variant="subtle" disabled={busy} onclick={() => void repair()}>Repair safe issues</Button>
+    </div>
   </div>
   {#if error}<p class="mt-3 text-sm text-rose-300" role="alert">{error}</p>{/if}
+  {#if fixed}
+    <p class="mt-3 text-sm text-ink-300" role="status">Fixed: {fixed.fixed.length ? fixed.fixed.join(", ") : "nothing"}{fixed.remaining.length ? ` · Remaining: ${fixed.remaining.join(", ")}` : ""}</p>
+  {/if}
   {#if report}
     <pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap" aria-live="polite">{reportText}</pre>
   {/if}

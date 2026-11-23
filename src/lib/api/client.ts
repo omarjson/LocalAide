@@ -119,6 +119,7 @@ import type {
   RunTarget,
   RunAnswer,
   DoctorReport,
+  DoctorFixReport,
   Agent,
   ContextFileHit,
   ContextFilesResult,
@@ -1056,6 +1057,11 @@ export class ApiClient {
   // Read-only local setup doctor (doctor.rs).
   async doctorRun(): Promise<DoctorReport> {
     return invoke<DoctorReport>("doctor_run");
+  }
+
+  /** Repairs only missing local scaffolding; never deletes user data. */
+  async doctorFix(): Promise<DoctorFixReport> {
+    return invoke<DoctorFixReport>("doctor_fix");
   }
 
   // Saved agent personas (policy.rs).

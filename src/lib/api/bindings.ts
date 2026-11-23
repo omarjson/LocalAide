@@ -1253,6 +1253,11 @@ export interface DoctorCheck {
   detail: string;
 }
 
+export interface DoctorFixReport {
+  fixed: string[];
+  remaining: string[];
+}
+
 export interface DoctorReport {
   /** All required checks passed; the best-effort keychain probe is excluded. */
   ok: boolean;

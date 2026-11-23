@@ -380,6 +380,7 @@ pub fn run() {
             commands::usage_record,
             commands::usage_list,
             commands::plugin_list,
+            crate::services::doctor::doctor_fix,
         ])
         // Pages the model draws in chat, each with its own strict policy.
         .register_uri_scheme_protocol("mockup", |_ctx, request| {
