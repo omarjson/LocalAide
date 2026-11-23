@@ -36,6 +36,11 @@
   import AgentsPanel from "../components/AgentsPanel.svelte";
   import DoctorPanel from "../components/DoctorPanel.svelte";
   import { applyAccent, applyDensity, applyFont, applyTheme, currentAccent, currentDensity, currentFont, currentTheme, type Accent, type AppFont, type Density } from "../lib/theme";
+  import { SETTINGS_GROUPS, SETTINGS_GROUP_OF, type SettingsGroupId } from "../lib/screens";
+  import GoalPanel from "../components/GoalPanel.svelte";
+  import UsagePanel from "../components/UsagePanel.svelte";
+  import SkinPanel from "../components/SkinPanel.svelte";
+  import PluginPanels from "../components/PluginPanels.svelte";
   import type {
     BackupConfigDto,
     BackupEntry,
@@ -72,6 +77,20 @@
     { id: "about", label: "About", icon: "info" },
   ];
   const sections = $derived(allSections.filter((sec) => (sec.id !== "online" || moduleOn("online")) && (sec.id !== "integrations" || moduleOn("opencode"))));
+
+  // Seven top-level groups in the fixed order from screens.ts. Every existing
+  // section stays reachable: picking a section brings its group forward, and
+  // deep links still open the exact section they ask for.
+  const groupOf = (section: SettingsSection): SettingsGroupId =>
+    SETTINGS_GROUP_OF[section] ?? "general";
+  let activeGroup = $state<SettingsGroupId>(groupOf(settingsView.section as SettingsSection));
+  const groupSections = $derived(sections.filter((sec) => groupOf(sec.id) === activeGroup));
+
+  const selectGroup = (id: SettingsGroupId) => {
+    activeGroup = id;
+    const first = sections.find((sec) => groupOf(sec.id) === id);
+    if (first) selectSection(first.id);
+  };
 
   // Search across sections: type a word ("theme", "voice", "logs") and the
   // section list narrows to what matches. Words a section answers to, beyond
@@ -354,6 +373,7 @@
 
   const selectSection = (section: SettingsSection) => {
     activeTab = section;
+    activeGroup = groupOf(section);
     settingsView.section = section as SettingsSectionId;
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
@@ -836,13 +856,29 @@
           class="h-9 w-full rounded-md border border-ink-700 bg-ink-900 pl-9 pr-3 text-sm text-ink-100 outline-none transition-colors placeholder:text-ink-500 focus:border-edge"
         />
       </div>
+      <div class="mb-2 flex flex-wrap gap-1 border-b border-ink-800 pb-2" aria-label="Settings groups">
+        {#each SETTINGS_GROUPS as group (group.id)}
+          <button
+            type="button"
+            aria-pressed={activeGroup === group.id}
+            title={group.label}
+            onclick={() => selectGroup(group.id)}
+            class={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors ${activeGroup === group.id
+              ? "bg-ink-800 font-semibold text-ink-50"
+              : "text-ink-400 hover:bg-veil/5 hover:text-ink-100"}`}
+          >
+            <Icon name={group.icon} class="h-3.5 w-3.5 shrink-0" />
+            <span class="truncate">{group.label}</span>
+          </button>
+        {/each}
+      </div>
       <span class="sr-only">Settings sections</span>
       {#if settingsQuery.trim()}
         <p class="px-3 pb-1 text-xs text-ink-500" role="status">
           {visibleSections.length === 0 ? "No section matches" : `${visibleSections.length} ${visibleSections.length === 1 ? "section matches" : "sections match"}`}
         </p>
       {/if}
-      {#each visibleSections as section (section.id)}
+      {#each (settingsQuery.trim() ? visibleSections : groupSections) as section (section.id)}
         <button
           type="button"
           aria-current={activeTab === section.id ? "page" : undefined}
@@ -917,6 +953,8 @@
               {/snippet}
             </SettingsRow>
           </SettingsGroup>
+
+          <SkinPanel />
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Model costs</h3>
           <SettingsGroup>
@@ -1179,6 +1217,7 @@
               {#if moduleOn("online")}<Button variant="secondary" onclick={() => { selectSection("online"); openAddProvider(); }}>Add a provider</Button>{/if}
             </div>
           </div>
+          <PluginPanels />
         </div>
       {:else if activeTab === "developer"}
         {@const ds = dev.settings}
@@ -1251,6 +1290,9 @@
 
             <div class="mt-7 flex justify-end"><Button variant="subtle" disabled={devBusy} onclick={() => { void resetDev().catch((e: unknown) => devNotice = errorMessage(e)); }}>Reset everything here</Button></div>
           {/if}
+
+          <GoalPanel />
+          <UsagePanel />
         </div>
       {:else if activeTab === "privacy"}
         <div>

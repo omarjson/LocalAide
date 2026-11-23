@@ -64,6 +64,8 @@
 
 /* Elevation for the raised chat surfaces (composer, cards, popovers). */
 :root {
+  /* Shareable skins (lib/theme.ts) override design tokens inline on <html>.
+     These values are the defaults a skin falls back to. */
   --shadow-elev: 0 18px 44px -20px rgb(0 0 0 / 0.75);
   --shadow-glow: 0 6px 16px -6px color-mix(in oklab, var(--color-ember-500) 60%, transparent);
   /* Motion tokens. lib/motion.ts reads these same values for JS transitions. */

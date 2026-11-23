@@ -1317,3 +1317,50 @@ export interface PolicyUpdate {
   hooks?: HooksConfig | null;
   routing?: RoutingConfig | null;
 }
+
+/** A tracked goal (commands/goal.rs, services/goal.rs). */
+export interface Goal {
+  id: string;
+  thread_id: string;
+  objective: string;
+  /** Steps still available; a step decrements it by one. */
+  budget: number;
+  /** "active" | "completed" | "abandoned". */
+  status: string;
+  /** Unix timestamp, seconds since the epoch (UTC). */
+  created_at: number;
+}
+
+/** One recorded model call (commands/usage_ledger.rs). */
+export interface UsageLedgerEntry {
+  id: number;
+  provider: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  /** Flat estimate from the caller's USD-per-1M-tokens rate. */
+  estimated_cost_usd: number;
+  /** Unix timestamp, seconds since the epoch (UTC). */
+  at: number;
+  thread_id: string;
+}
+
+/** Arguments recorded by the caller for one model call (camelCase at IPC). */
+export interface UsageRecordRequest {
+  provider: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  threadId: string;
+  ratePerMillionUsd?: number | null;
+}
+
+/** One local HTML panel reported by the upcoming `plugin_list` command.
+ * `label` and `name` are both accepted while the command's shape settles. */
+export interface PluginDescriptor {
+  id: string;
+  label?: string;
+  name?: string;
+  /** Absolute path to a local HTML file. */
+  path: string;
+}

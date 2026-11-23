@@ -124,6 +124,10 @@ import type {
   RefResult,
   PolicySettings,
   PolicyUpdate,
+  Goal,
+  UsageLedgerEntry,
+  UsageRecordRequest,
+  PluginDescriptor,
 } from "./bindings";
 
 export class ApiClient {
@@ -1091,6 +1095,49 @@ export class ApiClient {
 
   async policyConfigSet(update: PolicyUpdate): Promise<PolicySettings> {
     return invoke<PolicySettings>("policy_config_set", { update });
+  }
+
+  // Goals (commands/goal.rs). All state is local; no model call on this path.
+  async goalStart(threadId: string, objective: string, budget: number): Promise<Goal> {
+    return invoke<Goal>("goal_start", { threadId, objective, budget });
+  }
+
+  async goalStatus(id: string): Promise<Goal | null> {
+    return invoke<Goal | null>("goal_status", { id });
+  }
+
+  async goalStep(id: string, progress: string): Promise<Goal> {
+    return invoke<Goal>("goal_step", { id, progress });
+  }
+
+  async goalComplete(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_complete", { id });
+  }
+
+  // Usage ledger (commands/usage_ledger.rs). The rate is caller-supplied;
+  // the backend never invents a per-model price.
+  async usageRecord(req: UsageRecordRequest): Promise<UsageLedgerEntry> {
+    return invoke<UsageLedgerEntry>("usage_record", {
+      provider: req.provider,
+      model: req.model,
+      inputTokens: req.inputTokens ?? 0,
+      outputTokens: req.outputTokens ?? 0,
+      threadId: req.threadId,
+      ratePerMillionUsd: req.ratePerMillionUsd ?? null,
+    });
+  }
+
+  async usageList(threadId?: string | null, limit?: number): Promise<UsageLedgerEntry[]> {
+    return invoke<UsageLedgerEntry[]>("usage_list", {
+      threadId: threadId ?? null,
+      limit: limit ?? null,
+    });
+  }
+
+  // Local HTML plugin panels (added by the plugin_list command; absent builds
+  // simply reject, and the panel shows an honest empty state).
+  async pluginList(): Promise<PluginDescriptor[]> {
+    return invoke<PluginDescriptor[]>("plugin_list");
   }
 }
 
