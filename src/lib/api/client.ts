@@ -1,5 +1,6 @@
 import { invoke as tauriInvoke, Channel, type InvokeArgs } from "@tauri-apps/api/core";
 import { recordRequest } from "../requestLog.svelte";
+import { notifyGoalComplete, notifyQuestion, notifyToolApproval } from "../notifications.svelte";
 
 /** Every backend call goes through here, so the developer request log can time it. */
 async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
@@ -243,7 +244,16 @@ export class ApiClient {
     onEvent: (event: ChatStreamEvent) => void
   ): Promise<string> {
     const channel = new Channel<ChatStreamEvent>();
-    channel.onmessage = onEvent;
+    // Notifications ride the real stream event tags — no invented Tauri
+    // events, and the caller still receives every event unchanged.
+    channel.onmessage = (event) => {
+      if (event.type === "tool_approval") {
+        notifyToolApproval(`LocalAide wants to ${event.payload.title.toLowerCase()}.`);
+      } else if (event.type === "question") {
+        notifyQuestion(event.payload.question);
+      }
+      onEvent(event);
+    };
     return invoke<string>("chat_stream", { req, channel });
   }
 
@@ -1111,7 +1121,9 @@ export class ApiClient {
   }
 
   async goalComplete(id: string): Promise<Goal> {
-    return invoke<Goal>("goal_complete", { id });
+    const goal = await invoke<Goal>("goal_complete", { id });
+    notifyGoalComplete(`Goal finished: ${goal.objective}`);
+    return goal;
   }
 
   // Usage ledger (commands/usage_ledger.rs). The rate is caller-supplied;

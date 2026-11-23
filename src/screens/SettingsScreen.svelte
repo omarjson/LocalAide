@@ -40,6 +40,8 @@
   import GoalPanel from "../components/GoalPanel.svelte";
   import UsagePanel from "../components/UsagePanel.svelte";
   import SkinPanel from "../components/SkinPanel.svelte";
+  import PolicyPanel from "../components/PolicyPanel.svelte";
+  import NotificationsPanel from "../components/NotificationsPanel.svelte";
   import PluginPanels from "../components/PluginPanels.svelte";
   import type {
     BackupConfigDto,
@@ -956,6 +958,8 @@
 
           <SkinPanel />
 
+          <NotificationsPanel />
+
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Model costs</h3>
           <SettingsGroup>
             <div class="px-4 py-3">
@@ -1136,6 +1140,7 @@
       {:else if activeTab === "tools"}
         <McpSettings />
         <div class="mt-8"><AgentsPanel /></div>
+        <PolicyPanel />
       {:else if activeTab === "web"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Web search</h2>

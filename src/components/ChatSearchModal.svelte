@@ -4,6 +4,7 @@
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { chats } from "../lib/chats.svelte";
   import type { SessionHit } from "../lib/api/bindings";
 
   let {
@@ -92,11 +93,13 @@
               <div class="flex items-center gap-2 font-medium text-ink-100">
                 <Icon name="chat" class="h-4 w-4 shrink-0 text-ember-300" />
                 <span class="truncate">{hit.title || "Untitled"}</span>
+                {#if chats.tabs.some((t) => t.id === hit.thread_id && t.busy)}<span class="inline-block h-2 w-2 shrink-0 rounded-full bg-ember-400" title="This chat is working" aria-label="Busy"></span>{/if}
+                {#if chats.tabs.some((t) => t.id === hit.thread_id)}<span class="shrink-0 rounded-full bg-ember-500/10 px-2 py-0.5 text-xs font-normal text-ember-200">Open in tab</span>{/if}
               </div>
               <p class="mt-1 break-words text-sm text-ink-300">{hit.snippet}</p>
               <p class="mt-1 truncate text-xs text-ink-500" title={hit.path}>{hit.path}</p>
             </div>
-            <Button variant="secondary" onclick={() => onOpen(hit)}>Open</Button>
+            <Button variant="secondary" onclick={() => onOpen(hit)}>{chats.tabs.some((t) => t.id === hit.thread_id) ? "Open in tab" : "Open"}</Button>
           </div>
         </li>
       {/each}

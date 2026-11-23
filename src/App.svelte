@@ -30,7 +30,10 @@
   import AutomationsScreen from "./screens/AutomationsScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
   import ChatSearchModal from "./components/ChatSearchModal.svelte";
+  import SessionPicker from "./components/SessionPicker.svelte";
   import MultiRunModal from "./components/MultiRunModal.svelte";
+  import MultiRunFusion from "./components/MultiRunFusion.svelte";
+  import { notifyTurnFinished } from "./lib/notifications.svelte";
   import { chats, loadThreads, newChat, openChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
   import type { EngineDownloadEvent, SessionHit, UpdateCheckResponse } from "./lib/api/bindings";
@@ -50,7 +53,20 @@
   let cmdInput = $state<HTMLInputElement>();
   // Palette actions that open their own dialogs.
   let chatSearchOpen = $state(false);
+  let sessionPickerOpen = $state(false);
   let compareOpen = $state(false);
+  let fusionOpen = $state(false);
+  // Last reported busy state per tab, so a turn-finish notification fires on
+  // the true -> false edge only (not on mount or on repeated false reports).
+  const workingTabs = new Map<string, boolean>();
+  const tabBusy = (key: string, busy: boolean) => {
+    const wasBusy = workingTabs.get(key) === true;
+    workingTabs.set(key, busy);
+    tabBusyChanged(key, busy);
+    if (wasBusy && !busy && typeof document !== "undefined" && document.hidden) {
+      notifyTurnFinished();
+    }
+  };
   let mobileNav = $state(false);
   // The sidebar can shrink to icons. Remembered for the next launch.
   const SIDEBAR_KEY = "localaide-sidebar";
@@ -187,7 +203,9 @@
     { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) newChat(chats.activeFolder); } },
     { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
     { id: "search-chats", label: "Search chats", icon: "history", group: "Actions", run: () => { chatSearchOpen = true; } },
+    { id: "session-picker", label: "Pick a session (saved or open)", icon: "chat", group: "Actions", run: () => { sessionPickerOpen = true; } },
     { id: "compare-models", label: "Compare models", icon: "compare", group: "Actions", run: () => { compareOpen = true; } },
+    { id: "fuse-models", label: "Compare and fuse model answers", icon: "merge", group: "Actions", run: () => { fusionOpen = true; } },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
     { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
     { id: "updates", label: "Check for updates", icon: "download", group: "Actions", run: () => { if (navigate("settings")) requestSettings("about", true); } },
@@ -494,7 +512,7 @@
               startThread={{ id: tab.id, folder: tab.folder }}
               onThreadStarted={(id) => tabThreadStarted(tab.key, id)}
               onTitleChanged={(title) => tabTitleChanged(tab.key, title)}
-              onBusyChanged={(busy) => tabBusyChanged(tab.key, busy)}
+              onBusyChanged={(busy) => tabBusy(tab.key, busy)}
               onNewChatRequested={() => newChat(tab.folder)}
             />
           </div>
@@ -684,8 +702,14 @@
   {#if chatSearchOpen}
     <ChatSearchModal onClose={() => (chatSearchOpen = false)} onOpen={openChatHit} />
   {/if}
+  {#if sessionPickerOpen}
+    <SessionPicker onClose={() => (sessionPickerOpen = false)} onOpen={openChatHit} />
+  {/if}
   {#if compareOpen}
     <MultiRunModal onClose={() => (compareOpen = false)} />
+  {/if}
+  {#if fusionOpen}
+    <MultiRunFusion onClose={() => (fusionOpen = false)} />
   {/if}
   {#if legal.open}
     {@const doc = LEGAL_DOCS[legal.open]}
