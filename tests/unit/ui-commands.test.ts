@@ -79,13 +79,14 @@ test("title bar tabs use roving tabindex and keep close out of the tab", () => {
   assert.match(bar, /role="tab"[\s\S]*?<\/div>\s*<button[\s\S]*?Close the tab/);
 });
 
-test("all new icons are in the Icon union and the if/else chain", () => {
+test("all new icons are shipped in the Icon registry", () => {
   const icon = read("src/components/Icon.svelte");
+  assert.match(icon, /export const iconPaths = \{/);
+  assert.match(icon, /\{@html path\}/);
   for (const name of [
     "compare", "target", "calendar", "puzzle", "route",
     "shield_check", "keychain", "stethoscope", "panel", "history", "merge",
   ]) {
-    assert.match(icon, new RegExp(`\\| "${name}"`), `"${name}" missing from IconName`);
-    assert.match(icon, new RegExp(`name === "${name}"`), `"${name}" has no icon path`);
+    assert.match(icon, new RegExp(`^\\s*"?'?${name}"?'?:\\s*\``, "m"), `"${name}" has no registry entry`);
   }
 });

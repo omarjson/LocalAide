@@ -72,6 +72,9 @@
   --dur-fast: 120ms;
   --dur-base: 180ms;
   --dur-slow: 260ms;
+  /* Ambient loops (shimmer, progress, live dots) are slower than an
+     interaction but still derive from --dur-slow, so one dial tunes them. */
+  --dur-loop: calc(var(--dur-slow) * 5.5);
 }
 :root[data-theme="light"] {
   --shadow-elev: 0 14px 36px -18px rgb(78 50 24 / 0.28);
@@ -233,7 +236,8 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.6;
 }
 
-/* Browser autofill paints a pale yellow box; keep the field's own colors. */
+/* Browser autofill paints a pale yellow box; keep the field's own colors.
+   The 600000s below is a deliberate autofill-paint hack, not motion. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
@@ -289,7 +293,7 @@ select option {
   inset: 0;
   transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-veil) 7%, transparent), transparent);
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: skeleton-shimmer var(--dur-loop) ease-in-out infinite;
 }
 @keyframes skeleton-shimmer {
   to {
@@ -324,7 +328,7 @@ select option {
 
 /* A progress bar with no known total. */
 .progress-indeterminate {
-  animation: progress-slide 1.2s ease-in-out infinite;
+  animation: progress-slide var(--dur-loop) ease-in-out infinite;
 }
 @keyframes progress-slide {
   from {
@@ -349,6 +353,25 @@ select option {
   background: color-mix(in oklab, var(--color-ink-800) 82%, var(--color-ink-900));
   border: 1px solid var(--color-ink-700);
   box-shadow: var(--shadow-elev);
+}
+
+/* Shared entrance for raised panels: a short fade and lift on the base
+   clock. Any panel can opt in with class="surface-enter"; two shipped
+   panels do — raised chat surfaces here and the title-bar tab strip. */
+.surface-enter,
+.surface-raised,
+.tab-strip {
+  animation: surface-in var(--dur-base) var(--ease-out) backwards;
+}
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Thin scrollbars that appear on hover, like modern chat apps. */
@@ -430,7 +453,7 @@ aside nav:focus-within::-webkit-scrollbar-thumb {
 }
 /* Arriving at a screen makes its icon pop once. */
 .nav-item[aria-current="page"] .nav-ico {
-  animation: nav-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: nav-pop var(--dur-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes nav-pop {
   0% {
@@ -538,7 +561,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--color-ember-600);
   border: 2px solid var(--color-ink-900);
   box-shadow: 0 0 0 1px var(--color-ember-600);
-  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+  transition: transform var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out;
 }
 input[type="range"]::-moz-range-thumb {
   width: 12px;

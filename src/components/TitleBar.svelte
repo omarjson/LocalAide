@@ -106,7 +106,7 @@
 
   {#if visible && tabs.length > 0}
     <div
-      class="flex min-w-0 flex-1 items-end gap-1 self-stretch overflow-x-auto pt-1.5"
+      class="surface-enter tab-strip flex min-w-0 flex-1 items-end gap-1 self-stretch overflow-x-auto pt-1.5"
       role="tablist"
       aria-label="Open chats"
     >
@@ -136,7 +136,7 @@
           </div>
           <button
             type="button"
-            class="grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-500 opacity-0 transition-[opacity,color] group-hover/tab:opacity-100 hover:bg-veil/10 hover:text-ink-50 focus-visible:opacity-100"
+            class="tab-close grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-500 opacity-40 transition-[opacity,color] group-hover/tab:opacity-100 hover:bg-veil/10 hover:text-ink-50 hover:opacity-100 focus-visible:opacity-100"
             aria-label={`Close the tab ${tab.title}`}
             onclick={() => onClose?.(tab.key)}
           >
@@ -194,7 +194,7 @@
     width: 2.75rem;
     place-items: center;
     color: var(--color-ink-400);
-    transition: background-color 120ms ease-out, color 120ms ease-out;
+    transition: background-color var(--dur-fast) ease-out, color var(--dur-fast) ease-out;
   }
   .win-btn:hover {
     background: color-mix(in oklab, var(--color-veil) 10%, transparent);
@@ -223,7 +223,13 @@
     flex-shrink: 0;
     border-radius: 9999px;
     background: var(--color-ember-400);
-    animation: tab-pulse 1.4s ease-in-out infinite;
+    animation: tab-pulse var(--dur-loop) ease-in-out infinite;
+  }
+  /* Touch has no hover: the close affordance stays at full opacity there. */
+  @media (pointer: coarse), (hover: none) {
+    .tab-close {
+      opacity: 1;
+    }
   }
   @keyframes tab-pulse {
     0%,

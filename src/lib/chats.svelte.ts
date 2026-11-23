@@ -5,6 +5,7 @@
 // and newChat.
 import { api, errorMessage } from "./api/client";
 import type { ChatThread } from "./api/bindings";
+import { capTabs } from "./tabCap";
 
 /** One open chat. `id` is null until the chat's first answer is saved. */
 export type ChatTab = {
@@ -14,10 +15,20 @@ export type ChatTab = {
   folder: string | null;
   /** The tab's own chat is streaming, shown as a dot on the tab. */
   busy: boolean;
+  /** Monotonic recency stamp; used to drop the least-recently-used tab at the cap. */
+  lastUsed: number;
 };
 
 let tabCounter = 0;
 const nextTabKey = () => `tab_${Date.now()}_${++tabCounter}`;
+
+// A single clock for "when was this tab last brought forward". Restored stamps
+// fold back into it so a reloaded session keeps its recency order.
+let useCounter = 0;
+const stamp = (): number => ++useCounter;
+const adoptStamp = (value: number): void => {
+  if (Number.isFinite(value) && value > useCounter) useCounter = value;
+};
 
 const emptyTab = (folder: string | null = null): ChatTab => ({
   key: nextTabKey(),
@@ -25,6 +36,7 @@ const emptyTab = (folder: string | null = null): ChatTab => ({
   title: "New chat",
   folder,
   busy: false,
+  lastUsed: stamp(),
 });
 
 export const chats = $state({
@@ -49,7 +61,10 @@ const persistTabs = (): void => {
     localStorage.setItem(
       TABS_KEY,
       JSON.stringify({
-        tabs: chats.tabs.map(({ key, id, title, folder }) => ({ key, id, title, folder })),
+        tabs: chats.tabs.map((tab: ChatTab) => {
+          const { key, id, title, folder, lastUsed } = tab;
+          return { key, id, title, folder, lastUsed };
+        }),
         active: chats.activeTabKey,
       }),
     );
@@ -62,19 +77,26 @@ const persistTabs = (): void => {
 export function restoreTabs(): boolean {
   try {
     const saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "{}") as {
-      tabs?: { key?: string; id: string | null; title?: string; folder: string | null }[];
+      tabs?: { key?: string; id: string | null; title?: string; folder: string | null; lastUsed?: number }[];
       active?: string | null;
     };
-    const tabs = (saved.tabs ?? []).slice(0, 8).map((t) => ({
-      key: typeof t.key === "string" && t.key ? t.key : nextTabKey(),
-      id: t.id ?? null,
-      title: t.title ?? "New chat",
-      folder: t.folder ?? null,
-      busy: false,
-    }));
+    const tabs = (saved.tabs ?? []).map((t, index) => {
+      const lastUsed = Number.isFinite(t.lastUsed) ? (t.lastUsed as number) : index + 1;
+      adoptStamp(lastUsed);
+      return {
+        key: typeof t.key === "string" && t.key ? t.key : nextTabKey(),
+        id: t.id ?? null,
+        title: t.title ?? "New chat",
+        folder: t.folder ?? null,
+        busy: false,
+        lastUsed,
+      };
+    });
     if (tabs.length === 0) return false;
-    chats.tabs = tabs;
-    chats.activeTabKey = tabs.some((t) => t.key === saved.active) ? (saved.active as string) : tabs[0].key;
+    const active = tabs.some((t) => t.key === saved.active) ? (saved.active as string) : tabs[0].key;
+    const capped = capTabs(tabs, active);
+    chats.tabs = capped.tabs;
+    chats.activeTabKey = active;
     return true;
   } catch {
     return false;
@@ -133,6 +155,8 @@ const syncActive = (): void => {
 export function focusTab(key: string): void {
   if (!chats.tabs.some((t) => t.key === key)) return;
   chats.activeTabKey = key;
+  const tab = chats.tabs.find((t: ChatTab) => t.key === key);
+  if (tab) tab.lastUsed = stamp();
   syncActive();
   persistTabs();
 }
@@ -151,8 +175,11 @@ export function openChat(thread: ChatThread): void {
     title: thread.title || "Chat",
     folder: thread.folder ?? null,
     busy: false,
+    lastUsed: stamp(),
   };
-  chats.tabs = [...chats.tabs, tab];
+  // Cap while opening, not just on restore: a ninth tab evicts the oldest
+  // inactive one and keeps this newly focused tab.
+  chats.tabs = capTabs(chats.tabs, tab.key, tab).tabs;
   chats.activeTabKey = tab.key;
   if (thread.folder) rememberFolder(thread.folder);
   syncActive();
@@ -163,7 +190,7 @@ export function openChat(thread: ChatThread): void {
 export function newChat(folder: string | null = null): void {
   if (folder) rememberFolder(folder);
   const tab = emptyTab(folder);
-  chats.tabs = [...chats.tabs, tab];
+  chats.tabs = capTabs(chats.tabs, tab.key, tab).tabs;
   chats.activeTabKey = tab.key;
   syncActive();
   persistTabs();

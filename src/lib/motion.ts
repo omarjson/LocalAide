@@ -106,9 +106,12 @@ export function tabSwap(_node: Element, params: { x?: number; duration?: number 
 export const stagger = (index: number) => ({
   y: 6,
   duration: dur(motion.base),
-  delay: dur(Math.min(index, 8) * 30),
+  delay: dur(Math.min(index, 8) * (motion.fast / 4)),
   easing: motion.enter,
 });
+
+/** Shared panel entrance, mirroring the `.surface-enter` CSS preset. */
+export const surfaceEnter = () => ({ y: 4, duration: dur(motion.base), easing: motion.enter });
 
 /** Reordering lists (`animate:flip`). */
 export const flipOptions = () => ({ duration: dur(motion.base), easing: motion.ease });
