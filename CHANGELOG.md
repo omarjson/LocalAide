@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
+A large local-first upgrade: one window chrome row, a diagnostics and repair
+surface, secrets in the OS keychain, durable tool policy, session search,
+agents, goals, multi-run, project rules, notifications, paired sharing, skins
+and plugin panels. Settings are re-ordered, the model picker keeps the
+conversation when switching models, and config writes skip unchanged saves.
+
 ### Added
 - **One window chrome row.** The title bar and chat tabs are merged into a single 40px row. macOS uses an overlay title bar with native traffic lights; Windows and Linux keep the custom minimize/maximize/close buttons.
 - **Local diagnostics.** Settings → About shows uptime, resident memory, backend-call timings and local log/database sizes, plus a **Copy diagnostics** button that assembles a redacted, review-first report. Nothing is uploaded.
