@@ -839,8 +839,14 @@ mod tests {
             ..AppConfig::default()
         });
         assert_eq!(
+            tools.shell_decision("mv notes/a.txt notes/b.txt"),
+            crate::config::ToolDecision::Allow,
+            "all commands runs a risky-but-not-blocked command"
+        );
+        assert_eq!(
             tools.shell_decision("rm -rf /tmp/work"),
-            crate::config::ToolDecision::Allow
+            crate::config::ToolDecision::Ask,
+            "a blocked command stays asking even with all commands on"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

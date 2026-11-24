@@ -1046,12 +1046,16 @@ mod tests {
         );
         assert!(!old.use_compact_prompt, "compact prompt defaults off");
         // "All commands" covers safe commands too.
-        let mut caps = CapabilityAutoApprove::default();
-        caps.all_commands = true;
+        let caps = CapabilityAutoApprove {
+            all_commands: true,
+            ..CapabilityAutoApprove::default()
+        };
         assert!(caps.approves(Capability::SafeCommands));
         assert!(caps.approves(Capability::AllCommands));
-        caps.all_commands = false;
-        caps.safe_commands = true;
+        let caps = CapabilityAutoApprove {
+            safe_commands: true,
+            ..CapabilityAutoApprove::default()
+        };
         assert!(caps.approves(Capability::SafeCommands));
         assert!(!caps.approves(Capability::AllCommands));
     }

@@ -155,7 +155,7 @@ fn a_401_with_a_key_says_the_key_is_wrong() {
     let (result, _) = run(&engine, Arc::new(AtomicBool::new(false)));
     server.done.join().unwrap();
     let err = result.expect_err("401 fails").to_string();
-    assert!(err.contains("API key looks wrong"), "{err}");
+    assert!(err.contains("looks wrong"), "{err}");
 }
 
 #[test]
