@@ -161,3 +161,47 @@ test("the countdown fires once, skips paused and hidden time, and animates trans
   assert.match(c, /transform: scaleX\(\$\{fraction\}\)/);
   assert.match(c, /aria-live="polite"/);
 });
+
+// ---- R1: setup rework, presentation only ----
+
+test("setup keeps every setup call and the step machine (R1.H)", () => {
+  const w = read("src/screens/SetupWizard.svelte");
+  for (const call of [
+    "await api.systemProbe()",
+    "api.getModelPresets()",
+    "api.listModels()",
+    "await api.downloadModelPreset(preset.id, (evt) => {",
+    "await api.cancelPresetDownload(selected.id)",
+    "wfRepos = await api.hfSearch(wfQuery.trim(), 10)",
+    "const files = await api.hfRepoFiles(repo)",
+    'const res = await api.hfCustomAdd(repo, file.path, "chat", license, withMmproj)',
+    "await api.downloadModel(res.id, (evt) => {",
+    "await api.activateModel(res.id)",
+    "await api.cancelModelDownload(communityModelId)",
+    "await api.setTheme(value)",
+    "onMount(detect)",
+  ]) {
+    assert.ok(w.includes(call), `setup still calls ${call}`);
+  }
+  assert.match(w, /type Step = "detect" \| "preset" \| "confirm" \| "online" \| "download" \| "done";/);
+});
+
+test("setup: Tiny is the one recommended path, plain words, one More options", () => {
+  const w = read("src/screens/SetupWizard.svelte");
+  assert.match(w, /presets\.find\(\(p\) => p\.id === "tiny"\) \?\? fittingPresets\[fittingPresets\.length - 1\] \?\? presets\[0\]/);
+  assert.match(w, /"Too big for this computer" : p\.ramGb <= budgetGb \/ 2 \? "Fits easily" : "Fits"/);
+  assert.doesNotMatch(w, /formatBytes\(ramTotal\)|formatBytes\(budget\)|recommended\.ram\b/, "no RAM figures on the default view");
+  assert.equal(w.match(/<details/g)?.length, 1, "one disclosure");
+  assert.match(w, /<details class="more mt-5" bind:open=\{moreOpen\}>/);
+  assert.match(w, /if \(tightMemory\) moreOpen = true;/);
+  assert.match(w, /<GhostMascot \{mood\}/);
+  assert.match(w, /Start chatting/);
+});
+
+test("the mascot never animates an SVG child and only floats while working", () => {
+  const g = read("src/components/GhostMascot.svelte");
+  assert.match(g, /\.ghost-working \{\s+animation: ghost-float 2\.4s ease-in-out infinite;/);
+  assert.equal(g.match(/infinite/g)?.length, 1);
+  assert.doesNotMatch(g, /<(path|circle|rect|ellipse)[^>]*class=/, "SVG children carry no animation classes");
+  assert.match(g, /prefers-reduced-motion: reduce/);
+});
