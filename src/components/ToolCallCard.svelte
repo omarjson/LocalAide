@@ -4,7 +4,9 @@
   import { dur, motion } from "../lib/motion";
   import OptionButtons from "./OptionButtons.svelte";
   import FileActions from "./FileActions.svelte";
-  import type { ToolStatus } from "../lib/api/bindings";
+  import ModeChip from "./ModeChip.svelte";
+  import ApprovalCountdown from "./ApprovalCountdown.svelte";
+  import type { ApprovalMode, ToolStatus } from "../lib/api/bindings";
 
   interface Props {
     title: string;
@@ -14,8 +16,12 @@
     summary: string;
     arguments: string;
     output: string;
-    /** Shown while the tool waits for the user. */
-    approval?: { preview: string } | null;
+    /** Shown while the tool waits for the user: what it will do, the
+     * permission mode it was asked in, and (terminal only) the seconds
+     * until the command runs unless declined. */
+    approval?: { preview: string; mode?: ApprovalMode; countdown?: number } | null;
+    /** Holds the terminal countdown, e.g. while the chat is off screen. */
+    countdownPaused?: boolean;
     onDecide?: (decision: "allow" | "allow_chat" | "deny") => void;
     /** Subagents: what it did, newest last. */
     steps?: string[];
@@ -39,6 +45,7 @@
     arguments: args,
     output,
     approval = null,
+    countdownPaused = false,
     onDecide,
     steps = [],
     tokens = null,
@@ -98,6 +105,9 @@
   });
   const icon = $derived(ICONS[group] ?? "wrench");
   const waiting = $derived(status === "waiting" && approval !== null);
+  // Terminal requests can run on their own after the countdown in
+  // Settings → Tools (default 60 s). Other tools always wait.
+  const countdown = $derived(isShell && approval?.countdown ? approval.countdown : 0);
   const hasDetails = $derived((args.trim() && args.trim() !== "{}") || output.trim().length > 0 || steps.length > 0);
 
 </script>
@@ -184,9 +194,24 @@
     </div>
   {:else if waiting && approval}
     <div class="border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
-      <p class="text-sm font-medium text-ink-100">{isShell ? "Run this command?" : "LocalAide wants to do this."} <span class="font-normal text-ink-400">Nothing happens until you choose.</span></p>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p class="min-w-0 flex-1 text-sm font-medium text-ink-100">{isShell ? "Run this command?" : "LocalAide wants to do this."}{#if !countdown} <span class="font-normal text-ink-400">Nothing happens until you choose.</span>{/if}</p>
+        {#if approval.mode}<ModeChip mode={approval.mode} />{/if}
+      </div>
       {#if approval.preview.trim()}
         <pre class={`mt-2 max-h-48 ${isShell ? "term" : "tool-pre"}`}>{approval.preview}</pre>
+      {/if}
+      {#if countdown > 0}
+        <div class="mt-2">
+          <ApprovalCountdown
+            seconds={countdown}
+            label="Runs in"
+            suffix="unless you choose Don't run."
+            paused={countdownPaused}
+            pausedLabel="Countdown paused while this chat is not on screen."
+            onExpire={() => onDecide?.("allow")}
+          />
+        </div>
       {/if}
       <div class="mt-3">
         <OptionButtons

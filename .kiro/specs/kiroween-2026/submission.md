@@ -31,7 +31,7 @@ LocalAide is a desktop assistant for people who aren't technical. You pick a mod
 LocalAide is a stitched body. Each part comes from a different world:
 
 - **Brain:** llama.cpp's `llama-server`, a C++ binary, run as a child process on 127.0.0.1 with a random key. It runs three times over: one copy chats, one embeds, one reranks.
-- **Nervous system:** a Rust core (Tauri 2) with 89 typed commands. One `InferenceEngine` trait hides whether the answer comes from that local process or from a cloud API.
+- **Nervous system:** a Rust core (Tauri 2) with 204 typed commands. One `InferenceEngine` trait hides whether the answer comes from that local process or from a cloud API.
 - **Skin:** a Svelte 5 web UI inside a native window, under a strict content security policy.
 - **Memory:** SQLite FTS5 keyword search fused with vector search (reciprocal rank fusion), then reranked.
 - **Borrowed organs:** the Hugging Face hub for models, DuckDuckGo, Wikipedia, Jina, Exa and Firecrawl for the web, and any OpenAI-compatible provider for cloud chat.
@@ -49,7 +49,7 @@ Kiro is how this project kept its claims honest while moving fast.
 **Specs** (`.kiro/specs/`)
 - `kiroween-2026/plan.md`: the decisions, the audit fix list, and work tracks A to E, each closed with commit hashes.
 - `engine-upgrade/tasks.md`: the phased move to the sidecar engine, with DONE, PARTIAL and DEFERRED per item.
-- `online-providers/`: a full requirements → design → tasks spec for online mode, with EARS acceptance criteria mapped to the code and commits. It was written from the shipped code and says so. Its open tasks (HTTP tests for the cloud engine, OS keychain storage) are the next spec-first work.
+- `online-providers/`: a full requirements → design → tasks spec for online mode, with EARS acceptance criteria mapped to the code and commits. It was written from the shipped code and says so. Its tasks 8 to 10 (RemoteEngine HTTP tests, OS keychain storage, router tests) closed on November 22, so the spec's acceptance criteria now map to shipped code.
 - `kiroween-2026/kiro-log.md`: a dated log tying each change to the Kiro artifact that drove it.
 
 **Audits that fed the specs** (`docs/evidence/`) **[confirm these ran in Kiro; `kiro-log.md` also mentions a "ZCode session"]**
@@ -79,12 +79,11 @@ Kiro is how this project kept its claims honest while moving fast.
 ## What's next
 
 - Run the installers and a real-model demo on each platform.
-- Online-providers tasks 8 to 10: cloud engine HTTP tests, OS keychain storage, router tests.
-- Signed builds and an in-app updater.
+- Signed builds.
 
 ## Known limits (stated so judges don't have to find them)
 
 - The installers are built in CI but haven't been run on real machines.
 - Stop, image input and meaning search have not yet been checked against a real model.
-- API keys are stored in plain text in the local config file; the UI masks them.
+- API keys live in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service); `config.json` keeps only a `keyring:` marker, with an owner-only file fallback on machines with no native store.
 - Builds are unsigned.

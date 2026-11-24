@@ -1,7 +1,7 @@
 <script lang="ts">
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Icon from "../components/Icon.svelte";
-  import PageHeader from "../components/PageHeader.svelte";
+  import ProgressBar from "../components/ProgressBar.svelte";
   import { onMount } from "svelte";
   import { api, errorMessage } from "../lib/api/client";
   import type { HfFileInfo, HfRepo, ModelInfo } from "../lib/api/bindings";
@@ -9,7 +9,7 @@
   import { fly } from "svelte/transition";
   import { enterScreen } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
-  import LogoMark from "../components/LogoMark.svelte";
+  import GhostMascot, { type GhostMood } from "../components/GhostMascot.svelte";
   import ProviderForm from "../components/ProviderForm.svelte";
   import { moduleOn } from "../lib/dev.svelte";
   import { applyTheme, currentTheme, type Theme } from "../lib/theme";
@@ -20,9 +20,9 @@
   // Checking the computer takes a moment and needs nothing from the user,
   // so it is not a step of its own: it is the start of "Choose a model".
   const stepList: { id: Step; label: string }[] = [
-    { id: "preset", label: "Choose a model" },
-    { id: "download", label: "Install" },
-    { id: "done", label: "Ready" },
+    { id: "preset", label: "Choose" },
+    { id: "download", label: "Download" },
+    { id: "done", label: "Say hi" },
   ];
   const stepIndex = (value: Step): number => (value === "download" ? 1 : value === "done" ? 2 : 0);
 
@@ -70,12 +70,53 @@
 
   const budgetGb = $derived(budget / 1024 / 1024 / 1024);
   const fittingPresets = $derived(presets.filter(p => p.ramGb <= budgetGb));
-  const recommended = $derived<Preset | undefined>(fittingPresets[fittingPresets.length - 1] ?? presets[0]);
+  // One clear path: the Tiny model. If the backend list has no Tiny, the
+  // old pick (the largest size that fits) stays the fallback.
+  const recommended = $derived<Preset | undefined>(
+    presets.find((p) => p.id === "tiny") ?? fittingPresets[fittingPresets.length - 1] ?? presets[0],
+  );
   // Nothing fits the memory set aside for models: an online provider is
   // the better first suggestion.
   const tightMemory = $derived(presets.length > 0 && fittingPresets.length === 0);
   const onlineAvailable = $derived(moduleOn("online"));
   const otherPresets = $derived(presets.filter((p) => p.id !== recommended?.id));
+
+  // ---- Presentation only (no calls): plain words, the mascot, the disclosure ----
+
+  /** How well a size fits, in words instead of memory figures. */
+  const fitWords = (p: Preset): string =>
+    p.ramGb > budgetGb ? "Too big for this computer" : p.ramGb <= budgetGb / 2 ? "Fits easily" : "Fits";
+  const SIZE_BLURBS: Record<string, string> = {
+    tiny: "Quick and light. Great for everyday questions, notes and drafts.",
+    small: "A little smarter, still quick.",
+    balanced: "Thoughtful answers for a roomy computer.",
+    advanced: "The deepest answers, for computers with lots of memory.",
+  };
+  const blurb = (p: Preset): string => SIZE_BLURBS[p.id] ?? p.models.join(", ");
+  // Other sizes, online providers and community models wait behind one
+  // disclosure; it opens by itself when nothing fits.
+  let moreOpen = $state(false);
+  $effect(() => {
+    if (tightMemory) moreOpen = true;
+  });
+  const mood = $derived<GhostMood>(
+    step === "detect" ? "looking" : step === "download" ? "working" : step === "done" ? "done" : "hello",
+  );
+  const bubble = $derived(
+    step === "detect"
+      ? detectError
+        ? "Hmm, I couldn't get a good look at this computer."
+        : "Taking a quick look at this computer…"
+      : step === "preset"
+        ? "Hi! I'm your LocalAide. I live right here on this computer, so what you tell me stays with you."
+        : step === "confirm"
+          ? "Good choice. Ready when you are."
+          : step === "online"
+            ? "Pick a provider and I'll use it when you choose one of its models."
+            : step === "download"
+              ? "Fetching my brain. This is the only part that needs the internet."
+              : "All set! Say hi whenever you like.",
+  );
   let theme = $state<Theme>(currentTheme());
   const chooseTheme = async (value: Theme) => {
     theme = value;
@@ -114,7 +155,7 @@
       presetError = false;
       step = "preset";
       status = recommended
-        ? `Recommended: ${recommended.name} fits the ${probe.budget_gb.toFixed(1)} GB this computer can give to models.`
+        ? `${recommended.name} fits this computer. It's quick, light, and a great place to start.`
         : "No model sizes are available right now.";
     } catch (e: unknown) {
       detectError = true;
@@ -124,7 +165,7 @@
     }
   };
 
-  const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name} (${p.ram})?`; };
+  const select = (p: Preset) => { selected = p; step = "confirm"; status = `Install ${p.name}? ${fitWords(p)} on this computer.`; };
   // The recommended size installs in one click; other sizes confirm first.
   const installRecommended = () => {
     if (!recommended) return;
@@ -274,245 +315,242 @@
   onMount(detect);
 </script>
 
-<div class="mx-auto max-w-3xl">
-  <div class="ember-glow -mx-6 mb-2 flex items-center gap-4 rounded-lg px-6 pt-2" in:fly={enterScreen()}>
-    <LogoMark class="h-14 w-14 shrink-0 drop-shadow-lg" />
-    <div class="min-w-0 flex-1">
-      <PageHeader title="Welcome to LocalAide" description="Pick an AI model that fits this computer. It runs here, so your chats stay private." />
+<div class="setup mx-auto max-w-2xl">
+  <!-- The ghost leads every step; its line says what is happening. -->
+  <div class="flex items-end gap-4" in:fly={enterScreen()}>
+    {#key mood}
+      <GhostMascot {mood} class="h-24 w-24 shrink-0 sm:h-28 sm:w-28" />
+    {/key}
+    <div class="bubble min-w-0 flex-1" aria-live="polite">
+      <p class="text-[15px] leading-6 text-ink-100">{bubble}</p>
     </div>
   </div>
-  <ol class="mb-5 flex items-center gap-2" aria-label="Setup steps">
+
+  <ol class="mt-6 mb-4 flex items-center gap-3" aria-label="Setup steps">
     {#each stepList as item, i (item.id)}
       {@const current = stepIndex(step)}
-      <li class="flex min-w-0 flex-1 items-center gap-2" aria-current={i === current ? "step" : undefined}>
-        <span class={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold transition-colors duration-300 ${i < current ? "bg-emerald-500/20 text-emerald-300" : i === current ? "bg-ember-500 text-on-ember" : "bg-ink-800 text-ink-400"}`}>
-          {#if i < current}<Icon name="check" class="h-3.5 w-3.5" />{:else}{i + 1}{/if}
+      <li class="flex items-center gap-2" aria-current={i === current ? "step" : undefined}>
+        <span class={`step-dot ${i < current ? "step-dot-done" : i === current ? "step-dot-now" : ""}`}>
+          {#if i < current}<Icon name="check" class="h-3 w-3" />{/if}
         </span>
-        <span class={`hidden truncate text-sm sm:inline ${i === current ? "font-semibold text-ink-50" : "text-ink-400"}`}>{item.label}</span>
-        {#if i < stepList.length - 1}
-          <span class="relative h-px flex-1 overflow-hidden bg-ink-700" aria-hidden="true"><span class={`absolute inset-y-0 left-0 bg-ember-500 transition-[width] duration-500 ease-out ${i < current ? "w-full" : "w-0"}`}></span></span>
-        {/if}
+        <span class={`text-sm ${i === current ? "font-semibold text-ink-50" : "text-ink-400"}`}>{item.label}</span>
+        {#if i < stepList.length - 1}<span class="h-px w-6 bg-ink-700 sm:w-10" aria-hidden="true"></span>{/if}
       </li>
     {/each}
   </ol>
+
   {#if setupError}<div class="mb-4"><ErrorBanner message={setupError} onRetry={retrySetup} onDismiss={() => setupError = null} /></div>{/if}
-  <div class="rounded-lg border border-edge bg-ink-900/60 p-6 shadow-sm">
+
+  <div class="card">
   {#key step}
   <div in:fly={enterScreen()}>
 
     {#if step === "detect"}
-      <div class="flex flex-col items-center gap-3 py-10">
+      <div class="py-6">
         {#if detectError}
           <p class="text-sm text-rose-300">{status}</p>
-          <button
-            onclick={detect}
-            class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium transition-colors"
-          >
-            Retry
-          </button>
+          <button onclick={detect} class="btn-primary mt-4">Try again</button>
         {:else}
-          <div class="w-12 h-12 rounded-full border-4 border-edge border-t-ember-500 animate-spin"></div>
           <p class="text-sm text-ink-400">{status}</p>
+          <div class="sweep mt-4" aria-hidden="true"><span></span></div>
         {/if}
       </div>
     {:else if step === "preset"}
-      <div class="grid grid-cols-3 gap-2 text-sm mb-6">
-        <div class="px-3 py-2 rounded-lg border border-edge bg-ink-950">
-          <span class="block text-xs text-ink-400">Total</span>
-          <span class="text-ink-200">{formatBytes(ramTotal)}</span>
-        </div>
-        <div class="px-3 py-2 rounded-lg border border-edge bg-ink-950">
-          <span class="block text-xs text-ink-400">Usable</span>
-          <span class="text-ink-200">{formatBytes(ramUsable)}</span>
-        </div>
-        <div class="px-3 py-2 rounded-lg border border-ember-500/30 bg-ember-500/10">
-          <span class="block text-xs text-ember-300">For models</span>
-          <span class="text-ember-200">{formatBytes(budget)}</span>
-        </div>
-      </div>
-      <p class="-mt-3 mb-5 text-xs text-ink-500">"For models" is the share of memory LocalAide lets a model use, so the rest of the computer stays quick. You can change it later in Settings → General.</p>
       {#if presetError || !recommended}
-        <p class="mb-4 text-sm text-ink-400">Model sizes could not be loaded. Retry, or connect an online provider below.</p>
+        <p class="text-sm text-ink-400">I couldn't load the model sizes. Try again, or open More options to connect an online provider.</p>
       {:else}
-        <!-- The one-click path: the largest size that fits this computer. -->
-        <div class={`rounded-lg border p-4 ${tightMemory ? "border-edge bg-ink-950" : "border-ember-500/40 bg-ember-500/10"}`}>
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2 font-medium text-ink-50">
-                {recommended.name}
-                {#if !tightMemory}<span class="rounded border border-ember-500/30 bg-ember-500/20 px-1.5 py-0.5 text-xs text-ember-300">Recommended</span>{/if}
-              </div>
-              <div class="mt-0.5 text-xs text-ink-400">{recommended.ram} · {recommended.models.join(", ")}</div>
-              {#if tightMemory}
-                <p class="mt-2 text-xs text-amber-300">This computer has less memory for models than this size needs. It may run slowly; an online provider below is the smoother start.</p>
-              {/if}
+        <!-- The one recommended path. -->
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-xl font-semibold text-ink-50">{recommended.name}</h2>
+              {#if !tightMemory}<span class="pill-ember">Recommended</span>{/if}
+              <span class={`pill ${recommended.ramGb > budgetGb ? "pill-warn" : "pill-ok"}`}>{fitWords(recommended)}</span>
             </div>
-            <button onclick={installRecommended} class="shrink-0 rounded-lg bg-ember-600 px-4 py-2 text-sm font-medium text-on-ember transition-colors hover:bg-ember-500">Install {recommended.name}</button>
+            <p class="mt-1 text-sm leading-6 text-ink-300">{blurb(recommended)}</p>
+            <p class="mt-1 text-xs text-ink-500">Runs on this computer. You can switch any time on the Models screen.</p>
           </div>
+          <button onclick={installRecommended} class="btn-primary shrink-0">
+            <Icon name="download" class="h-4 w-4" />Install {recommended.name}
+          </button>
         </div>
-        {#if otherPresets.length > 0}
-          <details class="mt-3 group">
-            <summary class="cursor-pointer select-none text-sm text-ink-400 hover:text-ink-200">Other sizes</summary>
-            <div class="mt-2 space-y-2">
-              {#each otherPresets as p (p.id)}
-                {@const fits = p.ramGb <= budgetGb}
-                <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'}`}>
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="font-medium text-ink-100">{p.name}</div>
-                      <div class="text-xs text-ink-400">{p.ram} · {p.fits} · {fits ? 'Fits' : 'Too large'}</div>
-                    </div>
-                    <div class="text-xs text-ink-400">{#if !fits}<Icon name="close" class="w-3.5 h-3.5" />{/if}</div>
-                  </div>
-                  <ul class="mt-2 text-xs text-ink-400 list-disc list-inside">
-                    {#each p.models as m}<li>{m}</li>{/each}
-                  </ul>
-                </button>
-              {/each}
-            </div>
-          </details>
+        {#if tightMemory}
+          <p class="mt-4 text-sm text-amber-300">This computer is short on room for models, so answers may be slow. More options below has an online choice that needs no download.</p>
         {/if}
       {/if}
 
-      {#if onlineAvailable}
-        <button onclick={() => { setupError = null; step = "online"; }} class={`mt-4 flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition hover:bg-veil/[0.02] ${tightMemory ? "border-ember-500/40 bg-ember-500/10" : "border-edge hover:border-ember-500/50"}`}>
-          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-200"><Icon name="cloud" class="h-4 w-4" /></span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm font-medium text-ink-100">Use an online provider instead{#if tightMemory} <span class="ml-1 rounded border border-ember-500/30 bg-ember-500/20 px-1.5 py-0.5 text-xs text-ember-300">Recommended</span>{/if}</span>
-            <span class="block text-xs text-ink-400">Nothing to download. Some providers are free and need no key. Messages go to the provider you choose.</span>
-          </span>
-          <Icon name="chevron-right" class="h-4 w-4 shrink-0 text-ink-500" />
-        </button>
-      {/if}
-
-      <div class="mt-6 border-t border-edge pt-4">
-        {#if !communityOpen}
-          <div class="flex flex-wrap items-center gap-3">
-            <button
-              onclick={() => (communityOpen = true)}
-              class="text-xs text-ember-300 hover:underline"
-            >
-              Or grab a community model from Hugging Face →
-            </button>
-            {#if onSkip}
-              <button onclick={onSkip} class="ml-auto text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
-            {/if}
-          </div>
-        {:else}
-          <div class="text-xs font-semibold text-ink-300 mb-2">Community models (Hugging Face)</div>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={wfQuery}
-              placeholder="Search public community models…"
-              onkeydown={(e) => e.key === "Enter" && wfSearch()}
-              class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-xs text-ink-200 placeholder:text-ink-600 outline-none focus:border-ember-500/60"
-            />
-            <button
-              onclick={wfSearch}
-              disabled={wfBusy || !wfQuery.trim()}
-              class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-xs font-medium text-ink-200 transition-colors"
-            >
-              {wfBusy ? "Searching…" : "Search"}
-            </button>
-          </div>
-          {#if wfError}
-            <div class="mt-2"><ErrorBanner message={wfError} onRetry={() => void wfSearch()} onDismiss={() => wfError = null} /></div>
+      <details class="more mt-5" bind:open={moreOpen}>
+        <summary class="more-summary">
+          <Icon name="chevron-right" class="more-chevron h-4 w-4" />More options
+        </summary>
+        <div class="mt-3 space-y-4">
+          {#if otherPresets.length > 0}
+            <div>
+              <h3 class="mb-2 text-sm font-semibold text-ink-200">Other sizes</h3>
+              <div class="space-y-1.5">
+                {#each otherPresets as p (p.id)}
+                  {@const fits = p.ramGb <= budgetGb}
+                  <button onclick={() => fits && select(p)} disabled={!fits} class={`option ${fits ? "" : "option-off"}`}>
+                    <span class="min-w-0 flex-1">
+                      <span class="block font-medium text-ink-100">{p.name}</span>
+                      <span class="block text-xs text-ink-400">{blurb(p)}</span>
+                    </span>
+                    <span class={`pill shrink-0 ${fits ? "pill-ok" : "pill-off"}`}>{fitWords(p)}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
           {/if}
-          <div class="mt-3 space-y-1.5 max-h-72 overflow-auto">
-            {#each wfRepos as repo (repo.id)}
-              <div class="rounded-lg border border-edge bg-ink-950/60">
+
+          {#if onlineAvailable}
+            <button onclick={() => { setupError = null; step = "online"; }} class="option">
+              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-200"><Icon name="cloud" class="h-4 w-4" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-medium text-ink-100">Use an online provider{#if tightMemory} <span class="pill-ember ml-1">Recommended</span>{/if}</span>
+                <span class="block text-xs text-ink-400">Nothing to download. Some are free and need no key. Messages go to the provider you choose.</span>
+              </span>
+              <Icon name="chevron-right" class="h-4 w-4 shrink-0 text-ink-500" />
+            </button>
+          {/if}
+
+          <div>
+            {#if !communityOpen}
+              <button onclick={() => (communityOpen = true)} class="option">
+                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-200"><Icon name="globe" class="h-4 w-4" /></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-medium text-ink-100">Community models from Hugging Face</span>
+                  <span class="block text-xs text-ink-400">Search public models. Their files and licenses are not checked by LocalAide.</span>
+                </span>
+                <Icon name="chevron-right" class="h-4 w-4 shrink-0 text-ink-500" />
+              </button>
+            {:else}
+              <div class="text-sm font-semibold text-ink-200 mb-2">Community models (Hugging Face)</div>
+              <div class="flex gap-2">
+                <input
+                  type="text"
+                  bind:value={wfQuery}
+                  placeholder="Search public community models…"
+                  onkeydown={(e) => e.key === "Enter" && wfSearch()}
+                  class="flex-1 bg-ink-950 border border-edge rounded-lg px-3 py-2 text-sm text-ink-200 placeholder:text-ink-600 outline-none focus:border-ember-500/60"
+                />
                 <button
-                  onclick={() => wfToggleRepo(repo.id)}
-                  class="w-full text-left px-3 py-2 hover:bg-veil/[0.02] transition-colors"
+                  onclick={wfSearch}
+                  disabled={wfBusy || !wfQuery.trim()}
+                  class="px-3 py-2 bg-ink-800 hover:bg-ink-700 disabled:opacity-40 rounded-lg text-sm font-medium text-ink-200 transition-colors"
                 >
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs text-ink-200 font-medium truncate">{repo.id}</span>
-                    <span class="text-sm text-ink-400 shrink-0">{repo.downloads.toLocaleString()} downloads</span>
-                  </div>
-                  <div class="text-sm text-ink-400">
-                    {#if repo.license}{repo.license}{/if}
-                    {#if repo.gated}<span class="text-amber-300"> · gated — needs a hub login, refused here</span>{/if}
-                  </div>
+                  {wfBusy ? "Searching…" : "Search"}
                 </button>
-                {#if wfExpanded === repo.id}
-                  <div class="border-t border-edge px-3 py-2">
-                    {#if wfFilesBusy === repo.id}
-                      <div class="text-sm text-ink-400">Listing files…</div>
-                    {:else if (wfFiles[repo.id] ?? []).length === 0}
-                      <div class="text-sm text-ink-400">No model files in this folder.</div>
-                    {:else}
-                      {#each wfFiles[repo.id] as file (file.path)}
-                        <div class="flex items-center justify-between gap-2 py-1">
-                          <span class="text-xs text-ink-300 font-mono truncate">{file.path}</span>
-                          <span class="flex items-center gap-2 shrink-0">
-                            <span class="text-sm text-ink-400">{formatBytes(file.size)}</span>
-                            <button
-                              onclick={() => wfInstall(repo.id, file)}
-                              disabled={wfAdding !== null}
-                              class="px-2 py-1 rounded bg-ember-600 text-on-ember text-xs font-medium disabled:opacity-40"
-                            >
-                              {wfAdding === file.path ? "Adding…" : "Install"}
-                            </button>
-                          </span>
-                        </div>
-                      {/each}
+              </div>
+              {#if wfError}
+                <div class="mt-2"><ErrorBanner message={wfError} onRetry={() => void wfSearch()} onDismiss={() => wfError = null} /></div>
+              {/if}
+              <div class="mt-3 space-y-1.5 max-h-72 overflow-auto">
+                {#each wfRepos as repo (repo.id)}
+                  <div class="rounded-lg border border-edge bg-ink-950/60">
+                    <button
+                      onclick={() => wfToggleRepo(repo.id)}
+                      class="w-full text-left px-3 py-2 hover:bg-veil/[0.02] transition-colors"
+                    >
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs text-ink-200 font-medium truncate">{repo.id}</span>
+                        <span class="text-sm text-ink-400 shrink-0">{repo.downloads.toLocaleString()} downloads</span>
+                      </div>
+                      <div class="text-sm text-ink-400">
+                        {#if repo.license}{repo.license}{/if}
+                        {#if repo.gated}<span class="text-amber-300"> · gated — needs a hub login, refused here</span>{/if}
+                      </div>
+                    </button>
+                    {#if wfExpanded === repo.id}
+                      <div class="border-t border-edge px-3 py-2">
+                        {#if wfFilesBusy === repo.id}
+                          <div class="text-sm text-ink-400">Listing files…</div>
+                        {:else if (wfFiles[repo.id] ?? []).length === 0}
+                          <div class="text-sm text-ink-400">No model files in this folder.</div>
+                        {:else}
+                          {#each wfFiles[repo.id] as file (file.path)}
+                            <div class="flex items-center justify-between gap-2 py-1">
+                              <span class="text-xs text-ink-300 font-mono truncate">{file.path}</span>
+                              <span class="flex items-center gap-2 shrink-0">
+                                <span class="text-sm text-ink-400">{formatBytes(file.size)}</span>
+                                <button
+                                  onclick={() => wfInstall(repo.id, file)}
+                                  disabled={wfAdding !== null}
+                                  class="px-2 py-1 rounded bg-ember-600 text-on-ember text-xs font-medium disabled:opacity-40"
+                                >
+                                  {wfAdding === file.path ? "Adding…" : "Install"}
+                                </button>
+                              </span>
+                            </div>
+                          {/each}
+                        {/if}
+                      </div>
                     {/if}
                   </div>
-                {/if}
+                {/each}
               </div>
-            {/each}
+              <p class="mt-2 text-xs text-ink-500">
+                Community model files and licenses are not checked by LocalAide. Each download is checked against the source file.
+              </p>
+            {/if}
           </div>
-          <p class="mt-2 text-xs text-ink-500">
-            Community model files and licenses are not checked by LocalAide. Each download is checked against the source file.
-          </p>
-        {/if}
-      </div>
+        </div>
+      </details>
+
+      {#if onSkip}
+        <div class="mt-4 flex justify-end">
+          <button onclick={onSkip} class="text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
+        </div>
+      {/if}
     {:else if step === "online"}
       <p class="mb-3 text-sm leading-6 text-ink-400">Choose a provider. Its models appear in the chat's model menu; a message goes online only while the chat uses one of them. A key stays on this computer and is sent only to that provider.</p>
       <ProviderForm editing={null} onSaved={onlineSaved} onCancel={() => (step = "preset")} />
     {:else if step === "confirm"}
-      <div class="bg-ink-950 rounded-lg p-4 mb-6 border border-edge">
-        <div class="font-medium text-ink-100">{selected?.name} preset</div>
-        <div class="text-sm text-ink-400">{selected?.models.join(", ")}</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="text-xl font-semibold text-ink-50">{selected?.name}</h2>
+        {#if selected}<span class={`pill ${selected.ramGb > budgetGb ? "pill-warn" : "pill-ok"}`}>{fitWords(selected)}</span>{/if}
       </div>
-      <p class="text-sm text-ink-400 mb-6">{status}</p>
-      <div class="flex flex-wrap items-center gap-3">
-        <button onclick={() => step = "preset"} class="px-4 py-2 rounded-lg bg-veil/5 border border-edge text-sm text-ink-300 hover:bg-veil/10">Change preset</button>
-        <button onclick={install} class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium">Install</button>
+      {#if selected}<p class="mt-1 text-sm text-ink-300">{blurb(selected)}</p>{/if}
+      <p class="mt-3 text-sm text-ink-400">{status}</p>
+      <div class="mt-5 flex flex-wrap items-center gap-3">
+        <button onclick={install} class="btn-primary"><Icon name="download" class="h-4 w-4" />Install</button>
+        <button onclick={() => step = "preset"} class="btn-quiet">Back</button>
         {#if onSkip}
           <button onclick={onSkip} class="ml-auto text-sm text-ink-400 hover:text-ink-200 hover:underline">Set up later</button>
         {/if}
       </div>
       <p class="mt-4 text-xs text-ink-400">Installing needs an internet connection. If you are offline, choose Set up later and download a model from the Models screen when you are back online.</p>
     {:else if step === "download"}
-      <p class="text-sm text-ink-400 mb-4">{status}</p>
-      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-[width] duration-300" style="width:{progress}%"></div></div>
-      <div class="text-sm text-ink-400 mb-4">{progress}%</div>
+      <p class="text-sm text-ink-300">{status}</p>
+      <div class="mt-4 flex items-center gap-3">
+        <ProgressBar value={progress} label="Installing the model" class="h-2.5 flex-1" />
+        <span class="w-12 text-right text-sm font-semibold tabular-nums text-ink-100">{progress}%</span>
+      </div>
       <button
         onclick={communityModelId ? cancelCommunity : cancelInstall}
-        class="px-4 py-2 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
+        class="mt-5 rounded-lg border border-rose-500/30 px-4 py-2 text-sm text-rose-400 transition-colors hover:bg-rose-500/10"
       >
-        Cancel install
+        Cancel
       </button>
     {:else if step === "done"}
-      <div class="flex items-start gap-3 mb-6">
-        <span class="size-6 grid place-items-center rounded-full bg-emerald-500/20 text-emerald-300"><Icon name="check" class="w-3.5 h-3.5" /></span>
-        <div>
-          <div class="font-medium text-ink-100">Setup complete</div>
-          <div class="text-sm text-ink-400">{status}</div>
+      <div class="flex items-start gap-3">
+        <span class="done-check"><Icon name="check" class="h-4 w-4" /></span>
+        <div class="min-w-0">
+          <h2 class="text-xl font-semibold text-ink-50">All set!</h2>
+          <p class="mt-1 text-sm text-ink-400">{status}</p>
         </div>
       </div>
-      <div class="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-ink-950 px-4 py-3">
+      <div class="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-ink-950 px-4 py-3">
         <span class="text-sm text-ink-300">Look</span>
         <div class="flex gap-1.5" role="radiogroup" aria-label="Theme">
           {#each [{ id: "dark", label: "Dark" }, { id: "light", label: "Light" }] as option (option.id)}
             <button type="button" role="radio" aria-checked={theme === option.id} onclick={() => void chooseTheme(option.id as Theme)} class={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${theme === option.id ? "border-ember-500/50 bg-ember-500/15 text-ember-200" : "border-edge text-ink-300 hover:bg-veil/5"}`}>{option.label}</button>
           {/each}
         </div>
-        <span class="text-xs text-ink-500">Colors, fonts and size are in Settings → General → Appearance.</span>
+        <span class="text-xs text-ink-500">More in Settings → General → Appearance.</span>
       </div>
-      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="px-4 py-2 rounded-lg bg-ember-600 text-on-ember text-sm font-medium transition-colors hover:bg-ember-500">Open app</button>
+      <button onclick={() => (onFinished ? onFinished() : location.reload())} class="btn-primary mt-5">
+        <Icon name="chat" class="h-4 w-4" />Start chatting
+      </button>
     {/if}
   </div>
   {/key}
@@ -527,6 +565,204 @@
 </div>
 
 <style>
-  .animate-spin { animation: spin 1s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .bubble {
+    position: relative;
+    margin-bottom: 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink-900);
+    padding: 0.75rem 1rem;
+    box-shadow: 0 8px 20px -14px rgb(0 0 0 / 0.5);
+  }
+  /* The tail points at the ghost. */
+  .bubble::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    bottom: 14px;
+    height: 12px;
+    width: 12px;
+    transform: rotate(45deg);
+    border-left: 1px solid var(--color-edge);
+    border-bottom: 1px solid var(--color-edge);
+    background: var(--color-ink-900);
+  }
+  .card {
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-edge);
+    background: color-mix(in oklab, var(--color-ink-900) 70%, transparent);
+    padding: 1.5rem;
+  }
+  .step-dot {
+    display: grid;
+    height: 1.25rem;
+    width: 1.25rem;
+    place-items: center;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink-700);
+    transition: background-color 300ms ease-out, border-color 300ms ease-out;
+  }
+  .step-dot-now {
+    border-color: var(--color-ember-500);
+    background: color-mix(in oklab, var(--color-ember-500) 25%, transparent);
+  }
+  .step-dot-done {
+    border-color: transparent;
+    background: var(--color-ember-500);
+    color: var(--color-on-ember);
+  }
+  .btn-primary {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.6rem;
+    background: var(--color-ember-600);
+    padding: 0 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-on-ember);
+    transition: background-color 150ms ease-out, transform 120ms ease-out;
+  }
+  .btn-primary:hover {
+    background: var(--color-ember-500);
+  }
+  .btn-primary:active {
+    transform: translateY(1px);
+  }
+  .btn-quiet {
+    min-height: 44px;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-edge);
+    padding: 0 1rem;
+    font-size: 0.875rem;
+    color: var(--color-ink-300);
+  }
+  .btn-quiet:hover {
+    background: color-mix(in oklab, var(--color-veil) 5%, transparent);
+  }
+  .pill,
+  .pill-ember {
+    border-radius: 9999px;
+    padding: 0.05rem 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+  .pill-ember {
+    border: 1px solid color-mix(in oklab, var(--color-ember-500) 35%, transparent);
+    background: color-mix(in oklab, var(--color-ember-500) 15%, transparent);
+    color: var(--color-ember-300);
+  }
+  .pill-ok {
+    background: color-mix(in oklab, #10b981 14%, transparent);
+    color: var(--color-emerald-300);
+  }
+  .pill-warn {
+    background: color-mix(in oklab, #f59e0b 14%, transparent);
+    color: var(--color-amber-300);
+  }
+  .pill-off {
+    background: var(--color-ink-800);
+    color: var(--color-ink-400);
+  }
+  .more-summary {
+    display: inline-flex;
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.4rem 0.25rem 0.15rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-ink-300);
+    user-select: none;
+  }
+  .more-summary::-webkit-details-marker {
+    display: none;
+  }
+  .more-summary:hover {
+    color: var(--color-ink-50);
+  }
+  .more :global(.more-chevron) {
+    transition: transform 150ms ease-out;
+  }
+  .more[open] :global(.more-chevron) {
+    transform: rotate(90deg);
+  }
+  .option {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-edge);
+    padding: 0.65rem 0.85rem;
+    text-align: left;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out;
+  }
+  .option:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent);
+    background: color-mix(in oklab, var(--color-veil) 4%, transparent);
+  }
+  .option-off {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  /* Indeterminate: a short bar sweeps across while the computer is checked. */
+  .sweep {
+    height: 4px;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: var(--color-ink-800);
+  }
+  .sweep span {
+    display: block;
+    height: 100%;
+    width: 35%;
+    border-radius: 9999px;
+    background: var(--color-ember-500);
+    animation: sweep 1.2s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(290%); }
+  }
+  /* The done moment: one pop and one ring, then still. */
+  .done-check {
+    position: relative;
+    display: grid;
+    height: 2rem;
+    width: 2rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 9999px;
+    background: var(--color-ember-500);
+    color: var(--color-on-ember);
+    animation: done-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+  }
+  .done-check::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ember-500);
+    opacity: 0;
+    animation: done-ring 900ms ease-out 150ms 1;
+  }
+  @keyframes done-pop {
+    0% { transform: scale(0.4); }
+    100% { transform: scale(1); }
+  }
+  @keyframes done-ring {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sweep span,
+    .done-check,
+    .done-check::after {
+      animation: none;
+    }
+  }
 </style>

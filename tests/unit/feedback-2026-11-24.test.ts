@@ -47,8 +47,10 @@ test("the stop button does not pulse, and stopping offers a resume", () => {
   assert.match(input, /aria-label="Resume the stopped answer"/, "the resume button is there");
   assert.match(input, /Icon name="play"/, "resume reads as continue, not restart");
 
+  const composer = read("src/components/ChatComposer.svelte");
+  assert.match(composer, /canResume=\{run\.stoppedAnswer\}\s+onResume=\{onResume\}/, "the chat wires the resume button");
+
   const chat = read("src/screens/ChatScreen.svelte");
-  assert.match(chat, /canResume=\{stoppedAnswer\}\s+onResume=\{resumeGenerating\}/, "the chat wires the resume button");
   assert.match(chat, /stoppedAnswer = true/, "stopping marks the answer resumable");
   assert.match(chat, /void send\(false, undefined, true\)/, "resuming reuses send with the resume flag");
   assert.match(chat, /resume,\n\s+history,/, "the request carries the resume flag");
@@ -110,7 +112,7 @@ test("model prices come from OpenRouter, not a hand-typed table", () => {
   assert.match(cloud, /openrouter\.ai\/api\/v1/, "the list is OpenRouter's public one, no key needed");
   const settingsBackend = read("src-tauri/src/commands/settings.rs");
   assert.doesNotMatch(settingsBackend, /settings_model_prices|settings_set_model_prices/, "the manual price commands are gone");
-  const config = read("src-tauri/src/config.rs");
+  const config = read("src-tauri/src/config/mod.rs");
   assert.doesNotMatch(config, /model_prices/, "the manual price table is gone from the config");
   const models = read("src-tauri/src/services/inference/provider_models.rs");
   assert.match(models, /prompt_price_per_million/, "the model list keeps the prices OpenRouter sends");

@@ -177,9 +177,10 @@ test("question UIs mark the recommended option and offer a free-text answer", ()
   const dock = read("src/components/QuestionDock.svelte");
   assert.match(dock, /Other<\/span>/, "the dock keeps its typed-answer box");
   // The model can mark a recommendation through the ask_user tool.
-  const tools = read("src-tauri/src/services/agent/tools.rs");
+  // The tool schemas moved to tools/specs.rs in the 0.2.4 split.
+  const tools = read("src-tauri/src/services/agent/tools/specs.rs");
   assert.match(tools, /"recommended": \{"type": "boolean"/);
-  const agent = read("src-tauri/src/services/agent/mod.rs");
+  const agent = read("src-tauri/src/services/agent/handlers.rs");
   assert.match(agent, /recommended: o\s*\.get\("recommended"\)/);
   assert.match(agent, /recommended_option_is_carried_not_invented/);
 });
@@ -232,13 +233,14 @@ test("new chats start on the last-used model when it is still usable", () => {
 
 // N15 — header manners.
 test("the chat title is a button, renames on double-click, and shows whole on hover", () => {
-  const chat = read("src/screens/ChatScreen.svelte");
-  assert.match(chat, /title=\{activeThreadTitle === "New Conversation" \? "New chat" : activeThreadTitle\}/);
-  assert.match(chat, /onclick=\{onTitleClick\}/);
-  assert.match(chat, /ondblclick=\{onTitleDblClick\}/);
-  assert.match(chat, /setTimeout\(\(\) => \(showMoreActions = true\), 250\)/);
+  const header = read("src/components/ChatHeader.svelte");
+  assert.match(header, /title=\{title === "New Conversation" \? "New chat" : title\}/);
+  assert.match(header, /onclick=\{onTitleClick\}/);
+  assert.match(header, /ondblclick=\{onTitleDblClick\}/);
   // "New chat" until the model titles it — the Batch 3 behaviour stands.
-  assert.match(chat, /"New chat" : activeThreadTitle/);
+  assert.match(header, /"New chat" : title/);
+  const chat = read("src/screens/ChatScreen.svelte");
+  assert.match(chat, /setTimeout\(\(\) => \(showMoreActions = true\), 250\)/);
   const bar = read("src/components/TitleBar.svelte");
   assert.match(bar, /title=\{tab\.title\}/);
 });
@@ -273,11 +275,11 @@ test("the toast is portaled so reporting costs the page no layout", () => {
 });
 
 test("status is Offline by default, never a default Online", () => {
-  const chat = read("src/screens/ChatScreen.svelte");
+  const header = read("src/components/ChatHeader.svelte");
   // The header chip only says Online when an online model is actually
   // chosen; the fallback branch is Offline on this computer.
-  assert.match(chat, /Offline · this computer/);
-  assert.match(chat, /\{#if onlineChoice\}/);
+  assert.match(header, /Offline · this computer/);
+  assert.match(header, /\{#if onlineLabel\}/);
   // No autostart feature exists in the app at all, so the one-time marker
   // rule has nothing to attach to (see the evidence doc, §11).
   const walkRs = (dir: string): string[] => {

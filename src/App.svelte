@@ -22,6 +22,7 @@
   import ChatScreen from "./screens/ChatScreen.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
+  import ProgressBar from "./components/ProgressBar.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
   import SkillsScreen from "./screens/SkillsScreen.svelte";
   import ModelManagerScreen from "./screens/ModelManagerScreen.svelte";
@@ -449,8 +450,9 @@
     <!-- Starts under the chrome bar (h-10), so the window buttons stay reachable. -->
     <div role="presentation" class="fixed inset-x-0 bottom-0 top-10 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
   {/if}
-  <!-- The title bar above already carries the logo and name, so the sidebar
-       starts with its actions; on narrow windows it slides in under the
+  <!-- The title bar above carries no logo or name (on macOS it is just
+       the traffic lights and the drag area), so the sidebar starts with
+       its actions; on narrow windows it slides in under the
        title bar rather than over it. -->
   <aside class={`fixed lg:relative top-10 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
     <div class="lg:hidden flex h-9 shrink-0 items-center justify-end px-1">
@@ -465,7 +467,7 @@
       >
         <Icon name="plus" class="h-4 w-4" />
         New chat
-        <kbd class="ml-auto rounded bg-veil/5 px-1.5 py-0.5 font-mono text-[11px] font-normal text-ink-400">{mod}N</kbd>
+        <kbd class="ml-auto rounded bg-veil/5 px-1.5 py-0.5 font-mono text-xs font-normal text-ink-400">{mod}N</kbd>
       </button>
     {:else}
       <button
@@ -697,7 +699,7 @@
     <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:slideUp={{ y: 8 }} out:fade={{ duration: dur(motion.fast) }}>
       <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ember-300" />Getting the model engine</div>
       <p class="mt-1 text-xs leading-5 text-ink-400">Once only: the llama.cpp build for this processor, from github.com.</p>
-      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.max(3, engineDownload.percent)}%`}></div></div>
+      <ProgressBar value={engineDownload.percent} min={3} label="Getting the model engine" class="mt-2 h-1.5" />
       <p class="mt-1 text-right text-xs tabular-nums text-ink-500">{formatBytes(engineDownload.downloaded_bytes)} of {formatBytes(engineDownload.total_bytes)}</p>
     </div>
   {/if}

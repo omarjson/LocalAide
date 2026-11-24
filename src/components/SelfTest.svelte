@@ -3,6 +3,7 @@
   // one reply. Steps run in order; each shows pass or fail with its time.
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
+  import ProgressBar from "./ProgressBar.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import type { SelfTestReport, SelfTestStep } from "../lib/api/bindings";
 
@@ -69,7 +70,7 @@
             </div>
             <p class={`mt-0.5 text-[13px] leading-5 ${s?.status === "fail" ? "text-rose-300" : "text-ink-400"}`}>{s?.detail || item.hint}</p>
             {#if s?.status === "running" && s.percent !== null}
-              <div class="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.round(s.percent)}%`}></div></div>
+              <ProgressBar value={s.percent} label={item.label} class="mt-2 h-1.5 max-w-sm" />
               <span class="mt-1 block text-xs tabular-nums text-ink-500">{Math.round(s.percent)}%</span>
             {/if}
           </div>

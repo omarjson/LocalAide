@@ -230,8 +230,55 @@ const usageSummaryFixture = (args: Record<string, unknown>) => {
   };
 };
 
+// `?setup` opens first-run setup; `?run` makes the next chat answer ask to
+// run a terminal command, so the approval countdown can be seen.
+const query = new URLSearchParams(location.search);
+const previewSetup = query.has("setup");
+// Kept in local storage so a reload keeps it, as config.json would.
+const TIMERS_KEY = "localaide-shim-approval-timers";
+let approvalTimersFixture = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(TIMERS_KEY) ?? "null") ?? { plan_auto_accept_secs: 0, terminal_approval_secs: 60 };
+  } catch {
+    return { plan_auto_accept_secs: 0, terminal_approval_secs: 60 };
+  }
+})() as { plan_auto_accept_secs: number; terminal_approval_secs: number };
+let pendingDecision: ((decision: string) => void) | null = null;
+
+/** Fake preset download: progress over about four seconds, then done. */
+function streamPresetDownload(channel: { id: number } | undefined, id: string): Promise<void> {
+  return new Promise((resolve) => {
+    const cb = channel ? callbacks.get(channel.id) : undefined;
+    let pct = 0;
+    let index = 0;
+    const step = () => {
+      pct = Math.min(100, pct + 4 + Math.random() * 6);
+      cb?.({ index: index++, message: { model_id: `${id}-model`, percent: pct, status: pct >= 100 ? "done" : "downloading", downloaded: pct, total: 100 } });
+      if (pct >= 100) setTimeout(resolve, 900);
+      else setTimeout(step, 180);
+    };
+    setTimeout(step, 300);
+  });
+}
+
 const fixtures: Record<string, Handler> = {
-  config_load: () => ({ selected_models: ["qwen3.5-9b"] }),
+  config_load: () => (previewSetup ? { selected_models: [], setup_complete: false, has_online_providers: false } : { selected_models: ["qwen3.5-9b"] }),
+  settings_approval_timers: () => approvalTimersFixture,
+  settings_set_approval_timers: (args) => {
+    approvalTimersFixture = args.timers as typeof approvalTimersFixture;
+    try {
+      localStorage.setItem(TIMERS_KEY, JSON.stringify(approvalTimersFixture));
+    } catch {
+      // Preview only.
+    }
+    return approvalTimersFixture;
+  },
+  chat_tool_decide: (args) => {
+    const req = args.req as { decision: string };
+    pendingDecision?.(req.decision);
+    pendingDecision = null;
+    return true;
+  },
   settings_theme: () => "dark",
   settings_set_theme: () => null,
   ui_scale_get: () => 1,
@@ -379,7 +426,6 @@ const fixtures: Record<string, Handler> = {
   chat_enhance_prompt: (args) => `${args.text} — rewritten with clear steps and a short goal statement.`,
   chat_suggest_next: () => ["Turn this into a checklist I can follow tomorrow.", "Draft an email to the client about the delay.", "What else changed in the invoice terms?"],
   chat_title: () => "Invoice terms and payment dates",
-  chat_tool_decide: () => null,
   chat_attach_pick: () => null,
   chat_attach_dropped: () => [],
   summarize: () => ({ summary: "A short summary of the conversation.", title: "Summary" }),
@@ -561,6 +607,19 @@ function streamAnswer(channel: { id: number } | undefined, req: Record<string, u
   if (!channel) return;
   const cb = callbacks.get(channel.id);
   if (!cb) return;
+  if (/\brun\b/i.test(String(req.message ?? ""))) {
+    let n = 0;
+    const send = (message: Record<string, unknown>) => cb({ index: n++, message });
+    send({ type: "tool_call", payload: { id: "call-sh", name: "run_command", title: "Run a command", detail: "npm test", group: "shell", arguments: "{\"command\":\"npm test\"}" } });
+    send({ type: "tool_approval", payload: { id: "call-sh", approval_id: "job-1:call-sh", title: "Run a command", detail: "npm test", preview: "npm test" } });
+    pendingDecision = (decision) => {
+      const ok = decision !== "deny";
+      send({ type: "tool_result", payload: { id: "call-sh", ok, summary: ok ? "exit 0" : "Not run", output: ok ? '{"exit":0,"ms":840,"timed_out":false,"cut":false,"saved":null,"cwd":""}\n12 tests passed' : "You chose not to run this." } });
+      send({ type: "token", payload: { token: ok ? "All 12 tests pass." : "Okay, I did not run it." } });
+      send({ type: "done", payload: { finish_reason: "stop", total_tokens: 12 } });
+    };
+    return;
+  }
   const events: Array<Record<string, unknown>> = [
     { type: "status", payload: { label: "Checking your notes" } },
     {
@@ -656,6 +715,9 @@ export function installShim(): void {
       if (cmd.startsWith("plugin:window|")) return Promise.resolve(null);
       const handler = fixtures[cmd];
       if (handler) return Promise.resolve(handler(args));
+      if (cmd === "model_download_preset") {
+        return streamPresetDownload(args.channel as { id: number }, String(args.id));
+      }
       if (cmd === "chat_stream") {
         streamAnswer(args.channel as { id: number }, args.req as Record<string, unknown>);
         return Promise.resolve("job-1");

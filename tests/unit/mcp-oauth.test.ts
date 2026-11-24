@@ -11,7 +11,7 @@ const bindings = read("src/lib/api/bindings.ts");
 const client = read("src/lib/api/client.ts");
 const panel = read("src/components/McpOAuthPanel.svelte");
 const settings = read("src/screens/SettingsScreen.svelte");
-const rustConfig = read("src-tauri/src/config.rs");
+const rustConfig = read("src-tauri/src/config/mod.rs");
 const rustCommands = read("src-tauri/src/commands/mcp.rs");
 const rustService = read("src-tauri/src/services/mcp/mod.rs");
 

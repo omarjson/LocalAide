@@ -1,7 +1,7 @@
 {
   "name": "localaide",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/svelte-virtual": "^3.13.54",
     "@tauri-apps/api": "^2.12.4",
     "mermaid": "^12.3.0",
     "svelte": "^5.57.3"

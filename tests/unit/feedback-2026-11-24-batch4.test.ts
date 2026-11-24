@@ -76,7 +76,7 @@ test("a subagent step carries its token total, and it sticks", () => {
 
   const events = read("src-tauri/src/app/events.rs");
   assert.match(events, /tokens: Option<usize>/, "the step event carries a token total");
-  const agent = read("src-tauri/src/services/agent/mod.rs");
+  const agent = read("src-tauri/src/services/agent/subagent.rs");
   assert.match(agent, /let used = done\.prompt_tokens\.unwrap_or\(0\) \+ done\.tokens;/, "the total is prompt plus answer tokens");
   assert.match(agent, /tokens: Some\(used\)/, "the finished subagent reports its total");
   const bindings = read("src/lib/api/bindings.ts");

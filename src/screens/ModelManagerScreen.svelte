@@ -3,6 +3,7 @@
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import EmptyState from "../components/EmptyState.svelte";
+  import ProgressBar from "../components/ProgressBar.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Icon from "../components/Icon.svelte";
   import PageHeader from "../components/PageHeader.svelte";
@@ -604,7 +605,7 @@
             {#if model.status === "installing" || model.status === "pausing" || model.status === "paused"}
               <div class="mt-2 max-w-sm">
                 <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : model.status === "pausing" ? "Pausing…" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-[width]" style={`width:${model.progress ?? 0}%`}></div></div>
+                <ProgressBar value={model.progress ?? 0} label={`Downloading ${model.name}`} paused={model.status !== "installing"} />
                 <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.status === "installing" && model.speedBps ? `${formatBytes(model.speedBps)}/s` : model.status === "installing" ? "Starting…" : "Resume continues where it stopped"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.status === "installing" ? (model.speedBps ?? 0) : 0)}</span></div>
               </div>
             {/if}
@@ -685,7 +686,7 @@
                   {#if model.status === "installing" || model.status === "pausing" || model.status === "paused"}
                     <div class="mt-2 max-w-sm">
                       <div class="mb-1 flex flex-wrap justify-between gap-x-3 text-sm text-ink-400"><span>{model.status === "paused" ? "Paused" : model.status === "pausing" ? "Pausing…" : "Downloading…"}</span><span>{model.progress ?? 0}% · {formatBytes(model.downloadedBytes ?? 0)} / {formatBytes(model.totalBytes ?? 0)}</span></div>
-                      <div class="h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full bg-ember-500 transition-[width]" style={`width:${model.progress ?? 0}%`}></div></div>
+                      <ProgressBar value={model.progress ?? 0} label={`Downloading ${model.name}`} paused={model.status !== "installing"} />
                       <div class="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500"><span>{model.status === "installing" && model.speedBps ? `${formatBytes(model.speedBps)}/s` : model.status === "installing" ? "Starting…" : "Resume continues where it stopped"}</span><span>{formatEta(model.downloadedBytes ?? 0, model.totalBytes ?? 0, model.status === "installing" ? (model.speedBps ?? 0) : 0)}</span></div>
                     </div>
                   {/if}

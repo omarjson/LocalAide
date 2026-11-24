@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-24
+
+### Fixed
+- **Chat titles no longer stay stuck on the raw first message.** Title generation retries once when it fails, rejects empty titles and titles that just echo the question back, and keeps retrying on later completed answers until the model gives a real title.
+- **macOS title bar has no logo.** The ghost tile sat in the chrome next to the traffic lights, which real Mac apps don't do — the reference is a clean bar with just the traffic lights and the drag area. The logo button and its Minimize / Restore / Close menu are now Windows/Linux only, where the logo is the window menu; on macOS the traffic lights already are the window controls. Tabs stay in their own row below the chrome.
+- **macOS title bar looks normal, not stacked lines.** Tabs were bordered boxes (top and side borders each) under a bordered chrome row — line over line over line. They are now flat pills (active one filled, the rest transparent) and the chrome carries no divider when the tab row follows it, so the single line under the tab row is the only divider, like VS Code or Linear.
+- **Light-theme contrast on small labels.** The "Free" badge, the Plan mode label and the question-dock note were all under 2:1 against the light background. They now use the theme's emerald, blue and amber colours.
+
+### Added
+- **Setup is led by the patched ghost.** The first-run wizard now opens with the mascot, offers Tiny as the one recommended install described in plain words (no RAM figures), and hides the other sizes, online providers and community models behind one "More options". The download and done moments are the payoff. The setup calls and step machine are unchanged — presentation and copy only.
+- **Approvals show the mode, and can count down.** The approval prompt, the file-change dialog and the plan card carry an "Autonomous mode" / "Plan mode" chip. A plan can auto-accept on a timer (Off / 1 minute / 5 minutes, default Off, pauses while typing). A terminal request counts down ("Runs in 0:42 unless you choose Don't run") and runs when it reaches zero — duration configurable in Settings, default 60 seconds. Settings → Tools and MCP → Agent and approvals switches Plan mode and Autonomous mode for every open chat.
+- **An accessible progress bar.** Downloads, engine install, setup, voice downloads and the self-test now announce a label and percentage to screen readers. Paused model downloads show a grey bar instead of ember.
+
+### Changed
+- **Long chats render only the visible messages.** The message list is virtualized (TanStack Virtual), so a long thread no longer keeps every message, tool output and subagent transcript in the DOM — the prime suspect for the ~500 MB report. Streaming scroll anchoring and follow-while-streaming are preserved.
+- **Codebase refactored for maintainability (no behaviour change).** `ChatScreen.svelte` split into a run-state class plus header, empty-state and composer components; the Rust chat loop `services/agent/mod.rs` split into focused modules (types, context, failover, dispatch, handlers, subagent, gather); one `scripts/bump-version.mjs` now bumps all six version files; the window-chrome tests render the component instead of regex-matching its source. Pushes now go through real `git push` instead of the hand-rolled API scripts.
+- **Further splits, same rule.** Chat settings sheet, chat search bar and the plan card out of the chat screen (2,426 → 2,299 lines); web-search settings out of Settings (1,436 → 1,335); `config.rs` into `config/mod.rs` + `config/permissions.rs`; `agent/tools.rs` into `tools/mod.rs` + `tools/specs.rs`. Maintainability only — it does not make the app faster.
+
 ## [0.2.3] - 2026-11-24
 
 A large local-first upgrade: one window chrome row, a diagnostics and repair

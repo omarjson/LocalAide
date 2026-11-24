@@ -636,3 +636,171 @@ warning is the pre-existing `context="module"` deprecation in
 `Icon.svelte`); `cargo fmt --check` clean; `npm run build` passes. Rust
 verification is CI's job (no local GTK/WebKit libs): clippy + cargo test
 on the CI run.
+
+## 14. macOS title bar: logo out of the chrome — 2026-11-24 (`dev` only)
+
+Omar's screenshot (18:29 EET) showed the chrome row: traffic lights, then
+the ghost tile logo button. His reference (an app he called "open chamber")
+has a clean bar — traffic lights, sidebar controls, no app logo in the
+title bar — and his words were that he could give "100 million references"
+that apps don't do that. He also reported RAM ramping to ~500 MB after
+agent scouting runs (he expects ~100–120 MB).
+
+- **Title bar.** The logo was our own design choice, not a Tauri limit:
+  Batch 1 made it the window menu (Minimize / Restore / Close). On macOS
+  that menu is redundant — the traffic lights already are the window
+  controls — and no Mac app puts its logo there. Fix: `TitleBar.svelte`
+  now renders the logo button only on Windows/Linux (`{#if !isMac}`);
+  on macOS the chrome is just the traffic lights plus the drag area, tabs
+  still in their own row below. `window-chrome.test.ts` updated to assert
+  the logo menu is Windows/Linux only. Stale comments in `TitleBar.svelte`
+  and `App.svelte` ("the title bar carries the logo and name") fixed.
+- **Shell question.** Omar asked whether to switch the whole project to
+  Chromium/Electron/Expo. Analysis given: no rewrite before the Dec 5
+  submission — it would forfeit months of backend work; Electron is heavier
+  on RAM than WKWebView, so it would make the 500 MB worse; Expo is React
+  Native and cannot host the Rust backend; the visuals are the Svelte
+  layer, portable regardless of shell. Shell migration is a LATER item for
+  after Dec 5, if ever.
+- **RAM (open).** Checked in code: mockup-page cache capped (64 x 512 KB),
+  messages load per active thread only, subagent contexts drop when the run
+  ends, tool outputs capped 4–8 KB per stored part. Remaining suspect is
+  the WebView rendering the whole untruncated chat with no virtualization
+  (every message, tool output and subagent transcript stays in the DOM).
+  Blocked on Omar: which Activity Monitor process shows 500 MB —
+  LocalAide, LocalAide WebContent, or llama-server. The fix depends on it.
+
+## 15. Title bar, normal look + future refactoring list — 2026-11-24 (`dev` only)
+
+Omar, on the logo fix: make the title bar "like usual typical normal
+looking, not ghost line over line and over line" — it looked "meh and
+mid". And he asked for refactoring recommendations for the future, not
+now (now is enhancements).
+
+- **Title bar, second pass.** The logo was out, but the stacked lines
+  stayed: bordered chrome row + tab row with bordered box-tabs (each tab
+  had top and side borders). Now the tabs are flat pills — active one
+  filled `bg-ink-900`, the rest transparent with a hover fill — and the
+  chrome carries no divider when the tab row follows it, so the single
+  line under the tab row is the only divider, like VS Code or Linear.
+  `window-chrome.test.ts` locks the flat look (no `rounded-t-lg border-x
+  border-t` on tabs).
+- **Shell question, closed for the submission.** See §14: no Electron /
+  Expo rewrite before Dec 5. Revisit after the submission if ever.
+
+### Refactoring recommendations (FUTURE — after the Dec 5 submission)
+
+1. **Split `ChatScreen.svelte` (~2,400 lines).** It holds streaming,
+   queueing, titles, suggestions, starters, persistence and modes in one
+   component. Pull the streaming/queue state into a store and the
+   composer, starters and header into their own components.
+2. **Virtualize the message list.** `{#each messages}` renders the whole
+   thread — every message, tool output and subagent transcript stays in
+   the DOM. This is also the prime suspect for the 500 MB report. Render
+   only the visible rows (plus a small overscan).
+3. **Split `services/agent/mod.rs` (~1,600 lines).** Run loop, subagent
+   fan-out and tool-call handling in one file; make the subagent runner
+   and the tool-call dispatch their own modules.
+4. **Title generation fails silently.** The `catch` in `generateTitle`
+   swallows errors, so a tab can stay stuck on the raw first message
+   ("hi"). Retry once and fall back to a short generated-style title
+   instead of echoing the message.
+5. **Real `git push` instead of API scripts.** Pushes go through
+   hand-rolled GitHub API scripts because HTTPS has no credentials on
+   the VM (the merge push needed its own variant). A fine-grained PAT in
+   the vault would let normal `git push` work and kill that tooling.
+6. **One `bump-version` script.** The version lives in 6 files and is
+   bumped by hand; the CI version gate catches drift, but a script would
+   remove the manual step entirely.
+7. **Stop asserting on source text in tests.** `window-chrome.test.ts`
+   regex-matches `.svelte` files — brittle. Prefer render/component
+   tests where the behaviour is visual.
+
+## 16. Refactoring batch, all 7 items — 2026-11-24 (`dev` only)
+
+Omar first said "Not now… in future", then reversed: "Okay, do all of
+these now." All seven §15 items landed on `dev` the same evening, in
+three parallel tracks plus integration fixes. No merge to `main`, no
+release, no build sent.
+
+- **(1) ChatScreen split.** `src/lib/chatRun.svelte.ts` (`ChatRunState`,
+  per-tab instance: streaming, queue, steering, note edits) plus
+  `src/components/ChatHeader.svelte` (204 lines),
+  `ChatEmptyState.svelte` (135), `ChatComposer.svelte` (409). Honest
+  note: the screen is 2,426 lines after the split (was ~2,400) — the
+  markup moved out but the composer call site is ~85 props, so the gain
+  is separation, not length. Grouping the composer props is a possible
+  follow-up, not done here. One rename bug caught in verification: a
+  bulk rename produced invalid `live=streaming={run.streaming}` in three
+  places; fixed, `npm run check` green after.
+- **(2) Virtualization.** `@tanstack/svelte-virtual` 3.13.54 (new dep),
+  `estimateSize: 240`, `overscan: 5`, `gap: 28` (16 compact),
+  `measureElement` re-measures the streaming answer as it grows,
+  `jumpToMatch` reworked to `scrollToIndex` + delayed highlight (smooth
+  scrolling dropped — instant is deterministic). Streaming scroll
+  anchoring and follow-while-streaming preserved. End-to-end proof on
+  Omar's Mac (long chat, the ~500 MB question) still needs his machine.
+- **(3) Agent split.** `mod.rs` 1,796 → 503 lines; new `types.rs`,
+  `context.rs`, `failover.rs`, `dispatch.rs`, `handlers.rs`,
+  `subagent.rs`, `gather.rs`. Byte-identity check: all 33 moved items
+  match the original verbatim except intended `pub(crate)` insertions;
+  all 7 unit tests moved with their functions. One real bug caught: 
+  `next_failover_target` was private in `failover.rs` but imported by
+  the parent — fixed to `pub(crate)`. Public API preserved via
+  re-exports. Not compiled locally (GTK/WebKit libs missing on the VM);
+  CI is the Rust gate.
+- **(4) Title retry.** `src/lib/chatTitle.ts`: `cleanTitle()`,
+  `titleEchoesQuestion()`, `isGoodTitle()`; `generateTitle()` retries
+  once on failure, rejects empty/echoed titles, and leaves `aiTitle`
+  false so the existing `done`-event hook retries on later completed
+  answers. Deliberate deviation from §15: no synthetic fallback title
+  is invented — a bad title means "try again later", never an echo.
+  4 new tests, all pass.
+- **(5) Real `git push`.** No new PAT was needed: Omar's stored GitHub
+  token already works — `~/workspace/localaide-git-credential.py`
+  mints a fresh `hsurr:*` surrogate from authd per use (the real token
+  never leaves secure storage; the egress proxy swaps it in), configured
+  repo-locally as the credential helper. Verified with `git ls-remote`.
+  This batch is the first push via real `git push`; the API scripts are
+  now the fallback. Note: local and remote commits for identical trees
+  still differ in SHA from the API era — local was synced to
+  `origin/dev` before this push so it fast-forwards.
+- **(6) `scripts/bump-version.mjs`.** Bumps all 6 version files
+  (package.json, Cargo.toml, tauri.conf.json, Cargo.lock's
+  `ai-desktop-assistant` block only — the unrelated `cfg_aliases`
+  0.2.2 entry is untouched, CHANGELOG heading, README badge) with
+  `--dry-run` and `--check`; refuses a disagreeing tree or a
+  same-version bump. Verified against temp copies only (real bump,
+  dry-run, disagreement, bad semver — all behave). One bug found by
+  testing and fixed: the no-Unreleased fallback doubled the date in
+  the CHANGELOG heading.
+- **(7) Render-based tests.** `window-chrome.test.ts` now renders
+  through a real Vite + Svelte SSR harness (`tests/unit/ssr-harness.ts`,
+  `ssr-render-entry.ts` — 4/4 pass), macOS vs Linux via user agent.
+  Still source-text-based, with reasons in the file: double-click zoom
+  (never serialised into SSR HTML), window-menu contents (menu starts
+  closed), the dead `onMenu` handler name, and the `App.svelte`
+  assertions (rendering the app root would pull the whole app in).
+  Irony noted: the splits themselves broke other source-text tests —
+  the inspiration/batch tests that read `agent/mod.rs` and
+  `ChatScreen.svelte` were repointed to the new module/component files
+  (`failover.rs`, `handlers.rs`, `dispatch.rs`, `subagent.rs`,
+  `ChatHeader.svelte`, `ChatComposer.svelte`). The remaining
+  source-text tests still assert where code lives, not what it does;
+  converting them is a further step, not done here.
+
+Verification: `npm run check` 0 errors (1 pre-existing Icon.svelte
+warning), `npm run build` clean, `npm run test:unit` 203 pass / 0 fail,
+`cargo fmt --check` clean. Independent review of the combined diff
+before commit (reviewer subagent, verdict: changes requested — 3
+findings: a vacuous header-blur guard repointed to ChatHeader, the
+`isGoodTitle` helper wired into `generateTitle` instead of duplicated
+logic, dead `rail-btn-on` class toggle removed; all fixed, gates re-run
+green). CI on `dev` is the Rust gate: first run 45446907834 on `54e4eff`
+FAILED — the split dropped the `InferenceEngine` trait import (needed
+for `.status()` to resolve, E0599) and `subagent.rs` imported the
+`status` helper it never calls; both fixed in commit `823c970` and
+pushed as `db00155`. Second run 45447724792 on `db00155`: SUCCESS, all
+jobs green. (The separate Dependency audit workflow stays red on the
+pre-existing unmaintained-chrono advisory, RUSTSEC-2026-0543 — not
+this change.)

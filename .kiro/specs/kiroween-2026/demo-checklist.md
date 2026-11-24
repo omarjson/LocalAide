@@ -49,8 +49,8 @@ text; re-running resumes via the `.part` file rather than restarting.
 
 - [ ] In Search, index a small folder of text/markdown notes.
 - [ ] Search a phrase that exists in one file. Results return with the file
-      path and snippet. The subtitle says **BM25 keyword retrieval** — that is
-      what runs; no vector claims.
+      path and snippet. Keyword, vector, and hybrid search all run, with a
+      reranker on top — confirm the subtitle names the mode that ran.
 
 ## 5. Memory with approval
 

@@ -38,6 +38,6 @@ test("activity-only animations run on the compositor, not the main thread", () =
 test("the ember glow is rasterized once, and the chat header no longer blurs its backdrop every frame", () => {
   const css = read("src/main.css");
   assert.match(css, /\.ember-glow \{[^}]*transform: translateZ\(0\);/, "the gradient panel gets its own layer");
-  const chat = read("src/screens/ChatScreen.svelte");
+  const chat = read("src/components/ChatHeader.svelte");
   assert.doesNotMatch(chat, /<header class="[^"]*backdrop-blur/, "the chat header is solid, not a live blur");
 });

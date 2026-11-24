@@ -19,7 +19,7 @@
   import { onDestroy } from "svelte";
   import { fade, fly, scale } from "svelte/transition";
   import type { ChatAttachment, Citation, MessagePart } from "../lib/api/bindings";
-  import type { AnswerStats } from "../lib/chatModes";
+  import type { AnswerStats, PendingApproval } from "../lib/chatModes";
 
   interface Props {
     role: string;
@@ -48,7 +48,9 @@
     /** Which model wrote the answer. */
     model?: string;
     /** Tool calls waiting for the user, by tool call id. */
-    approvals?: Record<string, { approval_id: string; preview: string }>;
+    approvals?: Record<string, PendingApproval>;
+    /** Approval countdowns hold while the chat is off screen. */
+    approvalsPaused?: boolean;
     onDecide?: (toolId: string, decision: "allow" | "allow_chat" | "deny") => void;
     /** Set on the newest answer: send a tapped option as the reply. */
     onAnswer?: (text: string, questionId: string | null) => void;
@@ -92,6 +94,7 @@
     attachments = [],
     model = "",
     approvals = {},
+    approvalsPaused = false,
     onDecide,
     onAnswer,
     onA2uiAction,
@@ -321,7 +324,8 @@
                 summary={part.summary}
                 arguments={part.arguments}
                 output={part.output}
-                approval={approvals[part.id] ? { preview: approvals[part.id].preview } : null}
+                approval={approvals[part.id] ? { preview: approvals[part.id].preview, mode: approvals[part.id].mode, countdown: approvals[part.id].countdown } : null}
+                countdownPaused={approvalsPaused}
                 onDecide={(decision) => onDecide?.(part.id, decision)}
                 steps={part.steps ?? []}
                 tokens={part.tokens ?? null}

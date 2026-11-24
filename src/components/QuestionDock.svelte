@@ -205,7 +205,9 @@
     background: color-mix(in oklab, #f59e0b 16%, transparent);
     padding: 0.4rem 0.65rem;
     font-size: 0.8125rem;
-    color: color-mix(in oklab, #fbbf24 85%, var(--color-ink-50));
+    /* The amber token turns deep ember in the light theme, where a fixed
+       yellow washed out on the pale tint. */
+    color: var(--color-amber-300, #fcd34d);
   }
   .qd-option {
     display: flex;
