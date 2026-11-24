@@ -52,7 +52,7 @@
 </script>
 
 <div
-  class="relative"
+  class="relative min-w-0"
   role="presentation"
   use:popover={{ open, onClose: () => (open = false) }}
   onmouseenter={openSoon}

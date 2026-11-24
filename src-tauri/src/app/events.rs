@@ -117,6 +117,10 @@ pub struct QuestionOption {
     pub label: String,
     #[serde(default)]
     pub description: String,
+    /// The model's pick when the user is unsure: shown first, marked
+    /// "Recommended". Old calls omit it, so it defaults to false.
+    #[serde(default)]
+    pub recommended: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

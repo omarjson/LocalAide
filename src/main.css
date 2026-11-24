@@ -191,6 +191,22 @@ input {
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ember-500) 10%, transparent), var(--shadow-elev);
 }
 
+/* Composer bar-fit: on a narrow window the pills fold to glyphs in a
+ * fixed order — Tools label, model name, effort label — driven by the
+ * `data-fold` level ChatInput measures (see src/lib/composerFit.ts).
+ * Permission and usage are already glyphs; team and context have no pill
+ * here. A folded pill keeps its name for a screen reader (aria-label /
+ * title); only the visible label text is hidden. Send is shrink-0 and
+ * last, so it is never covered. */
+.composer[data-fold="1"] [data-fold-label="tools"],
+.composer[data-fold="2"] [data-fold-label="tools"],
+.composer[data-fold="2"] [data-fold-label="model"],
+.composer[data-fold="3"] [data-fold-label="tools"],
+.composer[data-fold="3"] [data-fold-label="model"],
+.composer[data-fold="3"] [data-fold-label="effort"] {
+  display: none;
+}
+
 /* Easing for CSS transitions (the same curves as lib/motion.ts). */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

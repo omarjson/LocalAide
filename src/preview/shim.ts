@@ -240,6 +240,8 @@ const fixtures: Record<string, Handler> = {
     total_ram_gb: 32,
     available_ram_gb: 21,
     gpu_vendor: null,
+    cpu_brand: "Apple M1",
+    cpu_cores: 8,
     recommended_preset: "balanced",
     budget_gb: 14,
   }),

@@ -25,8 +25,8 @@ test("cancel messages still say cancel, so screens can detect them", () => {
   assert.match(errorMessage({ code: "CANCELLED", message: "The operation was cancelled." }), /cancel/i);
 });
 
-test("unknown values fall back to a plain sentence", () => {
+test("unknown values fall back to a named cause class, not a generic failure", () => {
   for (const value of [undefined, null, 42, {}, "", { message: "   " }]) {
-    assert.equal(errorMessage(value), "Something went wrong. Try again.");
+    assert.equal(errorMessage(value), "Unknown error — LocalAide couldn't tell what went wrong. Try again.");
   }
 });

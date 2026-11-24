@@ -13,11 +13,13 @@
   import { updateVoice, voice } from "../lib/voice.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import { popover } from "../lib/actions/popover";
-  import type { CatalogStatus, HfFileInfo, HfRepo, HfSort, ModelInfo, ModelPreset } from "../lib/api/bindings";
+  import type { CatalogStatus, HfFileInfo, HfRepo, HfSort, ModelInfo, ModelPreset, SystemProbeResult } from "../lib/api/bindings";
   import { fly, slide } from "svelte/transition";
   import { dur, stagger } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
   import { formatBytes, formatGb } from "../lib/format";
+  import { fitBadge, recommendedModel, type ModelFit } from "../lib/hardware";
+  import { greetingAt } from "../lib/greeting";
 
   type Model = {
     id: string;
@@ -55,6 +57,9 @@
   let actionError = $state<string | null>(null);
   let loadingModelId = $state<string | null>(null);
   let budgetGb = $state(0);
+  // The full hardware probe: CPU/RAM/GPU for the fit badges below. Null
+  // when the probe failed — the page renders without it, never an error.
+  let probe = $state<SystemProbeResult | null>(null);
   let catalog = $state<CatalogStatus | null>(null);
   let catalogBusy = $state(false);
   let hfQuery = $state("");
@@ -406,12 +411,30 @@
   );
 
   const activeModel = $derived(models.find((model) => model.active && model.status === "installed") ?? null);
-  const recommended = $derived(
-    filtered.filter((model) => model.kind === "chat" && !model.active && model.status !== "installing").slice(0, 3)
-  );
+  // One "Recommended for you": the most capable chat model that runs well
+  // on this hardware (see src/lib/hardware.ts for the heuristic). Null
+  // until the probe answers; the section hides, it never guesses.
+  const recommendedOne = $derived.by(() => {
+    if (!probe) return null;
+    const pick = recommendedModel(
+      filtered.map((m) => ({ id: m.id, kind: m.kind ?? "chat", ramGb: m.ramGb, installed: m.status === "installed" })),
+      { budgetGb: probe.budget_gb, availableGb: probe.available_ram_gb },
+    );
+    return pick ? (filtered.find((m) => m.id === pick.id) ?? null) : null;
+  });
   const remainingModels = $derived(
-    filtered.filter((model) => !recommended.some((item) => item.id === model.id))
+    filtered.filter((model) => model.id !== recommendedOne?.id)
   );
+  // A model's fit badge for this hardware, or null while the probe is
+  // unknown — then the row shows no badge rather than a wrong one.
+  const fitOf = (model: Model): { label: string; tone: "ok" | "warn" | "bad" } | null => {
+    if (!probe) return null;
+    const fit: ModelFit = fitBadge(model.ramGb, probe.budget_gb, probe.available_ram_gb);
+    return {
+      label: fit === "runs-well" ? "Runs well" : fit === "slow" ? "Runs slowly" : "Too large",
+      tone: fit === "runs-well" ? "ok" : fit === "slow" ? "warn" : "bad",
+    };
+  };
   const helperModels = $derived(filtered.filter((model) => model.kind === "embedding" || model.kind === "reranker" || model.kind === "stt"));
   const catalogCount = $derived(catalog?.model_count ?? models.length);
 
@@ -452,9 +475,13 @@
       await refresh();
       if (!active) return;
       try {
-        const probe = await api.systemProbe();
-        budgetGb = probe.budget_gb;
+        const probeResult = await api.systemProbe();
+        probe = probeResult;
+        budgetGb = probeResult.budget_gb;
       } catch (e: unknown) {
+        // The probe is a nicety: no hardware card, no fit badges, the
+        // page still lists models. Never an error toast for this.
+        probe = null;
         console.error(e);
       }
       try {
@@ -491,6 +518,19 @@
   {#if actionError}
     <div class="mb-4">
       <ErrorBanner message={actionError} onRetry={() => void refresh()} onDismiss={() => actionError = null} />
+    </div>
+  {/if}
+
+  {#if probe}
+    <div class="mb-5 rounded-lg border border-ink-700 bg-ink-900 p-4">
+      <h2 class="font-semibold text-ink-50">This computer</h2>
+      <div class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-400">
+        <span>Processor <b class="font-semibold text-ink-200">{probe.cpu_brand ?? "Unknown"}{#if probe.cpu_cores} · {probe.cpu_cores} cores{/if}</b></span>
+        <span>Memory <b class="font-semibold text-ink-200">{probe.total_ram_gb.toFixed(1)} GB</b> · {probe.available_ram_gb.toFixed(1)} GB free</span>
+        <span>Graphics <b class="font-semibold text-ink-200">{probe.gpu_vendor ?? "Not detected"}</b></span>
+        <span>Model budget <b class="font-semibold text-ink-200">{probe.budget_gb.toFixed(1)} GB</b></span>
+      </div>
+      <p class="mt-2 text-xs leading-5 text-ink-500">“Runs well” means the model fits inside the model budget; “Runs slowly” fits in free memory but is over the budget; “Too large” is bigger than the free memory right now.</p>
     </div>
   {/if}
 
@@ -541,21 +581,25 @@
       </div>
     </div>
   {:else}
-    <EmptyState icon="models" title="No model is in use" description="Choose a model below to start chatting.">
+    <EmptyState icon="models" title="No model is in use" description="Choose a model below to start chatting." greeting={greetingAt(new Date(), false)}>
       {#snippet action()}
         <Button variant="primary" onclick={revealAllModels}>Browse models</Button>
       {/snippet}
     </EmptyState>
   {/if}
 
-  {#if !loading && recommended.length > 0}
+  {#if !loading && recommendedOne}
+    {@const model = recommendedOne}
+    {@const fit = fitOf(model)}
     <h2 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Recommended for this computer</h2>
     <SettingsGroup>
-      {#each recommended as model, index (model.id)}
-        <div class={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:px-[18px] ${index > 0 ? 'border-t border-ink-800' : ''}`}>
+        <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:px-[18px]">
           <div class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-200"><Icon name="models" class="h-[18px] w-[18px]" /></div>
           <div class="min-w-0 flex-1">
-            <div class="font-semibold text-ink-50">{model.name}</div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-semibold text-ink-50">{model.name}</span>
+              <StatusBadge label="Recommended for you" tone="ok" dot />
+            </div>
             <div class="text-sm text-ink-400">{modelDescription(model)}</div>
             {#if model.status === "installing" || model.status === "pausing" || model.status === "paused"}
               <div class="mt-2 max-w-sm">
@@ -566,11 +610,7 @@
             {/if}
           </div>
           <div class="flex shrink-0 items-center gap-2">
-            {#if budgetGb > 0 && model.ramGb > budgetGb}
-              <StatusBadge label="May be too big" tone="warn" />
-            {:else}
-              <StatusBadge label="Fits" tone="ok" />
-            {/if}
+            {#if fit}<StatusBadge label={fit.label} tone={fit.tone} />{/if}
             {#if model.status === "installing"}
               <Button variant="secondary" onclick={() => void pauseInstall(model.id)}>Pause</Button>
               <Button variant="danger" onclick={() => void cancelInstall(model.id)}>Cancel</Button>
@@ -589,7 +629,6 @@
             {/if}
           </div>
         </div>
-      {/each}
     </SettingsGroup>
   {/if}
 
@@ -627,6 +666,7 @@
         <SettingsGroup>
           <div class="mt-3">
             {#each remainingModels as model, index (model.id)}
+              {@const rowFit = fitOf(model)}
               <div class={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:px-[18px] ${index > 0 ? 'border-t border-ink-800' : ''} ${model.ramGb > budgetGb && budgetGb > 0 ? 'opacity-75' : ''}`}>
                 <div class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-200"><Icon name="models" class="h-[18px] w-[18px]" /></div>
                 <div class="min-w-0 flex-1">
@@ -651,8 +691,8 @@
                   {/if}
                 </div>
                 <div class="relative flex shrink-0 items-center gap-2" use:popover={{ open: openModelMenu === model.id, onClose: () => openModelMenu = null }}>
-                  {#if model.ramGb > budgetGb && budgetGb > 0}
-                    <StatusBadge label="May be too big" tone="warn" />
+                  {#if rowFit}
+                    <StatusBadge label={rowFit.label} tone={rowFit.tone} />
                   {/if}
                   {#if model.status === "installed"}
                     {#if verifyStatus[model.id] || model.verified}

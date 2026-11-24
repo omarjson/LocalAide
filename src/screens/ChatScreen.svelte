@@ -34,6 +34,8 @@
   import ProviderForm from "../components/ProviderForm.svelte";
   import { calibration, compactionStart, contextSegments, contextUsage, fits, forcedCompactionStart, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
+  import { greetingAt, workedToday } from "../lib/greeting";
+  import { loadLastUsedModel, resolveNewChatModel, saveLastUsedModel } from "../lib/lastModel";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -149,15 +151,41 @@
       : {},
   );
 
+  // "New chats start on": the model used last, remembered across restarts.
+  // A new chat takes it when it is still usable; when it is not, the chat
+  // falls back to the active model and says so in one honest line.
+  let lastUsedKey = $state<string | null>(loadLastUsedModel());
+  let modelNotice = $state<string | null>(null);
+
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
+  // What a new chat starts on: the last-used model when it is still
+  // usable, else the active model. Null for a chat that already has its
+  // own model saved.
+  const newChatModel = $derived.by(() => {
+    if (activeThreadId && chatModels[activeThreadId]) return null;
+    if (!choices) return null;
+    return resolveNewChatModel(lastUsedKey, choices.models, choices.local_loaded);
+  });
   const activeChoice = $derived.by(() => {
     const key = activeThreadId ? chatModels[activeThreadId] : undefined;
     return (
       (key ? choices?.models.find((m) => m.key === key) : null) ??
+      (newChatModel?.key ? choices?.models.find((m) => m.key === newChatModel.key) : null) ??
       choices?.models.find((m) => m.active) ??
       null
     );
+  });
+  // Name the fallback in one line, on the empty chat only — never an
+  // error, never a silent switch.
+  $effect(() => {
+    if (newChatModel?.fellBack && messages.length === 0) {
+      modelNotice = activeChoice
+        ? `Your last model isn't available, so this chat starts on ${activeChoice.name}.`
+        : "Your last model isn't available.";
+    } else if (!newChatModel?.fellBack) {
+      modelNotice = null;
+    }
   });
   const onlineChoice = $derived(activeChoice && activeChoice.provider_id !== null ? activeChoice : null);
   // Whether a local model is loaded in the engine right now.
@@ -210,6 +238,18 @@
     titleDraft = activeThreadTitle === "New Conversation" ? "" : activeThreadTitle;
     editingTitle = true;
   };
+  // The title is a button: one click opens the chat menu, a double-click
+  // renames. A click waits one beat, so the double-click can cancel it
+  // instead of opening the menu under the rename box.
+  let titleClickTimer: ReturnType<typeof setTimeout> | undefined;
+  const onTitleClick = () => {
+    clearTimeout(titleClickTimer);
+    titleClickTimer = setTimeout(() => (showMoreActions = true), 250);
+  };
+  const onTitleDblClick = () => {
+    clearTimeout(titleClickTimer);
+    startTitleEdit();
+  };
   const saveTitleEdit = () => {
     if (!editingTitle) return;
     editingTitle = false;
@@ -250,11 +290,17 @@
     focusComposer();
   };
   let localBudgetGb = $state<number | null>(null);
+  // RAM figures for the memory chip under the composer. Null when the
+  // probe failed — the chip hides, it never blocks the chat.
+  let localRam = $state<{ totalGb: number; availableGb: number } | null>(null);
   const loadLocalStats = async () => {
     try {
-      localBudgetGb = Math.round((await api.systemProbe()).budget_gb);
+      const probeResult = await api.systemProbe();
+      localBudgetGb = Math.round(probeResult.budget_gb);
+      localRam = { totalGb: probeResult.total_ram_gb, availableGb: probeResult.available_ram_gb };
     } catch {
       localBudgetGb = null;
+      localRam = null;
     }
     try {
       localDocs = (await api.getIndexerStats()).doc_count;
@@ -552,13 +598,16 @@
     ...defaultStarters.filter((d) => !usableLearned.some((l) => l.prompt === d.prompt)).map((d) => ({ ...d, learned: false })),
   ].slice(0, 4));
 
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 5) return "Working late?";
-    if (hour < 12) return "Good morning.";
-    if (hour < 18) return "Good afternoon.";
-    return "Good evening.";
-  })();
+  // Time-of-day greeting, re-evaluated at the next hour boundary; the
+  // evening variant says "nice work today" only when a chat had a turn
+  // today (see src/lib/greeting.ts).
+  let greetingNow = $state(new Date());
+  const greeting = $derived(greetingAt(greetingNow, workedToday(chats.threads, greetingNow)));
+  onMount(() => {
+    const ms = 3_600_000 - (Date.now() % 3_600_000) + 1000;
+    const timer = setTimeout(() => (greetingNow = new Date()), ms);
+    return () => clearTimeout(timer);
+  });
 
   const handleScroll = () => {
     if (!scrollEl) return;
@@ -1557,11 +1606,25 @@
       engineLoaded = choices.local_loaded;
       // The choice belongs to this chat from now on.
       if (activeThreadId) chatModels = { ...chatModels, [activeThreadId]: choice.key };
+      // And new chats start on it from now on.
+      lastUsedKey = choice.key;
+      saveLastUsedModel(choice.key);
+      modelNotice = null;
     } catch (e: unknown) {
       sendFailed = false;
       chatError = `${choice.name} could not be used: ${errorMessage(e)}`;
     } finally {
       pickerBusy = false;
+    }
+  };
+
+  /** Unload the local model from memory (the chip under the composer). */
+  const unloadLocalModel = async () => {
+    try {
+      await api.unloadInferenceModel();
+      engineLoaded = false;
+    } catch (e: unknown) {
+      chatError = `The model could not be unloaded: ${errorMessage(e)}`;
     }
   };
 
@@ -1869,7 +1932,17 @@
         />
       {:else}
         <div class="group/title flex min-w-0 items-center gap-1">
-          <h2 class="max-w-[18rem] truncate text-sm font-semibold text-ink-100">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</h2>
+          <!-- The title is a button: click opens the chat menu,
+               double-click renames. Hover says the full title when it is
+               cut off; "New chat" stays until the model titles it. -->
+          <button
+            type="button"
+            class="max-w-[18rem] truncate rounded-sm text-sm font-semibold text-ink-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
+            title={activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}
+            aria-label={`Chat title: ${activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}. Open the chat menu, or double-click to rename.`}
+            onclick={onTitleClick}
+            ondblclick={onTitleDblClick}
+          >{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</button>
           {#if messages.length > 0 && !streaming}
             <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Rename this chat" title="Rename" onclick={startTitleEdit}><Icon name="pencil" class="h-3.5 w-3.5" /></button>
             <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Generate a title with the model" title="Generate title with the model" disabled={titleBusy} onclick={() => void generateTitle()}><Icon name="refresh" class={`h-3.5 w-3.5 ${titleBusy ? "animate-spin" : ""}`} /></button>
@@ -2073,6 +2146,9 @@
             </div>
           {:else}
             <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
+            {#if modelNotice}
+              <p class="text-[15px] text-ink-400">{modelNotice}</p>
+            {/if}
             {#if onlineChoice}
               <p class="text-[15px] text-ink-400">Answers come from <span class="font-semibold text-ink-200">{onlineChoice.name}</span>, through {onlineChoice.provider_label}. Messages are sent to that provider.</p>
             {:else if engineLoading || pickerBusy}
@@ -2297,6 +2373,9 @@
         onSlashCommand={handleSlashCommand}
         onEnhance={() => void enhancePrompt()}
         {enhancing}
+        memory={activeChoice?.local && localRam ? { usedGb: localRam.totalGb - localRam.availableGb, totalGb: localRam.totalGb, loaded: engineLoaded, modelName: activeChoice.name } : null}
+        onLoadModel={activeChoice?.local && !engineLoaded ? () => void selectModel(activeChoice) : undefined}
+        onUnloadModel={activeChoice?.local && engineLoaded ? () => void unloadLocalModel() : undefined}
         {suggestions}
         {useWeb}
         {webAvailable}

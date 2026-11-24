@@ -198,8 +198,8 @@
 
 <svelte:document onpointerdown={onDocumentPointer} />
 
-<div class="relative" bind:this={rootEl}>
-  <button type="button" aria-haspopup="dialog" aria-expanded={open} onclick={() => (open = !open)} disabled={!choices} class="model-chip" title="Choose the model (Ctrl+Shift+M)">
+<div class="relative min-w-0" bind:this={rootEl}>
+  <button type="button" aria-haspopup="dialog" aria-expanded={open} onclick={() => (open = !open)} disabled={!choices} class="model-chip min-w-0" aria-label={`Model: ${chipLabel}${active && levels.length > 0 && effort !== "auto" && !busy ? `, ${effortLabel(effort)} effort` : ""}. Choose the model (Ctrl+Shift+M)`} title="Choose the model (Ctrl+Shift+M)">
     {#if busy}
       <span class="h-3 w-3 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
     {:else if active && !active.local}
@@ -207,8 +207,8 @@
     {:else}
       <span class={`h-1.5 w-1.5 shrink-0 rounded-full ${active && choices?.local_loaded ? "bg-emerald-400" : "bg-ink-600"}`} aria-hidden="true"></span>
     {/if}
-    <span class="max-w-[12rem] truncate font-medium text-ink-100">{chipLabel}</span>
-    {#if active && levels.length > 0 && effort !== "auto" && !busy}<span class="text-ink-400">{effortLabel(effort)}</span>{/if}
+    <span data-fold-label="model" class="max-w-[12rem] truncate font-medium text-ink-100">{chipLabel}</span>
+    {#if active && levels.length > 0 && effort !== "auto" && !busy}<span data-fold-label="effort" class="text-ink-400">{effortLabel(effort)}</span>{/if}
     <Icon name="chevron-down" class={`h-3 w-3 shrink-0 text-ink-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
   </button>
 

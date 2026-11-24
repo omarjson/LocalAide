@@ -349,3 +349,104 @@ Rust unit tests for `failover_chain`. 151 unit tests pass;
 `context="module"` deprecation in `Icon.svelte`); `cargo fmt --check`
 clean; `npm run build` passes. Rust verification is CI's job (no local
 GTK/WebKit libs): clippy + cargo test on the CI run.
+
+## 11. Inspiration backlog, NOW items Batch A — 2026-11-24 (N6, N7, N12–N18, `dev` only)
+
+UI/rules batch; nothing here touches the Tiny demo path (no streaming,
+no provider routing, no model loading changes beyond a Load/Unload button
+that calls the existing commands).
+
+- **N6 — hardware-aware Models page.** `system_probe` now also returns
+  the CPU brand and physical core count (sysinfo was already a
+  dependency; no new crate). `gpu_vendor` stays `None` on purpose: no GPU
+  source exists in this stack, so the page says "Not detected" instead of
+  inventing one. The fit heuristic lives in `src/lib/hardware.ts` and is
+  documented there: "runs well" = inside the model budget, "runs slowly"
+  = fits in free RAM but over the budget, "too large" = bigger than free
+  RAM; with no budget known only free RAM decides. One "Recommended for
+  you" (the most capable chat model that runs well, installed first on a
+  tie; the smallest slow one when nothing runs well; none when nothing
+  fits) replaces the old three-model list. The memory chip under the
+  composer shows GB in use with Load/Unload for the local model. A failed
+  probe hides the card, the badges and the chip — the page still lists
+  models.
+- **N7 — typed empty states + honesty rules.** `src/lib/api/errors.ts`
+  now classifies every failure into a cause class (`ErrorCause`) with one
+  fixing action per class (`ERROR_FIXES`, exhaustive by `satisfies
+  Record<ErrorCause, string>` — a new cause without its fix is a type
+  error). The generic fallback is gone: an unclassifiable error reads
+  "Unknown error — LocalAide couldn't tell what went wrong." `ErrorBanner`
+  takes an optional `fix` line; the Usage screen wires it. The Usage
+  screen also names the window its totals actually cover when retained
+  history is shorter than the requested window (`windowCoverage` in
+  `src/lib/usage.ts`; the ledger only keeps days that had answers), and
+  the Cost card names the models it leaves out for want of a price.
+- **N12 — interactive-question conventions.** The model's `ask_user`
+  tool can mark one option `recommended: true` (schema + description in
+  `tools.rs`, parsed in `parse_questions`, carried on `QuestionOption`);
+  it is shown first and marked "Recommended" in the QuestionDock, the
+  parsed-question buttons and A2UI ChoicePicker forms, all through one
+  `orderOptionsRecommended` helper. Nothing is marked recommended unless
+  the model said so. The free-text answer already existed in both
+  question UIs ("Other…" focusing the composer; the dock's typed-answer
+  box) and is now named in the buttons' hint line. A2UI forms submit
+  structured data, so no free-text box was added there.
+- **N13 — composer bar-fit.** Measured-width, not container queries:
+  the pills span ChatInput and snippets owned by ChatScreen, so a
+  `ResizeObserver` in ChatInput re-measures the row and sets a
+  `data-fold` level (0–3); the rules live in `main.css` so they reach
+  every pill, and the fold CSS is verified present in the vite build
+  output. Fold order: Tools label, model name, effort label; permission
+  and usage are already glyphs, team and context have no pill here.
+  Pills unfold last-folded-first as room returns; a folded pill keeps
+  its name (aria-label/title). Send is shrink-0 and last. The row keeps
+  `flex-wrap` as the ultimate fallback (a wrapped Send is still visible),
+  because `overflow-hidden` would clip the attach/tools menus that open
+  upward from the row.
+- **N14 — "New chats start on".** The last-used model is remembered in
+  localStorage on every pick (`src/lib/lastModel.ts`); a new chat starts
+  on it when it is still usable (an online model in the picker, or a
+  local one the engine has loaded). Otherwise the chat falls back to the
+  active model and says so in one line on the empty chat. There is no
+  separate "configured default" setting in the app; the active (loaded)
+  model is the fallback. Per-chat saved models are untouched.
+- **N15 — header manners.** The chat title is a button: one click opens
+  the chat menu (after a 250 ms beat, so a double-click can cancel it),
+  a double-click renames; hovering a cut-off title shows the whole
+  title. Tabs show their full title on hover too. "New chat" stays until
+  the model titles it.
+- **N16 — time-of-day greeting.** `greetingAt` in `src/lib/greeting.ts`:
+  morning / afternoon / evening, "Nice work today" only in the evening
+  and only when a chat was updated today, a gentle late-night line after
+  23:00. One line, re-evaluated at the next hour boundary. The empty
+  chat uses it; `EmptyState` takes an optional `greeting` line (used by
+  the Models screen's no-model state, where no chat data exists so the
+  worked-today variant never claims work).
+- **N17 — Tauri shell rules.** (a) Autostart: not applicable. No
+  autostart feature exists anywhere in the app (no plugin, no setting,
+  no marker in `tauri.conf.json`, `Cargo.toml` or the Rust sources, and
+  no startup hook beyond the saved-model engine load), so the one-time
+  marker rule has nothing to attach to — no autostart was built from
+  scratch. (b) Status: already compliant — the header chip only says
+  "Online" when an online model is actually chosen; otherwise it says
+  "Offline · this computer". (c) Toast: portaled to the document root in
+  `App.svelte`, so reporting costs the page no layout.
+- **N18 — i18n rule.** Convention, adopted as a rule: technical text is
+  never translated — model ids, commands, file paths, URLs, env vars,
+  HTTP headers, CLI samples. Checked first: the UI has no Arabic strings
+  at all (the app ships English; Arabic only reaches it as user content
+  and speech, rendered with `dir="auto"`), so there was no
+  currently-translated technical text to fix. A unit test guards the
+  source against Arabic-script text.
+
+Tests: `tests/unit/inspiration-now-batch-a.test.ts` (19 tests: fit
+heuristic, recommendation, hardware card, memory chip, no-generic-error,
+exhaustive fixes, classification, banner fix line, window coverage, cost
+caveat, recommended-first ordering, question-UI wiring, fold order +
+built CSS, last-used resolution + fallback line, header manners,
+greeting variants, portaled toast, Offline default, no-autostart,
+no-Arabic-script) plus one Rust unit test for the `recommended` flag
+parsing. 170 unit tests pass; `svelte-check` 0 errors (the 1 warning is
+the pre-existing `context="module"` deprecation in `Icon.svelte`);
+`cargo fmt --check` clean; `npm run build` passes. Rust verification is
+CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI run.

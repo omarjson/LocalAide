@@ -2,11 +2,14 @@
   // Tappable answers for a question or an approval. Number keys pick an
   // option while the chat box is empty, so typing is never hijacked.
   import Icon from "./Icon.svelte";
+  import { orderOptionsRecommended } from "../lib/questions";
 
   export interface Option {
     label: string;
     /** "primary" for the main choice, "quiet" for the decline. */
     tone?: "primary" | "default" | "quiet";
+    /** The model's pick when the user is unsure: shown first, marked Recommended. */
+    recommended?: boolean;
   }
 
   interface Props {
@@ -28,6 +31,9 @@
   let picked = $state<string[]>([]);
   let els = $state<HTMLButtonElement[]>([]);
   const done = $derived(chosen !== null);
+  // A recommended option stands first and is marked; the rest keep the
+  // model's order. Number keys follow the order on screen.
+  const shown = $derived(orderOptionsRecommended(options));
 
   $effect(() => {
     if (active && !done) {
@@ -51,9 +57,9 @@
     if (typing && (target as HTMLInputElement).value !== "") return;
     if (typing && target.tagName === "INPUT") return;
     const n = Number(e.key);
-    if (Number.isInteger(n) && n >= 1 && n <= options.length) {
+    if (Number.isInteger(n) && n >= 1 && n <= shown.length) {
       e.preventDefault();
-      choose(options[n - 1].label);
+      choose(shown[n - 1].label);
     } else if (multiple && e.key === "Enter" && picked.length > 0 && !typing) {
       e.preventDefault();
       onPick(picked);
@@ -64,7 +70,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div role="group" aria-label={ariaLabel} class="flex flex-wrap gap-2">
-  {#each options as option, i (option.label)}
+  {#each shown as option, i (option.label)}
     {@const isOn = done ? chosen!.includes(option.label) : picked.includes(option.label)}
     <button
       bind:this={els[i]}
@@ -73,7 +79,7 @@
       aria-pressed={multiple || done ? isOn : undefined}
       onclick={() => choose(option.label)}
       class={`opt opt-${option.tone ?? "default"} ${isOn ? "opt-on" : ""}`}
-    ><span class="opt-key" aria-hidden="true">{i + 1}</span><span>{option.label}</span>{#if isOn && (multiple || done)}<Icon name="check" class="h-3.5 w-3.5" />{/if}</button>
+    ><span class="opt-key" aria-hidden="true">{i + 1}</span><span>{option.label}</span>{#if option.recommended}<span class="opt-rec">Recommended</span>{/if}{#if isOn && (multiple || done)}<Icon name="check" class="h-3.5 w-3.5" />{/if}</button>
   {/each}
   {#if allowOther && !done}
     <button type="button" onclick={() => onOther?.()} class="opt opt-quiet"><Icon name="pencil" class="h-3.5 w-3.5" /><span>Other…</span></button>
@@ -83,7 +89,7 @@
   {/if}
 </div>
 {#if active && !done}
-  <p class="mt-2 text-xs text-ink-500">Press {options.length === 1 ? "1" : `1–${options.length}`} to choose{multiple ? ", Enter to send" : ""}.</p>
+  <p class="mt-2 text-xs text-ink-500">Press {shown.length === 1 ? "1" : `1–${shown.length}`} to choose{multiple ? ", Enter to send" : ""}{allowOther ? ", or type your own answer with Other…" : ""}.</p>
 {/if}
 
 <style>
@@ -154,5 +160,13 @@
   .opt-on .opt-key {
     background: var(--color-ember-600);
     color: var(--color-on-ember);
+  }
+  .opt-rec {
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--color-ember-500) 16%, transparent);
+    padding: 0.05rem 0.45rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-ember-200);
   }
 </style>

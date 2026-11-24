@@ -331,7 +331,7 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
         specs.push(builtin(
             "ask_user",
             ToolKind::AskUser,
-            "Ask the user one or more short questions with answer options they can pick, when you need their choice before you can continue. Give 2 to 6 options per question, each with a short label and an optional one-line description. The user can also type their own answer. Do not use it for questions you can answer yourself.",
+            "Ask the user one or more short questions with answer options they can pick, when you need their choice before you can continue. Give 2 to 6 options per question, each with a short label and an optional one-line description. Mark at most one option per question \"recommended\": true when you have a clear pick — it is shown first and marked Recommended. The user can also type their own answer. Do not use it for questions you can answer yourself.",
             object(
                 json!({
                     "questions": {
@@ -348,7 +348,8 @@ pub fn builtin_specs(perms: &Permissions) -> Vec<ToolSpec> {
                                         "type": "object",
                                         "properties": {
                                             "label": {"type": "string"},
-                                            "description": {"type": "string"}
+                                            "description": {"type": "string"},
+                                            "recommended": {"type": "boolean", "description": "True for your pick when you have one; at most one per question. Shown first, marked Recommended."}
                                         },
                                         "required": ["label"]
                                     },

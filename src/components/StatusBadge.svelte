@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Tone = "ok" | "warn" | "idle";
+  type Tone = "ok" | "warn" | "idle" | "bad";
 
   let {
     label,
@@ -16,7 +16,9 @@
   ? "bg-emerald-500/10 text-emerald-400"
   : tone === "warn"
     ? "bg-amber-500/10 text-amber-300"
-    : "bg-ink-800 text-ink-300"}`}>
+    : tone === "bad"
+      ? "bg-rose-500/10 text-rose-300"
+      : "bg-ink-800 text-ink-300"}`}>
   {#if dot}<span class="h-2 w-2 rounded-full bg-current" aria-hidden="true"></span>{/if}
   {label}
 </span>

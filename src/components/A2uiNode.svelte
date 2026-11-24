@@ -7,6 +7,7 @@
   import MarkdownDoc from "./MarkdownDoc.svelte";
   import Modal from "./Modal.svelte";
   import { openInBrowser } from "../lib/links";
+  import { orderOptionsRecommended } from "../lib/questions";
   import {
     boundPath,
     buildAction,
@@ -127,10 +128,14 @@
 
   const options = $derived.by(() => {
     const raw = prop("options");
-    if (!Array.isArray(raw)) return [] as { label: string; value: string }[];
-    return raw
-      .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")
-      .map((o) => ({ label: toText(resolve(o.label, scope)), value: toText(o.value) }));
+    if (!Array.isArray(raw)) return [] as { label: string; value: string; recommended: boolean }[];
+    // A form may mark one option recommended; it stands first, marked.
+    // Nothing is invented: an option without the flag stays unmarked.
+    return orderOptionsRecommended(
+      raw
+        .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")
+        .map((o) => ({ label: toText(resolve(o.label, scope)), value: toText(o.value), recommended: o.recommended === true })),
+    );
   });
   const selected = $derived.by(() => {
     const v = value("value");
@@ -294,11 +299,11 @@
       <div class={chips ? "flex flex-wrap gap-1.5" : "flex flex-col gap-1"} role={multiple ? "group" : "radiogroup"}>
         {#each shown as option (option.value)}
           {#if chips}
-            <button type="button" role={multiple ? "checkbox" : "radio"} aria-checked={selected.includes(option.value)} class={`a2ui-chip ${selected.includes(option.value) ? "a2ui-chip-on" : ""}`} onclick={() => toggleOption(option.value)}>{option.label}</button>
+            <button type="button" role={multiple ? "checkbox" : "radio"} aria-checked={selected.includes(option.value)} class={`a2ui-chip ${selected.includes(option.value) ? "a2ui-chip-on" : ""}`} onclick={() => toggleOption(option.value)}>{option.label}{#if option.recommended}<span class="a2ui-rec">Recommended</span>{/if}</button>
           {:else}
             <label class="flex cursor-pointer items-center gap-2 text-sm text-ink-100">
               <input type={multiple ? "checkbox" : "radio"} class="a2ui-check" name={inputId} checked={selected.includes(option.value)} onchange={() => toggleOption(option.value)} />
-              <span>{option.label}</span>
+              <span>{option.label}{#if option.recommended}<span class="a2ui-rec">Recommended</span>{/if}</span>
             </label>
           {/if}
         {/each}
@@ -343,6 +348,7 @@
   .a2ui-check { accent-color: var(--color-ember-500); height: 1rem; width: 1rem; }
   .a2ui-chip { border: 1px solid var(--color-edge); border-radius: 9999px; padding: 0.2rem 0.7rem; font-size: 0.8125rem; color: var(--color-ink-200); }
   .a2ui-chip-on { border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent); background: color-mix(in oklab, var(--color-ember-500) 15%, transparent); color: var(--color-ember-200); }
+  .a2ui-rec { margin-left: 0.35rem; border-radius: 9999px; background: color-mix(in oklab, var(--color-ember-500) 16%, transparent); padding: 0.05rem 0.45rem; font-size: 0.6875rem; font-weight: 600; color: var(--color-ember-200); white-space: nowrap; }
   .a2ui-tab { padding: 0.35rem 0.75rem; font-size: 0.8125rem; color: var(--color-ink-400); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .a2ui-tab-on { color: var(--color-ink-50); border-bottom-color: var(--color-ember-500); font-weight: 600; }
   .a2ui-link { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; color: var(--color-ember-300); }

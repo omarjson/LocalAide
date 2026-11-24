@@ -870,10 +870,15 @@ fn parse_questions(args: &Value) -> Vec<QuestionItem> {
                         Value::String(label) => Some(QuestionOption {
                             label: label.trim().chars().take(120).collect(),
                             description: String::new(),
+                            recommended: false,
                         }),
                         Value::Object(_) => Some(QuestionOption {
                             label: clip(o.get("label"), 120),
                             description: clip(o.get("description"), 200),
+                            recommended: o
+                                .get("recommended")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
                         }),
                         _ => None,
                     })
@@ -1626,6 +1631,24 @@ mod tests {
         let items = parse_questions(&old);
         assert_eq!(items[0].options.len(), 2);
         assert!(items[0].multiple);
+    }
+
+    #[test]
+    fn recommended_option_is_carried_not_invented() {
+        // The model may mark one option recommended; anything it does not
+        // mark stays false, so the UI never invents a recommendation.
+        let args = serde_json::json!({"questions": [
+            {"question": "Which?", "options": [
+                {"label": "First", "recommended": true},
+                {"label": "Second"},
+                "Third"
+            ]}
+        ]});
+        let items = parse_questions(&args);
+        assert_eq!(items.len(), 1);
+        assert!(items[0].options[0].recommended);
+        assert!(!items[0].options[1].recommended);
+        assert!(!items[0].options[2].recommended);
     }
 
     #[test]

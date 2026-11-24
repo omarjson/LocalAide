@@ -14,6 +14,10 @@ export interface SystemProbeResult {
   total_ram_gb: number;
   available_ram_gb: number;
   gpu_vendor: string | null;
+  /** CPU brand as the OS reports it; null when it gives nothing usable. */
+  cpu_brand: string | null;
+  /** Physical cores, when the OS reports them. */
+  cpu_cores: number | null;
   recommended_preset: string;
   budget_gb: number;
 }
@@ -170,6 +174,8 @@ export type MessagePart =
 export interface QuestionOption {
   label: string;
   description: string;
+  /** The model's pick when the user is unsure: shown first, marked Recommended. */
+  recommended?: boolean;
 }
 
 export interface QuestionItem {

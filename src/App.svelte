@@ -17,6 +17,7 @@
   import Modal from "./components/Modal.svelte";
   import type { IconName } from "./components/Icon.svelte";
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
+  import { portal } from "./lib/portal";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
@@ -701,8 +702,11 @@
     </div>
   {/if}
 
-  <!-- Always in the page, so screen readers hear each new message. -->
-  <div class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
+  <!-- Always in the page, so screen readers hear each new message.
+       Portaled to the document root: reporting from the shell costs the
+       page no layout (a `position: fixed` node inside a transformed
+       ancestor would be positioned against that ancestor instead). -->
+  <div use:portal class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
     {#if toast.message}
       <div
         in:fly={{ y: 12, duration: dur(motion.base), easing: motion.enter }}
