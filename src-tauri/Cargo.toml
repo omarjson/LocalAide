@@ -1,6 +1,6 @@
 [package]
 name = "ai-desktop-assistant"
-version = "0.2.2"
+version = "0.2.3"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
