@@ -118,7 +118,7 @@ test("timer choices and defaults match the spec", () => {
 });
 
 test("config defaults: plan auto-accept off, terminal countdown 60 s, clamped on save", () => {
-  const config = read("src-tauri/src/config.rs");
+  const config = read("src-tauri/src/config/mod.rs");
   assert.match(config, /#\[serde\(default\)\]\s+pub plan_auto_accept_secs: u32,/);
   assert.match(config, /#\[serde\(default = "default_terminal_approval_secs"\)\]\s+pub terminal_approval_secs: u32,/);
   assert.match(config, /fn default_terminal_approval_secs\(\) -> u32 \{\s+60\s+\}/);

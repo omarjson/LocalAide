@@ -112,7 +112,7 @@ test("model prices come from OpenRouter, not a hand-typed table", () => {
   assert.match(cloud, /openrouter\.ai\/api\/v1/, "the list is OpenRouter's public one, no key needed");
   const settingsBackend = read("src-tauri/src/commands/settings.rs");
   assert.doesNotMatch(settingsBackend, /settings_model_prices|settings_set_model_prices/, "the manual price commands are gone");
-  const config = read("src-tauri/src/config.rs");
+  const config = read("src-tauri/src/config/mod.rs");
   assert.doesNotMatch(config, /model_prices/, "the manual price table is gone from the config");
   const models = read("src-tauri/src/services/inference/provider_models.rs");
   assert.match(models, /prompt_price_per_million/, "the model list keeps the prices OpenRouter sends");

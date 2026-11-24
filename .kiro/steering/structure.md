@@ -50,7 +50,7 @@ Put new Svelte screens in `src/screens/`, reusable UI in `src/components/`, and 
   - `inference/openai_stream.rs` (shared streaming: text, thinking, tool calls, refused-field retries) and `inference/capabilities.rs` (thinking, vision, tools, context, effort levels).
   - `opencode.rs` (link to a user-run `opencode serve`: health check and task hand-off).
   - `backup/` (encrypted backups, ADR-0009), `skills/` (saved prompts; `discover.rs` browses GitHub skill collections), `websearch/` (web search and page reading, ADR-0011).
-- Top-level modules `model_manager.rs` (the active-model record in `models/state.json`, the setup presets, and model removal) and `config.rs` (config load and atomic save).
+- Top-level modules `model_manager.rs` (the active-model record in `models/state.json`, the setup presets, and model removal) and `config/` (`mod.rs`: config load and atomic save; `permissions.rs`: permission rules and capability auto-approve).
 
 ## Tests
 

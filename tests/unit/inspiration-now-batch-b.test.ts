@@ -211,9 +211,12 @@ test("the policy panel offers plain-language capability toggles", () => {
 });
 
 test("capabilities live in config and policy, defaulting to read-only", () => {
-  const config = read("src-tauri/src/config.rs");
-  assert.match(config, /pub struct CapabilityAutoApprove/);
-  assert.match(config, /read_files: true/);
+  const config = read("src-tauri/src/config/mod.rs");
+  // The capability types moved to config/permissions.rs in the 0.2.4 split.
+  const permissions = read("src-tauri/src/config/permissions.rs");
+  assert.match(permissions, /pub struct CapabilityAutoApprove/);
+  assert.match(permissions, /read_files: true/);
+  assert.match(config, /pub use permissions::\*;/);
   assert.match(config, /pub auto_approve_capabilities: CapabilityAutoApprove/);
   assert.match(config, /means ask, never auto-approve/);
   const policy = read("src-tauri/src/commands/policy.rs");
@@ -251,7 +254,7 @@ test("the compact prompt is local-only, default off, and shorter", () => {
   assert.match(modes, /compose_compact_system_prompt/);
   assert.match(modes, /compact_instruction/);
   assert.match(modes, /compact_tool_guidance/);
-  const config = read("src-tauri/src/config.rs");
+  const config = read("src-tauri/src/config/mod.rs");
   assert.match(config, /pub use_compact_prompt: bool/);
   assert.match(config, /Off by default/);
   const chat = read("src-tauri/src/commands/chat.rs");
