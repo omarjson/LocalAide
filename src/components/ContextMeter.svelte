@@ -15,12 +15,15 @@
     segments?: ContextSegment[];
     /** Cache hit rate of the last answer, 0-100, when the model reports it. */
     cacheRate?: number | null;
+    /** The same rate averaged over the usage log, for models that never
+        report cached tokens; shown when the last answer has no rate. */
+    cacheRateAverage?: number | null;
     /** Which way the popup opens: up from the composer, down inside the rail. */
     direction?: "up" | "down";
     onCompact?: () => void;
   }
 
-  let { usage, streaming = false, autoCompactAt, compacted = false, segments = [], cacheRate = null, direction = "up", onCompact }: Props = $props();
+  let { usage, streaming = false, autoCompactAt, compacted = false, segments = [], cacheRate = null, cacheRateAverage = null, direction = "up", onCompact }: Props = $props();
   let open = $state(false);
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -49,7 +52,7 @@
 </script>
 
 <div
-  class="relative"
+  class="relative min-w-0"
   role="presentation"
   use:popover={{ open, onClose: () => (open = false) }}
   onmouseenter={openSoon}
@@ -89,7 +92,11 @@
             </div>
           {/each}
           {#if cacheRate !== null}
-            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Average cache hit rate</dt><dd class="tabular-nums text-ink-200">{cacheRate.toFixed(1)}%</dd></div>
+            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Cache hit rate</dt><dd class="tabular-nums text-ink-200">{cacheRate.toFixed(1)}%</dd></div>
+          {:else if cacheRateAverage !== null}
+            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Cache hit rate <span class="text-ink-500">(recent average)</span></dt><dd class="tabular-nums text-ink-200">{cacheRateAverage.toFixed(1)}%</dd></div>
+          {:else}
+            <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Cache hit rate</dt><dd class="tabular-nums text-ink-500" title="This model does not report cached tokens.">—</dd></div>
           {/if}
           <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>

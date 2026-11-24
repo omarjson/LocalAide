@@ -1,5 +1,6 @@
 import { invoke as tauriInvoke, Channel, type InvokeArgs } from "@tauri-apps/api/core";
 import { recordRequest } from "../requestLog.svelte";
+import { notifyGoalComplete, notifyQuestion, notifyToolApproval } from "../notifications.svelte";
 
 /** Every backend call goes through here, so the developer request log can time it. */
 async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
@@ -93,6 +94,9 @@ import type {
   McpImportResult,
   McpPreset,
   McpServer,
+  McpOAuthFinishRequest,
+  McpOAuthStartDto,
+  McpOAuthStatusDto,
   ArtCraftPreset,
   Automation,
   AutomationsState,
@@ -114,6 +118,21 @@ import type {
   VoiceCleanup,
   ShareStatus,
   ShareStarted,
+  SessionHit,
+  RunTarget,
+  RunAnswer,
+  DoctorReport,
+  DoctorFixReport,
+  Agent,
+  ContextFileHit,
+  ContextFilesResult,
+  RefResult,
+  PolicySettings,
+  PolicyUpdate,
+  Goal,
+  UsageLedgerEntry,
+  UsageRecordRequest,
+  PluginDescriptor,
 } from "./bindings";
 
 export class ApiClient {
@@ -229,7 +248,16 @@ export class ApiClient {
     onEvent: (event: ChatStreamEvent) => void
   ): Promise<string> {
     const channel = new Channel<ChatStreamEvent>();
-    channel.onmessage = onEvent;
+    // Notifications ride the real stream event tags — no invented Tauri
+    // events, and the caller still receives every event unchanged.
+    channel.onmessage = (event) => {
+      if (event.type === "tool_approval") {
+        notifyToolApproval(`LocalAide wants to ${event.payload.title.toLowerCase()}.`);
+      } else if (event.type === "question") {
+        notifyQuestion(event.payload.question);
+      }
+      onEvent(event);
+    };
     return invoke<string>("chat_stream", { req, channel });
   }
 
@@ -396,14 +424,9 @@ export class ApiClient {
     return invoke<UsageSummary>("usage_summary", { days: days ?? null, folder: folder ?? null });
   }
 
-  /** What each online model costs, USD per 1M tokens. */
-  async modelPrices(): Promise<Record<string, ModelPrice>> {
-    return invoke<Record<string, ModelPrice>>("settings_model_prices");
-  }
-
-  /** Replace the whole price table and return the saved one. */
-  async setModelPrices(prices: Record<string, ModelPrice>): Promise<Record<string, ModelPrice>> {
-    return invoke<Record<string, ModelPrice>>("settings_set_model_prices", { prices });
+  /** Model prices from OpenRouter, USD per 1M tokens, keyed by model id. */
+  async openrouterModelPrices(): Promise<Record<string, ModelPrice>> {
+    return invoke<Record<string, ModelPrice>>("openrouter_model_prices");
   }
 
   // Library status, folder presets and indexing with progress
@@ -489,8 +512,8 @@ export class ApiClient {
     return invoke<ShareStatus>("share_status");
   }
 
-  async shareStart(tunnel = true): Promise<ShareStarted> {
-    return invoke<ShareStarted>("share_start", { tunnel });
+  async shareStart(tunnel = true, lan = false): Promise<ShareStarted> {
+    return invoke<ShareStarted>("share_start", { tunnel, lan });
   }
 
   async shareStop(): Promise<ShareStatus> {
@@ -617,6 +640,11 @@ export class ApiClient {
     return invoke<AppConfigDto>("config_load");
   }
 
+  /** The setup wizard finished or was skipped; setup must not reappear. */
+  async markSetupComplete(): Promise<void> {
+    return invoke<void>("config_setup_complete");
+  }
+
   // Engine context window
 
   async getContext(): Promise<number> {
@@ -630,6 +658,16 @@ export class ApiClient {
   /** The saved conversation memory, the model's own limit, and what is loaded now. */
   async getContextInfo(): Promise<ContextInfo> {
     return invoke<ContextInfo>("settings_context_info");
+  }
+
+  /** Whether the compact prompt is on (Settings → Performance). */
+  async getCompactPrompt(): Promise<boolean> {
+    return invoke<boolean>("settings_compact_prompt");
+  }
+
+  /** Turn the compact prompt on or off. Local models only. */
+  async setCompactPrompt(on: boolean): Promise<boolean> {
+    return invoke<boolean>("settings_set_compact_prompt", { on });
   }
 
   /** Share of memory models may use, in percent (20 to 90). */
@@ -1010,6 +1048,154 @@ export class ApiClient {
 
   async importMcpServers(text: string): Promise<McpImportResult> {
     return invoke<McpImportResult>("mcp_import", { text });
+  }
+
+  /** Start PKCE sign-in: returns the browser URL and the one-time state. */
+  async mcpOAuthStart(serverId: string): Promise<McpOAuthStartDto> {
+    return invoke<McpOAuthStartDto>("mcp_oauth_start", {
+      req: { server_id: serverId },
+    });
+  }
+
+  /** Exchange the pasted callback code. Returns status only, never a token. */
+  async mcpOAuthFinish(req: McpOAuthFinishRequest): Promise<McpOAuthStatusDto> {
+    return invoke<McpOAuthStatusDto>("mcp_oauth_finish", { req });
+  }
+
+  // Local session search, reindexing and side-by-side model runs (session.rs).
+
+  /** FTS hits over saved chats. The index is created on demand; run reindex to fill it. */
+  async sessionSearch(query: string, limit?: number): Promise<SessionHit[]> {
+    return invoke<SessionHit[]>("session_search", { query, limit: limit ?? null });
+  }
+
+  /** Rebuild the thread index from the conversations folder; returns the count. */
+  async sessionReindex(): Promise<number> {
+    return invoke<number>("session_reindex");
+  }
+
+  /** Send one prompt to several OpenAI-compatible endpoints at once. */
+  async multiRunChat(targets: RunTarget[], prompt: string): Promise<RunAnswer[]> {
+    return invoke<RunAnswer[]>("multi_run_chat", { targets, prompt });
+  }
+
+  // Read-only local setup doctor (doctor.rs).
+  async doctorRun(): Promise<DoctorReport> {
+    return invoke<DoctorReport>("doctor_run");
+  }
+
+  /** Repairs only missing local scaffolding; never deletes user data. */
+  async doctorFix(): Promise<DoctorFixReport> {
+    return invoke<DoctorFixReport>("doctor_fix");
+  }
+
+  // Saved agent personas (policy.rs).
+  async agentsList(): Promise<Agent[]> {
+    return invoke<Agent[]>("agents_list");
+  }
+
+  /** Add or update an agent (a matching name is overwritten in place). */
+  async agentsSave(
+    name: string,
+    model?: string | null,
+    tools?: string[],
+    prompt?: string,
+  ): Promise<Agent> {
+    return invoke<Agent>("agents_save", {
+      name,
+      model: model ?? null,
+      tools: tools ?? [],
+      prompt: prompt ?? "",
+    });
+  }
+
+  // Workspace instruction files and @path references (context.rs).
+  async contextFilesList(roots?: string[], maxBytes?: number): Promise<ContextFilesResult> {
+    return invoke<ContextFilesResult>("context_files_list", {
+      roots: roots ?? null,
+      maxBytes: maxBytes ?? null,
+    });
+  }
+
+  async contextRefsResolve(
+    reference: string,
+    roots?: string[],
+    maxBytes?: number,
+  ): Promise<RefResult> {
+    return invoke<RefResult>("context_refs_resolve", {
+      reference,
+      roots: roots ?? null,
+      maxBytes: maxBytes ?? null,
+    });
+  }
+
+  // Policy / configuration (policy.rs).
+  async policyConfigGet(): Promise<PolicySettings> {
+    return invoke<PolicySettings>("policy_config_get");
+  }
+
+  async policyConfigSet(update: PolicyUpdate): Promise<PolicySettings> {
+    return invoke<PolicySettings>("policy_config_set", { update });
+  }
+
+  // Goals (commands/goal.rs). All state is local; no model call on this path.
+  async goalStart(threadId: string, objective: string, budget: number): Promise<Goal> {
+    return invoke<Goal>("goal_start", { threadId, objective, budget });
+  }
+
+  async goalStatus(id: string): Promise<Goal | null> {
+    return invoke<Goal | null>("goal_status", { id });
+  }
+
+  async goalStep(id: string, progress: string): Promise<Goal> {
+    return invoke<Goal>("goal_step", { id, progress });
+  }
+
+  async goalComplete(id: string): Promise<Goal> {
+    const goal = await invoke<Goal>("goal_complete", { id });
+    notifyGoalComplete(`Goal finished: ${goal.objective}`);
+    return goal;
+  }
+
+  /** Pause a goal: progress stopped, but it is not done. */
+  async goalPause(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_pause", { id });
+  }
+
+  /** Mark a goal blocked: it waits on something outside the run. */
+  async goalBlock(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_block", { id });
+  }
+
+  /** Resume a paused or blocked goal. */
+  async goalResume(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_resume", { id });
+  }
+
+  // Usage ledger (commands/usage_ledger.rs). The rate is caller-supplied;
+  // the backend never invents a per-model price.
+  async usageRecord(req: UsageRecordRequest): Promise<UsageLedgerEntry> {
+    return invoke<UsageLedgerEntry>("usage_record", {
+      provider: req.provider,
+      model: req.model,
+      inputTokens: req.inputTokens ?? 0,
+      outputTokens: req.outputTokens ?? 0,
+      threadId: req.threadId,
+      ratePerMillionUsd: req.ratePerMillionUsd ?? null,
+    });
+  }
+
+  async usageList(threadId?: string | null, limit?: number): Promise<UsageLedgerEntry[]> {
+    return invoke<UsageLedgerEntry[]>("usage_list", {
+      threadId: threadId ?? null,
+      limit: limit ?? null,
+    });
+  }
+
+  // Local HTML plugin panels (added by the plugin_list command; absent builds
+  // simply reject, and the panel shows an honest empty state).
+  async pluginList(): Promise<PluginDescriptor[]> {
+    return invoke<PluginDescriptor[]>("plugin_list");
   }
 }
 

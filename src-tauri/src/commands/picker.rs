@@ -12,6 +12,7 @@ use crate::commands::cloud::{apply_engine_mode, load_config, save_config};
 use crate::config::{AppConfig, CloudProvider, is_local_host};
 use crate::domain::chat::ChatTargetRequest;
 use crate::domain::cloud::{ModelChoice, ModelChoices, ModelGroup};
+use crate::services::inference::InferenceEngine;
 use crate::services::inference::capabilities::{self, Capabilities};
 use crate::services::inference::provider_models::ProviderModel;
 
@@ -68,6 +69,9 @@ fn provider_models(p: &CloudProvider, chosen: Option<&str>) -> Vec<ProviderModel
                     reasoning: None,
                     vision: None,
                     tools: None,
+                    prompt_price_per_million: None,
+                    completion_price_per_million: None,
+                    cache_price_per_million: None,
                 },
             );
         }
@@ -151,6 +155,10 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
     };
 
     let mut models = Vec::new();
+    // A config that still lists the same provider twice (or the same model
+    // under two entries) must not show the model twice in the picker. The
+    // config loader merges duplicate providers; this is the backstop.
+    let mut seen_keys: HashSet<String> = HashSet::new();
     for entry in state.model_service.all_entries() {
         if !matches!(entry.kind.as_str(), "chat" | "code")
             || !state.model_service.is_installed(&entry.id)
@@ -161,6 +169,9 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         let is_loaded = loaded_path.as_ref() == Some(&path);
         let caps = local_caps(state, cfg, &entry.id, is_loaded);
         let key = local_key(&entry.id);
+        if !seen_keys.insert(key.clone()) {
+            continue;
+        }
         models.push(ModelChoice {
             active: active_key.as_deref() == Some(key.as_str()),
             favorite: favorites.contains(key.as_str()),
@@ -199,6 +210,9 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         for m in provider_models(p, chosen) {
             let caps = remote_caps(&m);
             let key = remote_key(&p.id, &m.id);
+            if !seen_keys.insert(key.clone()) {
+                continue;
+            }
             models.push(ModelChoice {
                 active: active_key.as_deref() == Some(key.as_str()),
                 favorite: favorites.contains(key.as_str()),
@@ -225,6 +239,7 @@ fn build_choices(state: &AppState, cfg: &AppConfig) -> ModelChoices {
         active_key,
         local_loaded: local_ep.is_some(),
         online_allowed: online,
+        budget_note: None,
     }
 }
 
@@ -247,6 +262,7 @@ pub async fn chat_target_set(
     state: State<'_, AppState>,
     req: ChatTargetRequest,
 ) -> Result<ModelChoices, AppError> {
+    let previous_context = state.inference_engine.status().context_size.max(0) as usize;
     match req.provider_id.as_deref() {
         None => {
             let path = state.model_service.model_file_path(&req.model);
@@ -289,11 +305,18 @@ pub async fn chat_target_set(
             apply_engine_mode(&state, &cfg);
         }
     }
-    with_app_state(&state, |owned| {
+    let mut choices = with_app_state(&state, |owned| {
         let cfg = load_config(&owned)?;
         Ok(build_choices(&owned, &cfg))
     })
-    .await
+    .await?;
+    let new_context = state.inference_engine.status().context_size.max(0) as usize;
+    if previous_context != new_context && previous_context > 0 {
+        choices.budget_note = Some(format!(
+            "Context budget recalculated for the new model: {previous_context} → {new_context} tokens. This conversation was kept."
+        ));
+    }
+    Ok(choices)
 }
 
 /// Star or unstar a model in the picker. Returns the starred keys.
@@ -331,6 +354,9 @@ mod tests {
             reasoning: Some(true),
             vision: Some(true),
             tools: Some(false),
+            prompt_price_per_million: None,
+            completion_price_per_million: None,
+            cache_price_per_million: None,
         };
         let caps = remote_caps(&m);
         assert!(caps.reasoning && caps.vision && !caps.tools);

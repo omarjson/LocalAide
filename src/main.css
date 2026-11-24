@@ -64,8 +64,17 @@
 
 /* Elevation for the raised chat surfaces (composer, cards, popovers). */
 :root {
+  /* Shareable skins (lib/theme.ts) override design tokens inline on <html>.
+     These values are the defaults a skin falls back to. */
   --shadow-elev: 0 18px 44px -20px rgb(0 0 0 / 0.75);
   --shadow-glow: 0 6px 16px -6px color-mix(in oklab, var(--color-ember-500) 60%, transparent);
+  /* Motion tokens. lib/motion.ts reads these same values for JS transitions. */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+  /* Ambient loops (shimmer, progress, live dots) are slower than an
+     interaction but still derive from --dur-slow, so one dial tunes them. */
+  --dur-loop: calc(var(--dur-slow) * 5.5);
 }
 :root[data-theme="light"] {
   --shadow-elev: 0 14px 36px -18px rgb(78 50 24 / 0.28);
@@ -163,7 +172,7 @@ input {
 }
 
 :is(input:not([type="range"], [type="checkbox"], [type="radio"], [type="file"], [type="color"]), textarea, select):not(.field-bare) {
-  transition: border-color 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
+  transition: border-color var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out, background-color var(--dur-fast) ease-out;
 }
 
 :is(input:not([type="range"], [type="checkbox"], [type="radio"], [type="file"], [type="color"]), textarea, select):not(.field-bare):focus,
@@ -173,13 +182,29 @@ input {
 }
 
 .field-shell {
-  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+  transition: border-color var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out;
 }
 
 /* The chat box: a quieter focus than other fields, it is focused most of the time. */
 .composer.field-shell:focus-within {
   border-color: color-mix(in oklab, var(--color-ember-500) 45%, var(--color-ink-700)) !important;
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ember-500) 10%, transparent), var(--shadow-elev);
+}
+
+/* Composer bar-fit: on a narrow window the pills fold to glyphs in a
+ * fixed order — Tools label, model name, effort label — driven by the
+ * `data-fold` level ChatInput measures (see src/lib/composerFit.ts).
+ * Permission and usage are already glyphs; team and context have no pill
+ * here. A folded pill keeps its name for a screen reader (aria-label /
+ * title); only the visible label text is hidden. Send is shrink-0 and
+ * last, so it is never covered. */
+.composer[data-fold="1"] [data-fold-label="tools"],
+.composer[data-fold="2"] [data-fold-label="tools"],
+.composer[data-fold="2"] [data-fold-label="model"],
+.composer[data-fold="3"] [data-fold-label="tools"],
+.composer[data-fold="3"] [data-fold-label="model"],
+.composer[data-fold="3"] [data-fold-label="effort"] {
+  display: none;
 }
 
 /* Easing for CSS transitions (the same curves as lib/motion.ts). */
@@ -191,6 +216,17 @@ input {
 .field-bare {
   outline: none;
   border: 0;
+  box-shadow: none;
+}
+
+/* A borderless field has no shell of its own to show focus (the palette and
+ * picker searches are examples), so draw a quiet ember underline. Fields
+ * inside a .field-shell already get the shell's ring: don't draw a second. */
+.field-bare:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px 0 0 var(--color-ember-500);
+}
+.field-shell .field-bare:focus-visible {
   box-shadow: none;
 }
 
@@ -216,7 +252,8 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.6;
 }
 
-/* Browser autofill paints a pale yellow box; keep the field's own colors. */
+/* Browser autofill paints a pale yellow box; keep the field's own colors.
+   The 600000s below is a deliberate autofill-paint hack, not motion. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
@@ -246,7 +283,7 @@ select option {
 /* ---- Motion helpers ---------------------------------------------------- */
 /* Cards that open something rise slightly on hover. */
 .lift {
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out;
+  transition: transform var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1), box-shadow var(--dur-base) ease-out, border-color var(--dur-fast) ease-out, background-color var(--dur-fast) ease-out;
 }
 /* Hover motion only where there is a real pointer; a tap would leave it stuck. */
 @media (hover: hover) and (pointer: fine) {
@@ -271,8 +308,9 @@ select option {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
+  will-change: transform;
   background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-veil) 7%, transparent), transparent);
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: skeleton-shimmer var(--dur-loop) ease-in-out infinite;
 }
 @keyframes skeleton-shimmer {
   to {
@@ -280,8 +318,11 @@ select option {
   }
 }
 
-/* A soft ember glow behind hero areas (empty states, setup). */
+/* A soft ember glow behind hero areas (empty states, setup). Own layer, so
+ * the big radial gradient is rasterized once and composited, not repainted
+ * every frame while anything above it animates. */
 .ember-glow {
+  transform: translateZ(0);
   background-image: radial-gradient(60% 80% at 50% 0%, color-mix(in oklab, var(--color-ember-500) 12%, transparent), transparent 70%);
 }
 
@@ -307,7 +348,8 @@ select option {
 
 /* A progress bar with no known total. */
 .progress-indeterminate {
-  animation: progress-slide 1.2s ease-in-out infinite;
+  will-change: transform;
+  animation: progress-slide var(--dur-loop) ease-in-out infinite;
 }
 @keyframes progress-slide {
   from {
@@ -332,6 +374,25 @@ select option {
   background: color-mix(in oklab, var(--color-ink-800) 82%, var(--color-ink-900));
   border: 1px solid var(--color-ink-700);
   box-shadow: var(--shadow-elev);
+}
+
+/* Shared entrance for raised panels: a short fade and lift on the base
+   clock. Any panel can opt in with class="surface-enter"; two shipped
+   panels do — raised chat surfaces here and the title-bar tab strip. */
+.surface-enter,
+.surface-raised,
+.tab-strip {
+  animation: surface-in var(--dur-base) var(--ease-out) backwards;
+}
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Thin scrollbars that appear on hover, like modern chat apps. */
@@ -377,7 +438,7 @@ aside nav:focus-within::-webkit-scrollbar-thumb {
    the curve makes them feel like physical things, not tinted rectangles. */
 .nav-ico {
   display: inline-flex;
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), color 150ms ease-out;
+  transition: transform var(--dur-slow) cubic-bezier(0.34, 1.56, 0.64, 1), color var(--dur-fast) ease-out;
 }
 .nav-item:hover .nav-ico,
 .nav-item:focus-visible .nav-ico {
@@ -413,7 +474,7 @@ aside nav:focus-within::-webkit-scrollbar-thumb {
 }
 /* Arriving at a screen makes its icon pop once. */
 .nav-item[aria-current="page"] .nav-ico {
-  animation: nav-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: nav-pop var(--dur-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes nav-pop {
   0% {
@@ -521,7 +582,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--color-ember-600);
   border: 2px solid var(--color-ink-900);
   box-shadow: 0 0 0 1px var(--color-ember-600);
-  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+  transition: transform var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out;
 }
 input[type="range"]::-moz-range-thumb {
   width: 12px;

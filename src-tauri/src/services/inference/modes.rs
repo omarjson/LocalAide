@@ -77,6 +77,24 @@ impl ChatMode {
             .unwrap_or("")
     }
 
+    /// The short form of the mode instruction, for the compact prompt:
+    /// the same rules, fewer words, so a small local model reaches its
+    /// first tokens sooner. Standard has no instruction either way.
+    pub fn compact_instruction(self) -> &'static str {
+        match self {
+            Self::Standard => "",
+            Self::Strict => {
+                "Strict mode. Use only facts you are confident about or that appear in the context, and cite context as [n]. When unsure, say so instead of guessing. Keep answers short and precise."
+            }
+            Self::Unrestricted => {
+                "Unrestricted mode. Answer directly and completely. No lectures, disclaimers or refusals for ordinary requests."
+            }
+            Self::Autonomous => {
+                "Autonomous mode. Work on your own until done. When unclear, pick the most reasonable assumption and say so in one line. Start with a short plan, then finish with what you delivered and what is still open."
+            }
+        }
+    }
+
     /// Strict keeps sampling close to the most likely words.
     pub fn temperature(self, requested: f32) -> f32 {
         match self {
@@ -162,6 +180,61 @@ pub fn compose_system_prompt(user: Option<&str>, mode: ChatMode, context: &str) 
     }
 }
 
+/// The compact system prompt: same shape, shorter mode instruction. Only
+/// used for local models when the user turns the compact prompt on
+/// (`AppConfig::use_compact_prompt`, default off). The default-off path
+/// never calls this, so its prompt is byte-identical to before.
+pub fn compose_compact_system_prompt(
+    user: Option<&str>,
+    mode: ChatMode,
+    context: &str,
+) -> Option<String> {
+    let parts: Vec<&str> = [user.unwrap_or(""), mode.compact_instruction(), context]
+        .into_iter()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}
+
+/// The short form of the tool guidance: what the tools can do, in one
+/// line, without the effort and citation rules. Used with the compact
+/// prompt only.
+pub fn compact_tool_guidance(groups: ToolGroups, mode: ChatMode) -> String {
+    let mut uses = Vec::new();
+    if groups.web {
+        uses.push("search the web for recent or uncertain facts");
+    }
+    if groups.notes {
+        uses.push("search the user's notes first for questions about their own files");
+    }
+    if groups.files {
+        uses.push("read and write files in the workspace when asked");
+    }
+    if groups.skills {
+        uses.push("look at saved skills when a task may match one");
+    }
+    if groups.shell {
+        uses.push("run terminal commands in the workspace when asked");
+    }
+    if groups.mcp {
+        uses.push("use the MCP servers' tools for what they describe");
+    }
+    if uses.is_empty() {
+        return String::new();
+    }
+    let effort = if mode == ChatMode::Autonomous {
+        "Use tools freely."
+    } else {
+        "Use a tool only when it helps."
+    };
+    format!("You have tools. {effort} You can {}.", uses.join("; "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,5 +262,61 @@ mod tests {
         let p = compose_system_prompt(Some("Be kind."), ChatMode::Strict, "Context: x").unwrap();
         assert!(p.starts_with("Be kind.\n\nStrict mode"));
         assert!(p.ends_with("Context: x"));
+    }
+
+    #[test]
+    fn compact_prompt_is_shorter_but_keeps_the_shape() {
+        // The default-off path never calls the compact composer, so the
+        // full prompt is unchanged; the compact one only swaps the mode
+        // instruction and keeps user prompt and context in place.
+        for mode in [
+            ChatMode::Standard,
+            ChatMode::Strict,
+            ChatMode::Unrestricted,
+            ChatMode::Autonomous,
+        ] {
+            let full = compose_system_prompt(Some("Be kind."), mode, "Context: x");
+            let compact = compose_compact_system_prompt(Some("Be kind."), mode, "Context: x");
+            match (full, compact) {
+                (Some(f), Some(c)) => {
+                    assert!(c.starts_with("Be kind.\n\n"), "{c}");
+                    assert!(c.ends_with("Context: x"), "{c}");
+                    assert!(
+                        c.len() <= f.len(),
+                        "compact must not be longer than full ({c} vs {f})"
+                    );
+                }
+                (None, None) => {}
+                (f, c) => panic!("full {f:?} and compact {c:?} disagree on empty"),
+            }
+        }
+        // Standard has no instruction either way: the two agree exactly.
+        assert_eq!(
+            compose_system_prompt(Some("Be kind."), ChatMode::Standard, "Context: x"),
+            compose_compact_system_prompt(Some("Be kind."), ChatMode::Standard, "Context: x")
+        );
+        let guidance = compact_tool_guidance(
+            ToolGroups {
+                web: true,
+                files: true,
+                ..ToolGroups::default()
+            },
+            ChatMode::Standard,
+        );
+        assert!(guidance.contains("search the web"));
+        assert!(guidance.contains("read and write files"));
+        assert!(
+            guidance.len()
+                < tool_guidance(
+                    ToolGroups {
+                        web: true,
+                        files: true,
+                        ..ToolGroups::default()
+                    },
+                    ChatMode::Standard
+                )
+                .len()
+        );
+        assert!(compact_tool_guidance(ToolGroups::default(), ChatMode::Standard).is_empty());
     }
 }

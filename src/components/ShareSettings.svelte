@@ -12,6 +12,7 @@
   import type { PairInfo, ShareStarted } from "../lib/api/bindings";
 
   let links = $state<ShareStarted | null>(null);
+  let lan = $state(false);
   let pair = $state<PairInfo | null>(null);
   let busy = $state<"start" | "local" | "stop" | "fetch" | null>(null);
   let pct = $state<number | null>(null);
@@ -40,7 +41,7 @@
     error = null;
     busy = tunnel ? "start" : "local";
     try {
-      links = await api.shareStart(tunnel);
+      links = await api.shareStart(tunnel, lan);
       setShare(links.status);
       void loadPair();
     } catch (e: unknown) {
@@ -123,7 +124,7 @@
       {#if links}
         <div class="mt-4 space-y-2" transition:slide={{ duration: dur(150) }}>
           <p class="flex items-center gap-2 text-sm font-medium text-ember-200"><Icon name="key" class="h-4 w-4" />Copy the links now. They are shown only once; to get new ones, stop and share again.</p>
-          {#each [["Viewer", links.viewer_link], ["Remote user", links.remote_link]] as [label, link] (label)}
+          {#each [["Pairing link", links.pairing_url], ["Pairing password", links.pairing_token], ["Viewer", links.viewer_link], ["Remote user", links.remote_link]] as [label, link] (label)}
             <div class="link">
               <span class="w-24 shrink-0 text-sm font-medium text-ink-200">{label}</span>
               <input readonly value={link} aria-label={`${label} link`} class="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-ink-300 outline-none" onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
@@ -164,6 +165,7 @@
       {:else}
         <div class="flex flex-wrap items-center gap-3">
           <p class="flex-1 text-sm leading-6 text-ink-300">Starts a Cloudflare quick tunnel to this app and makes a Viewer link and a Remote user link. No Cloudflare account is needed.</p>
+          <label class="flex items-center gap-2 text-sm text-ink-300"><input type="checkbox" bind:checked={lan} class="accent-ember-500" /> Allow other devices on this network</label>
           <Button variant="subtle" disabled={busy !== null} onclick={() => void start(false)}>{busy === "local" ? "Starting…" : "Try on this computer only"}</Button>
           <Button variant="primary" disabled={busy !== null || !tool?.installed} onclick={() => void start(true)}><Icon name="link" class="h-4 w-4" />{busy === "start" ? "Opening the tunnel…" : "Share my assistant"}</Button>
         </div>

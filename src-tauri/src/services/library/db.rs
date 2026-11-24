@@ -677,7 +677,9 @@ impl LibraryDb {
     }
 
     /// Calls `visit` with each stored chunk vector. Only ids and vectors are
-    /// read, so a search does not copy every chunk's text.
+    /// read, so a search does not copy every chunk's text. A single scratch
+    /// buffer is reused for every row instead of allocating a fresh `Vec<f32>`
+    /// and `Vec<u8>` per embedding.
     pub fn visit_chunk_embeddings(
         &self,
         mut visit: impl FnMut(&str, &[f32]),
@@ -694,17 +696,25 @@ impl LibraryDb {
         let mut rows = stmt
             .query([])
             .map_err(|e| AppError::storage(format!("Failed to query embeddings: {e}")))?;
+        let mut scratch: Vec<f32> = Vec::new();
         while let Some(row) = rows
             .next()
             .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?
         {
-            let id: String = row
-                .get(0)
+            let id_value = row
+                .get_ref(0)
                 .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
-            let blob: Vec<u8> = row
-                .get(1)
+            let id = id_value
+                .as_str()
                 .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
-            visit(&id, &Self::blob_to_embedding(&blob));
+            let blob_value = row
+                .get_ref(1)
+                .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
+            let blob = blob_value
+                .as_blob()
+                .map_err(|e| AppError::storage(format!("Embedding row read error: {e}")))?;
+            decode_embedding_into(blob, &mut scratch);
+            visit(id, &scratch);
         }
         Ok(())
     }
@@ -1130,11 +1140,20 @@ impl LibraryDb {
     }
 
     pub fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
-        blob.as_chunks::<4>()
-            .0
-            .iter()
-            .map(|chunk| f32::from_le_bytes(*chunk))
-            .collect()
+        let mut out = Vec::with_capacity(blob.len() / 4);
+        decode_embedding_into(blob, &mut out);
+        out
+    }
+}
+
+/// Decode a little-endian f32 embedding blob into `out`, reusing its capacity
+/// across calls. Trailing bytes that do not form a whole f32 are ignored,
+/// matching `blob_to_embedding`.
+pub fn decode_embedding_into(blob: &[u8], out: &mut Vec<f32>) {
+    out.clear();
+    out.reserve(blob.len() / 4);
+    for chunk in blob.as_chunks::<4>().0 {
+        out.push(f32::from_le_bytes(*chunk));
     }
 }
 

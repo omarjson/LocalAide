@@ -1,5 +1,7 @@
 // Developer → Request log: the last backend calls with their timings.
-// Records only while the "Request log" flag is on; nothing leaves the app.
+// Always measured in memory (a tiny ring buffer), so a slowdown can be
+// diagnosed after the fact; only the display lives behind a developer flag.
+// Nothing leaves the app unless the user copies the diagnostics report.
 
 export interface RequestEntry {
   id: number;
@@ -13,13 +15,9 @@ export interface RequestEntry {
 const LIMIT = 200;
 let next = 1;
 
-export const requestLog = $state<{ enabled: boolean; entries: RequestEntry[] }>({
-  enabled: false,
-  entries: [],
-});
+export const requestLog = $state<{ entries: RequestEntry[] }>({ entries: [] });
 
 export function recordRequest(command: string, ms: number, ok: boolean, error?: unknown): void {
-  if (!requestLog.enabled) return;
   const message = ok
     ? null
     : typeof error === "string"

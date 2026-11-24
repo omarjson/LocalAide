@@ -11,11 +11,13 @@
     /** Show the question text (tool questions); parsed ones already show it in the answer. */
     showQuestion?: boolean;
     answer?: string | null;
+    /** Label of the model's recommended option, when it named one. */
+    recommended?: string | null;
     onAnswer?: (text: string) => void;
     onOther?: () => void;
   }
 
-  let { question, options, multiple = false, showQuestion = true, answer = null, onAnswer, onOther }: Props = $props();
+  let { question, options, multiple = false, showQuestion = true, answer = null, recommended = null, onAnswer, onOther }: Props = $props();
 
   const chosen = $derived(answer ? (multiple ? answer.split(", ") : [answer]) : null);
   const active = $derived(!!onAnswer && !answer);
@@ -28,7 +30,7 @@
   {#if active || chosen}
     <div class={showQuestion ? "mt-3" : ""}>
       <OptionButtons
-        options={options.map((label) => ({ label }))}
+        options={options.map((label) => ({ label, recommended: recommended !== null && label === recommended }))}
         {multiple}
         allowOther={active}
         {active}

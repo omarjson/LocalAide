@@ -1,6 +1,8 @@
 use crate::app::error::AppError;
 use crate::domain::document::SearchResultDoc;
 use crate::services::library::db::{FtsHit, LibraryDb};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -86,16 +88,13 @@ impl HybridSearcher {
 
     fn search_vector_raw(&self, query_vec: &[f32], limit: usize) -> Result<Vec<RawHit>, AppError> {
         // Score every stored vector, but keep only the best `limit`. Text is
-        // read afterwards, for the winners only.
-        let mut best: Vec<(f32, String)> = Vec::with_capacity(limit + 1);
+        // read afterwards, for the winners only. A bounded heap avoids the
+        // per-row `Vec::insert`+`truncate` of a sorted buffer.
+        let mut best = TopK::new(limit);
         self.db.visit_chunk_embeddings(|chunk_id, embedding| {
-            keep_best(
-                &mut best,
-                limit,
-                cosine_similarity(query_vec, embedding),
-                chunk_id,
-            );
+            best.offer(cosine_similarity(query_vec, embedding), chunk_id);
         })?;
+        let best = best.into_sorted();
 
         let scores: HashMap<String, f32> = best
             .iter()
@@ -224,16 +223,95 @@ struct RawHit {
     size: u64,
 }
 
-/// Adds `(score, id)` to `best`, which stays sorted from high to low and holds
-/// at most `limit` entries. Scores that are not finite numbers are ignored.
-fn keep_best(best: &mut Vec<(f32, String)>, limit: usize, score: f32, id: &str) {
-    if !score.is_finite() {
-        return;
+/// One candidate in the bounded top-k heap. `Ord` is reversed so that the
+/// max-heap's top is the *worst* kept item (lowest score, latest arrival),
+/// which is the one evicted when a better candidate arrives.
+#[derive(Debug)]
+struct Candidate {
+    score: f32,
+    seq: u64,
+    id: String,
+}
+
+impl Ord for Candidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // `other.score.total_cmp(self.score)` is Greater when our score is
+        // lower, i.e. when we are worse and should be nearer the heap top.
+        match other.score.total_cmp(&self.score) {
+            Ordering::Equal => self.seq.cmp(&other.seq),
+            ordering => ordering,
+        }
     }
-    let position = best.partition_point(|(kept, _)| *kept >= score);
-    if position < limit {
-        best.insert(position, (score, id.to_string()));
-        best.truncate(limit);
+}
+
+impl PartialOrd for Candidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Candidate {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Candidate {}
+
+/// Keeps the `limit` highest-scoring ids seen so far, in a heap of bounded
+/// size. Each offer is O(log limit) with no per-row shifting or truncation;
+/// non-finite scores are ignored and equal scores keep the first arrivals.
+pub struct TopK {
+    limit: usize,
+    heap: BinaryHeap<Candidate>,
+    next_seq: u64,
+}
+
+impl TopK {
+    pub fn new(limit: usize) -> Self {
+        // Capacity is a bounded hint; the heap itself never exceeds `limit`.
+        let capacity = limit.saturating_add(1).min(4096);
+        Self {
+            limit,
+            heap: BinaryHeap::with_capacity(capacity),
+            next_seq: 0,
+        }
+    }
+
+    /// Offer one `(score, id)`. The id string is only allocated if the
+    /// candidate makes the cut. New arrivals always have a later sequence
+    /// number than kept ones, so an equal score never evicts an earlier tie.
+    pub fn offer(&mut self, score: f32, id: &str) {
+        if !score.is_finite() || self.limit == 0 {
+            return;
+        }
+        if self.heap.len() < self.limit {
+            self.heap.push(Candidate {
+                score,
+                seq: self.next_seq,
+                id: id.to_string(),
+            });
+        } else if self.heap.peek().is_some_and(|worst| score > worst.score) {
+            // Evict the current worst (lowest score); ties keep earlier arrivals.
+            let _ = self.heap.pop();
+            self.heap.push(Candidate {
+                score,
+                seq: self.next_seq,
+                id: id.to_string(),
+            });
+        } else {
+            // Did not make the cut: no id allocation for this row.
+            return;
+        }
+        self.next_seq = self.next_seq.wrapping_add(1);
+    }
+
+    /// The kept candidates, sorted from highest score to lowest, ties in
+    /// arrival order. This is the same ranking the sorted-buffer approach gave.
+    pub fn into_sorted(self) -> Vec<(f32, String)> {
+        let mut items: Vec<Candidate> = self.heap.into_iter().collect();
+        items.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.seq.cmp(&b.seq)));
+        items.into_iter().map(|c| (c.score, c.id)).collect()
     }
 }
 
@@ -255,11 +333,11 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::keep_best;
+    use super::TopK;
 
     #[test]
-    fn keep_best_holds_the_top_scores_in_order() {
-        let mut best = Vec::new();
+    fn top_k_holds_the_best_scores_in_order() {
+        let mut best = TopK::new(3);
         let scored = [
             (0.2, "a"),
             (0.9, "b"),
@@ -269,13 +347,14 @@ mod tests {
             (0.7, "e"),
         ];
         for (score, id) in scored {
-            keep_best(&mut best, 3, score, id);
+            best.offer(score, id);
         }
-        let ids: Vec<&str> = best.iter().map(|(_, id)| id.as_str()).collect();
+        let sorted = best.into_sorted();
+        let ids: Vec<&str> = sorted.iter().map(|(_, id)| id.as_str()).collect();
         assert_eq!(ids, ["b", "e", "c"]);
 
-        let mut none = Vec::new();
-        keep_best(&mut none, 0, 1.0, "x");
-        assert!(none.is_empty());
+        let mut none = TopK::new(0);
+        none.offer(1.0, "x");
+        assert!(none.into_sorted().is_empty());
     }
 }

@@ -3,12 +3,13 @@
   import { listen } from "@tauri-apps/api/event";
   import { fade, fly, scale } from "svelte/transition";
   import { api, errorMessage } from "./lib/api/client";
-  import { dur, enterDialog, enterScreen, leaveDialog, motion } from "./lib/motion";
+  import { dur, enterDialog, enterScreen, leaveDialog, motion, slideUp } from "./lib/motion";
   import { formatBytes } from "./lib/format";
   import { applyTheme, currentTheme } from "./lib/theme";
   import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
   import { requestSettings, screenRequest } from "./lib/nav.svelte";
-  import { loadDev, moduleOn } from "./lib/dev.svelte";
+  import { loadDev, moduleOn, activeEffectFlags } from "./lib/dev.svelte";
+  import { SCREEN_REGISTRY, screenForKey, type ScreenId } from "./lib/screens";
   import { loadVoice } from "./lib/voice.svelte";
   import { refreshShare, share } from "./lib/share.svelte";
   import MarkdownDoc from "./components/MarkdownDoc.svelte";
@@ -16,9 +17,9 @@
   import Modal from "./components/Modal.svelte";
   import type { IconName } from "./components/Icon.svelte";
   import { dismissToast, showToast, toast } from "./lib/toast.svelte";
+  import { portal } from "./lib/portal";
   import SetupWizard from "./screens/SetupWizard.svelte";
   import ChatScreen from "./screens/ChatScreen.svelte";
-  import TabStrip from "./components/TabStrip.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
@@ -29,12 +30,18 @@
   import UsageScreen from "./screens/UsageScreen.svelte";
   import AutomationsScreen from "./screens/AutomationsScreen.svelte";
   import SidebarChats from "./components/SidebarChats.svelte";
-  import { chats, loadThreads, newChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
+  import ChatSearchModal from "./components/ChatSearchModal.svelte";
+  import SessionPicker from "./components/SessionPicker.svelte";
+  import MultiRunModal from "./components/MultiRunModal.svelte";
+  import MultiRunFusion from "./components/MultiRunFusion.svelte";
+  import { notifyTurnFinished } from "./lib/notifications.svelte";
+  import { chats, loadThreads, newChat, openChat, restoreTabs, seedTab, focusTab, closeTab, tabThreadStarted, tabTitleChanged, tabBusyChanged } from "./lib/chats.svelte";
   import { applyScale, nudgeScale } from "./lib/scale.svelte";
-  import type { EngineDownloadEvent, UpdateCheckResponse } from "./lib/api/bindings";
+  import type { EngineDownloadEvent, SessionHit, UpdateCheckResponse } from "./lib/api/bindings";
 
-  type Screen = "setup" | "chat" | "memory" | "skills" | "models" | "settings" | "search" | "usage" | "automations";
-  type NavId = "chat" | "search" | "memory" | "skills" | "models" | "settings" | "usage" | "automations";
+  type Screen = ScreenId | "setup" | "skills";
+  type NavId = ScreenId | "skills";
+  const activeFlags = $derived(activeEffectFlags());
 
   // Null until startup decides: returning users with a downloaded model go
   // straight to chat; first-run users see the setup wizard.
@@ -45,6 +52,22 @@
   let cmdOpen = $state(false);
   let cmdQuery = $state("");
   let cmdInput = $state<HTMLInputElement>();
+  // Palette actions that open their own dialogs.
+  let chatSearchOpen = $state(false);
+  let sessionPickerOpen = $state(false);
+  let compareOpen = $state(false);
+  let fusionOpen = $state(false);
+  // Last reported busy state per tab, so a turn-finish notification fires on
+  // the true -> false edge only (not on mount or on repeated false reports).
+  const workingTabs = new Map<string, boolean>();
+  const tabBusy = (key: string, busy: boolean) => {
+    const wasBusy = workingTabs.get(key) === true;
+    workingTabs.set(key, busy);
+    tabBusyChanged(key, busy);
+    if (wasBusy && !busy && typeof document !== "undefined" && document.hidden) {
+      notifyTurnFinished();
+    }
+  };
   let mobileNav = $state(false);
   // The sidebar can shrink to icons. Remembered for the next launch.
   const SIDEBAR_KEY = "localaide-sidebar";
@@ -56,6 +79,14 @@
     }
   })());
   const toggleSidebar = () => {
+    // On narrow windows the sidebar is off-canvas, so the same shortcut
+    // opens the drawer instead of toggling a collapse nobody can see.
+    // (The title bar no longer carries its own menu button: it did nothing
+    // on wide windows and duplicated this control.)
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      mobileNav = !mobileNav;
+      return;
+    }
     collapsed = !collapsed;
     try {
       localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
@@ -167,14 +198,23 @@
   const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";
 
   const commands = $derived<Command[]>([
-    { id: "chat", label: "Chat", hint: `${mod}1`, icon: "chat", group: "Go to", run: () => navigate("chat") },
-    { id: "search", label: "Search", hint: `${mod}2`, icon: "search", group: "Go to", run: () => navigate("search") },
-    { id: "memory", label: "Memory", hint: `${mod}3`, icon: "memory", group: "Go to", run: () => navigate("memory") },
-    { id: "skills", label: "Skills", hint: `${mod}4`, icon: "skills", group: "Go to", run: () => navigate("skills") },
-    { id: "models", label: "Models", hint: `${mod}5`, icon: "models", group: "Go to", run: () => navigate("models") },
-    { id: "settings", label: "Settings", hint: `${mod}6`, icon: "settings", group: "Go to", run: () => navigate("settings") },
+    // All "Go to" entries come from the one registry, so the hint is always
+    // the key that opens that screen. Skills is a module with no number.
+    ...SCREEN_REGISTRY.map((s) => ({
+      id: s.id as string,
+      label: s.label,
+      hint: `${mod}${s.key}`,
+      icon: s.icon,
+      group: "Go to" as const,
+      run: () => { navigate(s.id); },
+    })),
+    { id: "skills", label: "Skills", icon: "skills", group: "Go to", run: () => navigate("skills") },
     { id: "new-chat", label: "New chat", hint: `${mod}N`, icon: "plus", group: "Actions", run: () => { if (navigate("chat")) newChat(chats.activeFolder); } },
     { id: "sidebar", label: "Collapse or expand the sidebar", hint: `${mod}B`, icon: "sidebar", group: "Actions", run: toggleSidebar },
+    { id: "search-chats", label: "Search chats", icon: "history", group: "Actions", run: () => { chatSearchOpen = true; } },
+    { id: "session-picker", label: "Pick a session (saved or open)", icon: "chat", group: "Actions", run: () => { sessionPickerOpen = true; } },
+    { id: "compare-models", label: "Compare models", icon: "compare", group: "Actions", run: () => { compareOpen = true; } },
+    { id: "fuse-models", label: "Compare and fuse model answers", icon: "merge", group: "Actions", run: () => { fusionOpen = true; } },
     { id: "theme", label: "Switch light or dark theme", icon: "sun", group: "Actions", run: () => void toggleTheme() },
     { id: "providers", label: "Online providers", icon: "cloud", group: "Actions", run: () => { if (navigate("settings")) requestSettings("online"); } },
     { id: "updates", label: "Check for updates", icon: "download", group: "Actions", run: () => { if (navigate("settings")) requestSettings("about", true); } },
@@ -202,6 +242,21 @@
     c.run();
   };
 
+  /** A chat-search hit opens a real tab via the shared chats helper. */
+  const openChatHit = (hit: SessionHit) => {
+    chatSearchOpen = false;
+    if (!navigate("chat")) return;
+    const saved = chats.threads.find((t) => t.id === hit.thread_id);
+    openChat(saved ?? {
+      id: hit.thread_id,
+      title: hit.title,
+      created_at: 0,
+      updated_at: 0,
+      message_count: 0,
+      folder: null,
+    });
+  };
+
   const paletteKeydown = (e: KeyboardEvent) => {
     const count = filteredCommands.length;
     if (e.key === "ArrowDown" && count) {
@@ -227,8 +282,6 @@
     document.getElementById(`cmd-${cmdIndex}`)?.scrollIntoView({ block: "nearest" });
   });
 
-  const shortcutScreens: NavId[] = ["chat", "search", "memory", "skills", "models", "usage", "automations", "settings"];
-
   const refreshProbe = async () => {
     try {
       const probe = await api.systemProbe();
@@ -244,7 +297,14 @@
     startupError = null;
     try {
       const cfg = await api.loadConfig();
-      screen = cfg.selected_models?.length ? "chat" : "setup";
+      // Setup is done when the wizard finished (or was skipped), when a
+      // local model is chosen, or when an online provider is saved. The
+      // local-models case alone sent online-only users back to setup on
+      // every launch, including after an update.
+      screen =
+        cfg.setup_complete || cfg.selected_models?.length || cfg.has_online_providers
+          ? "chat"
+          : "setup";
     } catch (e: unknown) {
       startupError = errorMessage(e);
     }
@@ -254,6 +314,9 @@
   let autoUpdate = $state<UpdateCheckResponse | null>(null);
   let updateStage = $state<"idle" | "running" | "done" | "failed">("idle");
   let updatePercent = $state(0);
+  // The chip opens this first: the release notes, then Install. Installing
+  // straight from the chip gave no chance to read what changes.
+  let updateModalOpen = $state(false);
   const installFromChip = async () => {
     if (!autoUpdate || updateStage === "running") return;
     if (!autoUpdate.can_install) {
@@ -329,10 +392,10 @@
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         navigate("settings");
-      } else if ((e.metaKey || e.ctrlKey) && /^[1-6]$/.test(e.key)) {
+      } else if ((e.metaKey || e.ctrlKey) && /^[1-7]$/.test(e.key)) {
         e.preventDefault();
-        const targetScreen = shortcutScreens[Number(e.key) - 1];
-        if (targetScreen && navVisible(targetScreen)) navigate(targetScreen);
+        const target = screenForKey(Number(e.key));
+        if (target && navVisible(target.id)) navigate(target.id);
       } else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isInput) {
         e.preventDefault();
         navigate("search");
@@ -373,16 +436,23 @@
 </script>
 
 <main class="h-screen flex flex-col overflow-hidden bg-ink-950 text-ink-100">
-  <TitleBar onMenu={() => (mobileNav = true)} />
+  <TitleBar
+    tabs={chats.tabs}
+    activeKey={chats.activeTabKey}
+    visible={screen === "chat"}
+    onFocus={focusTab}
+    onClose={closeTab}
+    onNew={() => newChat(chats.activeFolder)}
+  />
   <div class="flex flex-1 min-h-0">
   {#if mobileNav}
-    <!-- Starts under the title bar (h-9), so the window buttons stay reachable. -->
-    <div role="presentation" class="fixed inset-x-0 bottom-0 top-9 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
+    <!-- Starts under the chrome bar (h-10), so the window buttons stay reachable. -->
+    <div role="presentation" class="fixed inset-x-0 bottom-0 top-10 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden" in:fade={{ duration: dur(motion.base) }} out:fade={{ duration: dur(motion.fast) }} onclick={() => mobileNav = false}></div>
   {/if}
   <!-- The title bar above already carries the logo and name, so the sidebar
        starts with its actions; on narrow windows it slides in under the
        title bar rather than over it. -->
-  <aside class={`fixed lg:relative top-9 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
+  <aside class={`fixed lg:relative top-10 bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 shrink-0 bg-ink-950 border-r border-edge lg:border-r-0 flex flex-col px-1.5 pb-1.5 pt-2 transition-[transform,width] duration-300 ease-out w-64 ${collapsed ? 'lg:w-[60px]' : 'lg:w-64'} ${mobileNav ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} aria-label="Main navigation">
     <div class="lg:hidden flex h-9 shrink-0 items-center justify-end px-1">
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
@@ -421,13 +491,10 @@
       </button>
     {/snippet}
     <nav class="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pt-1" aria-label="Screens">
-      {@render navItem("chat", "Chat")}
-      {#if navVisible("search")}{@render navItem("search", "Search")}{/if}
-      {#if navVisible("memory")}{@render navItem("memory", "Memory")}{/if}
+      {#each SCREEN_REGISTRY as s (s.id)}
+        {#if s.id !== "settings" && navVisible(s.id)}{@render navItem(s.id, s.label)}{/if}
+      {/each}
       {#if navVisible("skills")}{@render navItem("skills", "Skills")}{/if}
-      {@render navItem("models", "Models")}
-      {@render navItem("usage", "Usage")}
-      {@render navItem("automations", "Automations")}
       {#if showLabels && screen !== "setup"}
         <div class="mt-2 border-t border-ink-800">
           <SidebarChats onOpen={() => navigate("chat")} />
@@ -453,14 +520,6 @@
   <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
     {#if chatMounted && !startupError}
       <div class="min-h-0 flex-1 flex flex-col" class:hidden={screen !== "chat"}>
-        <TabStrip
-          tabs={chats.tabs}
-          activeKey={chats.activeTabKey}
-          visible={screen === "chat"}
-          onFocus={focusTab}
-          onClose={closeTab}
-          onNew={() => newChat(chats.activeFolder)}
-        />
         {#each chats.tabs as tab (tab.key)}
           <div class="min-h-0 flex-1" class:hidden={tab.key !== chats.activeTabKey}>
             <ChatScreen
@@ -469,7 +528,7 @@
               startThread={{ id: tab.id, folder: tab.folder }}
               onThreadStarted={(id) => tabThreadStarted(tab.key, id)}
               onTitleChanged={(title) => tabTitleChanged(tab.key, title)}
-              onBusyChanged={(busy) => tabBusyChanged(tab.key, busy)}
+              onBusyChanged={(busy) => tabBusy(tab.key, busy)}
               onNewChatRequested={() => newChat(tab.folder)}
             />
           </div>
@@ -495,7 +554,7 @@
           <p class="text-sm text-ink-400">Starting LocalAide…</p>
         </div>
       {:else if screen === "setup"}
-        <SetupWizard onFinished={() => { setupBusy = false; navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => navigate("chat")} />
+        <SetupWizard onFinished={() => { setupBusy = false; void api.markSetupComplete().catch((e: unknown) => showToast(`Setup could not be saved as finished: ${errorMessage(e)}`, "error")); navigate("chat"); }} onBusyChange={(busy) => setupBusy = busy} onSkip={() => { void api.markSetupComplete().catch((e: unknown) => showToast(`Setup could not be saved as finished: ${errorMessage(e)}`, "error")); navigate("chat"); }} />
       {:else if screen === "chat"}
         <!-- The chat lives outside this block, so it is not reloaded. -->
       {:else if screen === "search"}
@@ -511,7 +570,7 @@
       {:else if screen === "usage"}
         <UsageScreen />
       {:else if screen === "settings"}
-        <SettingsScreen />
+        <SettingsScreen onSectionChange={() => { if (canvasEl) canvasEl.scrollTop = 0; }} />
       {/if}
         </div>
       {/key}
@@ -532,10 +591,9 @@
     {#if autoUpdate?.update_available}
       <button
         type="button"
-        onclick={() => void installFromChip()}
-        disabled={updateStage === "running"}
+        onclick={() => (updateModalOpen = true)}
         class={`flex items-center gap-2 rounded px-1.5 py-0.5 font-medium transition-colors ${updateStage === "failed" ? "text-rose-300 hover:text-rose-200" : "text-ember-200 hover:text-ember-100"}`}
-        title={autoUpdate.can_install ? "Download and install the new version" : autoUpdate.release_url}
+        title={autoUpdate.can_install ? "See what's new, then install" : autoUpdate.release_url}
       >
         <span class="h-1.5 w-1.5 rounded-full bg-ember-400" aria-hidden="true"></span>
         {#if updateStage === "running"}
@@ -543,18 +601,50 @@
         {:else if updateStage === "done"}
           Installed — restarting
         {:else if updateStage === "failed"}
-          Update failed — try again
-        {:else if autoUpdate.can_install}
-          LocalAide {autoUpdate.latest_version ?? ""} is ready — install
+          Update failed — see what's new
         {:else}
-          Update available — see what's new
+          LocalAide {autoUpdate.latest_version ?? ""} is ready — see what's new
         {/if}
       </button>
     {/if}
     <span class="ml-auto hidden sm:flex items-center gap-2">
       <button type="button" onclick={() => (showHelp = true)} class="flex items-center gap-2 rounded px-1.5 py-0.5 text-ink-500 transition-colors hover:text-ink-200" title="Keyboard shortcuts (?)">Keyboard shortcuts <kbd class="rounded border border-ink-700 bg-veil/5 px-1.5 py-0.5 font-mono text-xs text-ink-400">?</kbd></button>
     </span>
+    {#if activeFlags.length > 0}
+      <span class="debug-chip" title={`Developer effects on: ${activeFlags.join(", ")}`}><Icon name="flask" class="h-3.5 w-3.5" />{activeFlags.length} debug {activeFlags.length === 1 ? "flag" : "flags"}</span>
+    {/if}
   </footer>
+
+  {#if updateModalOpen && autoUpdate?.update_available}
+    {@const update = autoUpdate}
+    <Modal title={`LocalAide ${update.latest_version ?? ""} is ready`} size="lg" onClose={() => (updateModalOpen = false)}>
+      <p class="text-sm leading-6 text-ink-400">You have {update.current_version}. Updates keep your chats, notes, models and preferences.</p>
+      {#if update.notes}
+        <div class="mt-4 max-h-64 overflow-y-auto rounded-md border border-ink-800 bg-ink-950 p-3">
+          <MarkdownDoc source={update.notes} />
+        </div>
+      {:else}
+        <p class="mt-4 text-sm text-ink-400">No release notes were published for this version.</p>
+      {/if}
+      {#if updateStage === "running"}
+        <p class="mt-4 text-sm text-ink-300" aria-live="polite">Updating… {updatePercent}%</p>
+      {:else if updateStage === "done"}
+        <p class="mt-4 text-sm text-emerald-300">Installed — restarting LocalAide…</p>
+      {:else if updateStage === "failed"}
+        <p class="mt-4 text-sm text-rose-300">The update failed. Your current version still works — try again.</p>
+      {/if}
+      {#snippet footer()}
+        <button type="button" onclick={() => (updateModalOpen = false)} class="rounded-lg px-4 py-2 text-sm text-ink-300 hover:bg-veil/5">Later</button>
+        {#if update.can_install}
+          <button type="button" onclick={() => void installFromChip()} disabled={updateStage === "running" || updateStage === "done"} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400 disabled:opacity-50">
+            {updateStage === "running" ? `Updating… ${updatePercent}%` : updateStage === "done" ? "Installed — restarting" : "Install and restart"}
+          </button>
+        {:else}
+          <button type="button" onclick={() => void api.openLink(update.release_url)} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400">Open the download page</button>
+        {/if}
+      {/snippet}
+    </Modal>
+  {/if}
 
   {#if cmdOpen}
     <div role="presentation" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[18vh] px-4 z-50" onclick={closePalette} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); }}>
@@ -604,7 +694,7 @@
   {/if}
 
   {#if engineDownload && engineDownload.state === "downloading"}
-    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:fly={{ y: 8, duration: dur(motion.base), easing: motion.enter }} out:fade={{ duration: dur(motion.fast) }}>
+    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:slideUp={{ y: 8 }} out:fade={{ duration: dur(motion.fast) }}>
       <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ember-300" />Getting the model engine</div>
       <p class="mt-1 text-xs leading-5 text-ink-400">Once only: the llama.cpp build for this processor, from github.com.</p>
       <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${Math.max(3, engineDownload.percent)}%`}></div></div>
@@ -612,8 +702,11 @@
     </div>
   {/if}
 
-  <!-- Always in the page, so screen readers hear each new message. -->
-  <div class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
+  <!-- Always in the page, so screen readers hear each new message.
+       Portaled to the document root: reporting from the shell costs the
+       page no layout (a `position: fixed` node inside a transformed
+       ancestor would be positioned against that ancestor instead). -->
+  <div use:portal class="fixed bottom-10 left-1/2 z-50 -translate-x-1/2" role={toast.tone === "error" ? "alert" : "status"}>
     {#if toast.message}
       <div
         in:fly={{ y: 12, duration: dur(motion.base), easing: motion.enter }}
@@ -636,7 +729,7 @@
         <div class="space-y-2.5 text-sm">
           <div class="flex justify-between items-center"><span class="text-ink-400">Command palette</span><kbd class="kbd">{mod}K</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">New conversation</span><kbd class="kbd">{mod}N</kbd></div>
-          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens (1: Chat, 2: Search, … 7: Settings)</span><kbd class="kbd">{mod}1 – {mod}7</kbd></div>
+          <div class="flex justify-between items-center"><span class="text-ink-400">Switch screens ({SCREEN_REGISTRY.map((s) => `${s.key}: ${s.label}`).join(", ")})</span><kbd class="kbd">{mod}1 – {mod}7</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Settings</span><kbd class="kbd">{mod},</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Show or hide the sidebar</span><kbd class="kbd">{mod}B</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Search this chat (in Chat)</span><kbd class="kbd">{mod}F</kbd></div>
@@ -652,6 +745,18 @@
         </FocusTrap>
       </div>
     </div>
+  {/if}
+  {#if chatSearchOpen}
+    <ChatSearchModal onClose={() => (chatSearchOpen = false)} onOpen={openChatHit} />
+  {/if}
+  {#if sessionPickerOpen}
+    <SessionPicker onClose={() => (sessionPickerOpen = false)} onOpen={openChatHit} />
+  {/if}
+  {#if compareOpen}
+    <MultiRunModal onClose={() => (compareOpen = false)} />
+  {/if}
+  {#if fusionOpen}
+    <MultiRunFusion onClose={() => (fusionOpen = false)} />
   {/if}
   {#if legal.open}
     {@const doc = LEGAL_DOCS[legal.open]}
@@ -688,5 +793,16 @@
     border-radius: 9999px;
     background: var(--color-ember-500);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 25%, transparent);
+  }
+  .debug-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    border-radius: 9999px;
+    padding: 0 9px;
+    font-weight: 600;
+    background: color-mix(in oklab, var(--color-ink-500) 16%, transparent);
+    color: var(--color-ink-300);
   }
 </style>

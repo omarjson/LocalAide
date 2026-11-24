@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { fly, slide } from "svelte/transition";
+  import { slide } from "svelte/transition";
   import Button from "../components/Button.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import ErrorBanner from "../components/ErrorBanner.svelte";
@@ -22,16 +22,27 @@
   import { api, errorMessage } from "../lib/api/client";
   import { formatBytes } from "../lib/format";
   import { openInBrowser } from "../lib/links";
-  import { dur, enterScreen } from "../lib/motion";
+  import { dur } from "../lib/motion";
   import { openLegal } from "../lib/legal.svelte";
   import { settingsRequest, settingsView, type SettingsSectionId } from "../lib/nav.svelte";
   import { dev, flag, moduleOn, resetDev, updateDev } from "../lib/dev.svelte";
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
+  import { buildDiagnosticReport, requestStats } from "../lib/diagnostics";
+  import { platform } from "../lib/platform";
   import type { EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
+  import McpOAuthPanel from "../components/McpOAuthPanel.svelte";
+  import AgentsPanel from "../components/AgentsPanel.svelte";
+  import DoctorPanel from "../components/DoctorPanel.svelte";
   import { applyAccent, applyDensity, applyFont, applyTheme, currentAccent, currentDensity, currentFont, currentTheme, type Accent, type AppFont, type Density } from "../lib/theme";
+  import { SETTINGS_GROUPS, SETTINGS_GROUP_OF, type SettingsGroupId } from "../lib/screens";
+  import GoalPanel from "../components/GoalPanel.svelte";
+  import UsagePanel from "../components/UsagePanel.svelte";
+  import PolicyPanel from "../components/PolicyPanel.svelte";
+  import NotificationsPanel from "../components/NotificationsPanel.svelte";
+  import PluginPanels from "../components/PluginPanels.svelte";
   import type {
     BackupConfigDto,
     BackupEntry,
@@ -46,6 +57,10 @@
   } from "../lib/api/bindings";
 
   type SettingsSection = SettingsSectionId;
+  /** Called when the section changes, so the app can scroll the page
+   *  back to the top: a short section must not inherit a long section's
+   *  scroll position and look empty. */
+  let { onSectionChange }: { onSectionChange?: () => void } = $props();
   type Confirmation = {
     title: string;
     message: string;
@@ -68,6 +83,20 @@
     { id: "about", label: "About", icon: "info" },
   ];
   const sections = $derived(allSections.filter((sec) => (sec.id !== "online" || moduleOn("online")) && (sec.id !== "integrations" || moduleOn("opencode"))));
+
+  // Seven top-level groups in the fixed order from screens.ts. Every existing
+  // section stays reachable: picking a section brings its group forward, and
+  // deep links still open the exact section they ask for.
+  const groupOf = (section: SettingsSection): SettingsGroupId =>
+    SETTINGS_GROUP_OF[section] ?? "general";
+  let activeGroup = $state<SettingsGroupId>(groupOf(settingsView.section as SettingsSection));
+  const groupSections = $derived(sections.filter((sec) => groupOf(sec.id) === activeGroup));
+
+  const selectGroup = (id: SettingsGroupId) => {
+    activeGroup = id;
+    const first = sections.find((sec) => groupOf(sec.id) === id);
+    if (first) selectSection(first.id);
+  };
 
   // Search across sections: type a word ("theme", "voice", "logs") and the
   // section list narrows to what matches. Words a section answers to, beyond
@@ -219,56 +248,6 @@
     { value: "compact", label: "Compact" },
   ];
 
-  // Model prices (Settings → General → Model costs): USD per 1M tokens,
-  // what the Usage screen's cost cards compute from.
-  type PriceRow = { model: string; input: string; output: string; cache: string };
-  let priceRows = $state<PriceRow[]>([]);
-  let priceDirty = $state(false);
-  let priceSaving = $state(false);
-  let priceError = $state<string | null>(null);
-
-  const loadPrices = async () => {
-    try {
-      const prices = await api.modelPrices();
-      priceRows = Object.entries(prices).map(([model, p]) => ({
-        model,
-        input: String(p.input ?? 0),
-        output: String(p.output ?? 0),
-        cache: p.cache_read === null || p.cache_read === undefined ? "" : String(p.cache_read),
-      }));
-      priceDirty = false;
-    } catch (e: unknown) {
-      priceError = errorMessage(e);
-    }
-  };
-
-  const savePrices = async () => {
-    priceSaving = true;
-    priceError = null;
-    try {
-      const prices: Record<string, { input: number; output: number; cache_read: number | null }> = {};
-      for (const row of priceRows) {
-        const model = row.model.trim();
-        if (!model) continue;
-        prices[model] = {
-          input: Math.max(0, Number(row.input) || 0),
-          output: Math.max(0, Number(row.output) || 0),
-          cache_read: row.cache.trim() === "" ? null : Math.max(0, Number(row.cache) || 0),
-        };
-      }
-      await api.setModelPrices(prices);
-      await loadPrices();
-    } catch (e: unknown) {
-      priceError = errorMessage(e);
-    } finally {
-      priceSaving = false;
-    }
-  };
-
-  const addPriceRow = () => {
-    priceRows = [...priceRows, { model: "", input: "0", output: "0", cache: "" }];
-    priceDirty = true;
-  };
   $effect(() => {
     scalePct = Math.round(scale.value * 100);
   });
@@ -313,6 +292,9 @@
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
   let contextInfo = $state<ContextInfo | null>(null);
+  // Shorter system prompt for local models (N11). Off by default.
+  let compactPrompt = $state(false);
+  let compactBusy = $state(false);
   let reloadingModel = $state(false);
   let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let settingsNotice = $state<string | null>(null);
@@ -350,7 +332,12 @@
 
   const selectSection = (section: SettingsSection) => {
     activeTab = section;
+    activeGroup = groupOf(section);
     settingsView.section = section as SettingsSectionId;
+    // A new section starts at the top: the old scroll position belongs
+    // to the old section, and a short one would otherwise open scrolled
+    // past its content, looking blank.
+    onSectionChange?.();
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
     if (section === "about") void loadDiagnostics();
@@ -552,6 +539,19 @@
     }, 500);
   };
 
+  // Shorter system prompt for local models only; online models always
+  // get the full prompt. Off by default.
+  const setCompactPrompt = async (on: boolean) => {
+    compactBusy = true;
+    try {
+      compactPrompt = await api.setCompactPrompt(on);
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      compactBusy = false;
+    }
+  };
+
   // Reads only this computer. GitHub is contacted by checkForUpdates alone.
   const loadDiagnostics = async () => {
     diagBusy = true;
@@ -564,6 +564,31 @@
       logLines = logs;
     } catch (e: unknown) {
       settingsNotice = errorMessage(e);
+    } finally {
+      diagBusy = false;
+    }
+  };
+
+  // Copies a local report: health counters, backend timings and both log
+  // tails. The user reviews it before sharing; nothing is uploaded.
+  const copyDiagnostics = async () => {
+    diagBusy = true;
+    try {
+      const [appLog, engineLog] = await Promise.all([
+        api.getLogTail(120, "app").catch(() => [] as string[]),
+        api.getLogTail(120, "engine").catch(() => [] as string[]),
+      ]);
+      const report = buildDiagnosticReport({
+        health,
+        platform: platform(),
+        entries: requestLog.entries,
+        appLog,
+        engineLog,
+      });
+      await navigator.clipboard.writeText(report);
+      settingsNotice = "Diagnostics copied. Review before sharing.";
+    } catch (e: unknown) {
+      settingsNotice = `Could not copy diagnostics: ${errorMessage(e)}`;
     } finally {
       diagBusy = false;
     }
@@ -746,7 +771,6 @@
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
   onMount(async () => {
-    void loadPrices();
     // Load what the remembered section shows.
     selectSection(activeTab);
     void api.engineInfo().then((info) => (engine = info)).catch(() => undefined);
@@ -762,6 +786,11 @@
       contextTokens = Math.min(contextInfo.value, contextInfo.max);
     } catch (e: unknown) {
       failed.push(`conversation memory (${errorMessage(e)})`);
+    }
+    try {
+      compactPrompt = await api.getCompactPrompt();
+    } catch (e: unknown) {
+      failed.push(`compact prompt (${errorMessage(e)})`);
     }
     try {
       appVersion = await getVersion();
@@ -807,13 +836,29 @@
           class="h-9 w-full rounded-md border border-ink-700 bg-ink-900 pl-9 pr-3 text-sm text-ink-100 outline-none transition-colors placeholder:text-ink-500 focus:border-edge"
         />
       </div>
+      <div class="mb-2 flex flex-wrap gap-1 border-b border-ink-800 pb-2" aria-label="Settings groups">
+        {#each SETTINGS_GROUPS as group (group.id)}
+          <button
+            type="button"
+            aria-pressed={activeGroup === group.id}
+            title={group.label}
+            onclick={() => selectGroup(group.id)}
+            class={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors ${activeGroup === group.id
+              ? "bg-ink-800 font-semibold text-ink-50"
+              : "text-ink-400 hover:bg-veil/5 hover:text-ink-100"}`}
+          >
+            <Icon name={group.icon} class="h-3.5 w-3.5 shrink-0" />
+            <span class="truncate">{group.label}</span>
+          </button>
+        {/each}
+      </div>
       <span class="sr-only">Settings sections</span>
       {#if settingsQuery.trim()}
         <p class="px-3 pb-1 text-xs text-ink-500" role="status">
           {visibleSections.length === 0 ? "No section matches" : `${visibleSections.length} ${visibleSections.length === 1 ? "section matches" : "sections match"}`}
         </p>
       {/if}
-      {#each visibleSections as section (section.id)}
+      {#each (settingsQuery.trim() ? visibleSections : groupSections) as section (section.id)}
         <button
           type="button"
           aria-current={activeTab === section.id ? "page" : undefined}
@@ -829,13 +874,15 @@
       {/each}
     </nav>
 
-    <div class="min-w-0">
+    <div class="min-w-0 @container">
       {#if settingsNotice}
         <div class="mb-4"><ErrorBanner message={settingsNotice} onRetry={() => selectSection(activeTab)} onDismiss={() => settingsNotice = null} /></div>
       {/if}
 
-      {#key activeTab}
-      <div in:fly={enterScreen()}>
+      <!-- No entrance animation here: switching sections used to replay a
+           fly-in every time, which read as the panel flipping to a new
+           screen. The branches below already swap the content. -->
+      <div>
       {#if activeTab === "general"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">General</h2>
@@ -889,66 +936,7 @@
             </SettingsRow>
           </SettingsGroup>
 
-          <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Model costs</h3>
-          <SettingsGroup>
-            <div class="px-4 py-3">
-              <p class="text-sm text-ink-400">What each online model charges, in USD per 1M tokens. The Usage screen turns these into cost figures; local models are free and need no row.</p>
-              {#if priceRows.length > 0}
-                <div class="mt-3 space-y-2">
-                  <div class="grid grid-cols-4 gap-2 text-xs text-ink-500">
-                    <span>Model id</span><span>Input $/1M</span><span>Output $/1M</span><span>Cache read $/1M</span>
-                  </div>
-                  {#each priceRows as row, i (`${row.model}-${i}`)}
-                    <div class="grid grid-cols-4 gap-2">
-                      <input
-                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm text-ink-100 outline-none focus:border-ember-500"
-                        value={row.model}
-                        placeholder="gpt-5-mini"
-                        aria-label="Model id"
-                        oninput={(e) => { priceRows[i].model = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
-                      />
-                      <input
-                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
-                        value={row.input}
-                        inputmode="decimal"
-                        aria-label="Input price per million tokens"
-                        oninput={(e) => { priceRows[i].input = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
-                      />
-                      <input
-                        class="min-w-0 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
-                        value={row.output}
-                        inputmode="decimal"
-                        aria-label="Output price per million tokens"
-                        oninput={(e) => { priceRows[i].output = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
-                      />
-                      <div class="flex items-center gap-1">
-                        <input
-                          class="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-2 py-1.5 text-sm tabular-nums text-ink-100 outline-none focus:border-ember-500"
-                          value={row.cache}
-                          inputmode="decimal"
-                          placeholder="—"
-                          aria-label="Cache read price per million tokens"
-                          oninput={(e) => { priceRows[i].cache = (e.currentTarget as HTMLInputElement).value; priceDirty = true; }}
-                        />
-                        <button type="button" class="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-500 transition-colors hover:bg-veil/5 hover:text-ink-100" aria-label={`Remove prices for ${row.model || "row"}`} onclick={() => { priceRows = priceRows.filter((_, j) => j !== i); priceDirty = true; }}>
-                          <Icon name="close" class="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="mt-3 text-sm text-ink-500">No prices yet. Add one per model you use online.</p>
-              {/if}
-              {#if priceError}<p class="mt-2 text-sm text-ember-300">{priceError}</p>{/if}
-              <div class="mt-3 flex items-center gap-2">
-                <Button variant="secondary" onclick={addPriceRow}><Icon name="plus" class="h-4 w-4" />Add model</Button>
-                {#if priceRows.length > 0}
-                  <Button variant="primary" disabled={!priceDirty || priceSaving} onclick={() => void savePrices()}>{priceSaving ? "Saving…" : "Save prices"}</Button>
-                {/if}
-              </div>
-            </div>
-          </SettingsGroup>
+          <NotificationsPanel />
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Performance</h3>
           <SettingsGroup>
@@ -971,6 +959,11 @@
               {#snippet control()}
                 <Slider min={contextInfo?.min ?? 512} max={contextInfo?.max ?? 131072} step={512} bind:value={contextTokens} oninput={scheduleContextSave} class="w-44" label="Conversation memory" />
                 <span class="min-w-32 text-right text-sm tabular-nums text-ink-200"><span class="block">{tokensLabel(contextTokens)} tokens</span><span class="block text-xs text-ink-400">about {contextWords()} words</span></span>
+              {/snippet}
+            </SettingsRow>
+            <SettingsRow icon="chat" title="Use Compact Prompt" description="Shorter instructions for models on this computer, for faster first tokens. Off keeps the full instructions. Only affects local models." class="border-t border-ink-800">
+              {#snippet control()}
+                <Switch checked={compactPrompt} label="Use Compact Prompt" disabled={compactBusy} onchange={(on) => void setCompactPrompt(on)} />
               {/snippet}
             </SettingsRow>
             {#if contextNeedsReload && contextInfo?.loaded}
@@ -1068,6 +1061,9 @@
         </div>
       {:else if activeTab === "tools"}
         <McpSettings />
+        <McpOAuthPanel />
+        <div class="mt-8"><AgentsPanel /></div>
+        <PolicyPanel />
       {:else if activeTab === "web"}
         <div>
           <h2 class="text-xl font-semibold text-ink-50">Web search</h2>
@@ -1149,6 +1145,7 @@
               {#if moduleOn("online")}<Button variant="secondary" onclick={() => { selectSection("online"); openAddProvider(); }}>Add a provider</Button>{/if}
             </div>
           </div>
+          <PluginPanels />
         </div>
       {:else if activeTab === "developer"}
         {@const ds = dev.settings}
@@ -1221,6 +1218,9 @@
 
             <div class="mt-7 flex justify-end"><Button variant="subtle" disabled={devBusy} onclick={() => { void resetDev().catch((e: unknown) => devNotice = errorMessage(e)); }}>Reset everything here</Button></div>
           {/if}
+
+          <GoalPanel />
+          <UsagePanel />
         </div>
       {:else if activeTab === "privacy"}
         <div>
@@ -1300,6 +1300,7 @@
           <h2 class="text-xl font-semibold text-ink-50">About</h2>
           <p class="mt-1 text-sm text-ink-400">LocalAide keeps chat, models and files on this computer by default.</p>
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><div><h3 class="font-semibold text-ink-50">LocalAide</h3><p class="mt-1 text-sm text-ink-400">Version {appVersion || "unknown"}</p></div><StatusBadge label="Local by default" tone="ok" dot /></div></div>
+          <div class="mt-6"><DoctorPanel /></div>
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Updates</h3>
           <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1313,7 +1314,7 @@
               </Button>
             </div>
             {#if updateInfo?.update_available}
-              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4" in:slide={{ duration: dur(180) }}>
+              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div class="font-semibold text-ink-50">Version {updateInfo.latest_version} is ready</div>
@@ -1397,11 +1398,29 @@
               <SettingsRow icon="check" title="Settings" description={health.config_ok ? "Saved correctly" : "Could not read settings"} class="border-t border-ink-800" />
             </SettingsGroup>
           {/if}
+          {#if health && health.performance}
+            {@const perf = requestStats(requestLog.entries)}
+            <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="font-semibold text-ink-50">Performance</h3>
+                <Button variant="subtle" disabled={diagBusy} onclick={() => void copyDiagnostics()}>Copy diagnostics</Button>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div><span class="block text-ink-500">Uptime</span><span class="font-medium text-ink-100">{health.performance.uptime_secs}s</span></div>
+                <div><span class="block text-ink-500">App memory</span><span class="font-medium text-ink-100">{formatBytes(health.performance.rss_bytes)}</span></div>
+                <div><span class="block text-ink-500">Calls · p95</span><span class="font-medium text-ink-100">{perf.count} · {perf.p95Ms.toFixed(0)} ms</span></div>
+                <div><span class="block text-ink-500">Logs on disk</span><span class="font-medium text-ink-100">{formatBytes(health.performance.logs_bytes)}</span></div>
+              </div>
+              {#if perf.slowest}
+                <p class="mt-3 text-xs text-ink-400">Slowest call: <code class="text-ink-200">{perf.slowest.command}</code> · {perf.slowest.ms.toFixed(0)} ms</p>
+              {/if}
+              <p class="mt-2 text-xs text-ink-500">Measured on this machine. Copy produces a report you can review before sharing; nothing is uploaded.</p>
+            </div>
+          {/if}
           <div class="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4"><div class="flex items-center justify-between gap-3"><h3 class="font-semibold text-ink-50">Local log</h3><div class="flex items-center gap-2"><Tabs items={logTabs} value={logSource} onChange={(value) => { if (value === "app" || value === "engine") { logSource = value; void loadDiagnostics(); } }} ariaLabel="Which log" /><Button variant="subtle" disabled={diagBusy} onclick={() => void loadDiagnostics()}>Refresh</Button></div></div>{#if logLines.length === 0}<p class="mt-3 text-sm text-ink-400">No log output yet.</p>{:else}<pre class="mt-3 max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950 p-3 text-sm leading-6 text-ink-300 whitespace-pre-wrap">{logLines.join("\n")}</pre>{/if}</div>
         </div>
       {/if}
       </div>
-      {/key}
     </div>
   </div>
 </div>

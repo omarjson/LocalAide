@@ -14,6 +14,10 @@ export interface SystemProbeResult {
   total_ram_gb: number;
   available_ram_gb: number;
   gpu_vendor: string | null;
+  /** CPU brand as the OS reports it; null when it gives nothing usable. */
+  cpu_brand: string | null;
+  /** Physical cores, when the OS reports them. */
+  cpu_cores: number | null;
   recommended_preset: string;
   budget_gb: number;
 }
@@ -118,6 +122,8 @@ export interface ChatMessage {
   model?: string;
   /** The answer failed; it is not sent back as history. */
   error?: boolean;
+  /** A steering note sent to a running answer. Shown in the transcript, never sent back as history. */
+  steer?: boolean;
 }
 
 export type ToolStatus = "running" | "waiting" | "done" | "failed" | "denied";
@@ -139,6 +145,8 @@ export type MessagePart =
       output: string;
       /** Subagents: what it did, newest last. */
       steps?: string[];
+      /** Subagents: tokens the run used (prompt + answer), once known. */
+      tokens?: number | null;
       /** save_skill: the change Undo reverts, and whether it was undone. */
       skill?: { change_id: string; name: string; action: string; undone?: boolean } | null;
     }
@@ -166,6 +174,8 @@ export type MessagePart =
 export interface QuestionOption {
   label: string;
   description: string;
+  /** The model's pick when the user is unsure: shown first, marked Recommended. */
+  recommended?: boolean;
 }
 
 export interface QuestionItem {
@@ -233,6 +243,8 @@ export interface ModelChoices {
   local_loaded: boolean;
   /** Online providers are switched on in Settings. Off: none are listed. */
   online_allowed: boolean;
+  /** Set after a model switch recalculated the prompt budget. */
+  budget_note: string | null;
 }
 
 /** Settings → Tools and MCP. */
@@ -247,6 +259,18 @@ export interface KeyValueInput {
   value?: string;
 }
 
+/** Public OAuth 2.1 / PKCE client metadata. A token is never part of this. */
+export interface McpOAuthConfig {
+  /** The MCP server id this sign-in belongs to. */
+  server_id: string;
+  client_id: string;
+  authorize_url: string;
+  token_url: string;
+  redirect_uri: string;
+  scopes: string[];
+  audience: string | null;
+}
+
 export interface McpServer {
   id: string;
   name: string;
@@ -259,6 +283,8 @@ export interface McpServer {
   url: string;
   env: KeyValueHint[];
   headers: KeyValueHint[];
+  /** Public client metadata, or null when this server has no sign-in. */
+  oauth: McpOAuthConfig | null;
   connected: boolean;
 }
 
@@ -274,6 +300,30 @@ export interface McpServerSaveRequest {
   url: string;
   env: KeyValueInput[];
   headers: KeyValueInput[];
+  /** Omit or send null to keep the stored settings on an edit. */
+  oauth?: McpOAuthConfig | null;
+}
+
+/** Returned by mcp_oauth_start. The verifier stays on the backend. */
+export interface McpOAuthStartDto {
+  authorize_url: string;
+  state: string;
+  redirect_uri: string;
+}
+
+export interface McpOAuthFinishRequest {
+  server_id: string;
+  state: string;
+  code: string;
+}
+
+/** Safe status from mcp_oauth_finish: no token, verifier or code. */
+export interface McpOAuthStatusDto {
+  server_id: string;
+  signed_in: boolean;
+  message: string;
+  token_type: string;
+  expires_in: number | null;
 }
 
 export interface McpTool {
@@ -393,6 +443,8 @@ export interface ChatStreamRequest {
   use_subagents?: boolean;
   /** Tell the model it can draw charts, diagrams and mockups (default true). */
   rich_output?: boolean;
+  /** Continue a stopped answer; `message` is ignored and the model picks up the last assistant turn. */
+  resume?: boolean;
 }
 
 export type ChatModeId = "standard" | "strict" | "unrestricted" | "autonomous";
@@ -438,7 +490,7 @@ export type ChatStreamEvent =
   | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } }
   | { type: "question"; payload: { id: string; question: string; options: string[]; multiple: boolean; items?: QuestionItem[] } }
   | { type: "todos"; payload: { items: TodoItem[] } }
-  | { type: "subagent_step"; payload: { id: string; step: string } }
+  | { type: "subagent_step"; payload: { id: string; step: string; tokens?: number | null } }
   | { type: "skill_change"; payload: { id: string; change_id: string; name: string; action: string } };
 
 /** How much the chat asks before tools run: Plan mode, Ask before changes,
@@ -666,6 +718,8 @@ export interface ToolAuditEntry {
 /** What the app shell reads at startup. Empty `selected_models` means first run. */
 export interface AppConfigDto {
   selected_models: string[];
+  setup_complete: boolean;
+  has_online_providers: boolean;
 }
 
 export interface DownloadProgressEvent {
@@ -950,6 +1004,13 @@ export interface SystemHealthResponse {
   library: {
     doc_count: number;
   };
+  /** Cheap process counters for the About → Performance panel. */
+  performance: {
+    uptime_secs: number;
+    rss_bytes: number;
+    logs_bytes: number;
+    library_db_bytes: number;
+  };
   config_ok: boolean;
 }
 
@@ -1204,4 +1265,178 @@ export interface ShareStarted {
   remote_link: string;
   pair_code: string;
   qr_svg: string;
+  /** One-time link with the server password in the query string. */
+  pairing_url: string;
+  /** The same password, shown once for manual entry. */
+  pairing_token: string;
+}
+
+// Local session search, reindexing and multi-run (commands/session.rs).
+/** One hit from the local chat-thread index. */
+export interface SessionHit {
+  thread_id: string;
+  title: string;
+  /** Match-centred excerpt with `[` and `]` around the term. */
+  snippet: string;
+  /** Path of the JSON file the hit came from. */
+  path: string;
+}
+
+/** One OpenAI-compatible endpoint to query in a side-by-side run. */
+export interface RunTarget {
+  label: string;
+  endpoint: string;
+  model: string;
+  api_key?: string | null;
+  max_tokens?: number | null;
+}
+
+/** Answer (or per-target error) from one target of a multi-run. */
+export interface RunAnswer {
+  label: string;
+  text: string;
+  error?: string | null;
+}
+
+// The read-only setup doctor (services/doctor.rs).
+export interface DoctorCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface DoctorFixReport {
+  fixed: string[];
+  remaining: string[];
+}
+
+export interface DoctorReport {
+  /** All required checks passed; the best-effort keychain probe is excluded. */
+  ok: boolean;
+  checks: DoctorCheck[];
+}
+
+// Saved agent personas (services/agents.rs, commands/policy.rs).
+export interface Agent {
+  name: string;
+  model: string;
+  tools: string[];
+  prompt: string;
+  /** Absolute path of the backing markdown file. */
+  path: string;
+}
+
+// Workspace instruction files and @path references (commands/context.rs).
+export interface ContextFileHit {
+  path: string;
+  bytes: number;
+}
+
+export interface ContextFilesResult {
+  text: string;
+  files: ContextFileHit[];
+  truncated: boolean;
+}
+
+export interface RefResult {
+  path: string;
+  text: string;
+  start_line: number;
+  end_line: number;
+  total_lines: number;
+  truncated: boolean;
+}
+
+// Policy / configuration (commands/policy.rs, config.rs).
+export type PermissionDecision = "allow" | "ask" | "deny";
+
+export interface PermissionRule {
+  action: string;
+  resource: string;
+  decision: PermissionDecision;
+}
+
+export interface HooksConfig {
+  pre_tool?: string | null;
+  post_tool?: string | null;
+  timeout_secs: number;
+}
+
+export interface RoutingConfig {
+  provider_priority: string[];
+  key_pools: Record<string, string[]>;
+}
+
+export interface PolicySettings {
+  permissions: PermissionRule[];
+  hooks: HooksConfig;
+  routing: RoutingConfig;
+  provider_order: string[];
+  /** Per-capability auto-approve. Defaults to read-only. */
+  auto_approve_capabilities: CapabilityAutoApprove;
+}
+
+/** Which capabilities run without asking. All off except reads by default. */
+export interface CapabilityAutoApprove {
+  read_files: boolean;
+  edit_files: boolean;
+  safe_commands: boolean;
+  all_commands: boolean;
+  browser: boolean;
+  external_tools: boolean;
+}
+
+/** Null/absent fields are left untouched by a partial policy update. */
+export interface PolicyUpdate {
+  permissions?: PermissionRule[] | null;
+  hooks?: HooksConfig | null;
+  routing?: RoutingConfig | null;
+  auto_approve_capabilities?: CapabilityAutoApprove | null;
+}
+
+/** A tracked goal (commands/goal.rs, services/goal.rs). */
+export interface Goal {
+  id: string;
+  thread_id: string;
+  objective: string;
+  /** Steps still available; a step decrements it by one. */
+  budget: number;
+  /** "active" | "paused" | "blocked" | "completed" | "abandoned". */
+  status: string;
+  /** Unix timestamp, seconds since the epoch (UTC). */
+  created_at: number;
+}
+
+/** One recorded model call (commands/usage_ledger.rs). */
+export interface UsageLedgerEntry {
+  id: number;
+  provider: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  /** Flat estimate from the caller's USD-per-1M-tokens rate. */
+  estimated_cost_usd: number;
+  /** Unix timestamp, seconds since the epoch (UTC). */
+  at: number;
+  thread_id: string;
+}
+
+/** Arguments recorded by the caller for one model call (camelCase at IPC). */
+export interface UsageRecordRequest {
+  provider: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  threadId: string;
+  ratePerMillionUsd?: number | null;
+}
+
+/** One local HTML panel reported by the upcoming `plugin_list` command.
+ * `label` and `name` are both accepted while the command's shape settles. */
+export interface PluginDescriptor {
+  id: string;
+  label?: string;
+  name?: string;
+  /** Absolute path to a local HTML file. */
+  path: string;
 }

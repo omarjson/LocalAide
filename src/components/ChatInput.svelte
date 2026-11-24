@@ -6,6 +6,7 @@
   import { dur, motion } from "../lib/motion";
   import { flag } from "../lib/dev.svelte";
   import { slashItems, type SlashItem } from "../lib/slash";
+  import { MAX_COMPOSER_FOLD, nextFoldLevel } from "../lib/composerFit";
   import VoiceButton from "./VoiceButton.svelte";
   import { voice } from "../lib/voice.svelte";
   import type { ChatAttachment, Skill } from "../lib/api/bindings";
@@ -27,6 +28,9 @@
     onReadFile: () => void;
     onWriteFile?: () => void;
     onCancel?: () => void;
+    /** A stopped answer is waiting: offer to continue it where it left off. */
+    canResume?: boolean;
+    onResume?: () => void;
     /** While an answer runs: keep this message and send it when the answer ends. */
     onQueue?: () => void;
     /** While an answer runs: hand this note to the answer before its next step. */
@@ -69,6 +73,12 @@
     enhancing?: boolean;
     /** A suggested next message: shown in the empty box, Tab takes it. */
     suggestions?: string[];
+    /** Memory in use, for the chip under the composer (N6). Hidden when absent. */
+    memory?: { usedGb: number; totalGb: number; loaded: boolean; modelName?: string | null } | null;
+    /** Load the chosen local model into memory. */
+    onLoadModel?: () => void;
+    /** Unload the model from memory. */
+    onUnloadModel?: () => void;
   }
 
   let {
@@ -81,6 +91,8 @@
     onReadFile,
     onWriteFile,
     onCancel,
+    canResume = false,
+    onResume,
     onQueue,
     onSteer,
     pendingImages = [],
@@ -116,6 +128,9 @@
     onEnhance,
     enhancing = false,
     suggestions = [],
+    memory = null,
+    onLoadModel,
+    onUnloadModel,
   }: Props = $props();
 
   const firstSuggestion = $derived(suggestions[0] ?? null);
@@ -127,7 +142,56 @@
   let toolsMenuOpen = $state(false);
   // Experimental: Ctrl+Enter (Cmd+Enter on a Mac) sends, Enter adds a line.
   const ctrlEnterSends = $derived(flag("send_ctrl_enter"));
-  onMount(() => textareaEl?.focus());
+  // Bar-fit: how many pills are folded to glyphs (0–3: Tools, model,
+  // effort). A ResizeObserver re-measures the row; the loop unfolds
+  // first, one step at a time, then folds while the row wraps, so pills
+  // unfold last-folded-first as room returns. Send is shrink-0 and last,
+  // so it is never covered — at worst it wraps to its own line.
+  let rowEl = $state<HTMLDivElement>();
+  let fold = $state(0);
+  let fitting = false;
+  // True when a pill has wrapped onto a second line. Absolutely
+  // positioned children (the sr-only file input, open menus) are not
+  // pills and neither is the empty spacer.
+  const rowWrapped = (row: HTMLElement): boolean => {
+    const items = [...row.children].filter((el) => {
+      const e = el as HTMLElement;
+      return e.offsetHeight > 0 && getComputedStyle(e).position !== "absolute";
+    }) as HTMLElement[];
+    if (items.length < 2) return false;
+    const first = items[0].offsetTop;
+    return items.some((el) => el.offsetTop > first);
+  };
+  const fitRow = async () => {
+    const row = rowEl;
+    if (fitting || !row) return;
+    fitting = true;
+    try {
+      while (fold > 0) {
+        fold -= 1;
+        await tick();
+        if (rowWrapped(row)) {
+          fold += 1;
+          await tick();
+          break;
+        }
+      }
+      while (fold < MAX_COMPOSER_FOLD && rowWrapped(row)) {
+        fold = nextFoldLevel(true, fold);
+        await tick();
+      }
+    } finally {
+      fitting = false;
+    }
+  };
+  onMount(() => {
+    textareaEl?.focus();
+    if (!rowEl) return;
+    const observer = new ResizeObserver(() => void fitRow());
+    observer.observe(rowEl);
+    void fitRow();
+    return () => observer.disconnect();
+  });
 
 
   // The box stays focusable while an answer streams (read-only, not disabled),
@@ -291,7 +355,7 @@
     </div>
   {/if}
 
-  <div class="composer field-shell rounded-[18px] border border-ink-700 bg-ink-800/75 shadow-[var(--shadow-elev)]">
+  <div class="composer field-shell rounded-[18px] border border-ink-700 bg-ink-800/75 shadow-[var(--shadow-elev)]" data-fold={fold}>
     {#if showTools}
       <div class="space-y-2 border-b border-ink-800 p-3" in:fly={{ y: -4, duration: dur(motion.base) }}>
         <div class="flex items-center justify-between text-xs text-ink-400">
@@ -369,7 +433,7 @@
       class="field-bare block max-h-60 w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 text-ink-50 placeholder:text-ink-500"
     ></textarea>
 
-    <div class="flex flex-wrap items-center gap-1 px-2 pb-2 pt-1">
+    <div bind:this={rowEl} class="flex flex-wrap items-center gap-1 px-2 pb-2 pt-1">
       <input
         bind:this={fileInputEl}
         type="file"
@@ -417,7 +481,7 @@
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
-          <Icon name="wrench" class="h-3.5 w-3.5" /><span class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
+          <Icon name="wrench" class="h-3.5 w-3.5" /><span data-fold-label="tools" class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
         </button>
         {#if toolsMenuOpen}
           <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
@@ -467,10 +531,10 @@
 
       {#if streaming && input.trim() && (onQueue || onSteer)}
         {#if onSteer}
-          <button type="button" onclick={onSteer} class="composer-chip ml-1" title="Give this note to the answer before its next step (Alt+Enter)"><Icon name="wand" class="h-3.5 w-3.5" />Steer</button>
+          <button type="button" onclick={() => onSteer?.()} class="composer-chip ml-1" title="Give this note to the answer before its next step (Alt+Enter)"><Icon name="wand" class="h-3.5 w-3.5" />Steer</button>
         {/if}
         {#if onQueue}
-          <button type="button" onclick={onQueue} class="composer-chip ml-1" title="Send this when the answer ends (Enter)"><Icon name="plus" class="h-3.5 w-3.5" />Queue</button>
+          <button type="button" onclick={() => onQueue?.()} class="composer-chip ml-1" title="Send this when the answer ends (Enter)"><Icon name="plus" class="h-3.5 w-3.5" />Queue</button>
         {/if}
       {/if}
       {#if streaming}
@@ -482,9 +546,22 @@
           class="stop-btn ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950"
         ><Icon name="stop" class="h-5 w-5" /></button>
       {:else}
+        <!-- Never pass the handler bare: a click's MouseEvent would land in
+             `send`'s first parameter (`resend`) and resend the last message
+             instead of the text just typed. Enter calls `onSend()` with no
+             argument, which is why only the button mis-sent. -->
+        {#if canResume && onResume}
+          <button
+            type="button"
+            onclick={() => onResume?.()}
+            aria-label="Resume the stopped answer"
+            title="Resume — continue from where it stopped"
+            class="ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ember-500 text-on-ember transition-[transform,background-color] duration-150 hover:scale-105 hover:bg-ember-400 active:scale-95"
+          ><Icon name="play" class="h-5 w-5" /></button>
+        {/if}
         <button
           type="button"
-          onclick={onSend}
+          onclick={() => onSend()}
           disabled={!canSend}
           aria-label="Send"
           title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}
@@ -492,6 +569,20 @@
         ><Icon name="arrow-up" class="h-5 w-5" /></button>
       {/if}
     </div>
+
+    {#if memory}
+      <!-- Memory in use, with Load / Unload for the local model. Hidden
+           when the probe failed, so a missing reading never breaks chat. -->
+      <div class="mt-1.5 flex items-center gap-2 px-1 text-xs text-ink-500">
+        <span>Memory <b class="font-semibold tabular-nums text-ink-300">{memory.usedGb.toFixed(1)} / {memory.totalGb.toFixed(1)} GB</b></span>
+        {#if memory.modelName}<span class="min-w-0 truncate">{memory.modelName}</span>{/if}
+        {#if memory.loaded}
+          <button type="button" onclick={() => onUnloadModel?.()} class="shrink-0 rounded-md border border-ink-700 px-2 py-0.5 text-ink-300 transition-colors hover:bg-veil/5 hover:text-ink-50">Unload</button>
+        {:else if onLoadModel}
+          <button type="button" onclick={() => onLoadModel?.()} class="shrink-0 rounded-md border border-ink-700 px-2 py-0.5 text-ink-300 transition-colors hover:bg-veil/5 hover:text-ink-50">Load</button>
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -545,29 +636,17 @@
     padding: 0.375rem;
     box-shadow: var(--shadow-elev);
   }
-  /* The stop button announces itself: a soft ring breathes out while the
-     answer runs, so "make it stop" is always the obvious click. */
+  /* The stop button is a plain solid circle now: no pulse. The pulse was
+     one more always-on animation, and the button is obvious enough without
+     it. */
   .stop-btn {
     transition: transform 150ms ease-out;
-    animation: stop-breathe 1.8s ease-out infinite;
   }
   .stop-btn:hover {
     transform: scale(1.06);
   }
   .stop-btn:active {
     transform: scale(0.94);
-    animation: none;
-  }
-  @keyframes stop-breathe {
-    0% {
-      box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-ink-100) 45%, transparent);
-    }
-    70% {
-      box-shadow: 0 0 0 9px transparent;
-    }
-    100% {
-      box-shadow: 0 0 0 0 transparent;
-    }
   }
   .menu-row {
     display: flex;

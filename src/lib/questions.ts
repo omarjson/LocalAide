@@ -70,3 +70,14 @@ export function parseQuestion(text: string): ParsedQuestion | null {
   }
   return null;
 }
+
+/**
+ * Recommended options first, everything else in the model's order (the
+ * sort is stable). One helper for every question UI — QuestionCard,
+ * QuestionDock and A2UI forms — so "recommended first" means the same
+ * thing everywhere. Nothing is marked recommended unless the model said
+ * so; a parsed question has no recommendation to show.
+ */
+export function orderOptionsRecommended<T extends { recommended?: boolean }>(options: T[]): T[] {
+  return [...options].sort((a, b) => Number(b.recommended ?? false) - Number(a.recommended ?? false));
+}

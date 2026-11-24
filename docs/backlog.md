@@ -64,9 +64,9 @@ This backlog tracked the path to the current release. Each task is defined with 
 ## Phase 6: Document Library & Retrieval
 - [x] **6.1 SQLite Database Schema & Migrations** — documents, chunks, notes, tool audit, and the FTS5 table with forward-only migrations in `library/db.rs`.
 - [x] **6.2 Natural-Boundary Chunking** — paragraph/sentence chunking at 1500 characters with 250-character overlap in `library/ingest.rs`, covered by `library_test.rs`. *Real embeddings were part of this item originally; they remain unbuilt and are a declared non-goal for this release (see `scope.md`).*
-- [ ] **6.3 Debounced Index Watcher**
+- [x] **6.3 Debounced Index Watcher**
   - **Done When**: File modifications in indexed roots debounce cleanly without locking the database.
-  - **Status**: `library/watch.rs` ships (recursive watch, 500 ms debounce, ignore list) but has no automated test yet.
+  - **Status**: `library/watch.rs` ships (recursive watch, 500 ms debounce, ignore list). `src-tauri/tests/library_watch_test.rs` now proves five rapid writes collapse to one update, unsupported extensions are skipped and removals are forwarded, using a recorder updater so no SQLite lock is involved.
 
 ---
 
@@ -89,7 +89,7 @@ This backlog tracked the path to the current release. Each task is defined with 
 ## Phase 9: Accessible, Refined UI
 - [ ] **9.1 WCAG 2.2 AA Conformance**
   - **Done When**: Zero serious or critical issues; focus visible; contrast compliant.
-  - **Status**: Keyboard and semantics pass ([docs/evidence/a11y.md](evidence/a11y.md)); the open finding is border contrast below the 3:1 non-text threshold, and the design pass has not been re-measured on screen.
+  - **Status**: Keyboard and semantics pass ([docs/evidence/a11y.md](evidence/a11y.md)). A CI test now recomputes text and border contrast from the shipped CSS tokens for both themes; all roles clear 4.5:1 / 3:1 at token level. The design pass has still not been re-measured on a real screen.
 - [x] **9.2 Keyboard Navigation & Shortcuts** — full keyboard matrix in `App.svelte`; shortcuts ignore active form inputs; documented in [docs/evidence/a11y.md](evidence/a11y.md).
 
 ---

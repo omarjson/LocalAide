@@ -49,8 +49,8 @@ pub const FLAGS: &[Toggle] = &[
     },
     Toggle {
         id: "request_log",
-        label: "Request log",
-        description: "Record every call between the window and the app core, with timings, in this section.",
+        label: "Request log panel",
+        description: "Show backend timings here. Calls are measured in memory even when this is off.",
         default: false,
     },
     Toggle {
@@ -75,6 +75,54 @@ pub const FLAGS: &[Toggle] = &[
         id: "wide_chat",
         label: "Wide chat column",
         description: "Let messages and the chat box use the full width of the window.",
+        default: false,
+    },
+    Toggle {
+        id: "perf_overlay",
+        label: "Performance overlay",
+        description: "Show a small on-screen readout of frame time and memory use while the app runs.",
+        default: false,
+    },
+    Toggle {
+        id: "trace_ipc_sizes",
+        label: "Trace IPC payload sizes",
+        description: "Log the byte size of each window-to-backend message, to find oversized chat payloads.",
+        default: false,
+    },
+    Toggle {
+        id: "vector_search_debug",
+        label: "Vector search debug",
+        description: "Show embedding scores and which document chunks were retrieved during library search.",
+        default: false,
+    },
+    Toggle {
+        id: "mock_slow_backend",
+        label: "Simulate a slow backend",
+        description: "Add artificial delay to inference and search replies, to exercise loading and cancel states.",
+        default: false,
+    },
+    Toggle {
+        id: "show_keychain_state",
+        label: "Show keychain state",
+        description: "Display whether each provider key lives in the OS keychain or in the config file.",
+        default: false,
+    },
+    Toggle {
+        id: "log_redaction_preview",
+        label: "Log redaction preview",
+        description: "Preview which secrets would be redacted from the diagnostic log before you share it.",
+        default: false,
+    },
+    Toggle {
+        id: "agent_debug",
+        label: "Agent debug view",
+        description: "Show raw tool calls, permission decisions and hook output in the chat inspector.",
+        default: false,
+    },
+    Toggle {
+        id: "tab_debug",
+        label: "Tab debug view",
+        description: "List open mockup panels and their state, to debug embedded views.",
         default: false,
     },
 ];
@@ -135,6 +183,42 @@ pub const MODULES: &[Toggle] = &[
         id: "command_palette",
         label: "Command palette",
         description: "Ctrl/⌘+K to jump between screens and run commands.",
+        default: true,
+    },
+    Toggle {
+        id: "session_search",
+        label: "Session search",
+        description: "Search across past conversations from the chat history and command palette.",
+        default: true,
+    },
+    Toggle {
+        id: "multi_run",
+        label: "Multi-run comparison",
+        description: "Send one prompt to several models or providers and compare the answers side by side.",
+        default: true,
+    },
+    Toggle {
+        id: "agent_files",
+        label: "Agent files",
+        description: "Load agent personas from ~/.aiassistant/agents and use them in chat.",
+        default: true,
+    },
+    Toggle {
+        id: "goal_mode",
+        label: "Goal mode",
+        description: "Let the assistant work towards a goal over several steps, with checkpoints you can review.",
+        default: true,
+    },
+    Toggle {
+        id: "remote_ui",
+        label: "Remote UI panels",
+        description: "Render the interactive mockup panels the assistant can draw in chat.",
+        default: true,
+    },
+    Toggle {
+        id: "plugin_panels",
+        label: "Plugin panels",
+        description: "Show panels contributed by installed plugins in the sidebar.",
         default: true,
     },
 ];
@@ -285,5 +369,45 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), n);
+    }
+
+    #[test]
+    fn policy_stream_toggles_are_registered_with_labels() {
+        for id in [
+            "perf_overlay",
+            "trace_ipc_sizes",
+            "vector_search_debug",
+            "mock_slow_backend",
+            "show_keychain_state",
+            "log_redaction_preview",
+            "agent_debug",
+            "tab_debug",
+        ] {
+            let toggle = FLAGS.iter().find(|t| t.id == id).unwrap_or_else(|| {
+                panic!("missing flag {id}");
+            });
+            assert!(!toggle.label.is_empty(), "flag {id} needs a label");
+            assert!(
+                !toggle.description.is_empty(),
+                "flag {id} needs a description"
+            );
+        }
+        for id in [
+            "session_search",
+            "multi_run",
+            "agent_files",
+            "goal_mode",
+            "remote_ui",
+            "plugin_panels",
+        ] {
+            let toggle = MODULES.iter().find(|t| t.id == id).unwrap_or_else(|| {
+                panic!("missing module {id}");
+            });
+            assert!(!toggle.label.is_empty(), "module {id} needs a label");
+            assert!(
+                !toggle.description.is_empty(),
+                "module {id} needs a description"
+            );
+        }
     }
 }

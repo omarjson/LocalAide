@@ -44,8 +44,12 @@
 </svg>
 
 <style>
+  /* One gentle pulse when the logo mounts, then still. An infinite
+     animation on an SVG child runs on WebKit's main thread (SVG has no
+     compositor layer), so it kept the whole page re-laying-out and
+     re-painting every frame — the 95 C idle heat on Omar's Intel Mac. */
   .logo-glow {
-    animation: logo-pulse 2.6s ease-in-out infinite;
+    animation: logo-pulse 2.6s ease-in-out 1;
     transform-origin: 300px 236px;
   }
   @keyframes logo-pulse {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModelChoice, ModelChoices, Skill } from "../../src/lib/api/bindings.ts";
 import { formatGb } from "../../src/lib/format.ts";
-import { NO_FILTERS, matchesModel, parseFilters, pickerSections } from "../../src/lib/modelPicker.ts";
+import { NO_FILTERS, matchesModel, parseFilters, pickerSections, providerList } from "../../src/lib/modelPicker.ts";
 import { MAX_SKILL_ITEMS, SLASH_COMMANDS, slashItems, slashQuery } from "../../src/lib/slash.ts";
 import { speakableText } from "../../src/lib/speech.ts";
 
@@ -64,6 +64,16 @@ test("model menu: with online models switched off, only this computer is listed"
   const local = model({ key: "l1" });
   const sections = pickerSections(choices([local], false), "", NO_FILTERS);
   assert.deepEqual(sections.map((s) => s.id), ["local"]);
+});
+
+test("model menu: the same provider saved twice appears once", () => {
+  const kilo = model({ key: "k1", provider_id: "kilo", provider_label: "Kilo Code (free, no key)", local: false, free: true, name: "Kilo auto" });
+  const dup = choices([kilo]);
+  dup.groups = [
+    { provider_id: "kilo", label: "Kilo Code (free, no key)", enabled: true, local_router: false, needs_refresh: false },
+    { provider_id: "kilo", label: "Kilo Code (free, no key)", enabled: true, local_router: false, needs_refresh: false },
+  ];
+  assert.deepEqual(providerList(dup).map((p) => p.key), ["local", "kilo"]);
 });
 
 test("model menu: saved filters survive bad storage", () => {

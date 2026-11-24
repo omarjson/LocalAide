@@ -2,7 +2,6 @@
 // and after every change in Settings → Developer.
 import { api } from "./api/client";
 import type { ChatModeInfo, DeveloperSettings, DeveloperUpdate } from "./api/bindings";
-import { requestLog } from "./requestLog.svelte";
 
 export const dev = $state<{ settings: DeveloperSettings | null }>({ settings: null });
 
@@ -21,11 +20,44 @@ export function chatModes(): ChatModeInfo[] {
   return dev.settings?.modes ?? [];
 }
 
+/** Flags whose job is to change the running UI. Each also becomes a
+ * `data-<id>` attribute on <html>, so CSS and playwright can see it. */
+export const EFFECT_FLAGS = [
+  "perf_overlay",
+  "trace_ipc_sizes",
+  "vector_search_debug",
+  "mock_slow_backend",
+  "show_keychain_state",
+  "log_redaction_preview",
+  "agent_debug",
+  "tab_debug",
+  "session_search",
+  "multi_run",
+  "agent_files",
+  "goal_mode",
+  "remote_ui",
+  "plugin_panels",
+] as const;
+
+export type EffectFlag = (typeof EFFECT_FLAGS)[number];
+
+/** The effect flags currently on, for the Settings summary and status chips. */
+export function activeEffectFlags(): EffectFlag[] {
+  return EFFECT_FLAGS.filter((id) => flag(id));
+}
+
 function apply(settings: DeveloperSettings): void {
   dev.settings = settings;
-  requestLog.enabled = flag("request_log");
   const root = document.documentElement;
   root.dataset.motion = flag("no_motion") ? "off" : "on";
+  // Each debug flag is reflected on <html>. CSS uses [data-tab_debug="on"]
+  // and friends; removing the attribute when off keeps the DOM honest.
+  for (const id of EFFECT_FLAGS) {
+    if (id !== "perf_overlay") {
+      if (flag(id)) root.dataset[id] = "on";
+      else delete root.dataset[id];
+    }
+  }
   // The developer flag forces compact; otherwise the Appearance → Density
   // setting decides, so re-apply what it saved.
   if (flag("compact")) {

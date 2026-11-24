@@ -31,6 +31,8 @@ fn test_system_probe_serialization() {
         total_ram_gb: 16.0,
         available_ram_gb: 12.0,
         gpu_vendor: Some("Apple".to_string()),
+        cpu_brand: Some("Apple M1".to_string()),
+        cpu_cores: Some(8),
         recommended_preset: "balanced".to_string(),
         budget_gb: 9.8,
     };

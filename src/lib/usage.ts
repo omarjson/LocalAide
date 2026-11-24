@@ -49,3 +49,36 @@ export function formatAnswerMs(ms: number): string {
   const m = Math.floor(s / 60);
   return `${m} m ${Math.round(s - m * 60)} s`;
 }
+
+export interface WindowCoverage {
+  /** First day the totals actually cover, "Mar 3" style. */
+  from: string;
+  /** Last day the totals cover, "Mar 3" style. */
+  to: string;
+  /** True when retained history starts after the requested window. */
+  short: boolean;
+}
+
+const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dayLabel = (key: string) => {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+/**
+ * What window the totals actually cover. The ledger only keeps days that
+ * had answers, so when retained history is shorter than the requested
+ * window the earliest kept day is later than the window start — and the
+ * totals must say so instead of wearing the requested label. "All time"
+ * claims no window, so it has no coverage to check. A total that silently
+ * omits rows is a caveat, not a status update.
+ */
+export function windowCoverage(summary: UsageSummary, today = new Date()): WindowCoverage | null {
+  if (summary.days === 0) return null;
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (summary.days - 1));
+  const startKey = dayKey(start);
+  const earliest = summary.per_day.length > 0 ? [...summary.per_day.map((d) => d.date)].sort()[0] : null;
+  if (!earliest || earliest <= startKey) return { from: dayLabel(startKey), to: dayLabel(dayKey(today)), short: false };
+  return { from: dayLabel(earliest), to: dayLabel(dayKey(today)), short: true };
+}

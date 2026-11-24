@@ -77,3 +77,4 @@ export function applyDensity(density: Density): void {
 export function currentDensity(): Density {
   return document.documentElement.dataset.density === "compact" ? "compact" : "comfortable";
 }
+

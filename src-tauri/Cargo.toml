@@ -1,6 +1,6 @@
 [package]
 name = "ai-desktop-assistant"
-version = "0.2.1"
+version = "0.2.3"
 description = "Local-first AI desktop assistant (Rust + Tauri v2)"
 authors = ["omar"]
 license = "MIT"
@@ -67,6 +67,7 @@ tiny_http = "0.12"
 base64 = "0.22"
 # Live transcription over WebSocket (Gemini Live, Deepgram, Soniox).
 tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 # The terminal tool kills a command's whole process group on timeout.
 [target.'cfg(unix)'.dependencies]

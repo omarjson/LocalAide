@@ -1,7 +1,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::domain::system::SystemProbeResult;
-use sysinfo::System;
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, System};
 use tauri::State;
 
 const OS_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GB
@@ -21,12 +21,27 @@ pub async fn system_probe(state: State<'_, AppState>) -> Result<SystemProbeResul
 
 /// Reads RAM figures. sysinfo can take a moment, so this runs off the UI thread.
 fn probe_system(memory_percent: u8) -> Result<SystemProbeResult, AppError> {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    // Only RAM and the CPU brand are needed here. `new_all()` +
+    // `refresh_all()` would enumerate every process, CPU, disk and network
+    // interface twice; targeted refreshes read just the figures we use.
+    let mut sys = System::new();
+    sys.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
+    sys.refresh_cpu_specifics(CpuRefreshKind::new().with_frequency());
     let total_ram_bytes = sys.total_memory();
     let available_ram_bytes = sys.available_memory();
     let total_ram_gb = total_ram_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
     let available_ram_gb = available_ram_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+    // The brand string is per-CPU and identical across them; an empty one
+    // is the same as no answer, so it becomes None downstream.
+    let cpu_brand = sys
+        .cpus()
+        .first()
+        .map(|cpu| cpu.brand().trim().to_string())
+        .filter(|brand| !brand.is_empty());
+    let cpu_cores = sys
+        .physical_core_count()
+        .map(|cores| cores as u32)
+        .filter(|cores| *cores > 0);
 
     let usable_bytes = total_ram_bytes.saturating_sub(OS_RESERVE_BYTES);
     let budget_bytes = (usable_bytes as f64 * f64::from(memory_percent) / 100.0) as u64;
@@ -47,6 +62,8 @@ fn probe_system(memory_percent: u8) -> Result<SystemProbeResult, AppError> {
         total_ram_gb,
         available_ram_gb,
         gpu_vendor: None,
+        cpu_brand,
+        cpu_cores,
         recommended_preset,
         budget_gb,
     })

@@ -93,6 +93,12 @@ pub fn run() {
     if let Ok(store) = app_state.config_store.lock()
         && let Ok(cfg) = store.load()
     {
+        // Durable tool rules, hooks and provider routing are applied before
+        // any chat tool or model request can run.
+        app_state.tools.apply_config(&cfg);
+        app_state
+            .inference_engine
+            .apply_routing(&cfg, cfg.active_cloud_provider.as_deref());
         if cfg.cloud_llm_enabled && cfg.online_allowed() {
             let active = cfg
                 .active_cloud_provider
@@ -241,9 +247,12 @@ pub fn run() {
             commands::tool_audits_list,
             commands::tool_audits_clear,
             commands::config_load,
+            commands::config_setup_complete,
             commands::settings_context,
             commands::settings_set_context,
             commands::settings_context_info,
+            commands::settings_compact_prompt,
+            commands::settings_set_compact_prompt,
             commands::selftest_run,
             commands::library_folder_presets,
             commands::library_index_start,
@@ -269,8 +278,6 @@ pub fn run() {
             commands::share_cloudflared_fetch,
             commands::settings_theme,
             commands::settings_set_theme,
-            commands::settings_model_prices,
-            commands::settings_set_model_prices,
             commands::settings_model_memory,
             commands::settings_set_model_memory,
             commands::chat_prefs_get,
@@ -320,6 +327,7 @@ pub fn run() {
             commands::cloud_mode_set,
             commands::cloud_provider_presets,
             commands::cloud_list_models,
+            commands::openrouter_model_prices,
             commands::web_search,
             commands::web_crawl,
             commands::web_providers,
@@ -354,6 +362,32 @@ pub fn run() {
             commands::mcp_server_delete,
             commands::mcp_server_test,
             commands::mcp_import,
+            commands::mcp_server_set_tools,
+            commands::session_search,
+            commands::session_reindex,
+            commands::multi_run_chat,
+            commands::doctor_run,
+            commands::context_files_list,
+            commands::context_refs_resolve,
+            commands::policy_config_get,
+            commands::policy_config_set,
+            commands::policy_decide,
+            commands::agents_list,
+            commands::agents_read,
+            commands::agents_save,
+            commands::goal_start,
+            commands::goal_status,
+            commands::goal_step,
+            commands::goal_complete,
+            commands::goal_pause,
+            commands::goal_block,
+            commands::goal_resume,
+            commands::usage_record,
+            commands::usage_list,
+            commands::plugin_list,
+            crate::services::doctor::doctor_fix,
+            commands::mcp_oauth_start,
+            commands::mcp_oauth_finish,
         ])
         // Pages the model draws in chat, each with its own strict policy.
         .register_uri_scheme_protocol("mockup", |_ctx, request| {

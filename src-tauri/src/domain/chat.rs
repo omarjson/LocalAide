@@ -32,6 +32,10 @@ pub struct ChatMessage {
     /// The answer failed. Failed answers are not sent back as history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<bool>,
+    /// A steering note the user sent to a running answer. It shows in the
+    /// transcript but is never sent back to the model as history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steer: Option<bool>,
 }
 
 /// One piece of an answer.
@@ -63,6 +67,13 @@ pub enum MessagePart {
         summary: String,
         #[serde(default)]
         output: String,
+        /// Subagents: what it did, newest last. Kept so a chat opened
+        /// later still shows the subagent's work.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        steps: Option<Vec<String>>,
+        /// Subagents: tokens the run used (prompt + answer), once known.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens: Option<usize>,
     },
     /// A question the model asked with options (`ask_user`).
     Question {
@@ -195,6 +206,10 @@ pub struct ChatStreamRequest {
     /// Tell the model it can draw charts, diagrams and mockups. Default true.
     #[serde(default)]
     pub rich_output: Option<bool>,
+    /// Continue a stopped answer: `message` is ignored and the model is
+    /// told to pick up the last assistant turn where it stopped.
+    #[serde(default)]
+    pub resume: Option<bool>,
 }
 
 /// The user's answer to a tool approval question.

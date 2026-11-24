@@ -12,7 +12,7 @@
   import { chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
   import { fileManagerName } from "../lib/platform";
   import { dur, motion, stagger } from "../lib/motion";
-  import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
+  import { chatModes, dev, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
@@ -29,10 +29,14 @@
   import ModelPicker from "../components/ModelPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
   import Modal from "../components/Modal.svelte";
+  import SubagentTranscript from "../components/SubagentTranscript.svelte";
   import { A2uiChat, provideA2ui } from "../lib/a2ui.svelte";
   import ProviderForm from "../components/ProviderForm.svelte";
-  import { calibration, compactionStart, contextSegments, contextUsage, fits, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
+  import { calibration, compactionStart, contextSegments, contextUsage, fits, forcedCompactionStart, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
+  import { greetingAt, workedToday } from "../lib/greeting";
+  import { loadLastUsedModel, resolveNewChatModel, saveLastUsedModel } from "../lib/lastModel";
+  import { resolveChoreModel } from "../lib/modelPicker";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -148,15 +152,41 @@
       : {},
   );
 
+  // "New chats start on": the model used last, remembered across restarts.
+  // A new chat takes it when it is still usable; when it is not, the chat
+  // falls back to the active model and says so in one honest line.
+  let lastUsedKey = $state<string | null>(loadLastUsedModel());
+  let modelNotice = $state<string | null>(null);
+
   let pickerBusy = $state(false);
   let refreshingProvider = $state<string | null>(null);
+  // What a new chat starts on: the last-used model when it is still
+  // usable, else the active model. Null for a chat that already has its
+  // own model saved.
+  const newChatModel = $derived.by(() => {
+    if (activeThreadId && chatModels[activeThreadId]) return null;
+    if (!choices) return null;
+    return resolveNewChatModel(lastUsedKey, choices.models, choices.local_loaded);
+  });
   const activeChoice = $derived.by(() => {
     const key = activeThreadId ? chatModels[activeThreadId] : undefined;
     return (
       (key ? choices?.models.find((m) => m.key === key) : null) ??
+      (newChatModel?.key ? choices?.models.find((m) => m.key === newChatModel.key) : null) ??
       choices?.models.find((m) => m.active) ??
       null
     );
+  });
+  // Name the fallback in one line, on the empty chat only — never an
+  // error, never a silent switch.
+  $effect(() => {
+    if (newChatModel?.fellBack && messages.length === 0) {
+      modelNotice = activeChoice
+        ? `Your last model isn't available, so this chat starts on ${activeChoice.name}.`
+        : "Your last model isn't available.";
+    } else if (!newChatModel?.fellBack) {
+      modelNotice = null;
+    }
   });
   const onlineChoice = $derived(activeChoice && activeChoice.provider_id !== null ? activeChoice : null);
   // Whether a local model is loaded in the engine right now.
@@ -188,10 +218,13 @@
     if (!question.trim()) return;
     titleBusy = true;
     try {
+      // Chores run on the loaded local model when there is one (N5):
+      // free, and never blocking the chat. Otherwise the chat's model.
+      const chore = resolveChoreModel(choices);
       const title = await api.chatTitle(
         question.slice(0, 400),
         answer.slice(-1200),
-        activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined,
+        chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined),
       );
       if (title && title !== activeThreadTitle) {
         activeThreadTitle = title;
@@ -208,6 +241,18 @@
   const startTitleEdit = () => {
     titleDraft = activeThreadTitle === "New Conversation" ? "" : activeThreadTitle;
     editingTitle = true;
+  };
+  // The title is a button: one click opens the chat menu, a double-click
+  // renames. A click waits one beat, so the double-click can cancel it
+  // instead of opening the menu under the rename box.
+  let titleClickTimer: ReturnType<typeof setTimeout> | undefined;
+  const onTitleClick = () => {
+    clearTimeout(titleClickTimer);
+    titleClickTimer = setTimeout(() => (showMoreActions = true), 250);
+  };
+  const onTitleDblClick = () => {
+    clearTimeout(titleClickTimer);
+    startTitleEdit();
   };
   const saveTitleEdit = () => {
     if (!editingTitle) return;
@@ -249,11 +294,17 @@
     focusComposer();
   };
   let localBudgetGb = $state<number | null>(null);
+  // RAM figures for the memory chip under the composer. Null when the
+  // probe failed — the chip hides, it never blocks the chat.
+  let localRam = $state<{ totalGb: number; availableGb: number } | null>(null);
   const loadLocalStats = async () => {
     try {
-      localBudgetGb = Math.round((await api.systemProbe()).budget_gb);
+      const probeResult = await api.systemProbe();
+      localBudgetGb = Math.round(probeResult.budget_gb);
+      localRam = { totalGb: probeResult.total_ram_gb, availableGb: probeResult.available_ram_gb };
     } catch {
       localBudgetGb = null;
+      localRam = null;
     }
     try {
       localDocs = (await api.getIndexerStats()).doc_count;
@@ -338,7 +389,7 @@
     if (saved && saved !== "auto") return saved;
     return activeChoice.efforts.includes("medium") ? "medium" : "auto";
   });
-  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
+  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 95);
   $effect(() => {
     try {
       localStorage.setItem(
@@ -464,7 +515,9 @@
   let maxTokens = $state(2048);
   let persona = $state("General");
   // Answer statistics for everyone: tokens, time and speed under each
-  // answer. A normal switch in Chat settings; developer mode forces it on.
+  // answer. A normal switch in Chat settings; developer mode only seeds
+  // the default until the user picks — the switch is the control, so a
+  // developer flag can never force the stats back on after it is off.
   const STATS_KEY = "localaide-answer-stats";
   let answerStats = $state((() => {
     try {
@@ -481,10 +534,22 @@
       // Storage can be unavailable; the choice still applies now.
     }
   };
-  const showStats = $derived(answerStats || flag("answer_stats"));
+  // Developer settings arrive after this screen mounts. Until the user
+  // has chosen, the flag is the default; afterwards their choice stands.
+  $effect(() => {
+    if (!dev.settings) return;
+    try {
+      if (localStorage.getItem(STATS_KEY) === null) answerStats = flag("answer_stats");
+    } catch {
+      // Without storage there is nothing to seed from; the switch stays.
+    }
+  });
+  const showStats = $derived(answerStats);
   let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
   let showTools = $state(false);
+  /** The subagent whose work the read-only side view is showing. */
+  let transcriptAgent = $state<ToolPart | null>(null);
   let scrollEl = $state<HTMLDivElement>();
   let toolPath = $state("");
   let toolContent = $state("");
@@ -537,13 +602,16 @@
     ...defaultStarters.filter((d) => !usableLearned.some((l) => l.prompt === d.prompt)).map((d) => ({ ...d, learned: false })),
   ].slice(0, 4));
 
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 5) return "Working late?";
-    if (hour < 12) return "Good morning.";
-    if (hour < 18) return "Good afternoon.";
-    return "Good evening.";
-  })();
+  // Time-of-day greeting, re-evaluated at the next hour boundary; the
+  // evening variant says "nice work today" only when a chat had a turn
+  // today (see src/lib/greeting.ts).
+  let greetingNow = $state(new Date());
+  const greeting = $derived(greetingAt(greetingNow, workedToday(chats.threads, greetingNow)));
+  onMount(() => {
+    const ms = 3_600_000 - (Date.now() % 3_600_000) + 1000;
+    const timer = setTimeout(() => (greetingNow = new Date()), ms);
+    return () => clearTimeout(timer);
+  });
 
   const handleScroll = () => {
     if (!scrollEl) return;
@@ -560,12 +628,28 @@
   };
 
   // Follow the answer while it streams: the last message grows without the
-  // message count changing, so its length is tracked too. Off means you steer
-  // the scroll yourself; the pill below still jumps to the end.
+  // message count changing, so its length is tracked too. Progress also
+  // moves the view: tool calls, subagent steps, to-dos and reasoning change
+  // the parts, not the last message's text, so a fingerprint of them is
+  // tracked as well. Off means you steer the scroll yourself; the pill
+  // below still jumps to the end.
   $effect(() => {
     if (!followStreaming) return;
     const lastLength = messages.at(-1)?.content.length ?? 0;
-    if (messages.length > 0 && lastLength >= 0) {
+    const progress = messages
+      .map((m) =>
+        (m.parts ?? [])
+          .map((p) => {
+            if (p.type === "tool") return `tool:${p.id}:${p.status}:${p.steps?.length ?? 0}`;
+            if (p.type === "todos") return `todos:${p.items.length}`;
+            if (p.type === "text" || p.type === "reasoning") return `${p.type}:${p.text.length}`;
+            if (p.type === "question") return `q:${p.answer ?? ""}`;
+            return "other";
+          })
+          .join(","),
+      )
+      .join("|");
+    if (messages.length > 0 && lastLength >= 0 && progress.length >= 0) {
       scrollToBottom();
     }
   });
@@ -585,6 +669,8 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    compactionSummary = "";
+    stoppedAnswer = false;
     resetMeasurements();
     suggestions = [];
     void loadStarters();
@@ -629,7 +715,10 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    compactionSummary = "";
+    stoppedAnswer = false;
     resetMeasurements();
+    void refreshLedgerCacheRate();
     systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(id);
@@ -711,6 +800,45 @@
   // model. It resets with each chat.
   let compactedBefore = $state(0);
   const historyFrom = $derived(Math.min(compactedBefore, messages.length));
+  // Anchored summary (N4): when auto-compact cuts the history, the cut
+  // part is summarised — goal, decisions, progress, next steps — and the
+  // summary rides on the system prompt of later sends, so the model keeps
+  // the thread. It is session-only, like the cut itself: the full history
+  // stays on screen and in the saved chat, nothing is deleted. Empty
+  // when nothing was ever auto-compacted (or summarising failed).
+  let compactionSummary = $state("");
+
+  /**
+   * Summarise what auto-compact just cut, folding in the previous
+   * summary so the anchor covers the whole cut span. Fire-and-forget:
+   * the summary runs on the loaded local model for free
+   * (`summarize`); when no local model is loaded, or it errors, the
+   * summary stays as it was and the plain cut still stands.
+   */
+  const requestCompactionSummary = (cut: ChatMessage[]) => {
+    const lines: string[] = [];
+    if (compactionSummary) lines.push(`Previous summary:\n${compactionSummary}`);
+    const rendered = cut
+      .filter((m) => m.content.trim() && !m.steer)
+      .map((m) => `${m.role}: ${m.content.slice(0, 2000)}`)
+      .join("\n");
+    if (!rendered && !compactionSummary) return;
+    const text = [
+      "Summarize the conversation below for the AI that will continue it. Cover: the goal, decisions made, progress so far, and next steps. A few short lines, no preamble.",
+      rendered,
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 8000);
+    void api
+      .summarize({ text })
+      .then((res) => {
+        if (res.summary.trim()) compactionSummary = res.summary.trim();
+      })
+      .catch(() => {
+        // Summarising is a nicety; the cut stands without it.
+      });
+  };
   // The same thinking room the backend keeps for this effort.
   const answerReserve = $derived(maxTokens + (activeChoice?.reasoning ? thinkingReserve(effort) : 0));
   // The engine's own count for the first request of the last answer, and
@@ -727,6 +855,18 @@
   let reportedTools = $state<number | null>(null);
   // Cache hit rate of the last answer, when the provider reports cached tokens.
   let lastCacheRate = $state<number | null>(null);
+  // The same rate averaged over the usage log, for models that never
+  // report cached tokens (the local engine on older builds): the meter
+  // shows this when the last answer has no rate of its own.
+  let ledgerCacheRate = $state<number | null>(null);
+  const refreshLedgerCacheRate = async () => {
+    try {
+      const summary = await api.usageSummary();
+      ledgerCacheRate = summary.input_tokens > 0 && summary.cache_tokens > 0 ? (summary.cache_tokens / summary.input_tokens) * 100 : null;
+    } catch {
+      // The meter keeps the last answer's rate, or hides the row.
+    }
+  };
   // A2UI forms in this chat's answers: built once per finished block, in
   // chat order, so a later answer can update a form an earlier one drew.
   const a2ui = provideA2ui(new A2uiChat());
@@ -746,6 +886,14 @@
     measuredModel = null;
     lastCacheRate = null;
   };
+  // Steering notes show in the transcript but are never sent to the model,
+  // so they do not count toward the window, the meter or the fit checks.
+  // (Compaction itself keeps the real array: its cut is an index into it.)
+  const sentMessages = $derived(messages.filter((m) => !m.steer));
+  // A stopped answer waits for Resume. Set when the user stops it (or the
+  // run reports cancelled); any new send clears it.
+  let stoppedAnswer = $state(false);
+
   const usageOptions = (draft: string) => {
     const sameModel = measuredModel !== null && measuredModel === (activeChoice?.key ?? null);
     return {
@@ -758,7 +906,7 @@
       ratio: sameModel ? estimateRatio : 1,
     };
   };
-  const usage = $derived(contextUsage(messages, activeChoice?.context, usageOptions(input)));
+  const usage = $derived(contextUsage(sentMessages, activeChoice?.context, usageOptions(input)));
   // What the window is made of, for the hover breakdown: history, tool
   // schemas, meta context, skills and instructions, scaled to the meter.
   const segments = $derived(
@@ -778,11 +926,19 @@
   );
 
   /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
-  const compactConversation = (threshold = autoCompactAt, draft = "") => {
+  const compactConversation = (threshold = autoCompactAt, draft = "", force = false) => {
     const limit = activeChoice?.context;
     if (!limit) {
       // No known window: keep the last four messages.
       const next = Math.max(historyFrom, messages.length - 4);
+      if (next <= historyFrom) return false;
+      compactedBefore = next;
+      return true;
+    }
+    if (force) {
+      // An explicit compact always cuts, even when the conversation already
+      // fits: keep only the last exchange in what is sent.
+      const next = forcedCompactionStart(messages, historyFrom);
       if (next <= historyFrom) return false;
       compactedBefore = next;
       return true;
@@ -799,11 +955,12 @@
         newChat();
         break;
       case "compact":
-        // A manual compact aims for half the window, leaving room to talk.
-        if (compactConversation(Math.min(50, autoCompactAt))) {
+        // A manual compact always cuts, even when the conversation already
+        // fits the window: it aims for half the window, leaving room to talk.
+        if (compactConversation(Math.min(50, autoCompactAt), "", true)) {
           showToast("Older messages stay on screen but are no longer sent to the model.");
         } else {
-          showToast("This conversation already fits.");
+          showToast("Nothing left to compact — only the last exchange is being sent.");
         }
         break;
       case "model":
@@ -899,7 +1056,9 @@
   const askSuggestion = async (question: string, answer: string) => {
     const ticket = ++suggestTicket;
     try {
-      const next = await api.suggestNext(question, answer, activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
+      // Same chore rule as titles (N5): the loaded local model first.
+      const chore = resolveChoreModel(choices);
+      const next = await api.suggestNext(question, answer, chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined));
       if (ticket === suggestTicket && !streaming && !input.trim()) suggestions = next;
     } catch {
       // A suggestion is a nicety; nothing to report.
@@ -952,6 +1111,7 @@
     if (!text) return;
     queued.push({ id: ++noteSeq, text });
     input = "";
+    showToast("Queued — it sends when this answer ends.");
   };
   const steerText = async (text: string) => {
     const job = activeJobId;
@@ -963,6 +1123,21 @@
     // Listed first, so a "steered" event that arrives before the reply
     // still finds it.
     steering.push(note);
+    // The note also lands in the transcript, in full, before the answer it
+    // steers — so the chat shows what was asked, not just the model's
+    // truncated "Read your note" step. It is never sent back as history.
+    // (Safe to insert mid-stream: the running answer is held by object in
+    // send(), not by index, so this does not shift what it appends to.)
+    let aiIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        aiIdx = i;
+        break;
+      }
+    }
+    const steerMsg = { role: "user", content: text, ts: Date.now(), steer: true };
+    if (aiIdx >= 0) messages.splice(aiIdx, 0, steerMsg);
+    else messages.push(steerMsg);
     let taken = false;
     try {
       taken = await api.steerChat(job, text);
@@ -974,6 +1149,7 @@
       if (at >= 0) {
         steering.splice(at, 1);
         queued.push(note);
+        showToast("The answer had already finished — your note is queued as the next message.");
       }
     }
   };
@@ -1001,26 +1177,66 @@
     else void send(false, note.text);
   };
 
+  // Inline queue editing and reordering. Editing happens in the row itself
+  // (the old Edit moved the text back to the composer, which read as the
+  // queue not working); the up/down buttons move a note earlier or later.
+  let editingNoteId = $state<number | null>(null);
+  let editingNoteText = $state("");
+  const startNoteEdit = (id: number) => {
+    const note = queued.find((n) => n.id === id);
+    if (!note) return;
+    editingNoteId = id;
+    editingNoteText = note.text;
+  };
+  const saveNoteEdit = () => {
+    if (editingNoteId === null) return;
+    const text = editingNoteText.trim();
+    if (!text) return;
+    const note = queued.find((n) => n.id === editingNoteId);
+    if (note) note.text = text;
+    editingNoteId = null;
+    editingNoteText = "";
+  };
+  const cancelNoteEdit = () => {
+    editingNoteId = null;
+    editingNoteText = "";
+  };
+  const moveNote = (id: number, dir: -1 | 1) => {
+    const at = queued.findIndex((n) => n.id === id);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= queued.length) return;
+    const [note] = queued.splice(at, 1);
+    queued.splice(to, 0, note);
+  };
+
   // `queuedText` sends a queued message: its text only, leaving the draft
   // and any files waiting in the box alone.
-  const send = async (resend = false, queuedText?: string) => {
-    const fromQueue = !resend && queuedText !== undefined;
+  // The first parameter is a strict boolean on purpose: passing this
+  // function bare as a click handler once fed it a MouseEvent, which is
+  // truthy, and every Send click resent the previous message instead of
+  // the text just typed. Only an explicit `true` resends.
+  const send = async (resendArg = false, queuedText?: string, resumeArg = false) => {
+    const resend = resendArg === true;
+    const resume = resumeArg === true;
+    const fromQueue = !resend && !resume && queuedText !== undefined;
     const lastUser = resend ? messages.at(-1) : undefined;
     const files = resend
       ? (lastUser?.attachments ?? []).filter((f) => !f.error)
       : fromQueue
         ? []
         : $state.snapshot(pendingFiles).filter((f) => !f.error);
-    const userMsg = resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
+    const userMsg = resume ? "" : resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
     const resendImages = resend ? (lastUser?.images ?? []) : [];
-    if ((!userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) || streaming) return;
-    if (!resend && !fromQueue) {
+    if (streaming) return;
+    if (!resume && !userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) return;
+    if (!resend && !fromQueue && !resume) {
       input = "";
     }
     suggestions = [];
     previousDraft = null;
     planReady = false;
     lastCacheRate = null;
+    stoppedAnswer = false;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
     for (const m of messages) {
@@ -1028,8 +1244,12 @@
         if (p.type === "question" && !p.answer && !p.dismissed) p.deferred = true;
       }
     }
-    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
-      if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
+    if (activeChoice?.context && !fits(contextUsage(sentMessages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
+      const cutFrom = historyFrom;
+      if (compactConversation(autoCompactAt, userMsg)) {
+        requestCompactionSummary($state.snapshot(messages).slice(cutFrom, historyFrom));
+        showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
+      }
     }
 
     // Earlier turns only. The new message is sent separately as `message`.
@@ -1039,15 +1259,18 @@
     const history = $state
       .snapshot(priorMessages)
       .slice(historyFrom)
-      .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
+      .filter((m) => m.content.trim() && !m.error && !m.steer && !m.content.startsWith("[Chat Error"))
       .map((m) => ({
         role: m.role,
         content: m.content,
         attachments: m.attachments?.filter((a) => a.kind === "text").map((a) => ({ ...a, data_url: null })),
+        // Tool parts ride along so the backend can prune old tool
+        // outputs instead of dropping them all unseen (N4).
+        parts: m.parts,
       }));
 
     const images = resend ? resendImages : fromQueue ? [] : $state.snapshot(pendingImages);
-    if (!resend) {
+    if (!resend && !resume) {
       if (!fromQueue) {
         pendingImages = [];
         pendingFiles = [];
@@ -1057,25 +1280,39 @@
     streaming = true;
     runStartedAt = Date.now();
     sendFailed = false;
-    liveStatus = "LocalAide is answering.";
+    liveStatus = resume ? "Continuing the answer." : "LocalAide is answering.";
     userScrolledUp = false;
     void savePrefs();
 
-    const assistantIdx = messages.length;
     // Where the history this request carries starts, for the engine's count.
     const sentFrom = historyFrom;
     const sentModel = activeChoice?.key ?? null;
-    messages.push({
-      role: "assistant",
-      content: "",
-      ts: Date.now(),
-      steps: [],
-      parts: [],
-      model: activeChoice?.name ?? undefined,
-    });
+    // A resume keeps the partial answer in place and appends to it; a
+    // fresh send adds a new empty answer.
+    const assistantIdx = resume ? messages.length - 1 : messages.length;
+    if (!resume) {
+      messages.push({
+        role: "assistant",
+        content: "",
+        ts: Date.now(),
+        steps: [],
+        parts: [],
+        model: activeChoice?.name ?? undefined,
+      });
+    }
     const started = performance.now();
     let firstTokenAt: number | null = null;
-    const answer = () => messages[assistantIdx];
+    // The anchored summary rides on the system prompt, not the history:
+    // the context meter counts history by message index, and the summary
+    // is not a message. It is only sent while part of the history is cut.
+    const requestSystemPrompt =
+      historyFrom > 0 && compactionSummary
+        ? `${systemPrompt}\n\n[Summary of the earlier part of this conversation — those messages are no longer sent in full: ${compactionSummary}]`
+        : systemPrompt;
+    // Captured by object, not index: a steering note inserted before this
+    // answer must not shift what the stream appends to.
+    const assistantMsg = messages[assistantIdx];
+    const answer = () => assistantMsg;
     const parts = () => {
       const msg = answer();
       if (!msg.parts) msg.parts = [];
@@ -1099,11 +1336,12 @@
       activeJobId = await api.streamChat(
         {
           message: userMsg,
+          resume,
           history,
           images,
           model,
           thread_id: activeThreadId,
-          system_prompt: systemPrompt,
+          system_prompt: requestSystemPrompt,
           temperature,
           max_tokens: maxTokens,
           mode,
@@ -1154,7 +1392,7 @@
           } else if (event.type === "todos") {
             setTodos(parts(), event.payload.items);
           } else if (event.type === "subagent_step") {
-            addSubagentStep(parts(), event.payload.id, event.payload.step);
+            addSubagentStep(parts(), event.payload.id, event.payload.step, event.payload.tokens ?? null);
           } else if (event.type === "skill_change") {
             setSkillChange(parts(), event.payload);
             void api.skillsList().then((list) => (skills = list)).catch(() => undefined);
@@ -1173,20 +1411,23 @@
             lastCacheRate = event.payload.prompt_tokens && event.payload.cache_tokens
               ? Math.min(100, (event.payload.cache_tokens / event.payload.prompt_tokens) * 100)
               : null;
+            void refreshLedgerCacheRate();
             if (typeof event.payload.system_tokens === "number" && event.payload.system_tokens > 0) {
               reportedSystem = event.payload.system_tokens;
               reportedTools = event.payload.tool_tokens ?? 0;
             }
             // The question as sent, estimated the way the meter estimates,
-            // against the engine's own count of it.
-            const sentEstimate = contextUsage(messages.slice(0, assistantIdx), null, {
+            // against the engine's own count of it. The answer's index is
+            // read fresh: a steering note inserted mid-stream moves it.
+            const answerIdx = messages.indexOf(answer());
+            const sentEstimate = contextUsage(messages.slice(0, answerIdx).filter((m) => !m.steer), null, {
               from: sentFrom,
               systemPrompt,
               overhead: reportedSystem !== null ? reportedSystem + (reportedTools ?? 0) : null,
             }).used;
             const first = event.payload.first_prompt_tokens ?? null;
-            if (first && first > 0 && assistantIdx > 0) {
-              measuredPrompt = { tokens: first, upTo: assistantIdx, from: sentFrom, anchor: messages[assistantIdx - 1]?.ts };
+            if (first && first > 0 && answerIdx > 0) {
+              measuredPrompt = { tokens: first, upTo: answerIdx, from: sentFrom, anchor: messages[answerIdx - 1]?.ts };
               measuredModel = sentModel;
               estimateRatio = calibration(first, sentEstimate);
             } else if (sentModel !== measuredModel) {
@@ -1204,6 +1445,12 @@
             activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
+            if (event.payload.finish_reason === "cancelled") {
+              // A stop lands here too (the run reports back after the
+              // cancel): the partial answer waits for Resume.
+              stoppedAnswer = true;
+              liveStatus = "Answer stopped.";
+            }
             parkSteers();
             // The next queued message goes once this answer is saved, unless
             // the user stopped it or the model is waiting on a question.
@@ -1244,7 +1491,17 @@
     const last = messages.at(-1);
     if (last?.role === "assistant" && last.parts) settleParts(last.parts, performance.now());
     liveStatus = "Answer stopped.";
+    stoppedAnswer = true;
     persistCurrentThread();
+  };
+
+  // Continue a stopped answer where it left off: the partial answer stays
+  // and the model is told to pick it up, instead of starting over.
+  const resumeGenerating = () => {
+    if (streaming) return;
+    const last = messages.at(-1);
+    if (last?.role !== "assistant" || !last.content.trim()) return;
+    void send(false, undefined, true);
   };
 
   // Answer the last question again, in place: the question stays in the
@@ -1410,11 +1667,25 @@
       engineLoaded = choices.local_loaded;
       // The choice belongs to this chat from now on.
       if (activeThreadId) chatModels = { ...chatModels, [activeThreadId]: choice.key };
+      // And new chats start on it from now on.
+      lastUsedKey = choice.key;
+      saveLastUsedModel(choice.key);
+      modelNotice = null;
     } catch (e: unknown) {
       sendFailed = false;
       chatError = `${choice.name} could not be used: ${errorMessage(e)}`;
     } finally {
       pickerBusy = false;
+    }
+  };
+
+  /** Unload the local model from memory (the chip under the composer). */
+  const unloadLocalModel = async () => {
+    try {
+      await api.unloadInferenceModel();
+      engineLoaded = false;
+    } catch (e: unknown) {
+      chatError = `The model could not be unloaded: ${errorMessage(e)}`;
     }
   };
 
@@ -1704,7 +1975,7 @@
 
 <div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
   <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
-  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900/85 px-3 backdrop-blur md:px-5">
+  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900 px-3 md:px-5">
     <div class="flex min-w-0 items-center gap-2 px-1">
       {#if editingTitle}
         <!-- svelte-ignore a11y_autofocus -->
@@ -1722,7 +1993,17 @@
         />
       {:else}
         <div class="group/title flex min-w-0 items-center gap-1">
-          <h2 class="max-w-[18rem] truncate text-sm font-semibold text-ink-100">{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</h2>
+          <!-- The title is a button: click opens the chat menu,
+               double-click renames. Hover says the full title when it is
+               cut off; "New chat" stays until the model titles it. -->
+          <button
+            type="button"
+            class="max-w-[18rem] truncate rounded-sm text-sm font-semibold text-ink-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
+            title={activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}
+            aria-label={`Chat title: ${activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}. Open the chat menu, or double-click to rename.`}
+            onclick={onTitleClick}
+            ondblclick={onTitleDblClick}
+          >{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</button>
           {#if messages.length > 0 && !streaming}
             <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Rename this chat" title="Rename" onclick={startTitleEdit}><Icon name="pencil" class="h-3.5 w-3.5" /></button>
             <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Generate a title with the model" title="Generate title with the model" disabled={titleBusy} onclick={() => void generateTitle()}><Icon name="refresh" class={`h-3.5 w-3.5 ${titleBusy ? "animate-spin" : ""}`} /></button>
@@ -1779,6 +2060,7 @@
       {usage}
       {segments}
       cacheRate={lastCacheRate}
+      cacheRateAverage={ledgerCacheRate}
       {autoCompactAt}
       onAsk={askFromRail}
       onSkill={skillFromRail}
@@ -1925,6 +2207,9 @@
             </div>
           {:else}
             <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
+            {#if modelNotice}
+              <p class="text-[15px] text-ink-400">{modelNotice}</p>
+            {/if}
             {#if onlineChoice}
               <p class="text-[15px] text-ink-400">Answers come from <span class="font-semibold text-ink-200">{onlineChoice.name}</span>, through {onlineChoice.provider_label}. Messages are sent to that provider.</p>
             {:else if engineLoading || pickerBusy}
@@ -1994,6 +2279,7 @@
             parts={msg.parts}
             attachments={msg.attachments}
             model={msg.model}
+            steer={msg.steer}
             approvals={idx === messages.length - 1 ? approvals : {}}
             onDecide={(toolId, decision) => void decideTool(toolId, decision)}
             onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
@@ -2009,8 +2295,9 @@
             branchCount={activeThreadId ? branchCountAt(activeThreadId, idx) : 0}
             onRestoreBranch={() => restoreBranch(idx)}
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
-            onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
+            onEdit={msg.role === "user" && !msg.steer ? (newText) => editTurn(newText, idx) : undefined}
             onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
+            onViewSubagent={(part) => (transcriptAgent = part)}
             collapseLong={collapseQuestions}
           />
         {/each}
@@ -2094,19 +2381,33 @@
       {#if queued.length > 0 || steering.length > 0}
         <ul class="mb-2 space-y-1" aria-label="Messages waiting to be sent">
           {#each steering as note (note.id)}
-            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+            <li class="note-row">
               <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ember-300" />
               <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
               <span class="shrink-0 text-xs text-ink-500">Steering · read at the next step</span>
             </li>
           {/each}
           {#each queued as note, i (note.id)}
-            <li class="note-row" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
+            <li class="note-row">
               <span class="shrink-0 text-xs tabular-nums text-ink-500">{i + 1}</span>
-              <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
-              <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
-              <button type="button" class="note-action" onclick={() => { input = note.text; queued = queued.filter((n) => n.id !== note.id); focusComposer(); }} title="Edit it in the box">Edit</button>
-              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (queued = queued.filter((n) => n.id !== note.id))}><Icon name="close" class="h-3 w-3" /></button>
+              {#if editingNoteId === note.id}
+                <input
+                  type="text"
+                  bind:value={editingNoteText}
+                  aria-label="Edit this queued message"
+                  class="min-w-0 flex-1 rounded-md border border-edge bg-ink-950 px-2 py-1 text-sm text-ink-100 outline-none focus:border-ember-500"
+                  onkeydown={(e) => { if (e.key === "Enter") saveNoteEdit(); else if (e.key === "Escape") cancelNoteEdit(); }}
+                />
+                <button type="button" class="note-action" onclick={saveNoteEdit} disabled={!editingNoteText.trim()}>Save</button>
+                <button type="button" class="note-action" onclick={cancelNoteEdit}>Cancel</button>
+              {:else}
+                <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
+                <button type="button" class="note-action" onclick={() => moveNote(note.id, -1)} disabled={i === 0} aria-label="Move this queued message earlier" title="Move earlier">↑</button>
+                <button type="button" class="note-action" onclick={() => moveNote(note.id, 1)} disabled={i === queued.length - 1} aria-label="Move this queued message later" title="Move later">↓</button>
+                <button type="button" class="note-action" onclick={() => startNoteEdit(note.id)} title="Edit this queued message here">Edit</button>
+                <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
+              {/if}
+              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => { if (editingNoteId === note.id) cancelNoteEdit(); queued = queued.filter((n) => n.id !== note.id); }}><Icon name="close" class="h-3 w-3" /></button>
             </li>
           {/each}
         </ul>
@@ -2119,6 +2420,8 @@
         streaming={streaming}
         onSend={send}
         onCancel={stopGenerating}
+        canResume={stoppedAnswer}
+        onResume={resumeGenerating}
         onQueue={queueDraft}
         onSteer={steerDraft}
         onReadFile={readFile}
@@ -2131,6 +2434,9 @@
         onSlashCommand={handleSlashCommand}
         onEnhance={() => void enhancePrompt()}
         {enhancing}
+        memory={activeChoice?.local && localRam ? { usedGb: localRam.totalGb - localRam.availableGb, totalGb: localRam.totalGb, loaded: engineLoaded, modelName: activeChoice.name } : null}
+        onLoadModel={activeChoice?.local && !engineLoaded ? () => void selectModel(activeChoice) : undefined}
+        onUnloadModel={activeChoice?.local && engineLoaded ? () => void unloadLocalModel() : undefined}
         {suggestions}
         {useWeb}
         {webAvailable}
@@ -2159,7 +2465,7 @@
           <PermissionMenu mode={approvalMode} onChange={setApprovalMode} />
         {/snippet}
         {#snippet trailing()}
-          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} onCompact={() => handleSlashCommand("compact")} />
+          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} cacheRateAverage={ledgerCacheRate} onCompact={() => handleSlashCommand("compact")} />
           <ModelPicker
             {effort}
             onEffort={setEffort}
@@ -2206,6 +2512,7 @@
     onDeny={() => runApprovedTool(false)}
   />
 
+  <SubagentTranscript agent={transcriptAgent} onClose={() => (transcriptAgent = null)} />
 
 </div>
 

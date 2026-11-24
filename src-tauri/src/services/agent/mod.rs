@@ -23,13 +23,14 @@ use serde_json::Value;
 use crate::app::error::AppError;
 use crate::app::events::{ChatStreamEvent, QuestionItem, QuestionOption, TodoItem};
 use crate::app::state::AppState;
+use crate::config::Capability;
 use crate::domain::memory::Citation;
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{
-    Adjustment, ChatTurn, Delta, Effort, TOOLS_UNSUPPORTED, ToolCall, initial_options,
+    Adjustment, ChatTurn, Delta, Effort, Endpoint, TOOLS_UNSUPPORTED, ToolCall, initial_options,
     stream_with_retries,
 };
-use crate::services::inference::router::ChatTarget;
+use crate::services::inference::router::{ChatTarget, RouterEngine};
 use crate::services::tools::sandbox::WorkspaceJail;
 use crate::services::usage;
 use approval::{APPROVAL_TIMEOUT, ApprovalHub, Decision};
@@ -82,6 +83,15 @@ impl AgentState {
             .unwrap_or_else(|e| e.into_inner())
             .remove(job_id)
             .unwrap_or_default()
+    }
+
+    /// True when a note is waiting for `job_id`.
+    fn has_steers(&self, job_id: &str) -> bool {
+        self.steers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(job_id)
+            .is_some_and(|notes| !notes.is_empty())
     }
 
     fn knows_no_tools(&self, key: &str) -> bool {
@@ -395,6 +405,92 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// One step of the failover chain: another provider, or the local model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FailoverCandidate {
+    Provider(String),
+    Local,
+}
+
+/// The order to try after the current target fails with a retryable error:
+/// the user's provider order minus the current and already-tried providers,
+/// then the local model last. Pure, so it is unit-tested below.
+fn failover_chain(
+    provider_order: &[String],
+    current_id: Option<&str>,
+    tried: &HashSet<String>,
+) -> Vec<FailoverCandidate> {
+    let mut chain: Vec<FailoverCandidate> = provider_order
+        .iter()
+        .filter(|id| Some(id.as_str()) != current_id && !tried.contains(*id))
+        .map(|id| FailoverCandidate::Provider(id.clone()))
+        .collect();
+    if !tried.contains("local") {
+        chain.push(FailoverCandidate::Local);
+    }
+    chain
+}
+
+/// Compare provider addresses ignoring a trailing slash.
+fn same_base_url(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
+}
+
+/// Try the next failover target after a retryable error. Returns the new
+/// target and its endpoint, or None when the chain is exhausted.
+///
+/// Fail-open by design: any problem here (config unreadable, endpoint
+/// unbuildable, no model loaded locally) returns None and the caller
+/// reports the original error unchanged. A local chat never fails over to
+/// a cloud provider — that would send the conversation somewhere the user
+/// did not choose.
+fn next_failover_target(
+    state: &AppState,
+    engine: &RouterEngine,
+    current: &ChatTarget,
+    tried: &mut HashSet<String>,
+) -> Option<(ChatTarget, Endpoint)> {
+    let ChatTarget::Remote(remote) = current else {
+        return None;
+    };
+    let Ok(cfg) = crate::commands::cloud::load_config(state) else {
+        return None;
+    };
+    let current_id = cfg
+        .cloud_providers
+        .iter()
+        .find(|p| same_base_url(&p.base_url, &remote.base_url))
+        .map(|p| p.id.clone());
+    if let Some(id) = &current_id {
+        tried.insert(id.clone());
+    }
+    let order = cfg.provider_order();
+    for candidate in failover_chain(&order, current_id.as_deref(), tried) {
+        match candidate {
+            FailoverCandidate::Provider(id) => {
+                let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled) else {
+                    continue;
+                };
+                tried.insert(id.clone());
+                let target = ChatTarget::Remote(crate::commands::cloud::remote_target(p, None));
+                // No key override: the target carries its own stored key
+                // (the router's key pool belongs to the active provider).
+                if let Ok(endpoint) = engine.endpoint_for_with_key(&target, None) {
+                    return Some((target, endpoint));
+                }
+            }
+            FailoverCandidate::Local => {
+                tried.insert("local".to_string());
+                if let Ok(endpoint) = engine.endpoint_for(&ChatTarget::Local) {
+                    return Some((ChatTarget::Local, endpoint));
+                }
+                return None;
+            }
+        }
+    }
+    None
+}
+
 fn run_inner(
     state: &AppState,
     mut run: AgentRun,
@@ -402,7 +498,7 @@ fn run_inner(
     sink: &dyn Sink,
 ) -> Result<RunResult, AppError> {
     let engine = state.inference_engine.clone();
-    let endpoint = engine.endpoint_for(&run.target)?;
+    let mut endpoint = engine.endpoint_for(&run.target)?;
     // Notes the user pinned ride in every chat while recall is on.
     if run.perms.notes
         && let Ok(pinned) = state.memory.pinned_context()
@@ -410,7 +506,9 @@ fn run_inner(
     {
         run.turns.insert(1, ChatTurn::System(pinned));
     }
-    let key = format!("{}|{}", endpoint.url, endpoint.model);
+    // The no-tools tracking key follows the endpoint when failover switches
+    // providers mid-run (see below).
+    let mut key = format!("{}|{}", endpoint.url, endpoint.model);
 
     let mut specs: Vec<ToolSpec> = Vec::new();
     let tools_wanted = run.perms.any();
@@ -460,6 +558,9 @@ fn run_inner(
     let mut tool_tokens = schema_tokens(&opts.tools);
 
     let mut round = 0usize;
+    // Providers already tried by failover this run, so a provider that
+    // failed is never tried twice.
+    let mut tried: HashSet<String> = HashSet::new();
     while round < run.max_rounds {
         if cancel.load(Ordering::Relaxed) {
             return Ok(RunResult {
@@ -500,15 +601,22 @@ fn run_inner(
         );
         opts.max_tokens = round_limit(&run, &run.turns, tool_tokens);
 
+        // Tokens delivered this round. A failure after the first token
+        // must not fail over: the new provider would answer from scratch
+        // and its text would land after the partial answer.
+        let mut round_delivered = 0usize;
         let result = stream_with_retries(
             client,
             &endpoint,
             &mut run.turns,
             &mut opts,
             cancel,
-            &mut |delta| match delta {
-                Delta::Content(token) => sink.emit(ChatStreamEvent::Token { token }),
-                Delta::Reasoning(text) => sink.emit(ChatStreamEvent::Reasoning { text }),
+            &mut |delta| {
+                round_delivered += 1;
+                match delta {
+                    Delta::Content(token) => sink.emit(ChatStreamEvent::Token { token }),
+                    Delta::Reasoning(text) => sink.emit(ChatStreamEvent::Reasoning { text }),
+                }
             },
             &mut |label| status(sink, label),
         );
@@ -525,6 +633,39 @@ fn run_inner(
                 add_gathered_context(state, &mut run, &mut next_citation, sink);
                 // Same round again, without tools.
                 continue;
+            }
+            Err(e) if e.retryable && round_delivered == 0 => {
+                match next_failover_target(state, &engine, &run.target, &mut tried) {
+                    Some((next_target, next_endpoint)) => {
+                        let from = endpoint.label.clone();
+                        run.target = next_target;
+                        endpoint = next_endpoint;
+                        key = format!("{}|{}", endpoint.url, endpoint.model);
+                        // Rebuild the flavor-dependent options for the new
+                        // provider, keeping the tools state (a model that
+                        // cannot use tools stays tool-less) and the
+                        // last-round tool ban.
+                        let forbid = opts.forbid_tools;
+                        opts = initial_options(
+                            endpoint.flavor,
+                            opts.max_tokens,
+                            run.temperature,
+                            opts.tools.clone(),
+                            run.effort.clone(),
+                        );
+                        opts.forbid_tools = forbid;
+                        let to = match &run.target {
+                            ChatTarget::Local => "the local model".to_string(),
+                            ChatTarget::Remote(_) => endpoint.label.clone(),
+                        };
+                        status(sink, format!("{from} was busy — continued on {to}"));
+                        // Same round again, on the new provider.
+                        continue;
+                    }
+                    // Chain exhausted (or failover itself broke): the
+                    // original error stands, unchanged.
+                    None => return Err(e),
+                }
             }
             Err(e) => return Err(e),
         };
@@ -569,7 +710,7 @@ fn run_inner(
             });
         }
         let wants_tools = !outcome.tool_calls.is_empty() && !specs.is_empty() && !opts.forbid_tools;
-        if !wants_tools {
+        if !wants_tools && !state.agent.has_steers(&run.job_id) {
             finish_reason = outcome
                 .finish_reason
                 .clone()
@@ -585,6 +726,12 @@ fn run_inner(
             }
             break;
         }
+        // A note sent while this round streamed has no tool round to ride
+        // in on: steers are only read at the top of a later round, so
+        // breaking here dropped the note (the chat then parked it as a new
+        // message, which is why Steer looked like it did nothing). Falling
+        // through runs one more round instead: the assistant turn is kept
+        // below, and the next round reads the note before answering.
 
         // Call ids must be unique across the whole answer; small local
         // models reuse "call_0" every round.
@@ -724,10 +871,15 @@ fn parse_questions(args: &Value) -> Vec<QuestionItem> {
                         Value::String(label) => Some(QuestionOption {
                             label: label.trim().chars().take(120).collect(),
                             description: String::new(),
+                            recommended: false,
                         }),
                         Value::Object(_) => Some(QuestionOption {
                             label: clip(o.get("label"), 120),
                             description: clip(o.get("description"), 200),
+                            recommended: o
+                                .get("recommended")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
                         }),
                         _ => None,
                     })
@@ -921,6 +1073,7 @@ impl Sink for SubSink<'_> {
         let step = |step: String| ChatStreamEvent::SubagentStep {
             id: self.id.clone(),
             step,
+            tokens: None,
         };
         match event {
             ChatStreamEvent::Token { token } => {
@@ -1059,6 +1212,7 @@ fn run_subagents(
                     sink.emit(ChatStreamEvent::SubagentStep {
                         id: id.clone(),
                         step: "Starting".into(),
+                        tokens: None,
                     });
                     let result = run_inner(state, child, cancel, &sub);
                     let text = sub.text.into_inner().unwrap_or_else(|e| e.into_inner());
@@ -1067,7 +1221,18 @@ fn run_subagents(
                         Ok(_) if text.trim().is_empty() => {
                             Err("It finished without a report.".to_string())
                         }
-                        Ok(_) => Ok(text),
+                        Ok(done) => {
+                            // The model only reports exact tokens when a
+                            // round ends, so the total lands here, with the
+                            // final step, rather than as a mid-run guess.
+                            let used = done.prompt_tokens.unwrap_or(0) + done.tokens;
+                            sink.emit(ChatStreamEvent::SubagentStep {
+                                id: id.clone(),
+                                step: "Done".into(),
+                                tokens: Some(used),
+                            });
+                            Ok(text)
+                        }
                         Err(e) => Err(e.message),
                     };
                     (id, title, result)
@@ -1209,11 +1374,19 @@ fn run_call(
         return "This run only reads (Plan mode or a subagent), so this change did not run. Describe it in the plan or report instead.".into();
     }
     let allowed_here = auto_approve.contains(&spec.name);
-    let wait = must_ask(mode, needs, allowed_here, || spec.risky(&args, jail));
+    // Per-capability auto-approve (N9): the Settings toggles. A capability
+    // approval is not "allowed for this chat", so the note below names it
+    // separately; the decision itself just stops the prompt.
+    let capability_approved = capability_auto_approved(state, spec, &args, jail);
+    let wait = must_ask(mode, needs, allowed_here || capability_approved, || {
+        spec.risky(&args, jail)
+    });
     let mut note = None;
     if needs && !wait {
         note = if allowed_here {
             Some("allowed for this chat")
+        } else if capability_approved {
+            Some("auto-approved in Settings")
         } else {
             mode.note()
         };
@@ -1286,6 +1459,44 @@ fn run_call(
 
 /// Whether a call waits for the user's OK. Plan mode never gets here for
 /// a change (it refuses first).
+/// Which capability a tool call belongs to, for per-capability
+/// auto-approve (N9). Reads and web lookups never need approval on their
+/// own, so their toggles are posture; the ones that change behaviour are
+/// edits, commands and external tools. A command that is hard to undo
+/// counts as "all commands", a tame one as "safe commands" — and "all
+/// commands" covers safe ones (see `CapabilityAutoApprove::approves`).
+fn capability_for(spec: &ToolSpec, args: &Value, jail: &WorkspaceJail) -> Capability {
+    match spec.kind {
+        tools::ToolKind::WebSearch | tools::ToolKind::ReadPage => Capability::Browser,
+        tools::ToolKind::WriteFile
+        | tools::ToolKind::MakeDocument
+        | tools::ToolKind::SaveNote
+        | tools::ToolKind::SaveSkill => Capability::EditFiles,
+        tools::ToolKind::RunCommand => {
+            if spec.risky(args, jail) {
+                Capability::AllCommands
+            } else {
+                Capability::SafeCommands
+            }
+        }
+        tools::ToolKind::Mcp => Capability::ExternalTools,
+        _ => Capability::ReadFiles,
+    }
+}
+
+/// Whether the configured capabilities auto-approve this call. Fail-open:
+/// the policy snapshot defaults to read-only, so a policy that was never
+/// set (or a fresh install) asks instead of auto-approving.
+fn capability_auto_approved(
+    state: &AppState,
+    spec: &ToolSpec,
+    args: &Value,
+    jail: &WorkspaceJail,
+) -> bool {
+    let caps = state.tools.policy().capabilities();
+    caps.approves(capability_for(spec, args, jail))
+}
+
 fn must_ask(
     mode: ApprovalMode,
     needs: bool,
@@ -1470,6 +1681,24 @@ mod tests {
     }
 
     #[test]
+    fn recommended_option_is_carried_not_invented() {
+        // The model may mark one option recommended; anything it does not
+        // mark stays false, so the UI never invents a recommendation.
+        let args = serde_json::json!({"questions": [
+            {"question": "Which?", "options": [
+                {"label": "First", "recommended": true},
+                {"label": "Second"},
+                "Third"
+            ]}
+        ]});
+        let items = parse_questions(&args);
+        assert_eq!(items.len(), 1);
+        assert!(items[0].options[0].recommended);
+        assert!(!items[0].options[1].recommended);
+        assert!(!items[0].options[2].recommended);
+    }
+
+    #[test]
     fn old_tool_results_go_first_then_old_turns() {
         let mut turns = vec![
             ChatTurn::System("system".into()),
@@ -1512,5 +1741,56 @@ mod tests {
                 .any(|t| matches!(t, ChatTurn::User { text, .. } if text == "now"))
         );
         assert!(estimate_tokens(&turns) <= 400);
+    }
+
+    #[test]
+    fn failover_chain_skips_current_and_tried_and_ends_local() {
+        let order = ["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(
+            failover_chain(&order, Some("a"), &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("b".into()),
+                FailoverCandidate::Provider("c".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+        let mut tried = HashSet::new();
+        tried.insert("b".to_string());
+        assert_eq!(
+            failover_chain(&order, Some("a"), &tried),
+            vec![
+                FailoverCandidate::Provider("c".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+        let mut tried = HashSet::new();
+        tried.insert("b".to_string());
+        tried.insert("c".to_string());
+        tried.insert("local".to_string());
+        assert!(failover_chain(&order, Some("a"), &tried).is_empty());
+    }
+
+    #[test]
+    fn failover_chain_with_no_current_still_ends_local() {
+        let order = ["a".to_string()];
+        assert_eq!(
+            failover_chain(&order, None, &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("a".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+    }
+
+    #[test]
+    fn failover_chain_keeps_the_users_order() {
+        let order = ["groq".to_string(), "openrouter".to_string()];
+        assert_eq!(
+            failover_chain(&order, Some("openrouter"), &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("groq".into()),
+                FailoverCandidate::Local,
+            ]
+        );
     }
 }

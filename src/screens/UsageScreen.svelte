@@ -6,9 +6,10 @@
   import Icon from "../components/Icon.svelte";
   import PageHeader from "../components/PageHeader.svelte";
   import { api, errorMessage } from "../lib/api/client";
+  import { describeError } from "../lib/api/errors";
   import { folderName } from "../lib/chats.svelte";
   import type { ModelPrice, SystemProbeResult, UsageSummary } from "../lib/api/bindings";
-  import { answerStreak, compactTokens, formatAnswerMs, windowDays } from "../lib/usage";
+  import { answerStreak, compactTokens, formatAnswerMs, windowCoverage, windowDays } from "../lib/usage";
 
   // days 1 = today, 0 = all time, anything else the rolling window.
   const RANGES: { label: string; days: number }[] = [
@@ -24,6 +25,7 @@
   let prices = $state<Record<string, ModelPrice>>({});
   let loading = $state(true);
   let errorMsg = $state<string | null>(null);
+  let errorFix = $state<string | null>(null);
   let probe = $state<SystemProbeResult | null>(null);
   let updatedAt = $state<Date | null>(null);
   let showToolCalls = $state(false);
@@ -32,16 +34,19 @@
   const load = async () => {
     loading = true;
     errorMsg = null;
+    errorFix = null;
     try {
       const [next, nextPrices] = await Promise.all([
         api.usageSummary(days, folder),
-        api.modelPrices().catch(() => ({} as Record<string, ModelPrice>)),
+        api.openrouterModelPrices().catch(() => ({} as Record<string, ModelPrice>)),
       ]);
       summary = next;
       prices = nextPrices;
       updatedAt = new Date();
     } catch (e: unknown) {
-      errorMsg = errorMessage(e);
+      const described = describeError(e);
+      errorMsg = described.message;
+      errorFix = described.fix;
       summary = null;
     } finally {
       loading = false;
@@ -81,6 +86,12 @@
   });
 
   const series = $derived(summary ? windowDays(summary) : []);
+  // What window the totals actually cover: when retained history is
+  // shorter than the requested window, the totals say so (N7).
+  const coverage = $derived(summary ? windowCoverage(summary) : null);
+  // Models with no price are costed at $0 — a total that silently omits
+  // rows is a caveat, so the Cost card names them (N7).
+  const unpricedCount = $derived(summary ? summary.per_model.filter((m) => !prices[m.model]).length : 0);
   const peak = $derived(Math.max(1, ...series.map((day) => day.output)));
   const streak = $derived(answerStreak(series));
   const speed = $derived.by(() => {
@@ -88,9 +99,11 @@
     return summary.output_tokens / (summary.ms / 1000);
   });
 
-  // --- Cost: per-model from the price table, USD per 1M tokens. Cache
-  // reads ride the input count in provider reports, so they are split out
-  // and charged at their own price when one exists.
+  // --- Cost: per-model from OpenRouter's prices, USD per 1M tokens.
+  // Models OpenRouter does not list (or a list that failed to load) price
+  // at $0 rather than an invented number. Cache reads ride the input count
+  // in provider reports, so they are split out and charged at their own
+  // price when one exists.
   const modelCost = (m: { model: string; input: number; output: number; cache: number }): number => {
     const price = prices[m.model];
     if (!price) return 0;
@@ -214,7 +227,7 @@
   </PageHeader>
 
   {#if errorMsg}
-    <div class="mb-4"><ErrorBanner message={errorMsg} onRetry={() => void load()} onDismiss={() => errorMsg = null} /></div>
+    <div class="mb-4"><ErrorBanner message={errorMsg} fix={errorFix ?? undefined} onRetry={() => void load()} onDismiss={() => { errorMsg = null; errorFix = null; }} /></div>
   {/if}
 
   {#if loading}
@@ -227,6 +240,9 @@
     />
   {:else if summary}
     <div class="space-y-5">
+      {#if coverage?.short}
+        <p class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200" role="note">Totals cover {coverage.from} – {coverage.to}. Nothing is recorded before {coverage.from}.</p>
+      {/if}
       <!-- Headline numbers -->
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
@@ -248,6 +264,7 @@
           <p class="text-sm text-ink-400">Cost</p>
           <p class="mt-1 text-3xl font-semibold text-ink-50">{costLabel(totalCost)}</p>
           <p class="mt-1 text-sm text-ink-400">{Object.keys(prices).length > 0 ? "From your price table" : "Add prices in Settings to track"}</p>
+          {#if unpricedCount > 0}<p class="mt-1 text-sm text-amber-300">Cost leaves out {unpricedCount} {unpricedCount === 1 ? "model" : "models"} with no price.</p>{/if}
         </div>
         <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
           <p class="text-sm text-ink-400">Active days</p>

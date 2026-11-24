@@ -1,8 +1,11 @@
 use crate::app::error::AppError;
 use crate::domain::tool::FileInfo;
+use crate::services::tools::shell;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 pub const MAX_READ_BYTES: u64 = 1024 * 1024; // 1 MB
 pub const MAX_WRITE_BYTES: usize = 4 * 1024 * 1024; // 4 MB
@@ -10,6 +13,17 @@ pub const MAX_WRITE_BYTES: usize = 4 * 1024 * 1024; // 4 MB
 #[derive(Debug, Clone)]
 pub struct WorkspaceJail {
     canonical_root: PathBuf,
+}
+
+/// The result of running one configured hook command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookOutcome {
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+    /// A non-zero exit, a timeout, or a failure to start blocks the tool call.
+    pub blocked: bool,
 }
 
 impl WorkspaceJail {
@@ -34,6 +48,44 @@ impl WorkspaceJail {
 
     pub fn root_path(&self) -> &Path {
         &self.canonical_root
+    }
+
+    /// True when `rel` resolves to a path inside this jail. Hooks are only
+    /// ever run for tool calls whose target stays inside the workspace.
+    pub fn contains_path(&self, rel: &str) -> bool {
+        self.resolve_path(rel).is_ok()
+    }
+
+    /// Run a configured hook command from the workspace root with a hard
+    /// timeout. A non-zero exit, a timeout, or a failure to start blocks the
+    /// tool call. Output is returned for logging but never trusted as data.
+    pub fn run_hook(&self, command: &str, timeout: Duration) -> HookOutcome {
+        if command.trim().is_empty() {
+            return HookOutcome {
+                exit_code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+                blocked: false,
+            };
+        }
+        let cancel = AtomicBool::new(false);
+        match shell::run(command, &self.canonical_root, timeout, &cancel) {
+            Ok(out) => HookOutcome {
+                exit_code: out.exit_code,
+                stdout: out.stdout,
+                stderr: out.stderr,
+                timed_out: out.timed_out,
+                blocked: out.timed_out || out.cancelled || out.exit_code != Some(0),
+            },
+            Err(message) => HookOutcome {
+                exit_code: None,
+                stdout: String::new(),
+                stderr: message,
+                timed_out: false,
+                blocked: true,
+            },
+        }
     }
 
     /// Resolve and verify that the target path remains strictly within the workspace jail.
@@ -469,5 +521,49 @@ impl WorkspaceJail {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn jail(name: &str) -> (WorkspaceJail, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("la-hook-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let j = WorkspaceJail::new(&dir).unwrap();
+        (j, dir)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hooks_run_from_the_workspace_root() {
+        let (j, dir) = jail("cwd");
+        let out = j.run_hook("pwd", Duration::from_secs(5));
+        assert!(!out.blocked);
+        assert!(out.stdout.contains(&dir.to_string_lossy().to_string()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_zero_exit_and_timeout_block() {
+        let (j, dir) = jail("block");
+        let out = j.run_hook("exit 3", Duration::from_secs(5));
+        assert!(out.blocked);
+        assert_eq!(out.exit_code, Some(3));
+        let out = j.run_hook("sleep 5", Duration::from_millis(100));
+        assert!(out.blocked);
+        assert!(out.timed_out);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_paths_inside_the_jail_are_hook_eligible() {
+        let (j, dir) = jail("contains");
+        assert!(j.contains_path("notes/a.txt"));
+        assert!(!j.contains_path("../outside.txt"));
+        assert!(!j.contains_path("/etc/passwd"));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

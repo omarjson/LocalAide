@@ -12,6 +12,11 @@ export interface PickerFilters {
 
 export const NO_FILTERS: PickerFilters = { reasoning: false, vision: false, tools: false, free: false };
 
+/** True when at least one capability filter is on (including saved Tools). */
+export function anyFilterOn(f: PickerFilters): boolean {
+  return f.reasoning || f.vision || f.tools || f.free;
+}
+
 export interface PickerSection {
   id: string;
   label: string;
@@ -68,6 +73,12 @@ export function pickerSections(choices: ModelChoices | null, query: string, filt
   return out;
 }
 
+/** The canonical section order: Starred, On this computer, then providers.
+ * The menu uses this to order both its provider switcher and its rows. */
+export function sectionOrder(choices: ModelChoices | null, query: string, filters: PickerFilters): string[] {
+  return pickerSections(choices, query, filters).map((s) => s.id);
+}
+
 /** "local" for models on this computer, else the provider id. */
 export function providerKey(m: ModelChoice): string {
   return m.provider_id ?? "local";
@@ -91,7 +102,11 @@ export function providerList(choices: ModelChoices | null): PickerProvider[] {
     { key: "local", providerId: null, label: "This computer", badge: "Private", router: false, needsRefresh: false },
   ];
   if (choices.online_allowed === false) return out;
+  const seen = new Set<string>();
   for (const g of choices.groups.filter((g) => g.enabled)) {
+    // The same provider saved twice must still appear once.
+    if (seen.has(g.provider_id)) continue;
+    seen.add(g.provider_id);
     const models = choices.models.filter((m) => m.provider_id === g.provider_id);
     out.push({
       key: g.provider_id,
@@ -111,4 +126,27 @@ export function providerModels(choices: ModelChoices | null, key: string, query:
   return choices.models
     .filter((m) => providerKey(m) === key && matchesModel(m, query, filters))
     .sort((a, b) => Number(b.favorite) - Number(a.favorite));
+}
+
+/**
+ * Per-task model roles (N5): the model a background chore runs on — chat
+ * titles, "suggest next", compaction summaries, memory writes. A chore
+ * never blocks the chat and never costs anything online when a local
+ * model is already loaded: prefer that loaded local model. When no local
+ * model is loaded, return null and the caller keeps its current
+ * behaviour (the chat's own model), instead of loading one.
+ */
+export interface ChoreTarget {
+  provider_id: string | null;
+  model: string;
+}
+
+export function resolveChoreModel(choices: ModelChoices | null): ChoreTarget | null {
+  if (!choices || !choices.local_loaded) return null;
+  const local = choices.models.filter((m) => m.provider_id === null);
+  if (local.length === 0) return null;
+  // The loaded local model is the active one; otherwise the first local
+  // model on the list (loading is the engine's job, never the chore's).
+  const loaded = local.find((m) => m.active) ?? local.find((m) => m.key === choices.active_key) ?? local[0];
+  return { provider_id: null, model: loaded.model };
 }

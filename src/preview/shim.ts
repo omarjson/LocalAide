@@ -240,6 +240,8 @@ const fixtures: Record<string, Handler> = {
     total_ram_gb: 32,
     available_ram_gb: 21,
     gpu_vendor: null,
+    cpu_brand: "Apple M1",
+    cpu_cores: 8,
     recommended_preset: "balanced",
     budget_gb: 14,
   }),
@@ -250,6 +252,12 @@ const fixtures: Record<string, Handler> = {
     embedding: { ready: false, model_id: null, dimension: null, total_chunks: 184, embedded_chunks: 0 },
     rerank: { ready: false, model_id: null },
     library: { doc_count: 12 },
+    performance: {
+      uptime_secs: 3600,
+      rss_bytes: 184549376,
+      logs_bytes: 4096,
+      library_db_bytes: 262144,
+    },
     config_ok: true,
   }),
   developer_get: () => ({
@@ -257,7 +265,7 @@ const fixtures: Record<string, Handler> = {
     flags: {},
     modules: {},
     flag_list: [
-      { id: "request_log", label: "Request log", description: "Time every backend call.", default: false },
+      { id: "request_log", label: "Request log panel", description: "Show backend timings in Developer.", default: false },
       { id: "no_motion", label: "Turn off animations", description: "Skip transitions everywhere.", default: false },
       { id: "compact", label: "Compact layout", description: "Tighter spacing.", default: false },
       { id: "answer_stats", label: "Answer statistics", description: "Tokens, time and speed under each answer.", default: false },
@@ -300,11 +308,10 @@ const fixtures: Record<string, Handler> = {
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
   chat_prefs_set: () => null,
   usage_summary: (args) => usageSummaryFixture(args as Record<string, unknown>),
-  settings_model_prices: () => ({
+  openrouter_model_prices: () => ({
     "kimi-k2.5": { input: 0.6, output: 2.5, cache_read: 0.1 },
     "gpt-5-mini": { input: 0.25, output: 2.0, cache_read: 0.025 },
   }),
-  settings_set_model_prices: (args) => args?.prices ?? {},
   chat_target_set: (args) => {
     // Flip the active model, so the picker's active row and the effort
     // ladder follow the choice like the real backend does.

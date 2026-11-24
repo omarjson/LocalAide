@@ -7,11 +7,14 @@
     onDismiss,
     onRetry,
     retryLabel = "Retry",
+    /** The one action that fixes this failure, from the error's cause class. */
+    fix,
   }: {
     message: string;
     onDismiss: () => void;
     onRetry?: () => void;
     retryLabel?: string;
+    fix?: string;
   } = $props();
 </script>
 
@@ -21,7 +24,7 @@
 >
   <div class="flex min-w-0 items-start gap-2">
     <Icon name="alert" class="mt-0.5 h-[18px] w-[18px] shrink-0" />
-    <span class="break-words">{message}</span>
+    <span class="break-words">{message}{#if fix}<span class="block text-rose-200/80">{fix}</span>{/if}</span>
   </div>
   <div class="flex shrink-0 items-center gap-1">
     {#if onRetry}

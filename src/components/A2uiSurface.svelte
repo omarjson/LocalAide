@@ -4,7 +4,7 @@
   // the model to fix them (sent as an A2UI `error` message).
   import A2uiNode from "./A2uiNode.svelte";
   import Icon from "./Icon.svelte";
-  import { errorReport, rootScope } from "../lib/a2ui";
+  import { a2uiProblem, errorReport, rootScope } from "../lib/a2ui";
   import { useA2ui } from "../lib/a2ui.svelte";
 
   interface Props {
@@ -17,7 +17,7 @@
   const chat = useA2ui();
   const result = $derived(chat?.results[source.trimEnd()] ?? null);
   const surfaces = $derived((result?.created ?? []).map((id) => chat?.surfaces[id]).filter((s) => !!s && !s.deleted));
-  const problems = $derived([...(result?.problems ?? []), ...surfaces.flatMap((s) => s?.problems ?? []), ...surfaces.filter((s) => s && !s.components.root).map((s) => `Surface "${s?.id}" has no component with the id "root".`)]);
+  const problems = $derived([...(result?.problems ?? []), ...surfaces.flatMap((s) => s?.problems ?? []), ...surfaces.filter((s) => s && !s.components.root).map((s) => a2uiProblem(`Surface "${s?.id}" has no component with the id "root".`))]);
   let reported = $state(false);
 </script>
 
@@ -43,7 +43,7 @@
         <div class="min-w-0 flex-1">
           <p class="font-medium">Part of this form could not be drawn.</p>
           <ul class="mt-1 list-disc pl-4 text-xs leading-5 text-amber-200/90">
-            {#each problems.slice(0, 6) as problem, i (i)}<li>{problem}</li>{/each}
+            {#each problems.slice(0, 6) as problem, i (i)}<li>{problem.message}</li>{/each}
           </ul>
         </div>
         {#if onAction && !reported}

@@ -19,9 +19,13 @@
     onDecide?: (decision: "allow" | "allow_chat" | "deny") => void;
     /** Subagents: what it did, newest last. */
     steps?: string[];
+    /** Subagents: tokens the run used (prompt + answer), once known. */
+    tokens?: number | null;
     /** A skill the model saved or improved, with Undo. */
     skill?: { change_id: string; name: string; action: string; undone?: boolean } | null;
     onUndoSkill?: () => void;
+    /** Subagents: open the read-only side view of this subagent. */
+    onViewTranscript?: () => void;
     /** The folder the chat works in, for the file buttons. */
     folder?: string | null;
   }
@@ -37,12 +41,15 @@
     approval = null,
     onDecide,
     steps = [],
+    tokens = null,
     skill = null,
     onUndoSkill,
+    onViewTranscript,
     folder = null,
   }: Props = $props();
   const isSubagent = $derived(group === "subagent");
   const currentStep = $derived(steps.at(-1) ?? (status === "running" ? "Starting" : ""));
+  const tokenLabel = $derived(tokens !== null && tokens !== undefined ? `${tokens.toLocaleString("en-US")} tokens` : null);
   // A file the model wrote: open it, open it with another app, or show it.
   const writtenFile = $derived(group === "files" && title === "Write a file" && status === "done" && detail ? detail : null);
 
@@ -96,9 +103,10 @@
 </script>
 
 <div class={`tool ${waiting ? "tool-waiting" : ""}`}>
+  <div class="flex items-center gap-1 pr-1">
   <button
     type="button"
-    class="tool-head"
+    class="tool-head min-w-0 flex-1"
     aria-expanded={hasDetails ? open : undefined}
     disabled={!hasDetails}
     onclick={() => (open = !open)}
@@ -107,7 +115,7 @@
     <span class="min-w-0 flex-1 text-left">
       <span class="block truncate"><span class="font-medium text-ink-100">{title}</span>{#if detail}<span class="ml-1.5 text-ink-400">{detail}</span>{/if}</span>
       {#if isSubagent && currentStep}
-        <span class={`block truncate text-xs ${status === "running" ? "text-ink-300" : "text-ink-500"}`} aria-live={status === "running" ? "polite" : undefined}>{status === "running" ? currentStep : `${steps.length} ${steps.length === 1 ? "step" : "steps"} · last: ${currentStep}`}</span>
+        <span class={`block truncate text-xs ${status === "running" ? "text-ink-300" : "text-ink-500"}`} aria-live={status === "running" ? "polite" : undefined}>{status === "running" ? currentStep : `${steps.length} ${steps.length === 1 ? "step" : "steps"} · last: ${currentStep}`}{#if tokenLabel}<span class="text-ink-400"> · {tokenLabel}</span>{/if}</span>
       {/if}
     </span>
     <span class="flex shrink-0 items-center gap-1.5 text-xs">
@@ -131,6 +139,10 @@
       {/if}
     </span>
   </button>
+  {#if isSubagent && onViewTranscript}
+    <button type="button" onclick={() => onViewTranscript?.()} class="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-ember-300 transition-colors hover:bg-veil/5 hover:text-ember-200" title="See what this subagent was asked and did — read-only">View</button>
+  {/if}
+  </div>
 
   {#if skill}
     <div class="flex flex-wrap items-center gap-2 border-t border-ink-800 px-3 py-2 text-sm">

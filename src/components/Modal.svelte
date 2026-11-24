@@ -13,12 +13,16 @@
     size = "md",
     children,
     footer,
+    motion: animate = true,
   }: {
     title: string;
     onClose: () => void;
     size?: "md" | "lg";
     children: Snippet;
     footer?: Snippet;
+    /** False renders the dialog instantly: chat search opens often enough
+        that the scale-in reads as extra motion. */
+    motion?: boolean;
   } = $props();
 
   const width = $derived(size === "lg" ? "max-w-3xl" : "max-w-md");
@@ -26,8 +30,8 @@
 
 <div
   role="presentation"
-  in:fade={{ duration: dur(motion.fast) }}
-  out:fade={{ duration: dur(motion.fast) }}
+  in:fade={{ duration: animate ? dur(motion.fast) : 0 }}
+  out:fade={{ duration: animate ? dur(motion.fast) : 0 }}
   class="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
   onclick={onClose}
   onkeydown={(e) => { if (e.key === "Escape") onClose(); }}
@@ -37,8 +41,8 @@
     tabindex="-1"
     aria-modal="true"
     aria-label={title}
-    in:scale={enterDialog()}
-    out:scale={leaveDialog()}
+    in:scale={animate ? enterDialog() : { start: 1, duration: 0 }}
+    out:scale={animate ? leaveDialog() : { start: 1, duration: 0 }}
     class={`flex max-h-[85vh] w-full ${width} flex-col overflow-hidden rounded-xl border border-edge bg-ink-900 shadow-2xl`}
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => { if (e.key === "Escape") onClose(); e.stopPropagation(); }}

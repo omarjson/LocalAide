@@ -14,7 +14,22 @@ pub fn config_load(state: State<'_, AppState>) -> Result<AppConfigDto, AppError>
     let cfg = store.load().map_err(AppError::internal)?;
     Ok(AppConfigDto {
         selected_models: cfg.selected_models,
+        setup_complete: cfg.setup_complete,
+        has_online_providers: !cfg.cloud_providers.is_empty(),
     })
+}
+
+/// The setup wizard finished, or the user chose to set up later. Either way
+/// setup must not appear again on the next launch.
+#[tauri::command]
+pub fn config_setup_complete(state: State<'_, AppState>) -> Result<(), AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.setup_complete = true;
+    store.save(&cfg).map_err(AppError::internal)
 }
 
 /// Current engine context window setting (tokens).
@@ -45,6 +60,32 @@ pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u
     cfg.context_tokens = tokens.clamp(MIN_CONTEXT_TOKENS, MAX_CONTEXT_TOKENS);
     store.save(&cfg).map_err(AppError::internal)?;
     Ok(cfg.context_tokens)
+}
+
+/// Whether the compact prompt is on (Settings → Performance). Off by
+/// default: local models get the full system prompt unless the user
+/// turns this on.
+#[tauri::command]
+pub fn settings_compact_prompt(state: State<'_, AppState>) -> Result<bool, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    Ok(store.load().map_err(AppError::internal)?.use_compact_prompt)
+}
+
+/// Turn the compact prompt on or off. Only affects local models; online
+/// models always get the full prompt.
+#[tauri::command]
+pub fn settings_set_compact_prompt(state: State<'_, AppState>, on: bool) -> Result<bool, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.use_compact_prompt = on;
+    store.save(&cfg).map_err(AppError::internal)?;
+    Ok(cfg.use_compact_prompt)
 }
 
 /// What Settings → Conversation memory needs: the saved value, how far the
@@ -205,39 +246,6 @@ pub fn chat_prefs_get(state: State<'_, AppState>) -> Result<ChatPrefs, AppError>
         max_tokens: cfg.chat_max_tokens,
         persona: cfg.chat_persona,
     })
-}
-
-/// What each online model costs, for the Usage screen's cost figures.
-/// USD per 1M tokens, keyed by model id. Local models are free.
-#[tauri::command]
-pub fn settings_model_prices(
-    state: State<'_, AppState>,
-) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
-    let store = state
-        .config_store
-        .lock()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    Ok(store.load().map_err(AppError::internal)?.model_prices)
-}
-
-/// Replace the whole price table. Prices are plain numbers, so negatives
-/// are dropped rather than trusted.
-#[tauri::command]
-pub fn settings_set_model_prices(
-    state: State<'_, AppState>,
-    prices: std::collections::BTreeMap<String, crate::config::ModelPrice>,
-) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
-    let store = state
-        .config_store
-        .lock()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    let mut cfg = store.load().map_err(AppError::internal)?;
-    cfg.model_prices = prices
-        .into_iter()
-        .filter(|(_, price)| price.input >= 0.0 && price.output >= 0.0)
-        .collect();
-    store.save(&cfg).map_err(AppError::internal)?;
-    Ok(cfg.model_prices)
 }
 
 #[tauri::command]

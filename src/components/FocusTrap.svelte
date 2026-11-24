@@ -1,8 +1,12 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { onDestroy, type Snippet } from "svelte";
 
   let { children }: { children?: Snippet } = $props();
   let container = $state<HTMLDivElement | null>(null);
+  // Captured before the dialog pulls focus in, then restored when it closes:
+  // the trigger button (or whatever had focus) gets focus back, not the body.
+  let previous: HTMLElement | null = null;
+  let captured = false;
 
   const focusable = () => Array.from(container?.querySelectorAll<HTMLElement>(
     'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -27,9 +31,15 @@
   };
 
   $effect(() => {
-    if (!container) return;
-    const first = focusable()[0];
-    first?.focus();
+    if (!container || captured) return;
+    captured = true;
+    const active = document.activeElement;
+    previous = active instanceof HTMLElement ? active : null;
+    focusable()[0]?.focus();
+  });
+
+  onDestroy(() => {
+    if (previous?.isConnected) previous.focus();
   });
 </script>
 

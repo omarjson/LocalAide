@@ -93,9 +93,13 @@ pub enum ChatStreamEvent {
         items: Vec<TodoItem>,
     },
     /// What a subagent (`run_subagent`, tool call `id`) is doing now.
+    /// `tokens` is the subagent's total token use (prompt + answer) once
+    /// its run finishes; steps before that carry none.
     SubagentStep {
         id: String,
         step: String,
+        #[serde(default)]
+        tokens: Option<usize>,
     },
     /// The model saved or improved a skill on its own (`save_skill`). The
     /// chat shows a note with Undo, which calls `skills_undo(change_id)`.
@@ -113,6 +117,10 @@ pub struct QuestionOption {
     pub label: String,
     #[serde(default)]
     pub description: String,
+    /// The model's pick when the user is unsure: shown first, marked
+    /// "Recommended". Old calls omit it, so it defaults to false.
+    #[serde(default)]
+    pub recommended: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

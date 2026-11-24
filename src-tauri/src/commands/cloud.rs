@@ -3,9 +3,13 @@
 //! Providers live in the app config file on this machine. The API key never
 //! leaves the backend except as a bearer token to the provider's base URL.
 
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::config::{CloudProvider, is_local_host, validate_base_url};
+use crate::config::{CloudProvider, ModelPrice, is_local_host, validate_base_url};
 use crate::domain::cloud::{
     CloudConfigStatus, CloudModeRequest, CloudModelsRequest, CloudProviderDto,
     CloudProviderSaveRequest, ProviderEnableRequest,
@@ -339,6 +343,33 @@ fn is_loopback_http(base_url: &str) -> bool {
     url::Url::parse(base_url).is_ok_and(|u| u.scheme() == "http" && is_local_host(&u))
 }
 
+/// How a save request changes a stored API key. `None` (the field omitted)
+/// keeps the saved key, an explicitly empty string clears it, and any other
+/// string replaces it. Kept out of the command so the three cases are testable
+/// without a config store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyChange<'a> {
+    Keep,
+    Clear,
+    Set(&'a str),
+}
+
+fn key_change(requested: Option<&str>) -> KeyChange<'_> {
+    match requested {
+        None => KeyChange::Keep,
+        Some(k) if k.trim().is_empty() => KeyChange::Clear,
+        Some(k) => KeyChange::Set(k.trim()),
+    }
+}
+
+fn apply_key_change(stored: &mut String, change: KeyChange<'_>) {
+    match change {
+        KeyChange::Keep => {}
+        KeyChange::Clear => stored.clear(),
+        KeyChange::Set(key) => *stored = key.to_string(),
+    }
+}
+
 /// Short hint of a stored key for the frontend: fixed dots plus the last four
 /// characters for longer keys.
 fn key_hint(key: &str) -> String {
@@ -445,6 +476,53 @@ pub async fn cloud_models_refresh(
     Ok(models)
 }
 
+/// Model prices from OpenRouter, USD per 1M tokens, keyed by model id.
+/// OpenRouter's `/models` list is public, so no key is needed. The Usage
+/// screen loads this on every visit and range change, so the list is cached
+/// for ten minutes. Keyed by the full id ("vendor/model") and, when it has
+/// one, the short id too, because the usage log records the id as the
+/// picker showed it, which is sometimes the short form.
+type ModelPriceMap = BTreeMap<String, ModelPrice>;
+
+#[tauri::command]
+pub async fn openrouter_model_prices() -> Result<ModelPriceMap, AppError> {
+    const OPENROUTER_API: &str = "https://openrouter.ai/api/v1";
+    const CACHE_FOR: Duration = Duration::from_secs(600);
+    static CACHE: OnceLock<Mutex<Option<(Instant, ModelPriceMap)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock()
+        && let Some((at, prices)) = guard.as_ref()
+        && at.elapsed() < CACHE_FOR
+    {
+        return Ok(prices.clone());
+    }
+    let models = list_models(OPENROUTER_API, "").await?;
+    let mut prices: ModelPriceMap = BTreeMap::new();
+    for m in &models {
+        let Some(prompt) = m.prompt_price_per_million else {
+            continue;
+        };
+        let Some(completion) = m.completion_price_per_million else {
+            continue;
+        };
+        let price = ModelPrice {
+            input: prompt,
+            output: completion,
+            cache_read: m.cache_price_per_million,
+        };
+        prices.insert(m.id.clone(), price);
+        if let Some(short) = m.id.rsplit('/').next()
+            && short != m.id
+        {
+            prices.entry(short.to_string()).or_insert(price);
+        }
+    }
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((Instant::now(), prices.clone()));
+    }
+    Ok(prices)
+}
+
 /// Keep a provider's model list, when the address is still the one the
 /// list came from.
 fn store_models(
@@ -545,13 +623,23 @@ pub fn cloud_provider_save(
     let mut cfg = load_config(&state)?;
 
     // Two entries for the same endpoint and model are always a mistake; the
-    // entry being edited is exempt from its own match.
+    // entry being edited is exempt from its own match. So is the same
+    // address under the same name with a different default model: that is
+    // how "Kilo Code" ended up listed three times in the model menu.
+    let same_address = |a: &str, b: &str| {
+        a.trim()
+            .trim_end_matches('/')
+            .eq_ignore_ascii_case(b.trim().trim_end_matches('/'))
+    };
     let duplicate = cfg.cloud_providers.iter().any(|p| {
-        p.base_url == base_url && p.model == model && req.id.as_deref() != Some(p.id.as_str())
+        req.id.as_deref() != Some(p.id.as_str())
+            && ((p.base_url == base_url && p.model == model)
+                || (same_address(&p.base_url, &base_url)
+                    && p.label.trim().eq_ignore_ascii_case(label.trim())))
     });
     if duplicate {
         return Err(AppError::invalid_input(
-            "A provider with this base URL and model already exists.",
+            "A provider with this address already exists. Edit the existing one instead of adding it again.",
         ));
     }
 
@@ -561,14 +649,12 @@ pub fn cloud_provider_save(
             let Some(provider) = provider else {
                 return Err(AppError::invalid_input("That provider no longer exists."));
             };
-            let new_key = req
-                .api_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty());
+            let change = key_change(req.api_key.as_deref());
             // A saved key goes only to the address it was entered for. When
-            // the address moves to another site, the key must be entered again.
-            if new_key.is_none()
+            // the address moves to another site, a save that keeps the key
+            // must be entered again. An explicit new key (or a clear) is
+            // intentional and does not trip this guard.
+            if change == KeyChange::Keep
                 && !provider.api_key.is_empty()
                 && !same_origin(&provider.base_url, &base_url)
             {
@@ -587,17 +673,16 @@ pub fn cloud_provider_save(
             }
             provider.base_url = base_url;
             provider.model = model;
-            if let Some(key) = new_key {
-                provider.api_key = key.to_string();
-            }
+            // Empty string clears the stored key and removes it from the
+            // OS keychain on save; omitting the field keeps it untouched.
+            apply_key_change(&mut provider.api_key, change);
             provider.id.clone()
         }
         None => {
-            let key = req
-                .api_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty());
+            let key = match key_change(req.api_key.as_deref()) {
+                KeyChange::Set(k) => k.to_string(),
+                KeyChange::Keep | KeyChange::Clear => String::new(),
+            };
             // The key is optional: keyless services (Pollinations) and routers
             // on this computer work without one. A provider that needs a key
             // answers chat with a clear "needs an API key" message.
@@ -607,7 +692,7 @@ pub fn cloud_provider_save(
                 label,
                 base_url,
                 model,
-                api_key: key.unwrap_or_default().to_string(),
+                api_key: key,
                 enabled: true,
                 models: Vec::new(),
                 check: None,
@@ -657,6 +742,9 @@ pub fn cloud_provider_delete(
     if cfg.cloud_providers.len() == before {
         return Err(AppError::invalid_input("That provider no longer exists."));
     }
+    // The config save only sees the providers that remain, so remove the
+    // deleted one's key from the OS keychain explicitly.
+    let _ = crate::services::secrets::delete(&provider_id);
     if cfg.active_cloud_provider.as_deref() == Some(provider_id.as_str()) {
         cfg.active_cloud_provider = cfg.cloud_providers.first().map(|p| p.id.clone());
         // Chat pointed at the deleted provider. Turn cloud mode off instead of
@@ -766,7 +854,20 @@ fn same_origin(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{same_origin, uuid_v4};
+    use super::{KeyChange, apply_key_change, key_change, same_origin, uuid_v4};
+
+    #[test]
+    fn an_empty_key_clears_but_an_omitted_one_keeps_the_stored_key() {
+        let mut stored = "sk-secret".to_string();
+        apply_key_change(&mut stored, key_change(None));
+        assert_eq!(stored, "sk-secret", "omitting the field keeps the key");
+        apply_key_change(&mut stored, key_change(Some("   ")));
+        assert_eq!(stored, "", "an explicit empty string clears the key");
+        apply_key_change(&mut stored, key_change(Some("  sk-new  ")));
+        assert_eq!(stored, "sk-new", "pasted whitespace is trimmed");
+        assert_eq!(key_change(Some("")), KeyChange::Clear);
+        assert_eq!(key_change(None), KeyChange::Keep);
+    }
 
     #[test]
     fn a_key_stays_with_its_site() {

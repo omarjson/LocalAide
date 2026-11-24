@@ -14,17 +14,20 @@ pub fn share_status() -> ShareStatus {
 }
 
 /// Start sharing. `tunnel` false serves on this computer only, for trying
-/// the page before the link goes public.
+/// the page before the link goes public. `lan` opts into binding on all
+/// interfaces; the pairing token is required either way.
 #[tauri::command]
 pub async fn share_start(
     state: State<'_, AppState>,
     tunnel: Option<bool>,
+    lan: Option<bool>,
 ) -> Result<ShareStarted, AppError> {
     let owned: AppState = (*state).clone();
     let with_tunnel = tunnel.unwrap_or(true);
+    let with_lan = lan.unwrap_or(false);
     let (tx, rx) = tokio::sync::oneshot::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(share::start(owned, with_tunnel));
+        let _ = tx.send(share::start(owned, with_tunnel, with_lan));
     });
     rx.await
         .unwrap_or_else(|_| Err(AppError::internal("Sharing stopped while it started.")))

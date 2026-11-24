@@ -16,7 +16,8 @@ use crate::services::inference::PromptMessage;
 use crate::services::inference::capabilities::effort_for_request;
 use crate::services::inference::context::ContextBudget;
 use crate::services::inference::modes::{
-    ChatMode, ToolGroups, compose_system_prompt, tool_guidance,
+    ChatMode, ToolGroups, compact_tool_guidance, compose_compact_system_prompt,
+    compose_system_prompt, tool_guidance,
 };
 use crate::services::inference::openai_stream::{ChatTurn, Effort};
 use crate::services::inference::router::ChatTarget;
@@ -411,18 +412,25 @@ pub(crate) fn prepare_run(
     // so the engine can reuse its cached prompt instead of reading the whole
     // chat again; the clock, which changes every minute, rides on the new
     // message instead (below).
+    //
+    // The compact prompt (N11) is local models only, and only when the
+    // user turns it on in Settings — it defaults off, so the prompt a
+    // local run gets without the toggle is byte-identical to before.
+    let compact_prompt = matches!(target, ChatTarget::Local) && cfg.use_compact_prompt;
     let mut extra = Vec::new();
-    let guidance = tool_guidance(
-        ToolGroups {
-            web: perms.web,
-            notes: perms.notes,
-            files: perms.files,
-            skills: perms.skills,
-            shell: perms.shell,
-            mcp: !perms.mcp.is_empty(),
-        },
-        mode,
-    );
+    let groups = ToolGroups {
+        web: perms.web,
+        notes: perms.notes,
+        files: perms.files,
+        skills: perms.skills,
+        shell: perms.shell,
+        mcp: !perms.mcp.is_empty(),
+    };
+    let guidance = if compact_prompt {
+        compact_tool_guidance(groups, mode)
+    } else {
+        tool_guidance(groups, mode)
+    };
     if caps.tools && !guidance.is_empty() {
         extra.push(guidance);
     }
@@ -439,7 +447,29 @@ pub(crate) fn prepare_run(
         // Interactive forms (A2UI) come with the other visuals.
         extra.push(A2UI_GUIDANCE.to_string());
     }
-    let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
+    // Project rules from AGENTS.md / CLAUDE.md / .hermes.md / .cursorrules,
+    // best-effort and capped. Users can switch this module off in Developer.
+    let context_files_on = state
+        .config_store
+        .lock()
+        .ok()
+        .and_then(|store| store.load().ok())
+        .map(|cfg| cfg.developer.module_on("context_files"))
+        .unwrap_or(true);
+    if context_files_on {
+        let mut roots = vec![crate::app::paths::workspace_dir()];
+        roots.extend(crate::services::context_files::indexed_roots(
+            &crate::app::paths::index_dir().join("library.db"),
+        ));
+        if let Some(rules) = crate::services::inference::context::project_rules(&roots, 8192) {
+            extra.push(rules);
+        }
+    }
+    let system = if compact_prompt {
+        compose_compact_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"))
+    } else {
+        compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"))
+    };
 
     let thinking_room = if thinks {
         effort.thinking_allowance()
@@ -468,6 +498,9 @@ pub(crate) fn prepare_run(
                     m.attachments.as_deref().unwrap_or(&[]),
                     (cap_old && i < keep_from).then_some(OLD_FILE_CHARS),
                 ),
+                // Tool parts ride along so `build_messages` can prune old
+                // tool outputs instead of dropping them all unseen (N4).
+                parts: m.parts.clone(),
                 ..Default::default()
             })
             .collect()
@@ -482,6 +515,14 @@ pub(crate) fn prepare_run(
         history = build_history(true);
     }
     let mut message = history_text(&req.message, &req.attachments);
+    if req.resume.unwrap_or(false) {
+        // Resuming a stopped answer: the history already ends with the
+        // partial answer, so the only new turn is the instruction to
+        // continue it. `req.message` (empty on resume) is ignored, and
+        // `user_message` stays empty so a tool-less model does not go
+        // gathering for the instruction text.
+        message = RESUME_MESSAGE.to_string();
+    }
     if let Some(now) = req.now.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         let now: String = now.chars().take(120).collect();
         message.push_str(&format!("\n\n[The user's current date and time: {now}.]"));
@@ -531,6 +572,11 @@ pub(crate) fn prepare_run(
 }
 
 const PLAN_GUIDANCE: &str = "Plan mode is on. Look around with the read-only tools as much as you need, then answer with a short numbered plan: what you would change, in which files, and which commands you would run. Do not try to make the changes; they will not run. End by saying the user can press Build to carry out the plan.";
+
+/// The only new turn when an answer resumes after the user stopped it.
+/// The partial answer is already the last history turn, so this tells the
+/// model to pick it up instead of starting over.
+const RESUME_MESSAGE: &str = "Continue your previous answer from exactly where it stopped. Do not repeat what you already wrote and do not start over.";
 
 const RICH_OUTPUT_GUIDANCE: &str = "The chat can draw visuals from fenced code blocks. Use one only when a visual helps more than text:\n- ```chart with JSON: {\"type\": \"bar\" | \"line\" | \"pie\", \"title\": \"...\", \"labels\": [\"...\"], \"series\": [{\"name\": \"...\", \"values\": [1, 2]}]}\n- ```mermaid for diagrams (flowchart, sequence, class, state, timeline, gantt).\n- ```html for an interface mockup or a small page. It runs in a sandbox with no network and no access to the user's files; inline all CSS and scripts. To let the user pick an option on it, call localaide.choose(\"the choice in a few words\") from a button; the choice comes back as the user's next message.\nFor tables, use markdown tables.";
 

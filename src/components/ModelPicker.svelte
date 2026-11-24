@@ -8,7 +8,7 @@
   import { dur, motion } from "../lib/motion";
   import { contextLabel, effortLabel } from "../lib/chatParts";
   import { formatGb } from "../lib/format";
-  import { matchesModel, NO_FILTERS, parseFilters, providerKey, providerList, providerModels, type PickerFilters } from "../lib/modelPicker";
+  import { anyFilterOn, matchesModel, NO_FILTERS, parseFilters, providerKey, providerList, providerModels, sectionOrder, type PickerFilters } from "../lib/modelPicker";
   import type { ModelChoice, ModelChoices } from "../lib/api/bindings";
 
   interface Props {
@@ -46,7 +46,6 @@
 
   const isChatActive = (m: ModelChoice) => (activeKey ? m.key === activeKey : m.active);
   const active = $derived(choices?.models.find(isChatActive) ?? null);
-  const providers = $derived(providerList(choices));
   // The provider whose models are listed; starts at the active model's.
   let viewing = $state<string | null>(null);
   let view = $state<"models" | "providers">("models");
@@ -65,7 +64,17 @@
       return { ...NO_FILTERS };
     }
   })());
-  const anyFilter = $derived(filters.reasoning || filters.vision || filters.free);
+  const anyFilter = $derived(anyFilterOn(filters));
+
+  // pickerSections() is the one source of truth for menu order: Starred,
+  // On this computer, then enabled providers. Both the provider switcher and
+  // the rows follow it, so a model never appears above its own section.
+  const sections = $derived(sectionOrder(choices, query, filters));
+  const rank = (key: string) => {
+    const at = sections.indexOf(key);
+    return at < 0 ? sections.length : at;
+  };
+  const providers = $derived(providerList(choices).slice().sort((a, b) => rank(a.key) - rank(b.key)));
 
   $effect(() => {
     try {
@@ -82,7 +91,7 @@
 
   const shown = $derived(viewing ?? (active ? providerKey(active) : providers[0]?.key ?? "local"));
   const provider = $derived(providers.find((p) => p.key === shown) ?? null);
-  const list = $derived(providerModels(choices, shown, query, filters));
+  const list = $derived(providerModels(choices, shown, query, filters).slice().sort((a, b) => rank(providerKey(a)) - rank(providerKey(b))));
   const elsewhere = $derived(query.trim() && list.length === 0 ? (choices?.models ?? []).filter((m) => providerKey(m) !== shown && matchesModel(m, query, filters)).slice(0, 8) : []);
   const rows = $derived([...list, ...elsewhere]);
 
@@ -189,8 +198,8 @@
 
 <svelte:document onpointerdown={onDocumentPointer} />
 
-<div class="relative" bind:this={rootEl}>
-  <button type="button" aria-haspopup="dialog" aria-expanded={open} onclick={() => (open = !open)} disabled={!choices} class="model-chip" title="Choose the model (Ctrl+Shift+M)">
+<div class="relative min-w-0" bind:this={rootEl}>
+  <button type="button" aria-haspopup="dialog" aria-expanded={open} onclick={() => (open = !open)} disabled={!choices} class="model-chip min-w-0" aria-label={`Model: ${chipLabel}${active && levels.length > 0 && effort !== "auto" && !busy ? `, ${effortLabel(effort)} effort` : ""}. Choose the model (Ctrl+Shift+M)`} title="Choose the model (Ctrl+Shift+M)">
     {#if busy}
       <span class="h-3 w-3 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
     {:else if active && !active.local}
@@ -198,13 +207,16 @@
     {:else}
       <span class={`h-1.5 w-1.5 shrink-0 rounded-full ${active && choices?.local_loaded ? "bg-emerald-400" : "bg-ink-600"}`} aria-hidden="true"></span>
     {/if}
-    <span class="max-w-[12rem] truncate font-medium text-ink-100">{chipLabel}</span>
-    {#if active && levels.length > 0 && effort !== "auto" && !busy}<span class="text-ink-400">{effortLabel(effort)}</span>{/if}
+    <span data-fold-label="model" class="max-w-[12rem] truncate font-medium text-ink-100">{chipLabel}</span>
+    {#if active && levels.length > 0 && effort !== "auto" && !busy}<span data-fold-label="effort" class="text-ink-400">{effortLabel(effort)}</span>{/if}
     <Icon name="chevron-down" class={`h-3 w-3 shrink-0 text-ink-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
   </button>
 
   {#if open && choices}
     <div role="dialog" aria-label="Choose a model" tabindex="-1" onkeydown={onKeydown} class="picker" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+      {#if choices.budget_note}
+        <p class="border-b border-ink-800 px-3 py-2 text-xs leading-5 text-ink-400" role="status">{choices.budget_note}</p>
+      {/if}
       {#if view === "providers"}
         <div class="p-1.5" role="listbox" aria-label="Providers">
           {#each providers as p (p.key)}
@@ -253,6 +265,7 @@
         <div class="flex items-center gap-1.5 px-3 pb-1" role="group" aria-label="Filter models">
           <button type="button" aria-pressed={filters.reasoning} onclick={() => toggleFilter("reasoning")} class={`fchip ${filters.reasoning ? "fchip-on" : ""}`}>Thinks</button>
           <button type="button" aria-pressed={filters.vision} onclick={() => toggleFilter("vision")} class={`fchip ${filters.vision ? "fchip-on" : ""}`}>Vision</button>
+          <button type="button" aria-pressed={filters.tools} onclick={() => toggleFilter("tools")} class={`fchip ${filters.tools ? "fchip-on" : ""}`}>Tools</button>
           <button type="button" aria-pressed={filters.free} onclick={() => toggleFilter("free")} class={`fchip ${filters.free ? "fchip-on" : ""}`}>Free</button>
           {#if anyFilter}
             <span class="ml-auto flex items-center gap-1.5">
@@ -269,6 +282,8 @@
             <p class="px-3 py-5 text-center text-sm text-ink-400">{query.trim() ? `No model matches “${query.trim()}”.` : provider?.needsRefresh ? "Press Load to see this provider's models." : "No models here yet."}</p>
           {/if}
           {#each rows as m, index (m.key)}
+            {#if m.favorite && (index === 0 || !rows[index - 1].favorite)}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Starred</div>{/if}
+            {#if !m.favorite && index > 0 && rows[index - 1].favorite}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">{provider?.label ?? "Models"}</div>{/if}
             {#if index === list.length && elsewhere.length > 0}<div class="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-500">Other providers</div>{/if}
             <div id={`model-opt-${index}`} data-index={index} role="option" aria-selected={isChatActive(m)} tabindex="-1" onclick={() => pick(m)} onkeydown={(e) => { if (e.key === " ") { e.preventDefault(); pick(m); } }} onmousemove={() => (cursor = index)} class={`row ${index === cursor ? "row-cursor" : ""} ${isChatActive(m) ? "row-active" : ""}`}>
               <span class="min-w-0 flex-1">
@@ -559,6 +574,7 @@
     border-radius: inherit;
     background: linear-gradient(105deg, transparent 32%, rgb(255 243 224 / 0.5) 50%, transparent 68%);
     transform: translateX(-110%);
+    will-change: transform;
     animation: effort-sheen 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
   .effort-max .effort-fill::after {

@@ -6,6 +6,7 @@
   import { slide } from "svelte/transition";
   import Icon from "./Icon.svelte";
   import { dur, motion } from "../lib/motion";
+  import { orderOptionsRecommended } from "../lib/questions";
   import type { QuestionItem } from "../lib/api/bindings";
 
   interface Props {
@@ -35,6 +36,9 @@
   });
   const current = $derived(items[Math.min(step, items.length - 1)]);
   const last = $derived(step >= items.length - 1);
+  // A recommended option stands first and is marked; the rest keep the
+  // model's order. The "Other" free-text answer stays last, after them.
+  const shownOptions = $derived(current ? orderOptionsRecommended(current.options) : []);
 
   const answered = (i: number) => (picked[i]?.length ?? 0) > 0 || !!other[i]?.trim();
   const canSubmit = $derived(items.every((_, i) => answered(i)));
@@ -123,14 +127,14 @@
           {#if current.header}<p class="text-[13px] font-semibold text-ink-200">{current.header}</p>{/if}
           <p class="text-[15px] leading-6 text-ink-50 text-pretty">{current.question}</p>
           <div class="mt-2 space-y-0.5" role={current.multiple ? "group" : "radiogroup"} aria-label={current.question}>
-            {#each current.options as option, oi (option.label + oi)}
+            {#each shownOptions as option, oi (option.label + oi)}
               {@const on = (picked[step] ?? []).includes(option.label)}
               <button type="button" role={current.multiple ? "checkbox" : "radio"} aria-checked={on} class={`qd-option ${on ? "qd-option-on" : ""}`} onclick={() => toggle(option.label)}>
                 <span class={`qd-mark ${current.multiple ? "rounded-[4px]" : "rounded-full"} ${on ? "qd-mark-on" : ""}`} aria-hidden="true">
                   {#if on}{#if current.multiple}<Icon name="check" class="h-3 w-3" />{:else}<span class="h-2 w-2 rounded-full bg-current"></span>{/if}{/if}
                 </span>
                 <span class="min-w-0">
-                  <span class={`block text-sm ${on ? "font-semibold text-ink-50" : "text-ink-200"}`}>{option.label}</span>
+                  <span class={`block text-sm ${on ? "font-semibold text-ink-50" : "text-ink-200"}`}>{option.label}{#if option.recommended}<span class="qd-rec">Recommended</span>{/if}</span>
                   {#if option.description}<span class="block text-[13px] leading-5 text-ink-500">{option.description}</span>{/if}
                 </span>
               </button>
@@ -220,6 +224,16 @@
   }
   .qd-option-on {
     background: color-mix(in oklab, var(--color-veil) 7%, transparent);
+  }
+  .qd-rec {
+    margin-left: 0.4rem;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--color-ember-500) 16%, transparent);
+    padding: 0.05rem 0.45rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-ember-200);
+    white-space: nowrap;
   }
   .qd-mark {
     margin-top: 0.15rem;
