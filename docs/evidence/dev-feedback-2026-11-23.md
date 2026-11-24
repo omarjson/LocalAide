@@ -636,3 +636,36 @@ warning is the pre-existing `context="module"` deprecation in
 `Icon.svelte`); `cargo fmt --check` clean; `npm run build` passes. Rust
 verification is CI's job (no local GTK/WebKit libs): clippy + cargo test
 on the CI run.
+
+## 14. macOS title bar: logo out of the chrome — 2026-11-24 (`dev` only)
+
+Omar's screenshot (18:29 EET) showed the chrome row: traffic lights, then
+the ghost tile logo button. His reference (an app he called "open chamber")
+has a clean bar — traffic lights, sidebar controls, no app logo in the
+title bar — and his words were that he could give "100 million references"
+that apps don't do that. He also reported RAM ramping to ~500 MB after
+agent scouting runs (he expects ~100–120 MB).
+
+- **Title bar.** The logo was our own design choice, not a Tauri limit:
+  Batch 1 made it the window menu (Minimize / Restore / Close). On macOS
+  that menu is redundant — the traffic lights already are the window
+  controls — and no Mac app puts its logo there. Fix: `TitleBar.svelte`
+  now renders the logo button only on Windows/Linux (`{#if !isMac}`);
+  on macOS the chrome is just the traffic lights plus the drag area, tabs
+  still in their own row below. `window-chrome.test.ts` updated to assert
+  the logo menu is Windows/Linux only. Stale comments in `TitleBar.svelte`
+  and `App.svelte` ("the title bar carries the logo and name") fixed.
+- **Shell question.** Omar asked whether to switch the whole project to
+  Chromium/Electron/Expo. Analysis given: no rewrite before the Dec 5
+  submission — it would forfeit months of backend work; Electron is heavier
+  on RAM than WKWebView, so it would make the 500 MB worse; Expo is React
+  Native and cannot host the Rust backend; the visuals are the Svelte
+  layer, portable regardless of shell. Shell migration is a LATER item for
+  after Dec 5, if ever.
+- **RAM (open).** Checked in code: mockup-page cache capped (64 x 512 KB),
+  messages load per active thread only, subagent contexts drop when the run
+  ends, tool outputs capped 4–8 KB per stored part. Remaining suspect is
+  the WebView rendering the whole untruncated chat with no virtualization
+  (every message, tool output and subagent transcript stays in the DOM).
+  Blocked on Omar: which Activity Monitor process shows 500 MB —
+  LocalAide, LocalAide WebContent, or llama-server. The fix depends on it.

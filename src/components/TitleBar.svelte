@@ -1,9 +1,11 @@
 <script lang="ts">
-  // One chrome row for the whole window: the logo, the drag area and the
-  // window controls. The logo is the window menu (Minimize / Restore /
-  // Close): the old title-bar menu button duplicated the sidebar control
-  // and, on wide windows, did nothing visible. The project name is gone
-  // from the bar; the logo alone is the identity.
+  // One chrome row for the whole window: the drag area and the window
+  // controls. On Windows and Linux the logo is the window menu (Minimize /
+  // Restore / Close): the old title-bar menu button duplicated the sidebar
+  // control and, on wide windows, did nothing visible. On macOS there is
+  // no logo in the chrome at all — real Mac apps don't put one next to the
+  // traffic lights, and the traffic lights already are the window controls,
+  // so the menu would be redundant. The project name is gone from the bar.
   //
   // macOS keeps its own traffic lights and hides the custom buttons. Its
   // chat tabs live in a row of their own below the chrome, so they no
@@ -123,26 +125,28 @@
     aria-label="Window and open chats"
     ondblclick={onChromeDblClick}
   >
-    <div class="relative shrink-0">
-      <button
-        type="button"
-        class="logo-btn grid h-7 w-7 place-items-center rounded-md hover:bg-veil/10"
-        aria-label="Window menu"
-        title="Window menu"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onclick={() => (menuOpen = !menuOpen)}
-      >
-        <LogoMark class="h-4 w-4" />
-      </button>
-      {#if menuOpen}
-        <div role="menu" aria-label="Window" class="absolute left-0 top-9 z-50 w-44 overflow-hidden rounded-lg border border-edge bg-ink-900 py-1 shadow-2xl">
-          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; minimizeWindow(); }}>Minimize</button>
-          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; toggleMaximizeWindow(); }}>{maximized ? "Restore" : "Maximize"}</button>
-          <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; closeWindow(); }}>Close</button>
-        </div>
-      {/if}
-    </div>
+    {#if !isMac}
+      <div class="relative shrink-0">
+        <button
+          type="button"
+          class="logo-btn grid h-7 w-7 place-items-center rounded-md hover:bg-veil/10"
+          aria-label="Window menu"
+          title="Window menu"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onclick={() => (menuOpen = !menuOpen)}
+        >
+          <LogoMark class="h-4 w-4" />
+        </button>
+        {#if menuOpen}
+          <div role="menu" aria-label="Window" class="absolute left-0 top-9 z-50 w-44 overflow-hidden rounded-lg border border-edge bg-ink-900 py-1 shadow-2xl">
+            <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; minimizeWindow(); }}>Minimize</button>
+            <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; toggleMaximizeWindow(); }}>{maximized ? "Restore" : "Maximize"}</button>
+            <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; closeWindow(); }}>Close</button>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     {#if !tabsBelow && visible && tabs.length > 0}
       {@render tabStrip()}

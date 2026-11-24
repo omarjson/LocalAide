@@ -24,7 +24,7 @@ test("macOS uses the native traffic lights, not custom window buttons", () => {
   }
 });
 
-test("the chrome row carries the window identity; tabs sit below it on macOS", () => {
+test("the chrome row is clean on macOS; tabs sit below it", () => {
   const bar = read("src/components/TitleBar.svelte");
   assert.match(bar, /platform\(\) === "mac"/);
   assert.match(bar, /\{#if !isMac\}/, "custom buttons are hidden on macOS");
@@ -36,7 +36,14 @@ test("the chrome row carries the window identity; tabs sit below it on macOS", (
   assert.match(bar, /ondblclick/, "double-clicking empty chrome zooms the window");
   assert.doesNotMatch(bar, /onMenu/, "the dead title-bar menu button is gone");
   assert.doesNotMatch(bar, /LocalAide<\/span>/, "the project name is gone from the title bar");
-  assert.match(bar, /Window menu/, "the logo opens a window menu instead");
+  // No logo in the macOS chrome: real Mac apps don't put one next to the
+  // traffic lights, and the traffic lights already are the window
+  // controls. The logo window menu lives on Windows/Linux only.
+  assert.match(
+    bar,
+    /\{#if !isMac\}[\s\S]*?aria-label="Window menu"/,
+    "the logo window menu is Windows/Linux only",
+  );
   assert.match(bar, /Minimize/, "the window menu offers Minimize");
   assert.match(bar, /Close/, "the window menu offers Close");
 

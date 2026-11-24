@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **macOS title bar has no logo.** The ghost tile sat in the chrome next to the traffic lights, which real Mac apps don't do — the reference is a clean bar with just the traffic lights and the drag area. The logo button and its Minimize / Restore / Close menu are now Windows/Linux only, where the logo is the window menu; on macOS the traffic lights already are the window controls. Tabs stay in their own row below the chrome.
+
 ## [0.2.3] - 2026-11-24
 
 A large local-first upgrade: one window chrome row, a diagnostics and repair
