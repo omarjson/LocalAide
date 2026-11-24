@@ -46,6 +46,10 @@ test("the chrome row is clean on macOS; tabs sit below it", () => {
   );
   assert.match(bar, /Minimize/, "the window menu offers Minimize");
   assert.match(bar, /Close/, "the window menu offers Close");
+  // Tabs are flat pills, not bordered boxes, and the chrome carries no
+  // divider when the tab row follows it — one line under the tab row is
+  // the only divider, like a normal Mac app.
+  assert.doesNotMatch(bar, /rounded-t-lg border-x border-t/, "tabs are flat pills, not bordered boxes");
 
   const app = read("src/App.svelte");
   assert.doesNotMatch(app, /import TabStrip/, "the old separate tab strip is gone");

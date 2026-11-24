@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - **macOS title bar has no logo.** The ghost tile sat in the chrome next to the traffic lights, which real Mac apps don't do — the reference is a clean bar with just the traffic lights and the drag area. The logo button and its Minimize / Restore / Close menu are now Windows/Linux only, where the logo is the window menu; on macOS the traffic lights already are the window controls. Tabs stay in their own row below the chrome.
+- **macOS title bar looks normal, not stacked lines.** Tabs were bordered boxes (top and side borders each) under a bordered chrome row — line over line over line. They are now flat pills (active one filled, the rest transparent) and the chrome carries no divider when the tab row follows it, so the single line under the tab row is the only divider, like VS Code or Linear.
 
 ## [0.2.3] - 2026-11-24
 

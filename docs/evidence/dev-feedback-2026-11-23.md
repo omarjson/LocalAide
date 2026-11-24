@@ -669,3 +669,49 @@ agent scouting runs (he expects ~100–120 MB).
   (every message, tool output and subagent transcript stays in the DOM).
   Blocked on Omar: which Activity Monitor process shows 500 MB —
   LocalAide, LocalAide WebContent, or llama-server. The fix depends on it.
+
+## 15. Title bar, normal look + future refactoring list — 2026-11-24 (`dev` only)
+
+Omar, on the logo fix: make the title bar "like usual typical normal
+looking, not ghost line over line and over line" — it looked "meh and
+mid". And he asked for refactoring recommendations for the future, not
+now (now is enhancements).
+
+- **Title bar, second pass.** The logo was out, but the stacked lines
+  stayed: bordered chrome row + tab row with bordered box-tabs (each tab
+  had top and side borders). Now the tabs are flat pills — active one
+  filled `bg-ink-900`, the rest transparent with a hover fill — and the
+  chrome carries no divider when the tab row follows it, so the single
+  line under the tab row is the only divider, like VS Code or Linear.
+  `window-chrome.test.ts` locks the flat look (no `rounded-t-lg border-x
+  border-t` on tabs).
+- **Shell question, closed for the submission.** See §14: no Electron /
+  Expo rewrite before Dec 5. Revisit after the submission if ever.
+
+### Refactoring recommendations (FUTURE — after the Dec 5 submission)
+
+1. **Split `ChatScreen.svelte` (~2,400 lines).** It holds streaming,
+   queueing, titles, suggestions, starters, persistence and modes in one
+   component. Pull the streaming/queue state into a store and the
+   composer, starters and header into their own components.
+2. **Virtualize the message list.** `{#each messages}` renders the whole
+   thread — every message, tool output and subagent transcript stays in
+   the DOM. This is also the prime suspect for the 500 MB report. Render
+   only the visible rows (plus a small overscan).
+3. **Split `services/agent/mod.rs` (~1,600 lines).** Run loop, subagent
+   fan-out and tool-call handling in one file; make the subagent runner
+   and the tool-call dispatch their own modules.
+4. **Title generation fails silently.** The `catch` in `generateTitle`
+   swallows errors, so a tab can stay stuck on the raw first message
+   ("hi"). Retry once and fall back to a short generated-style title
+   instead of echoing the message.
+5. **Real `git push` instead of API scripts.** Pushes go through
+   hand-rolled GitHub API scripts because HTTPS has no credentials on
+   the VM (the merge push needed its own variant). A fine-grained PAT in
+   the vault would let normal `git push` work and kill that tooling.
+6. **One `bump-version` script.** The version lives in 6 files and is
+   bumped by hand; the CI version gate catches drift, but a script would
+   remove the manual step entirely.
+7. **Stop asserting on source text in tests.** `window-chrome.test.ts`
+   regex-matches `.svelte` files — brittle. Prefer render/component
+   tests where the behaviour is visual.

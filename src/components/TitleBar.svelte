@@ -11,6 +11,11 @@
   // chat tabs live in a row of their own below the chrome, so they no
   // longer crowd the title bar or the traffic lights. Windows and Linux
   // keep the tabs in the chrome row, which already reads right there.
+  //
+  // The chrome is a normal Mac title bar: flat, no stacked lines. Tabs
+  // are flat pills (active one filled, the rest transparent), and the
+  // chrome carries no divider when the tab row follows it — the single
+  // line under the tab row is the only divider, like VS Code or Linear.
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "./Icon.svelte";
@@ -121,7 +126,7 @@
        empty chrome zooms the window, like a native title bar; the header
        itself is not interactive content. -->
   <header
-    class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-b border-edge bg-ink-950 ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
+    class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-edge bg-ink-950 ${tabsBelow && visible && tabs.length > 0 ? "" : "border-b"} ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
     aria-label="Window and open chats"
     ondblclick={onChromeDblClick}
   >
@@ -192,16 +197,16 @@
 
 {#snippet tabStrip()}
   <div
-    class="surface-enter tab-strip flex min-w-0 flex-1 items-end gap-1 self-stretch overflow-x-auto pt-1.5"
+    class="surface-enter tab-strip flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-x-auto"
     role="tablist"
     aria-label="Open chats"
   >
     {#each tabs as tab, i (tab.key)}
       <div
-        class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 items-center gap-1 rounded-t-lg border-x border-t px-2 text-sm transition-colors ${
+        class={`tab group/tab flex h-8 max-w-52 min-w-0 shrink-0 items-center gap-1 rounded-md px-2 text-sm transition-colors ${
           tab.key === activeKey
-            ? "border-ink-700 bg-ink-900 font-medium text-ink-50"
-            : "border-transparent text-ink-400 hover:bg-veil/5 hover:text-ink-100"
+            ? "bg-ink-900 font-medium text-ink-50"
+            : "text-ink-400 hover:bg-veil/5 hover:text-ink-100"
         }`}
       >
         <div
@@ -232,7 +237,7 @@
     {/each}
     <button
       type="button"
-      class="mb-1 ml-0.5 flex h-7 shrink-0 items-center gap-1 self-center rounded-md px-2 text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
+      class="ml-0.5 flex h-7 shrink-0 items-center gap-1 self-center rounded-md px-2 text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
       title="New chat tab (Ctrl+N)"
       aria-label="Open a new chat tab"
       onclick={() => onNew?.()}
