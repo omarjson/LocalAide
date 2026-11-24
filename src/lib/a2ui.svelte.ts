@@ -4,14 +4,14 @@
 // user types into a surface stays while the chat is open.
 
 import { getContext, setContext } from "svelte";
-import { buildSurfaces, type Surface } from "./a2ui";
+import { buildSurfaces, type A2uiProblem, type Surface } from "./a2ui";
 
 const KEY = Symbol("a2ui-chat");
 
 export interface BlockResult {
   /** Surfaces this block created; they are drawn where the block sits. */
   created: string[];
-  problems: string[];
+  problems: A2uiProblem[];
 }
 
 /** Finished ```a2ui blocks in a text, in order. */

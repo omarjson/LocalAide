@@ -585,3 +585,54 @@ pre-existing `context="module"` deprecation in `Icon.svelte`);
 `cargo fmt --check` clean; `npm run build` passes. Rust verification
 is CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI
 run.
+
+## 13. A2UI gaps G1, G2 + tests — 2026-11-24 (`dev` only)
+
+From the A2UI audit (`~/workspace/a2ui-audit.md`): the upstream v1.0 spec
+has not changed since ADR-0013, so no spec update was needed — but the
+audit found three small gaps worth fixing, and Omar approved them.
+
+- **G1 — the regex safety rules are now all four.** `safePattern` only
+  enforced rules 1–2 (256 code points; no unbounded quantifier inside a
+  quantified group). `src/lib/a2ui.ts` now has a small regex parser
+  (sequences, alternations, groups, classes, escapes, quantifiers) plus
+  `checkPattern`, which runs the dialect check and all four static
+  safety rules from the Basic Catalog Guide: rule 3 rejects an unbounded
+  quantifier over an alternation whose branches can start with the same
+  character (`(a|ab)*c`); rule 4 rejects two adjacent
+  unbounded-quantified atoms with overlapping character sets
+  (`\d+\s*\d+`), where only zero-width assertions or items that can
+  match the empty string count as "between" them — so `\d+\s+\d+` still
+  passes, because `\s+` always consumes. The dialect is now enforced
+  while parsing (backreferences, lookbehind, named groups, `\p`/`\P`,
+  `\c`, octal escapes, inline flags) instead of by a pre-regex, which
+  also fixes a false rejection: a literal backslash followed by `1`
+  (`\\1`) is no longer mistaken for a backreference. Rule 2 is now the
+  parser's version too, which closes the old regex's gaps (nested
+  groups like `((a+))+`, and `{2,3}` bounds). A pattern outside the
+  dialect or failing a rule fails with `EXPRESSION_ERROR` (the
+  `regex` function returns `{valid:false, code:"EXPRESSION_ERROR"}`);
+  only a value over 4,096 code points stays a silent non-match, per
+  the spec.
+- **G2 — error envelopes point at the field.** Problems are no longer
+  plain strings: `A2uiProblem` carries `{message, path}`, threaded
+  from `parseStream` / `applyEnvelope` / `addComponents` through
+  `buildSurfaces`, the chat's `BlockResult`, and the surface panel
+  (which renders `problem.message`). `errorReport` now uses the first
+  problem's path instead of always `"/"`, so the model is told which
+  field to fix. Message wording is unchanged; only the path gains
+  precision.
+- **Testing gap — A2UI finally has unit tests.** `tests/unit/a2ui.test.ts`
+  (13 tests): parsing, the upstream contact-form stream embedded as a
+  fixture and run through `buildSurfaces` (25 components, data model,
+  email/phone checks, the submit action, then delete), all four safety
+  rules plus the dialect, the `EXPRESSION_ERROR` / value-cap behaviour,
+  the G2 paths, and the catalog functions, checks, actions, media and
+  pointers. The fixture is embedded in the test file rather than copied
+  from the upstream checkout.
+
+Tests: 197 unit tests pass (184 + 13 new); `svelte-check` 0 errors (the 1
+warning is the pre-existing `context="module"` deprecation in
+`Icon.svelte`); `cargo fmt --check` clean; `npm run build` passes. Rust
+verification is CI's job (no local GTK/WebKit libs): clippy + cargo test
+on the CI run.

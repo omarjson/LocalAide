@@ -40,10 +40,20 @@ export interface Surface {
   sendDataModel: boolean;
   components: Record<string, A2uiComponent>;
   data: JsonObject;
-  /** Problems found while building the surface, in plain words. */
-  problems: string[];
+  /** Problems found while building the surface, each pointing at its field. */
+  problems: A2uiProblem[];
   deleted: boolean;
 }
+
+/** A problem with the field it points at, as a JSON Pointer. */
+export interface A2uiProblem {
+  message: string;
+  /** JSON Pointer to the failing field; "/" when the whole block is at fault. */
+  path: string;
+}
+
+/** Builds a problem; the path defaults to the whole block. */
+export const a2uiProblem = (message: string, path = "/"): A2uiProblem => ({ message, path });
 
 export const COMPONENTS = new Set([
   "Text",
@@ -82,7 +92,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => !!value &
 
 export interface ParsedStream {
   envelopes: Record<string, unknown>[];
-  problems: string[];
+  problems: A2uiProblem[];
 }
 
 /**
@@ -91,8 +101,8 @@ export interface ParsedStream {
  */
 export function parseStream(source: string): ParsedStream {
   const text = source.trim();
-  const problems: string[] = [];
-  if (!text) return { envelopes: [], problems: ["The interface block is empty."] };
+  const problems: A2uiProblem[] = [];
+  if (!text) return { envelopes: [], problems: [a2uiProblem("The interface block is empty.")] };
   try {
     const whole: unknown = JSON.parse(text);
     if (Array.isArray(whole)) return { envelopes: whole.filter(isObject), problems };
@@ -107,9 +117,9 @@ export function parseStream(source: string): ParsedStream {
     try {
       const value: unknown = JSON.parse(trimmed);
       if (isObject(value)) envelopes.push(value);
-      else problems.push(`Line ${i + 1} is not a JSON object.`);
+      else problems.push(a2uiProblem(`Line ${i + 1} is not a JSON object.`));
     } catch {
-      problems.push(`Line ${i + 1} is not valid JSON.`);
+      problems.push(a2uiProblem(`Line ${i + 1} is not valid JSON.`));
     }
   });
   return { envelopes, problems };
@@ -119,23 +129,23 @@ export function parseStream(source: string): ParsedStream {
 // Applying messages
 
 /** Applies one envelope to the surfaces. Returns the surface it created, if any, and any problem. */
-export function applyEnvelope(surfaces: Record<string, Surface>, envelope: Record<string, unknown>): { created?: string; problem?: string } {
-  if (envelope.version !== A2UI_VERSION) return { problem: `Only A2UI version "${A2UI_VERSION}" is supported; a message said ${JSON.stringify(envelope.version ?? null)}.` };
+export function applyEnvelope(surfaces: Record<string, Surface>, envelope: Record<string, unknown>): { created?: string; problem?: A2uiProblem } {
+  if (envelope.version !== A2UI_VERSION) return { problem: a2uiProblem(`Only A2UI version "${A2UI_VERSION}" is supported; a message said ${JSON.stringify(envelope.version ?? null)}.`) };
   const keys = MESSAGE_KEYS.filter((k) => k in envelope);
-  if (keys.length !== 1) return { problem: "Each message needs exactly one of createSurface, updateComponents, updateDataModel or deleteSurface." };
+  if (keys.length !== 1) return { problem: a2uiProblem("Each message needs exactly one of createSurface, updateComponents, updateDataModel or deleteSurface.") };
   const kind = keys[0];
   const body = envelope[kind];
-  if (!isObject(body)) return { problem: `${kind} must be an object.` };
+  if (!isObject(body)) return { problem: a2uiProblem(`${kind} must be an object.`, `/${kind}`) };
   if (kind === "callRendererFunction" || kind === "agentFunctionResponse") {
-    return { problem: `${kind} is not supported in the chat, so it was skipped.` };
+    return { problem: a2uiProblem(`${kind} is not supported in the chat, so it was skipped.`, `/${kind}`) };
   }
   const surfaceId = body.surfaceId;
-  if (typeof surfaceId !== "string" || !surfaceId) return { problem: `${kind} needs a surfaceId.` };
+  if (typeof surfaceId !== "string" || !surfaceId) return { problem: a2uiProblem(`${kind} needs a surfaceId.`, `/${kind}/surfaceId`) };
 
   if (kind === "createSurface") {
     const existing = surfaces[surfaceId];
-    if (existing && !existing.deleted) return { problem: `A surface called "${surfaceId}" already exists (INTEGRITY_ERROR). Delete it first or use another surfaceId.` };
-    if ("theme" in body) return { problem: "createSurface may not carry a theme in A2UI 1.0; the app's own theme is used." };
+    if (existing && !existing.deleted) return { problem: a2uiProblem(`A surface called "${surfaceId}" already exists (INTEGRITY_ERROR). Delete it first or use another surfaceId.`, "/createSurface/surfaceId") };
+    if ("theme" in body) return { problem: a2uiProblem("createSurface may not carry a theme in A2UI 1.0; the app's own theme is used.", "/createSurface/theme") };
     const catalogId = typeof body.catalogId === "string" ? body.catalogId : null;
     const surface: Surface = {
       id: surfaceId,
@@ -147,26 +157,26 @@ export function applyEnvelope(surfaces: Record<string, Surface>, envelope: Recor
       deleted: false,
     };
     if (catalogId !== BASIC_CATALOG_ID) {
-      surface.problems.push(catalogId ? `Only the A2UI Basic Catalog is available here, not "${catalogId}".` : "createSurface needs a catalogId (the Basic Catalog).");
+      surface.problems.push(a2uiProblem(catalogId ? `Only the A2UI Basic Catalog is available here, not "${catalogId}".` : "createSurface needs a catalogId (the Basic Catalog).", "/createSurface/catalogId"));
     }
-    if (Array.isArray(body.components)) addComponents(surface, body.components);
+    if (Array.isArray(body.components)) addComponents(surface, body.components, "/createSurface");
     surfaces[surfaceId] = surface;
     return { created: surfaceId };
   }
 
   const surface = surfaces[surfaceId];
-  if (!surface || surface.deleted) return { problem: `There is no surface called "${surfaceId}" to ${kind === "deleteSurface" ? "delete" : "update"}.` };
+  if (!surface || surface.deleted) return { problem: a2uiProblem(`There is no surface called "${surfaceId}" to ${kind === "deleteSurface" ? "delete" : "update"}.`, `/${kind}/surfaceId`) };
   if (kind === "deleteSurface") {
     surface.deleted = true;
     return {};
   }
   if (kind === "updateComponents") {
-    if (!Array.isArray(body.components)) return { problem: "updateComponents needs a components list." };
-    addComponents(surface, body.components);
+    if (!Array.isArray(body.components)) return { problem: a2uiProblem("updateComponents needs a components list.", "/updateComponents/components") };
+    addComponents(surface, body.components, "/updateComponents");
     return {};
   }
   // updateDataModel
-  if (!("value" in body)) return { problem: "updateDataModel needs a value (null removes the key)." };
+  if (!("value" in body)) return { problem: a2uiProblem("updateDataModel needs a value (null removes the key).", "/updateDataModel/value") };
   const path = typeof body.path === "string" && body.path ? body.path : "/";
   if (path === "/") {
     surface.data = isObject(body.value) ? (clone(body.value) as JsonObject) : {};
@@ -176,23 +186,23 @@ export function applyEnvelope(surfaces: Record<string, Surface>, envelope: Recor
   return {};
 }
 
-function addComponents(surface: Surface, list: unknown[]): void {
+function addComponents(surface: Surface, list: unknown[], base: string): void {
   list.forEach((raw, i) => {
     if (!isObject(raw)) {
-      surface.problems.push(`Component ${i + 1} is not an object.`);
+      surface.problems.push(a2uiProblem(`Component ${i + 1} is not an object.`, `${base}/components/${i}`));
       return;
     }
     const { id, component } = raw;
     if (!isIdentifier(id)) {
-      surface.problems.push(`Component ${i + 1} has an id that is not a plain name (letters, digits and underscores, not starting with a digit): ${JSON.stringify(id ?? null)}.`);
+      surface.problems.push(a2uiProblem(`Component ${i + 1} has an id that is not a plain name (letters, digits and underscores, not starting with a digit): ${JSON.stringify(id ?? null)}.`, `${base}/components/${i}/id`));
       return;
     }
     if (typeof component !== "string" || !COMPONENTS.has(component)) {
-      surface.problems.push(`"${id}" uses ${JSON.stringify(component ?? null)}, which is not in the Basic Catalog.`);
+      surface.problems.push(a2uiProblem(`"${id}" uses ${JSON.stringify(component ?? null)}, which is not in the Basic Catalog.`, `${base}/components/${i}/component`));
       return;
     }
     if (raw["@catalogId"] !== undefined && raw["@catalogId"] !== BASIC_CATALOG_ID) {
-      surface.problems.push(`"${id}" asks for another catalog; only the Basic Catalog is available.`);
+      surface.problems.push(a2uiProblem(`"${id}" asks for another catalog; only the Basic Catalog is available.`, `${base}/components/${i}/@catalogId`));
       return;
     }
     surface.components[id] = raw as A2uiComponent;
@@ -200,7 +210,7 @@ function addComponents(surface: Surface, list: unknown[]): void {
 }
 
 /** Builds surfaces from one block. */
-export function buildSurfaces(source: string, surfaces: Record<string, Surface> = {}): { surfaces: Record<string, Surface>; created: string[]; problems: string[] } {
+export function buildSurfaces(source: string, surfaces: Record<string, Surface> = {}): { surfaces: Record<string, Surface>; created: string[]; problems: A2uiProblem[] } {
   const parsed = parseStream(source);
   const created: string[] = [];
   const problems = [...parsed.problems];
@@ -320,16 +330,625 @@ export interface ValidationResult {
 
 const valid = (ok: boolean): ValidationResult => ({ valid: ok });
 
-/** Rejects regular expressions outside the A2UI dialect or likely to run away. */
-export function safePattern(pattern: string): RegExp | null {
-  if ([...pattern].length > 256) return null;
-  if (/\\[1-9]|\\k<|\(\?<[=!]|\(\?<[A-Za-z]|\\[pP]\{|\\c[A-Za-z]|\(\?[a-z]/.test(pattern)) return null;
-  // A quantified group holding an unbounded quantifier: (a+)+, (a*){2,}...
-  if (/\((?:[^()\\]|\\.)*[*+](?:[^()\\]|\\.)*\)(?:[*+]|\{\d+,\d*\})/.test(pattern)) return null;
+/** The spec's static safety rejection tokens (a2ui-core names). */
+export type PatternRejection = "PATTERN_TOO_LONG" | "NESTED_QUANTIFIER" | "OVERLAPPING_ALTERNATION" | "ADJACENT_OVERLAP" | "INVALID_PATTERN";
+
+/**
+ * Checks a pattern against the A2UI regex dialect and its four static
+ * safety rules (Basic Catalog Guide, `regex`): 1) at most 256 code points;
+ * 2) no quantifier with upper bound above 1 over a subexpression holding
+ * an unbounded quantifier; 3) no unbounded quantifier over an alternation
+ * whose branches can start with the same character; 4) no two adjacent
+ * unbounded-quantified atoms with overlapping character sets. A pattern
+ * outside the dialect or failing a rule is rejected with `EXPRESSION_ERROR`
+ * before matching; only a value over 4,096 code points is a silent
+ * non-match (handled by the `regex` function, not here).
+ */
+export function checkPattern(pattern: string): { regex: RegExp | null; rejection?: PatternRejection } {
+  if ([...pattern].length > 256) return { regex: null, rejection: "PATTERN_TOO_LONG" };
+  const ast = new RegexParser(pattern).parse();
+  if (!ast) return { regex: null, rejection: "INVALID_PATTERN" };
+  const rejection = checkRegexSafety(ast);
+  if (rejection) return { regex: null, rejection };
   try {
-    return new RegExp(pattern, "u");
+    return { regex: new RegExp(pattern, "u") };
   } catch {
+    return { regex: null, rejection: "INVALID_PATTERN" };
+  }
+}
+
+/** The compiled pattern, or null when the dialect or safety rules refuse it. */
+export function safePattern(pattern: string): RegExp | null {
+  return checkPattern(pattern).regex;
+}
+
+// --- Regex parser: a small AST over the ECMAScript dialect, enough to
+// run the static safety rules. The dialect itself (no backreferences,
+// lookbehind, named groups, \p/\P, \cX, octal escapes, inline flags) is
+// enforced while parsing; `new RegExp` at the end is the final arbiter.
+
+/** A character set as inclusive code-point ranges, or its complement. */
+type CharSet = { kind: "any" } | { kind: "ranges"; ranges: [number, number][] } | { kind: "neg"; ranges: [number, number][] };
+/** A first-set is a disjunction of character sets. */
+type FirstSet = CharSet[];
+
+const ANY_SET: CharSet = { kind: "any" };
+const EMPTY_SET: CharSet = { kind: "ranges", ranges: [] };
+const DIGITS: [number, number][] = [[48, 57]];
+const WORD: [number, number][] = [
+  [48, 57],
+  [65, 90],
+  [95, 95],
+  [97, 122],
+];
+const SPACE: [number, number][] = [
+  [9, 13],
+  [32, 32],
+  [160, 160],
+  [5760, 5760],
+  [8192, 8202],
+  [8232, 8233],
+  [8239, 8239],
+  [8287, 8287],
+  [12288, 12288],
+  [65279, 65279],
+];
+
+const isEmptySet = (s: CharSet): boolean => s.kind === "ranges" && s.ranges.length === 0;
+
+function rangesOverlap(a: [number, number][], b: [number, number][]): boolean {
+  for (const [a0, a1] of a) for (const [b0, b1] of b) if (a0 <= b1 && b0 <= a1) return true;
+  return false;
+}
+
+/** Is every interval of `inner` fully covered by `outer`? */
+function rangesCovered(inner: [number, number][], outer: [number, number][]): boolean {
+  const sorted = [...outer].sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  return inner.every(([lo, hi]) => {
+    let at = lo;
+    for (const [o0, o1] of sorted) {
+      if (o0 > at) break;
+      if (o1 >= at) at = Math.max(at, o1 + 1);
+      if (at > hi) return true;
+    }
+    return at > hi;
+  });
+}
+
+function setsOverlap(a: CharSet, b: CharSet): boolean {
+  if (isEmptySet(a) || isEmptySet(b)) return false;
+  if (a.kind === "any" || b.kind === "any") return true;
+  if (a.kind === "ranges" && b.kind === "ranges") return rangesOverlap(a.ranges, b.ranges);
+  if (a.kind === "neg" && b.kind === "neg") return true;
+  const [ranges, neg] = a.kind === "ranges" ? [a, b] : [b, a];
+  return !rangesCovered(ranges.ranges, (neg as { kind: "neg"; ranges: [number, number][] }).ranges);
+}
+
+const firstSetsOverlap = (a: FirstSet, b: FirstSet): boolean => a.some((x) => b.some((y) => setsOverlap(x, y)));
+
+type RegexNode =
+  | { type: "seq"; items: RegexNode[] }
+  | { type: "alt"; branches: RegexNode[] }
+  | { type: "group"; child: RegexNode }
+  | { type: "assert"; child: RegexNode }
+  | { type: "char"; cp: number }
+  | { type: "dot" }
+  | { type: "set"; first: FirstSet }
+  | { type: "anchor" }
+  | { type: "quant"; child: RegexNode; min: number; max: number | null };
+
+class RegexParser {
+  private pos = 0;
+  private readonly src: string;
+  constructor(src: string) {
+    this.src = src;
+  }
+
+  parse(): RegexNode | null {
+    const node = this.parseAlt();
+    return node && this.pos === this.src.length ? node : null;
+  }
+
+  private peek(): string | undefined {
+    return this.src[this.pos];
+  }
+
+  private parseAlt(): RegexNode | null {
+    const first = this.parseSeq();
+    if (!first) return null;
+    const branches: RegexNode[] = [first];
+    while (this.peek() === "|") {
+      this.pos++;
+      const next = this.parseSeq();
+      if (!next) return null;
+      branches.push(next);
+    }
+    return branches.length === 1 ? branches[0] : { type: "alt", branches };
+  }
+
+  private parseSeq(): RegexNode | null {
+    const items: RegexNode[] = [];
+    while (this.pos < this.src.length && this.peek() !== "|" && this.peek() !== ")") {
+      const item = this.parseItem();
+      if (!item) return null;
+      items.push(item);
+    }
+    return { type: "seq", items };
+  }
+
+  private parseItem(): RegexNode | null {
+    let atom = this.parseAtom();
+    if (!atom) return null;
+    const q = this.parseQuantifier();
+    if (q) atom = { type: "quant", child: atom, min: q.min, max: q.max };
+    return atom;
+  }
+
+  private parseQuantifier(): { min: number; max: number | null } | null {
+    const c = this.peek();
+    const lazy = () => {
+      if (this.peek() === "?") this.pos++;
+    };
+    if (c === "*") {
+      this.pos++;
+      lazy();
+      return { min: 0, max: null };
+    }
+    if (c === "+") {
+      this.pos++;
+      lazy();
+      return { min: 1, max: null };
+    }
+    if (c === "?") {
+      this.pos++;
+      lazy();
+      return { min: 0, max: 1 };
+    }
+    if (c === "{") {
+      const m = /^\{(\d+)(?:,(\d*))?\}/.exec(this.src.slice(this.pos));
+      if (!m) return null;
+      this.pos += m[0].length;
+      lazy();
+      const min = Number(m[1]);
+      const max = m[2] === undefined ? min : m[2] === "" ? null : Number(m[2]);
+      if (max !== null && max < min) return null;
+      return { min, max };
+    }
     return null;
+  }
+
+  private parseAtom(): RegexNode | null {
+    const c = this.peek();
+    if (c === undefined) return null;
+    if (c === "(") return this.parseGroup();
+    if (c === "[") return this.parseClass();
+    if (c === ".") {
+      this.pos++;
+      return { type: "dot" };
+    }
+    if (c === "^" || c === "$") {
+      this.pos++;
+      return { type: "anchor" };
+    }
+    if (c === "\\") return this.parseEscape();
+    if (c === "*" || c === "+" || c === "?") return null;
+    if (c === "{") {
+      // A valid quantifier here is a syntax error in Unicode mode; otherwise a literal.
+      const save = this.pos;
+      if (this.parseQuantifier()) return null;
+      this.pos = save + 1;
+      return { type: "char", cp: "{".codePointAt(0)! };
+    }
+    const cp = this.src.codePointAt(this.pos)!;
+    this.pos += cp > 0xffff ? 2 : 1;
+    return { type: "char", cp };
+  }
+
+  private parseGroup(): RegexNode | null {
+    this.pos++; // consume "("
+    let assert = false;
+    if (this.peek() === "?") {
+      const next = this.src[this.pos + 1];
+      if (next === ":") this.pos += 2;
+      else if (next === "=" || next === "!") {
+        this.pos += 2;
+        assert = true;
+      } else return null; // (?<, (?i, (?P — outside the dialect.
+    }
+    const child = this.parseAlt();
+    if (!child || this.peek() !== ")") return null;
+    this.pos++;
+    return assert ? { type: "assert", child } : { type: "group", child };
+  }
+
+  /** Parses an escape outside a class. Returns null outside the dialect. */
+  private parseEscape(): RegexNode | null {
+    this.pos++; // consume "\"
+    const e = this.peek();
+    if (e === undefined) return null;
+    const set = (ranges: [number, number][]): RegexNode => ({ type: "set", first: [{ kind: "ranges", ranges }] });
+    const neg = (ranges: [number, number][]): RegexNode => ({ type: "set", first: [{ kind: "neg", ranges }] });
+    if (e === "d") {
+      this.pos++;
+      return set(DIGITS);
+    }
+    if (e === "D") {
+      this.pos++;
+      return neg(DIGITS);
+    }
+    if (e === "w") {
+      this.pos++;
+      return set(WORD);
+    }
+    if (e === "W") {
+      this.pos++;
+      return neg(WORD);
+    }
+    if (e === "s") {
+      this.pos++;
+      return set(SPACE);
+    }
+    if (e === "S") {
+      this.pos++;
+      return neg(SPACE);
+    }
+    if (e === "b" || e === "B") {
+      this.pos++;
+      return { type: "anchor" };
+    }
+    if (e === "n") {
+      this.pos++;
+      return { type: "char", cp: 10 };
+    }
+    if (e === "r") {
+      this.pos++;
+      return { type: "char", cp: 13 };
+    }
+    if (e === "t") {
+      this.pos++;
+      return { type: "char", cp: 9 };
+    }
+    if (e === "v") {
+      this.pos++;
+      return { type: "char", cp: 11 };
+    }
+    if (e === "f") {
+      this.pos++;
+      return { type: "char", cp: 12 };
+    }
+    if (e === "0") {
+      // A null escape; \0 followed by a digit is a legacy octal escape.
+      if (/[0-9]/.test(this.src[this.pos + 1] ?? "")) return null;
+      this.pos++;
+      return { type: "char", cp: 0 };
+    }
+    if (e === "x" || e === "u") {
+      const cp = this.parseUnicodeEscape();
+      if (cp === null) return null;
+      return { type: "char", cp };
+    }
+    if (/[1-9]/.test(e) || e === "k" || e === "p" || e === "P" || e === "c") return null;
+    const cp = this.src.codePointAt(this.pos);
+    if (cp === undefined) return null;
+    this.pos += cp > 0xffff ? 2 : 1;
+    return { type: "char", cp };
+  }
+
+  /** Parses \xHH, \uHHHH or \u{...} after the backslash and letter. */
+  private parseUnicodeEscape(): number | null {
+    const letter = this.src[this.pos];
+    this.pos++;
+    if (letter === "x") {
+      const hex = this.src.slice(this.pos, this.pos + 2);
+      if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
+      this.pos += 2;
+      return Number.parseInt(hex, 16);
+    }
+    if (this.peek() === "{") {
+      const end = this.src.indexOf("}", this.pos);
+      if (end < 0) return null;
+      const hex = this.src.slice(this.pos + 1, end);
+      if (!/^[0-9A-Fa-f]+$/.test(hex)) return null;
+      const cp = Number.parseInt(hex, 16);
+      if (cp > 0x10ffff) return null;
+      this.pos = end + 1;
+      return cp;
+    }
+    const hex = this.src.slice(this.pos, this.pos + 4);
+    if (!/^[0-9A-Fa-f]{4}$/.test(hex)) return null;
+    this.pos += 4;
+    return Number.parseInt(hex, 16);
+  }
+
+  private parseClass(): RegexNode | null {
+    this.pos++; // consume "["
+    let negated = false;
+    if (this.peek() === "^") {
+      negated = true;
+      this.pos++;
+    }
+    const ranges: [number, number][] = [];
+    const negSets: [number, number][][] = [];
+    let first = true;
+    while (this.pos < this.src.length) {
+      const c = this.peek();
+      if (c === "]" && !first) {
+        this.pos++;
+        return { type: "set", first: classFirstSet(negated, ranges, negSets) };
+      }
+      first = false;
+      const atom = this.parseClassAtom();
+      if (!atom) return null;
+      if (atom.kind === "neg") {
+        negSets.push(atom.ranges);
+        continue;
+      }
+      if (this.peek() === "-" && this.pos + 1 < this.src.length && this.src[this.pos + 1] !== "]") {
+        if (atom.ranges.length !== 1 || atom.ranges[0][0] !== atom.ranges[0][1]) return null;
+        this.pos++;
+        const hi = this.parseClassAtom();
+        if (!hi || hi.kind !== "ranges" || hi.ranges.length !== 1 || hi.ranges[0][0] !== hi.ranges[0][1]) return null;
+        const lo = atom.ranges[0][0];
+        const hiCp = hi.ranges[0][0];
+        if (lo > hiCp) return null;
+        ranges.push([lo, hiCp]);
+      } else {
+        ranges.push(...atom.ranges);
+      }
+    }
+    return null; // unterminated class
+  }
+
+  /** One class item: a single char, a positive escape set, or a negated escape set. */
+  private parseClassAtom(): { kind: "ranges" | "neg"; ranges: [number, number][] } | null {
+    const c = this.peek();
+    if (c === undefined) return null;
+    if (c === "\\") {
+      this.pos++;
+      const e = this.peek();
+      if (e === undefined) return null;
+      const set = (ranges: [number, number][]): { kind: "ranges"; ranges: [number, number][] } => ({ kind: "ranges", ranges });
+      const neg = (ranges: [number, number][]): { kind: "neg"; ranges: [number, number][] } => ({ kind: "neg", ranges });
+      if (e === "d") {
+        this.pos++;
+        return set(DIGITS);
+      }
+      if (e === "D") {
+        this.pos++;
+        return neg(DIGITS);
+      }
+      if (e === "w") {
+        this.pos++;
+        return set(WORD);
+      }
+      if (e === "W") {
+        this.pos++;
+        return neg(WORD);
+      }
+      if (e === "s") {
+        this.pos++;
+        return set(SPACE);
+      }
+      if (e === "S") {
+        this.pos++;
+        return neg(SPACE);
+      }
+      if (e === "b") {
+        this.pos++;
+        return set([[8, 8]]); // backspace inside a class
+      }
+      if (e === "n") {
+        this.pos++;
+        return set([[10, 10]]);
+      }
+      if (e === "r") {
+        this.pos++;
+        return set([[13, 13]]);
+      }
+      if (e === "t") {
+        this.pos++;
+        return set([[9, 9]]);
+      }
+      if (e === "v") {
+        this.pos++;
+        return set([[11, 11]]);
+      }
+      if (e === "f") {
+        this.pos++;
+        return set([[12, 12]]);
+      }
+      if (e === "0") {
+        if (/[0-9]/.test(this.src[this.pos + 1] ?? "")) return null;
+        this.pos++;
+        return set([[0, 0]]);
+      }
+      if (e === "x" || e === "u") {
+        const cp = this.parseUnicodeEscape();
+        if (cp === null) return null;
+        return set([[cp, cp]]);
+      }
+      if (/[1-9]/.test(e) || e === "k" || e === "p" || e === "P" || e === "c") return null;
+      const cp = this.src.codePointAt(this.pos);
+      if (cp === undefined) return null;
+      this.pos += cp > 0xffff ? 2 : 1;
+      return set([[cp, cp]]);
+    }
+    const cp = this.src.codePointAt(this.pos)!;
+    this.pos += cp > 0xffff ? 2 : 1;
+    return { kind: "ranges", ranges: [[cp, cp]] };
+  }
+}
+
+/** The first-set of a character class, as a disjunction of character sets. */
+function classFirstSet(negated: boolean, ranges: [number, number][], negSets: [number, number][][]): FirstSet {
+  if (!negated) {
+    const out: FirstSet = [];
+    if (ranges.length > 0) out.push({ kind: "ranges", ranges });
+    for (const r of negSets) out.push({ kind: "neg", ranges: r });
+    return out.length > 0 ? out : [EMPTY_SET];
+  }
+  // A negated class holding a negated escape (e.g. [^\D]) is a union of
+  // complements; over-approximate it as "any" rather than under-checking.
+  if (negSets.length > 0) return [ANY_SET];
+  return [{ kind: "neg", ranges }];
+}
+
+/** The characters a node can start with. */
+function firstSet(node: RegexNode): FirstSet {
+  switch (node.type) {
+    case "char":
+      return [{ kind: "ranges", ranges: [[node.cp, node.cp]] }];
+    case "dot":
+      return [ANY_SET];
+    case "set":
+      return node.first;
+    case "anchor":
+    case "assert":
+      return [];
+    case "group":
+    case "quant":
+      return firstSet(node.child);
+    case "seq": {
+      const out: FirstSet = [];
+      for (const item of node.items) {
+        out.push(...firstSet(item));
+        if (!nullable(item)) break;
+      }
+      return out;
+    }
+    case "alt":
+      return node.branches.flatMap(firstSet);
+  }
+}
+
+/** Can the node match the empty string? */
+function nullable(node: RegexNode): boolean {
+  switch (node.type) {
+    case "char":
+    case "dot":
+    case "set":
+      return false;
+    case "anchor":
+    case "assert":
+      return true;
+    case "group":
+      return nullable(node.child);
+    case "quant":
+      return node.min === 0 || nullable(node.child);
+    case "seq":
+      return node.items.every(nullable);
+    case "alt":
+      return node.branches.some(nullable);
+  }
+}
+
+/** Does the subtree hold an unbounded quantifier (`*`, `+`, `{n,}`)? */
+function containsUnboundedQuant(node: RegexNode): boolean {
+  switch (node.type) {
+    case "quant":
+      return node.max === null || containsUnboundedQuant(node.child);
+    case "seq":
+      return node.items.some(containsUnboundedQuant);
+    case "alt":
+      return node.branches.some(containsUnboundedQuant);
+    case "group":
+    case "assert":
+      return containsUnboundedQuant(node.child);
+    default:
+      return false;
+  }
+}
+
+/** Unwraps groups to the node they hold. */
+function unwrapGroup(node: RegexNode): RegexNode {
+  let n = node;
+  while (n.type === "group") n = n.child;
+  return n;
+}
+
+/** A quantified atom, unwrapping a group whose only content is one. */
+function asQuantifiedAtom(node: RegexNode): { type: "quant"; child: RegexNode; min: number; max: number | null } | null {
+  if (node.type === "quant") return node;
+  if (node.type === "group" || node.type === "assert") {
+    const inner = unwrapSingle(node.child);
+    return inner ? asQuantifiedAtom(inner) : null;
+  }
+  return null;
+}
+
+/** A sequence with exactly one item unwraps to it; anything else stays. */
+function unwrapSingle(node: RegexNode): RegexNode | null {
+  if (node.type === "seq") return node.items.length === 1 ? node.items[0] : null;
+  if (node.type === "group") return unwrapSingle(node.child);
+  return node;
+}
+
+/**
+ * Rule 4 for one concatenation: two unbounded-quantified atoms with
+ * overlapping first sets, separated only by zero-width assertions or items
+ * that can match the empty string. A consuming item resets the run; a
+ * non-nullable quantified atom is itself consuming, so it replaces the run
+ * after being checked against it.
+ */
+function checkSequence(items: RegexNode[]): PatternRejection | undefined {
+  let run: FirstSet[] = [];
+  for (const item of items) {
+    const q = asQuantifiedAtom(item);
+    if (q && q.max === null) {
+      const set = firstSet(q.child);
+      if (run.some((seen) => firstSetsOverlap(seen, set))) return "ADJACENT_OVERLAP";
+      run = nullable(q) ? [...run, set] : [set];
+      continue;
+    }
+    if (item.type === "anchor" || item.type === "assert" || nullable(item)) continue;
+    run = [];
+  }
+  return undefined;
+}
+
+/** Runs safety rules 2–4 over the AST. Rule 1 (length) is checked by the caller. */
+function checkRegexSafety(node: RegexNode): PatternRejection | undefined {
+  switch (node.type) {
+    case "quant": {
+      // Rule 2: a quantifier with upper bound above 1 over a subexpression
+      // holding an unbounded quantifier.
+      if ((node.max === null || node.max > 1) && containsUnboundedQuant(node.child)) return "NESTED_QUANTIFIER";
+      // Rule 3: an unbounded quantifier over an alternation whose branches
+      // can start with the same character (after unwrapping groups).
+      if (node.max === null) {
+        const inner = unwrapGroup(node.child);
+        if (inner.type === "alt" && inner.branches.length >= 2) {
+          const firsts = inner.branches.map(firstSet);
+          for (let i = 0; i < firsts.length; i++) {
+            for (let j = i + 1; j < firsts.length; j++) {
+              if (firstSetsOverlap(firsts[i], firsts[j])) return "OVERLAPPING_ALTERNATION";
+            }
+          }
+        }
+      }
+      return checkRegexSafety(node.child);
+    }
+    case "seq": {
+      const bad = checkSequence(node.items);
+      if (bad) return bad;
+      for (const item of node.items) {
+        const found = checkRegexSafety(item);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case "alt": {
+      for (const branch of node.branches) {
+        const found = checkRegexSafety(branch);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case "group":
+    case "assert":
+      return checkRegexSafety(node.child);
+    default:
+      return undefined;
   }
 }
 
@@ -375,9 +994,11 @@ export function callFunction(name: string, rawArgs: Record<string, unknown>, sco
     }
     case "regex": {
       const v = toText(arg("value"));
-      const re = safePattern(toText(arg("pattern")));
-      if (!re || [...v].length > 4096) return valid(false);
-      return valid(re.test(v));
+      // A value over the cap is a silent non-match, never an error.
+      if ([...v].length > 4096) return valid(false);
+      const checked = checkPattern(toText(arg("pattern")));
+      if (!checked.regex) return { valid: false, code: "EXPRESSION_ERROR", message: `The pattern is not allowed (${checked.rejection}).` };
+      return valid(checked.regex.test(v));
     }
     case "length": {
       const n = [...toText(arg("value"))].length;
@@ -631,8 +1252,9 @@ export function childEntries(children: unknown, scope: Scope): { id: string; sco
   return [];
 }
 
-/** A short plain-words error for the model, in the spec's error shape. */
-export function errorReport(surfaceId: string, problems: string[]): string {
-  const envelope = { version: A2UI_VERSION, error: { code: "VALIDATION_FAILED", surfaceId, path: "/", message: problems.slice(0, 5).join(" ") } };
+/** A short plain-words error for the model, in the spec's error shape. The path is the first problem's field, so the model knows what to fix. */
+export function errorReport(surfaceId: string, problems: A2uiProblem[]): string {
+  const first = problems[0];
+  const envelope = { version: A2UI_VERSION, error: { code: "VALIDATION_FAILED", surfaceId, path: first?.path ?? "/", message: problems.slice(0, 5).map((p) => p.message).join(" ") } };
   return `The interface you drew had problems. Please send a corrected version.\n\n\`\`\`${EVENT_FENCE}\n${JSON.stringify(envelope)}\n\`\`\``;
 }
