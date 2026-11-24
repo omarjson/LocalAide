@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-24
+
 ### Fixed
 - **Chat titles no longer stay stuck on the raw first message.** Title generation retries once when it fails, rejects empty titles and titles that just echo the question back, and keeps retrying on later completed answers until the model gives a real title.
 - **macOS title bar has no logo.** The ghost tile sat in the chrome next to the traffic lights, which real Mac apps don't do — the reference is a clean bar with just the traffic lights and the drag area. The logo button and its Minimize / Restore / Close menu are now Windows/Linux only, where the logo is the window menu; on macOS the traffic lights already are the window controls. Tabs stay in their own row below the chrome.
