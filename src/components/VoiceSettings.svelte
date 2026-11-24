@@ -5,6 +5,7 @@
   import { slide } from "svelte/transition";
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
+  import ProgressBar from "./ProgressBar.svelte";
   import Slider from "./Slider.svelte";
   import Switch from "./Switch.svelte";
   import VoiceButton from "./VoiceButton.svelte";
@@ -165,7 +166,7 @@
             </p>
             <p class="mt-0.5 text-[13px] leading-5 text-ink-400">{m.description}</p>
             {#if downloading[m.id] !== undefined}
-              <div class="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-ink-800"><div class="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={`width:${downloading[m.id]}%`}></div></div>
+              <ProgressBar value={downloading[m.id]} label={`Downloading ${m.name}`} class="mt-2 h-1.5 max-w-xs" />
             {/if}
           </div>
           {#if m.installed}

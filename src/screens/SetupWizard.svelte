@@ -2,6 +2,7 @@
   import ErrorBanner from "../components/ErrorBanner.svelte";
   import Icon from "../components/Icon.svelte";
   import PageHeader from "../components/PageHeader.svelte";
+  import ProgressBar from "../components/ProgressBar.svelte";
   import { onMount } from "svelte";
   import { api, errorMessage } from "../lib/api/client";
   import type { HfFileInfo, HfRepo, ModelInfo } from "../lib/api/bindings";
@@ -356,7 +357,7 @@
             <div class="mt-2 space-y-2">
               {#each otherPresets as p (p.id)}
                 {@const fits = p.ramGb <= budgetGb}
-                <button onclick={() => fits && select(p)} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/[0.02]' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'}`}>
+                <button onclick={() => fits && select(p)} disabled={!fits} class={`w-full text-left px-4 py-3 rounded-lg border transition ${fits ? 'border-edge hover:border-ember-500/50 hover:bg-veil/5' : 'border-ink-900 bg-ink-950/50 opacity-50 cursor-not-allowed'}`}>
                   <div class="flex items-center justify-between">
                     <div>
                       <div class="font-medium text-ink-100">{p.name}</div>
@@ -375,7 +376,7 @@
       {/if}
 
       {#if onlineAvailable}
-        <button onclick={() => { setupError = null; step = "online"; }} class={`mt-4 flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition hover:bg-veil/[0.02] ${tightMemory ? "border-ember-500/40 bg-ember-500/10" : "border-edge hover:border-ember-500/50"}`}>
+        <button onclick={() => { setupError = null; step = "online"; }} class={`mt-4 flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition hover:bg-veil/5 ${tightMemory ? "border-ember-500/40 bg-ember-500/10" : "border-edge hover:border-ember-500/50"}`}>
           <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-200"><Icon name="cloud" class="h-4 w-4" /></span>
           <span class="min-w-0 flex-1">
             <span class="block text-sm font-medium text-ink-100">Use an online provider instead{#if tightMemory} <span class="ml-1 rounded border border-ember-500/30 bg-ember-500/20 px-1.5 py-0.5 text-xs text-ember-300">Recommended</span>{/if}</span>
@@ -487,7 +488,7 @@
       <p class="mt-4 text-xs text-ink-400">Installing needs an internet connection. If you are offline, choose Set up later and download a model from the Models screen when you are back online.</p>
     {:else if step === "download"}
       <p class="text-sm text-ink-400 mb-4">{status}</p>
-      <div class="w-full bg-ink-800 rounded-full h-2 mb-3"><div class="bg-ember-500 h-2 rounded-full transition-[width] duration-300" style="width:{progress}%"></div></div>
+      <ProgressBar value={progress} label="Installing the model" class="mb-3 h-2 w-full" />
       <div class="text-sm text-ink-400 mb-4">{progress}%</div>
       <button
         onclick={communityModelId ? cancelCommunity : cancelInstall}
