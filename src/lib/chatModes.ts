@@ -1,5 +1,4 @@
 import type { ApprovalMode, ChatModeId } from "./api/bindings";
-import type { IconName } from "../components/Icon.svelte";
 
 /** One icon per chat mode, used by the mode picker and messages. */
 export const MODE_ICONS: Record<ChatModeId, "sparkle" | "shield" | "unlock" | "bolt"> = {
@@ -30,7 +29,8 @@ export interface PermissionModeInfo {
   id: Exclude<ApprovalMode, "chat">;
   label: string;
   hint: string;
-  icon: IconName;
+  /** An Icon.svelte name. Spelled out here: plain tsc cannot read types from .svelte files. */
+  icon: "lightbulb" | "hand" | "shield" | "shield-check";
 }
 
 export const PERMISSION_MODES: PermissionModeInfo[] = [
