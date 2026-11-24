@@ -177,7 +177,8 @@ test("question UIs mark the recommended option and offer a free-text answer", ()
   const dock = read("src/components/QuestionDock.svelte");
   assert.match(dock, /Other<\/span>/, "the dock keeps its typed-answer box");
   // The model can mark a recommendation through the ask_user tool.
-  const tools = read("src-tauri/src/services/agent/tools.rs");
+  // The tool schemas moved to tools/specs.rs in the 0.2.4 split.
+  const tools = read("src-tauri/src/services/agent/tools/specs.rs");
   assert.match(tools, /"recommended": \{"type": "boolean"/);
   const agent = read("src-tauri/src/services/agent/handlers.rs");
   assert.match(agent, /recommended: o\s*\.get\("recommended"\)/);

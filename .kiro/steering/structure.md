@@ -45,7 +45,7 @@ Put new Svelte screens in `src/screens/`, reusable UI in `src/components/`, and 
   - `memory/`: `notes.rs` (markdown notes on disk), `rag.rs` (recall and citations), `mod.rs`.
   - `tools/`: `sandbox.rs` (`WorkspaceJail`), `approval.rs`, `mod.rs` (`ToolService`, audit).
   - `models/`: `catalog.rs` (built-in catalog and manifest check), `custom.rs` (community models), `hf.rs`, `refresh.rs`, `download.rs` (resumable downloads), `verify.rs` (SHA-256), `mod.rs`.
-  - `agent/`: the chat tool loop (`mod.rs`), built-in tools and their runners (`tools.rs`), approvals (`approval.rs`).
+  - `agent/`: the chat tool loop (`mod.rs`), built-in tools (`tools/specs.rs`: the catalogue and schemas; `tools/mod.rs`: how each runs), approvals (`approval.rs`).
   - `mcp/`: MCP client (`mod.rs` sessions, `transport.rs` stdio and Streamable HTTP, `import.rs` other apps' config formats, `presets.rs`).
   - `inference/openai_stream.rs` (shared streaming: text, thinking, tool calls, refused-field retries) and `inference/capabilities.rs` (thinking, vision, tools, context, effort levels).
   - `opencode.rs` (link to a user-run `opencode serve`: health check and task hand-off).
