@@ -1108,9 +1108,11 @@ pub fn stream_with_retries(
     let mut tries = 0u32;
     // Whether any token reached the chat yet. A retry is only safe before
     // the first token: retrying mid-answer would show the start twice.
-    let mut saw_token = false;
+    // An AtomicBool, not a plain bool: the tracking closure borrows it
+    // for the whole loop, and the retry arm still has to read it.
+    let saw_token = AtomicBool::new(false);
     let mut tracking = |d: Delta| {
-        saw_token = true;
+        saw_token.store(true, Ordering::Relaxed);
         on_delta(d);
     };
     loop {
@@ -1186,7 +1188,10 @@ pub fn stream_with_retries(
                 // token arrived, and only while the user has not stopped
                 // the run. A mid-stream break is not retryable, so it
                 // still fails at once.
-                if e.retryable && !saw_token && tries < SAME_PROVIDER_RETRIES {
+                if e.retryable
+                    && !saw_token.load(Ordering::Relaxed)
+                    && tries < SAME_PROVIDER_RETRIES
+                {
                     tries += 1;
                     let wait = backoff_delay(tries, None);
                     on_status(format!(

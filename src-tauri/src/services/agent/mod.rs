@@ -23,7 +23,7 @@ use serde_json::Value;
 use crate::app::error::AppError;
 use crate::app::events::{ChatStreamEvent, QuestionItem, QuestionOption, TodoItem};
 use crate::app::state::AppState;
-use crate::config::{Capability, CapabilityAutoApprove};
+use crate::config::Capability;
 use crate::domain::memory::Citation;
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{

@@ -109,7 +109,7 @@ impl ToolPolicy {
         // commands are on, any non-blocked command when all commands are
         // on. A blocked command never becomes Allow here — the caller
         // refuses it before consulting the policy.
-        if shell::classify(command) != shell::Verdict::Blocked {
+        if !matches!(shell::classify(command), shell::Verdict::Blocked(_)) {
             let caps = self.capabilities();
             if caps.safe_commands && !shell::risky(command) {
                 return ToolDecision::Allow;

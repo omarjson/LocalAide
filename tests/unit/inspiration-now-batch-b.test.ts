@@ -237,7 +237,7 @@ test("errors speak plainly and network errors retry with backoff", () => {
   assert.match(stream, /Couldn't reach \{\} — check your connection/);
   assert.match(stream, /Couldn't reach \{\} — trying again in \{\} s/);
   assert.match(stream, /pub fn backoff_delay/);
-  assert.match(stream, /if e\.retryable && !saw_token/);
+  assert.match(stream, /if e\.retryable\s+&& !saw_token\.load\(/);
   assert.match(stream, /retrying mid-answer would show the start twice/);
   // No bare status code in the user-facing message.
   assert.doesNotMatch(stream, /returned \{status\}/);
