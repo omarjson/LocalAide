@@ -35,6 +35,29 @@ pub struct ProviderModel {
     pub vision: Option<bool>,
     #[serde(default)]
     pub tools: Option<bool>,
+    /// What the provider charges, USD per 1M tokens, when it lists prices
+    /// (OpenRouter lists per-token prices). None = not listed.
+    #[serde(default)]
+    pub prompt_price_per_million: Option<f64>,
+    #[serde(default)]
+    pub completion_price_per_million: Option<f64>,
+    #[serde(default)]
+    pub cache_price_per_million: Option<f64>,
+}
+
+/// One price from a provider's `pricing` object, converted from USD per
+/// token to USD per 1M tokens. Strings ("0.000001") and numbers both occur.
+fn price_per_million(pricing: &serde_json::Map<String, Value>, key: &str) -> Option<f64> {
+    let per_token = match pricing.get(key)? {
+        Value::String(s) => s.trim().parse::<f64>().ok(),
+        Value::Number(n) => n.as_f64(),
+        _ => None,
+    }?;
+    if per_token.is_finite() && per_token >= 0.0 {
+        Some(per_token * 1_000_000.0)
+    } else {
+        None
+    }
 }
 
 /// Where a provider lists its models. Almost every provider uses
@@ -165,6 +188,9 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                 reasoning: None,
                 vision: None,
                 tools: None,
+                prompt_price_per_million: None,
+                completion_price_per_million: None,
+                cache_price_per_million: None,
             },
             Value::Object(map) => {
                 let text = |key: &str| map.get(key).and_then(Value::as_str).map(str::to_string);
@@ -221,6 +247,11 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                     };
                     zero("prompt") && zero("completion")
                 });
+                // Prices ride the same object; keep them instead of
+                // dropping them, so the Usage screen can price from
+                // OpenRouter instead of a hand-typed table.
+                let pricing = map.get("pricing").and_then(Value::as_object);
+                let price = |key: &str| pricing.and_then(|p| price_per_million(p, key));
                 ProviderModel {
                     free: looks_free(&id) || priced_free,
                     id,
@@ -230,6 +261,9 @@ pub fn parse_models(json: &Value) -> Vec<ProviderModel> {
                     reasoning,
                     vision,
                     tools,
+                    prompt_price_per_million: price("prompt"),
+                    completion_price_per_million: price("completion"),
+                    cache_price_per_million: price("input_cache_read"),
                 }
             }
             _ => continue,
@@ -268,6 +302,29 @@ mod tests {
         assert!(!list[0].free);
         assert!(list[1].free);
         assert_eq!(list[1].context_length, Some(131072));
+    }
+
+    #[test]
+    fn openrouter_pricing_is_kept_per_million() {
+        let list = parse_models(&json!({
+            "data": [
+                {"id": "a/b", "pricing": {"prompt": "0.00000015", "completion": "0.0000006", "input_cache_read": "0.000000015"}},
+                {"id": "c/d", "pricing": {"prompt": 0, "completion": 0}}
+            ]
+        }));
+        assert_eq!(list.len(), 2);
+        let close = |got: Option<f64>, want: f64| {
+            assert!(
+                got.is_some_and(|v| (v - want).abs() < 1e-9),
+                "got {got:?}, want {want}"
+            );
+        };
+        close(list[0].prompt_price_per_million, 0.15);
+        close(list[0].completion_price_per_million, 0.6);
+        close(list[0].cache_price_per_million, 0.015);
+        assert_eq!(list[1].prompt_price_per_million, Some(0.0));
+        assert_eq!(list[1].completion_price_per_million, Some(0.0));
+        assert_eq!(list[1].cache_price_per_million, None);
     }
 
     #[test]

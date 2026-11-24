@@ -222,39 +222,6 @@ pub fn chat_prefs_get(state: State<'_, AppState>) -> Result<ChatPrefs, AppError>
     })
 }
 
-/// What each online model costs, for the Usage screen's cost figures.
-/// USD per 1M tokens, keyed by model id. Local models are free.
-#[tauri::command]
-pub fn settings_model_prices(
-    state: State<'_, AppState>,
-) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
-    let store = state
-        .config_store
-        .lock()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    Ok(store.load().map_err(AppError::internal)?.model_prices)
-}
-
-/// Replace the whole price table. Prices are plain numbers, so negatives
-/// are dropped rather than trusted.
-#[tauri::command]
-pub fn settings_set_model_prices(
-    state: State<'_, AppState>,
-    prices: std::collections::BTreeMap<String, crate::config::ModelPrice>,
-) -> Result<std::collections::BTreeMap<String, crate::config::ModelPrice>, AppError> {
-    let store = state
-        .config_store
-        .lock()
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    let mut cfg = store.load().map_err(AppError::internal)?;
-    cfg.model_prices = prices
-        .into_iter()
-        .filter(|(_, price)| price.input >= 0.0 && price.output >= 0.0)
-        .collect();
-    store.save(&cfg).map_err(AppError::internal)?;
-    Ok(cfg.model_prices)
-}
-
 #[tauri::command]
 pub fn chat_prefs_set(state: State<'_, AppState>, prefs: ChatPrefs) -> Result<(), AppError> {
     let store = state

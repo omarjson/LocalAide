@@ -66,6 +66,8 @@
     onAnswerDeferred?: (text: string, questionId: string) => void;
     /** Chat setting: questions longer than a few lines start collapsed. */
     collapseLong?: boolean;
+    /** A steering note sent to a running answer: shown small, on the left. */
+    steer?: boolean;
   }
 
   let {
@@ -97,6 +99,7 @@
     folder = null,
     onAnswerDeferred,
     collapseLong = false,
+    steer = false,
   }: Props = $props();
 
   // A long question starts collapsed when the reading setting is on and
@@ -127,6 +130,8 @@
   let activeCitation = $state<Citation | null>(null);
   let lightbox = $state<string | null>(null);
   let raw = $state(false);
+  /** Sources stay folded until the answer is done, then open on a tap. */
+  let sourcesOpen = $state(false);
   let speaking = $state(false);
   // Settings → Voice → Read answers aloud, where the system has a voice.
   const canSpeak = $derived(!!voice.settings?.read_aloud && speechAvailable());
@@ -188,7 +193,7 @@
 </script>
 
 {#if role === "user"}
-  <div class="group flex justify-end" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+  <div class={`group flex ${steer ? "justify-start" : "justify-end"}`} in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
     {#if branchCount > 0}
       <div class="mb-1 flex w-full items-center justify-end gap-2 text-xs text-ink-500">
         <span class="flex items-center gap-1"><Icon name="undo" class="h-3 w-3" />{branchCount} later {branchCount === 1 ? "message" : "messages"} branched here</span>
@@ -197,7 +202,7 @@
         {/if}
       </div>
     {/if}
-    <div class="flex max-w-[82%] flex-col items-end">
+    <div class={`flex max-w-[82%] flex-col ${steer ? "items-start" : "items-end"}`}>
       {#if isEditing}
         <div class="w-[min(36rem,80vw)] rounded-2xl border border-edge bg-ink-950 p-3">
           <textarea
@@ -233,7 +238,10 @@
           </div>
         {/if}
         {#if content}
-          <div class="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md border border-ember-500/25 bg-ember-500/12 px-4 py-2.5 text-[15px] leading-6 text-ink-50">{shownContent}{#if sentFromForm.event}<span class="mt-1 flex items-center gap-1 text-xs text-ember-200/80"><Icon name="sparkle" class="h-3 w-3" />Sent from the form</span>{/if}</div>
+          {#if steer}
+            <span class="mb-1 flex items-center gap-1.5 text-xs text-ink-500"><Icon name="wand" class="h-3.5 w-3.5 text-ember-300" />Steered this answer{#if timeLabel}<span>· {timeLabel}</span>{/if}</span>
+          {/if}
+          <div class={`whitespace-pre-wrap break-words rounded-[18px] px-4 py-2.5 text-[15px] leading-6 ${steer ? "rounded-bl-md border border-edge bg-ink-900 text-sm text-ink-300" : "rounded-br-md border border-ember-500/25 bg-ember-500/12 text-ink-50"}`}>{shownContent}{#if sentFromForm.event}<span class="mt-1 flex items-center gap-1 text-xs text-ember-200/80"><Icon name="sparkle" class="h-3 w-3" />Sent from the form</span>{/if}</div>
           {#if longQuestion && !questionExpanded}
             <button type="button" onclick={() => (questionExpanded = true)} class="mt-0.5 text-xs font-medium text-ember-300 transition-colors hover:text-ember-200">Show full question</button>
           {/if}
@@ -344,20 +352,30 @@
         </div>
       {/if}
 
-      {#if citations.length > 0}
-        <div class="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Sources">
-          <span class="mr-0.5 flex items-center gap-1.5 text-xs text-ink-500">
-            <Icon name="layers" class="h-3.5 w-3.5" />Sources
-          </span>
-          {#each citations as cit (cit.index)}
-            <button
-              type="button"
-              class="reference-chip"
-              aria-label={`Source ${cit.index}: ${cit.title}`}
-              title={`${cit.title} — ${host(cit.source)}`}
-              onclick={(e) => openCitation(e, cit)}
-            >[{cit.index}]</button>
-          {/each}
+      {#if citations.length > 0 && !streaming}
+        <div class="mt-3" aria-label="Sources">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-xs text-ink-500 transition-colors hover:text-ink-200"
+            aria-expanded={sourcesOpen}
+            onclick={() => (sourcesOpen = !sourcesOpen)}
+          >
+            <Icon name="layers" class="h-3.5 w-3.5" />Sources ({citations.length})
+            <Icon name="chevron-down" class={`h-3 w-3 transition-transform ${sourcesOpen ? "rotate-180" : ""}`} />
+          </button>
+          {#if sourcesOpen}
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {#each citations as cit (cit.index)}
+                <button
+                  type="button"
+                  class="reference-chip"
+                  aria-label={`Source ${cit.index}: ${cit.title}`}
+                  title={`${cit.title} — ${host(cit.source)}`}
+                  onclick={(e) => openCitation(e, cit)}
+                >[{cit.index}]</button>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
 

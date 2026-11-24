@@ -27,6 +27,9 @@
     onReadFile: () => void;
     onWriteFile?: () => void;
     onCancel?: () => void;
+    /** A stopped answer is waiting: offer to continue it where it left off. */
+    canResume?: boolean;
+    onResume?: () => void;
     /** While an answer runs: keep this message and send it when the answer ends. */
     onQueue?: () => void;
     /** While an answer runs: hand this note to the answer before its next step. */
@@ -81,6 +84,8 @@
     onReadFile,
     onWriteFile,
     onCancel,
+    canResume = false,
+    onResume,
     onQueue,
     onSteer,
     pendingImages = [],
@@ -486,6 +491,15 @@
              `send`'s first parameter (`resend`) and resend the last message
              instead of the text just typed. Enter calls `onSend()` with no
              argument, which is why only the button mis-sent. -->
+        {#if canResume && onResume}
+          <button
+            type="button"
+            onclick={() => onResume?.()}
+            aria-label="Resume the stopped answer"
+            title="Resume — continue from where it stopped"
+            class="ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ember-500 text-on-ember transition-[transform,background-color] duration-150 hover:scale-105 hover:bg-ember-400 active:scale-95"
+          ><Icon name="play" class="h-5 w-5" /></button>
+        {/if}
         <button
           type="button"
           onclick={() => onSend()}
@@ -549,29 +563,17 @@
     padding: 0.375rem;
     box-shadow: var(--shadow-elev);
   }
-  /* The stop button announces itself: a soft ring breathes out while the
-     answer runs, so "make it stop" is always the obvious click. */
+  /* The stop button is a plain solid circle now: no pulse. The pulse was
+     one more always-on animation, and the button is obvious enough without
+     it. */
   .stop-btn {
     transition: transform 150ms ease-out;
-    animation: stop-breathe 1.8s ease-out infinite;
   }
   .stop-btn:hover {
     transform: scale(1.06);
   }
   .stop-btn:active {
     transform: scale(0.94);
-    animation: none;
-  }
-  @keyframes stop-breathe {
-    0% {
-      box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-ink-100) 45%, transparent);
-    }
-    70% {
-      box-shadow: 0 0 0 9px transparent;
-    }
-    100% {
-      box-shadow: 0 0 0 0 transparent;
-    }
   }
   .menu-row {
     display: flex;

@@ -171,6 +171,9 @@
     stop: `
       <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />
     `,
+    play: `
+      <path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none" />
+    `,
     copy: `
       <rect x="9" y="9" width="11" height="11" rx="2" />
       <path d="M5 15V6a2 2 0 0 1 2-2h8" />

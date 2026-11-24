@@ -69,6 +69,9 @@ fn provider_models(p: &CloudProvider, chosen: Option<&str>) -> Vec<ProviderModel
                     reasoning: None,
                     vision: None,
                     tools: None,
+                    prompt_price_per_million: None,
+                    completion_price_per_million: None,
+                    cache_price_per_million: None,
                 },
             );
         }
@@ -351,6 +354,9 @@ mod tests {
             reasoning: Some(true),
             vision: Some(true),
             tools: Some(false),
+            prompt_price_per_million: None,
+            completion_price_per_million: None,
+            cache_price_per_million: None,
         };
         let caps = remote_caps(&m);
         assert!(caps.reasoning && caps.vision && !caps.tools);

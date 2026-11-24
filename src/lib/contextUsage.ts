@@ -267,3 +267,9 @@ export function compactionStart(messages: ChatMessage[], limit: number, threshol
   }
   return lastKeep;
 }
+
+/** An explicit compact always cuts, even when the conversation already
+ * fits: keep only the last exchange in what is sent. */
+export function forcedCompactionStart(messages: ChatMessage[], from = 0): number {
+  return Math.max(from, messages.length - 2);
+}

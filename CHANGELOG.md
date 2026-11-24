@@ -9,8 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 A large local-first upgrade: one window chrome row, a diagnostics and repair
 surface, secrets in the OS keychain, durable tool policy, session search,
-agents, goals, multi-run, project rules, notifications, paired sharing, skins
-and plugin panels. Settings are re-ordered, the model picker keeps the
+agents, goals, multi-run, project rules, notifications, paired sharing and
+plugin panels. Settings are re-ordered, the model picker keeps the
 conversation when switching models, and config writes skip unchanged saves.
 
 ### Added
@@ -20,7 +20,7 @@ conversation when switching models, and config writes skip unchanged saves.
 - **Session search, doctor, agents, multi-run and context references.** Search old chats with FTS5, run a local health report, manage Markdown agents, compare answers from several providers and resolve safe `@file:line` references.
 - **Permission rules, tool hooks and provider routing.** Durable allow/ask/deny rules, pre/post tool hooks, MCP tool gating, provider priority and key pools.
 - **Goals and usage ledger.** Goal state with a step budget and a documented flat-rate usage ledger for online calls.
-- **Paired sharing, skins and plugins.** Shared sessions now need a one-time pairing token; portable skins can be imported/exported; local HTML plugin panels are listed safely and shown in a sandbox.
+- **Paired sharing and plugins.** Shared sessions now need a one-time pairing token; local HTML plugin panels are listed safely and shown in a sandbox.
 - **Project rules and model-switch notes.** `AGENTS.md`-style files are injected into chat prompts when enabled, and switching models reports the recalculated context budget without losing the conversation.
 - **Local notifications and sounds.** Opt-in desktop notifications with a short chime when a goal completes, a background turn finishes, a tool approval is needed, or the model asks a question. No network calls.
 
@@ -37,6 +37,13 @@ conversation when switching models, and config writes skip unchanged saves.
 - Open chat tabs are capped live at 8 with least-recently-used eviction; the contrast gate reads the shipped focus token; tab close stays visible on touch.
 - Provider keys rotate on real 401/429 responses, doctor can repair safe local scaffolding, and repeated identical config saves are skipped.
 - **Online provider router and SSE engine** have loopback HTTP tests for clean and truncated streams, mid-stream errors, 401 hints, no-follow redirects and cancellation.
+- **Sources sit under the finished answer, folded.** They used to render mid-stream (as citations arrived) and sprawl across the chat — 133 chips in the reported case. They now appear only when the answer is done, under its final text, collapsed behind a "Sources (N)" toggle.
+- **A new chat's tab says what the header says.** The tab was renamed to "Chat" once the thread got its first saved id, while the header said "New chat". It now stays "New chat" until the model titles it.
+- **The stop button no longer pulses, and stopping offers a resume.** The breathing ring is gone (one more always-on animation), and after a stop the composer shows a Resume button that tells the model to continue the stopped answer from exactly where it left off — the partial answer stays and is picked up, not regenerated. The run still reports `cancelled`, so the button also appears when the backend confirms the stop.
+- **"Compact now" and `/compact` always compact.** They used to refuse when the conversation already fit the window ("This conversation already fits"). An explicit compact now always cuts to the last exchange, no matter the size; the automatic compact at the threshold is unchanged.
+- **Steered notes show in the chat.** A steer used to leave only the model's truncated "Read your note: …" step (and that step is session-only). The note now lands in the transcript in full, before the answer it steers, labelled "Steered this answer", and survives reopening the chat. It is never sent back to the model as history.
+- **The chat follows progress, not just the last message's text.** The auto-scroll only watched the last message's length, so subagent steps, to-dos and tool rounds did not pull the view down. It now follows a fingerprint of the answer's parts too.
+- **Skins are removed, and model prices come from OpenRouter.** The skin panel, its import/export and the theme overrides are gone. The hand-typed "Model costs" table in Settings is gone too: the Usage screen now prices from OpenRouter's public `/models` list (cached ten minutes, keyed by full and short model id), so a model that is not listed prices at $0 instead of an invented number.
 
 ### Changed
 - Contrast checks now recompute WCAG ratios from the shipped CSS tokens in CI for both themes; the a11y evidence table carries the current palette values.

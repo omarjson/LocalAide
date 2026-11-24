@@ -5,7 +5,7 @@
   import { api, errorMessage } from "./lib/api/client";
   import { dur, enterDialog, enterScreen, leaveDialog, motion, slideUp } from "./lib/motion";
   import { formatBytes } from "./lib/format";
-  import { applyTheme, currentTheme, applySkin, activeSkinOverrides } from "./lib/theme";
+  import { applyTheme, currentTheme } from "./lib/theme";
   import { LEGAL_DOCS, legal, openLegal } from "./lib/legal.svelte";
   import { requestSettings, screenRequest } from "./lib/nav.svelte";
   import { loadDev, moduleOn, activeEffectFlags } from "./lib/dev.svelte";
@@ -337,8 +337,6 @@
 
   onMount(() => {
     void (async () => {
-      // Skins are localStorage-only in this build; restore before first paint.
-      applySkin(activeSkinOverrides());
       try {
         const theme = await api.getTheme();
         if (theme === "light" || theme === "dark") {

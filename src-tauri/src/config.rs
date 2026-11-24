@@ -84,11 +84,6 @@ pub struct AppConfig {
     /// are offered to the model in chat while the server is switched on.
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
-    /// What each online model costs, so Usage can show a price. USD per
-    /// 1M tokens, keyed by model id as the picker shows it. Local models
-    /// are free and need no entry.
-    #[serde(default)]
-    pub model_prices: std::collections::BTreeMap<String, ModelPrice>,
     /// Tool permission rules, evaluated in order; the last matching rule wins.
     #[serde(default)]
     pub permissions: Vec<PermissionRule>,
@@ -558,7 +553,6 @@ impl Default for AppConfig {
             voice: VoiceConfig::default(),
             favorite_models: Vec::new(),
             mcp_servers: Vec::new(),
-            model_prices: std::collections::BTreeMap::new(),
             permissions: Vec::new(),
             hooks: HooksConfig::default(),
             routing: RoutingConfig::default(),
@@ -933,29 +927,10 @@ mod tests {
         let cfg: AppConfig = serde_json::from_str(old).unwrap();
         assert!(cfg.cloud_providers.is_empty());
         assert!(cfg.active_cloud_provider.is_none());
-        assert!(cfg.model_prices.is_empty());
         assert_eq!(
             cfg.memory_percent_for_models(),
             DEFAULT_MODEL_MEMORY_PERCENT
         );
-    }
-
-    #[test]
-    fn model_prices_round_trip() {
-        let mut cfg = AppConfig::default();
-        cfg.model_prices.insert(
-            "gpt-4o-mini".into(),
-            ModelPrice {
-                input: 0.15,
-                output: 0.6,
-                cache_read: Some(0.075),
-            },
-        );
-        let json = serde_json::to_string(&cfg).unwrap();
-        let back: AppConfig = serde_json::from_str(&json).unwrap();
-        let price = back.model_prices.get("gpt-4o-mini").unwrap();
-        assert_eq!(price.input, 0.15);
-        assert_eq!(price.cache_read, Some(0.075));
     }
 
     #[test]

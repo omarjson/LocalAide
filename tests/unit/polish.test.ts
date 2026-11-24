@@ -83,7 +83,7 @@ const LEGACY_NAMES: string[] = [
   "folder", "folder-plus", "more", "sliders", "refresh", "download", "trash", "info",
   "sun", "computer", "cloud", "database", "globe", "chevron-right", "chevron-down",
   "flame", "heart", "clock", "automations", "external", "scale", "key", "sparkle",
-  "sidebar", "arrow-up", "stop", "copy", "pencil", "image", "bolt", "unlock", "code",
+  "sidebar", "arrow-up", "stop", "play", "copy", "pencil", "image", "bolt", "unlock", "code",
   "flask", "plug", "eye", "layers", "target", "brain", "wrench", "paperclip", "star",
   "star-filled", "x-circle", "window", "terminal", "volume", "mic", "link", "lightbulb",
   "hand", "shield-check", "users", "list-check", "undo", "help", "chart", "folder-open",

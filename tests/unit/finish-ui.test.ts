@@ -1,11 +1,10 @@
-// Guards the frontend-only finish work: the seven Settings groups, the typed
-// IPC methods for goals/usage/plugins, and the localStorage skin validation.
+// Guards the frontend-only finish work: the seven Settings groups and the typed
+// IPC methods for goals/usage/plugins.
 // No Tauri window, no Svelte compiler, no fabricated data.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { SETTINGS_GROUPS, SETTINGS_GROUP_OF } from "../../src/lib/screens.ts";
-import { SKIN_PROPERTIES, cleanSkinOverrides, parseSkin } from "../../src/lib/theme.ts";
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 const client = read("src/lib/api/client.ts");
@@ -92,22 +91,4 @@ test("plugin frames allow scripts only, never same-origin", () => {
   assert.doesNotMatch(panels, /allow-same-origin/);
   assert.match(panels, /try \{[\s\S]*api\.pluginList\(\)/);
   assert.match(panels, /No plugin panels are installed/);
-});
-
-test("skin overrides are validated against the design tokens", () => {
-  assert.ok(SKIN_PROPERTIES.includes("--color-ember-500"));
-  assert.ok(SKIN_PROPERTIES.includes("--radius-lg"));
-  const clean = cleanSkinOverrides({
-    "--color-ember-500": " #ff7a1a ",
-    "--not-a-token": "red",
-    "--color-edge": "red; } body { display:none",
-  });
-  assert.deepEqual(clean, { "--color-ember-500": "#ff7a1a" });
-  assert.deepEqual(cleanSkinOverrides(null), {});
-  assert.deepEqual(parseSkin("not json"), null);
-  assert.deepEqual(parseSkin(JSON.stringify({ overrides: {} })), null);
-  assert.deepEqual(
-    parseSkin(JSON.stringify({ name: "Mine", overrides: { "--color-edge": "red" } })),
-    { name: "Mine", overrides: { "--color-edge": "red" } },
-  );
 });

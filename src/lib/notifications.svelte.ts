@@ -1,7 +1,7 @@
 // Local-only notifications and a short chime. Only browser APIs are used:
 // the Web Notification API and a WebAudio oscillator. Nothing here makes a
 // network call, and nothing fires until the user opts in. Preferences live in
-// localStorage next to the other UI-only settings (skins, sidebar, tabs).
+// localStorage next to the other UI-only settings (sidebar, tabs).
 //
 // This module is deliberately free of Svelte runes and imports so it can also
 // be exercised by the plain Node unit tests. Components keep their own $state

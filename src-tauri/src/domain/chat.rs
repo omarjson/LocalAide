@@ -32,6 +32,10 @@ pub struct ChatMessage {
     /// The answer failed. Failed answers are not sent back as history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<bool>,
+    /// A steering note the user sent to a running answer. It shows in the
+    /// transcript but is never sent back to the model as history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steer: Option<bool>,
 }
 
 /// One piece of an answer.
@@ -195,6 +199,10 @@ pub struct ChatStreamRequest {
     /// Tell the model it can draw charts, diagrams and mockups. Default true.
     #[serde(default)]
     pub rich_output: Option<bool>,
+    /// Continue a stopped answer: `message` is ignored and the model is
+    /// told to pick up the last assistant turn where it stopped.
+    #[serde(default)]
+    pub resume: Option<bool>,
 }
 
 /// The user's answer to a tool approval question.

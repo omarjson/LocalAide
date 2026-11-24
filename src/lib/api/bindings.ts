@@ -118,6 +118,8 @@ export interface ChatMessage {
   model?: string;
   /** The answer failed; it is not sent back as history. */
   error?: boolean;
+  /** A steering note sent to a running answer. Shown in the transcript, never sent back as history. */
+  steer?: boolean;
 }
 
 export type ToolStatus = "running" | "waiting" | "done" | "failed" | "denied";
@@ -433,6 +435,8 @@ export interface ChatStreamRequest {
   use_subagents?: boolean;
   /** Tell the model it can draw charts, diagrams and mockups (default true). */
   rich_output?: boolean;
+  /** Continue a stopped answer; `message` is ignored and the model picks up the last assistant turn. */
+  resume?: boolean;
 }
 
 export type ChatModeId = "standard" | "strict" | "unrestricted" | "autonomous";

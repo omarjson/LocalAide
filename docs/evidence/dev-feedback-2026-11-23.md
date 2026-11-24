@@ -146,12 +146,94 @@ Fix (this commit, `dev` only):
 - Activity-only animations (typing dots, thinking label, index sweep, effort
   sheen, session pulse, skeleton shimmer, progress slide) get `will-change`
   so they run on the compositor.
-- Left alone on purpose: the `box-shadow` breathers (stop button,
-  effort glow, share pulse) — small elements, only while active. The
-  `.app-canvas` root gradients were NOT promoted: a transform there would
-  make it the containing block for `position: fixed` descendants (modals,
-  popovers).
+- Left alone on purpose: the `box-shadow` breathers (effort glow, share
+  pulse) — small elements, only while active. The stop button's pulse was
+  removed in the 2026-11-24 batch (§8): a plain solid circle, with a Resume
+  button after a stop instead. The `.app-canvas` root gradients were NOT
+  promoted: a transform there would make it the containing block for
+  `position: fixed` descendants (modals, popovers).
 
 Re-measure: run the 60 s logger again on the new build and compare GPU %
 and temperature. If `fill_shading` persists, the next step is replacing the
 root radial gradients with a pre-rendered static image.
+
+## 8. Chat feedback — 2026-11-24 (Batch 3, `dev` only)
+
+Omar's screenshot (three subagents working a Black Friday search, 133 source
+chips mid-answer) plus a list of fixes. No build was sent for this batch.
+
+- **Sources under the final answer, collapsed.** `MessageBubble` rendered
+  citations whenever they arrived, so they showed mid-stream, above the
+  still-running answer. They now render only when the answer is done
+  (`!streaming`), under its final text, behind a `Sources (N)` toggle that
+  starts folded (`sourcesOpen = false`). The rail's Sources section is
+  untouched.
+- **Title bar: the tab said "Chat", the header said "New chat".**
+  `tabThreadStarted` renamed a new tab to "Chat" once the thread got its
+  first saved id. The rename is gone; an untitled thread is "New chat" in
+  the tab and in the header until the model titles it.
+- **Subagent visibility — verified, no code change.** Omar asked whether
+  the main model can watch the subagents live, and whether subagents can
+  talk to each other. The answer from `services/agent/mod.rs`
+  (`run_subagents`): no, on both counts, by design. Each subagent gets a
+  fresh context (system prompt + its task only, no chat history, no sibling
+  tasks) and runs in its own thread; the main model waits for all of them
+  and gets only their final reports ("Report from the subagent …") in its
+  next round. The one-line `subagent_step` events go to the chat UI, not to
+  the model. Subagents cannot message each other; the only path between
+  them is through the main model after they finish. Changing that (live
+  progress into the model's context, or a shared channel between
+  subagents) is a design decision, not a bug fix — left for Omar to ask
+  for.
+- **Stop button: no pulse, plus Resume.** The `stop-breathe` ring is
+  removed from `ChatInput` (`.stop-btn` is a plain solid circle now). After
+  a stop the composer shows a Resume button (new `play` icon). Resume
+  re-enters the same run: the backend takes `resume: true` on
+  `ChatStreamRequest` and replaces the new message with a fixed "continue
+  from exactly where you stopped" turn, while the history already ends with
+  the partial answer; the frontend appends the new tokens to that partial
+  message instead of starting a new one. The running answer is held by
+  object in `send()`, not by index, so a steering note inserted before it
+  cannot shift what the stream appends to; the `done` handler re-reads the
+  answer's current index for its estimate. `stoppedAnswer` is set both by
+  the stop itself and when the run reports `cancelled`, and cleared by any
+  new send, a new chat, or switching threads.
+- **"Compact now" and `/compact` always compact.** `compactConversation`
+  takes a `force` flag (pure helper `forcedCompactionStart` in
+  `contextUsage.ts`: keep only the last exchange). The manual path passes
+  it; the automatic compact at the threshold does not. A chat with only the
+  last exchange left reports "Nothing left to compact".
+- **Steered notes show in the chat.** `steerText` now inserts the note
+  into the transcript as a user message with `steer: true`, before the
+  answer it steers, rendered small on the left with a "Steered this
+  answer" label. The flag is a real `ChatMessage` field (Rust + IPC
+  bindings), so it survives saving and reopening. Steers are excluded from
+  the history sent to the model, from the context meter and fit checks
+  (`sentMessages`), and from edit-and-resend.
+- **The chat follows progress.** The follow-stream effect only tracked the
+  last message's length, so subagent steps, to-dos and tool rounds did not
+  pull the view down. It now also tracks a fingerprint of the answer's
+  parts (tool id/status/step count, to-do count, text/reasoning length,
+  question answers).
+- **Skins removed.** `SkinPanel.svelte` and the whole skin system are
+  gone: the theme module's skin functions, the restore at startup, the
+  Settings panel. Accent, font, density and light/dark theme stay — those
+  are appearance settings, not skins.
+- **Model prices come from OpenRouter.** The hand-typed "Model costs"
+  table in Settings is gone, with it the `settings_model_prices` /
+  `settings_set_model_prices` commands and the `model_prices` config
+  field. The new `openrouter_model_prices` command fetches OpenRouter's
+  public `/models` list (no key, cached ten minutes) and returns USD per
+  1M tokens keyed by full id and short id; `ProviderModel` now keeps the
+  `pricing.prompt` / `completion` / `input_cache_read` values the parser
+  used to drop. The Usage screen prices from that; a model OpenRouter does
+  not list prices at $0. The developer Usage ledger panel keeps its own
+  manual rate field — it is a diagnostic for recording arbitrary calls,
+  not the user-facing price table.
+
+Tests: `tests/unit/feedback-2026-11-24.test.ts` (source-text regressions
+for every item above, plus unit tests for `forcedCompactionStart` and the
+OpenRouter price parsing). 135 unit tests pass; `svelte-check` 0 errors
+(the 1 warning is the pre-existing `context="module"` deprecation in
+`Icon.svelte`); `cargo fmt --check` clean. Rust verification is CI's job
+(no local GTK/WebKit libs): clippy + cargo test on the CI run.

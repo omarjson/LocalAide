@@ -35,7 +35,7 @@
     try {
       const [next, nextPrices] = await Promise.all([
         api.usageSummary(days, folder),
-        api.modelPrices().catch(() => ({} as Record<string, ModelPrice>)),
+        api.openrouterModelPrices().catch(() => ({} as Record<string, ModelPrice>)),
       ]);
       summary = next;
       prices = nextPrices;
@@ -88,9 +88,11 @@
     return summary.output_tokens / (summary.ms / 1000);
   });
 
-  // --- Cost: per-model from the price table, USD per 1M tokens. Cache
-  // reads ride the input count in provider reports, so they are split out
-  // and charged at their own price when one exists.
+  // --- Cost: per-model from OpenRouter's prices, USD per 1M tokens.
+  // Models OpenRouter does not list (or a list that failed to load) price
+  // at $0 rather than an invented number. Cache reads ride the input count
+  // in provider reports, so they are split out and charged at their own
+  // price when one exists.
   const modelCost = (m: { model: string; input: number; output: number; cache: number }): number => {
     const price = prices[m.model];
     if (!price) return 0;

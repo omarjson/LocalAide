@@ -31,7 +31,7 @@
   import Modal from "../components/Modal.svelte";
   import { A2uiChat, provideA2ui } from "../lib/a2ui.svelte";
   import ProviderForm from "../components/ProviderForm.svelte";
-  import { calibration, compactionStart, contextSegments, contextUsage, fits, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
+  import { calibration, compactionStart, contextSegments, contextUsage, fits, forcedCompactionStart, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
 
   let messages = $state<ChatMessage[]>([]);
@@ -560,12 +560,28 @@
   };
 
   // Follow the answer while it streams: the last message grows without the
-  // message count changing, so its length is tracked too. Off means you steer
-  // the scroll yourself; the pill below still jumps to the end.
+  // message count changing, so its length is tracked too. Progress also
+  // moves the view: tool calls, subagent steps, to-dos and reasoning change
+  // the parts, not the last message's text, so a fingerprint of them is
+  // tracked as well. Off means you steer the scroll yourself; the pill
+  // below still jumps to the end.
   $effect(() => {
     if (!followStreaming) return;
     const lastLength = messages.at(-1)?.content.length ?? 0;
-    if (messages.length > 0 && lastLength >= 0) {
+    const progress = messages
+      .map((m) =>
+        (m.parts ?? [])
+          .map((p) => {
+            if (p.type === "tool") return `tool:${p.id}:${p.status}:${p.steps?.length ?? 0}`;
+            if (p.type === "todos") return `todos:${p.items.length}`;
+            if (p.type === "text" || p.type === "reasoning") return `${p.type}:${p.text.length}`;
+            if (p.type === "question") return `q:${p.answer ?? ""}`;
+            return "other";
+          })
+          .join(","),
+      )
+      .join("|");
+    if (messages.length > 0 && lastLength >= 0 && progress.length >= 0) {
       scrollToBottom();
     }
   });
@@ -585,6 +601,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    stoppedAnswer = false;
     resetMeasurements();
     suggestions = [];
     void loadStarters();
@@ -629,6 +646,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    stoppedAnswer = false;
     resetMeasurements();
     systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
     try {
@@ -746,6 +764,14 @@
     measuredModel = null;
     lastCacheRate = null;
   };
+  // Steering notes show in the transcript but are never sent to the model,
+  // so they do not count toward the window, the meter or the fit checks.
+  // (Compaction itself keeps the real array: its cut is an index into it.)
+  const sentMessages = $derived(messages.filter((m) => !m.steer));
+  // A stopped answer waits for Resume. Set when the user stops it (or the
+  // run reports cancelled); any new send clears it.
+  let stoppedAnswer = $state(false);
+
   const usageOptions = (draft: string) => {
     const sameModel = measuredModel !== null && measuredModel === (activeChoice?.key ?? null);
     return {
@@ -758,7 +784,7 @@
       ratio: sameModel ? estimateRatio : 1,
     };
   };
-  const usage = $derived(contextUsage(messages, activeChoice?.context, usageOptions(input)));
+  const usage = $derived(contextUsage(sentMessages, activeChoice?.context, usageOptions(input)));
   // What the window is made of, for the hover breakdown: history, tool
   // schemas, meta context, skills and instructions, scaled to the meter.
   const segments = $derived(
@@ -778,11 +804,19 @@
   );
 
   /** Move the cut so the rest fits under `threshold` percent. True when it moved. */
-  const compactConversation = (threshold = autoCompactAt, draft = "") => {
+  const compactConversation = (threshold = autoCompactAt, draft = "", force = false) => {
     const limit = activeChoice?.context;
     if (!limit) {
       // No known window: keep the last four messages.
       const next = Math.max(historyFrom, messages.length - 4);
+      if (next <= historyFrom) return false;
+      compactedBefore = next;
+      return true;
+    }
+    if (force) {
+      // An explicit compact always cuts, even when the conversation already
+      // fits: keep only the last exchange in what is sent.
+      const next = forcedCompactionStart(messages, historyFrom);
       if (next <= historyFrom) return false;
       compactedBefore = next;
       return true;
@@ -799,11 +833,12 @@
         newChat();
         break;
       case "compact":
-        // A manual compact aims for half the window, leaving room to talk.
-        if (compactConversation(Math.min(50, autoCompactAt))) {
+        // A manual compact always cuts, even when the conversation already
+        // fits the window: it aims for half the window, leaving room to talk.
+        if (compactConversation(Math.min(50, autoCompactAt), "", true)) {
           showToast("Older messages stay on screen but are no longer sent to the model.");
         } else {
-          showToast("This conversation already fits.");
+          showToast("Nothing left to compact — only the last exchange is being sent.");
         }
         break;
       case "model":
@@ -964,6 +999,21 @@
     // Listed first, so a "steered" event that arrives before the reply
     // still finds it.
     steering.push(note);
+    // The note also lands in the transcript, in full, before the answer it
+    // steers — so the chat shows what was asked, not just the model's
+    // truncated "Read your note" step. It is never sent back as history.
+    // (Safe to insert mid-stream: the running answer is held by object in
+    // send(), not by index, so this does not shift what it appends to.)
+    let aiIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        aiIdx = i;
+        break;
+      }
+    }
+    const steerMsg = { role: "user", content: text, ts: Date.now(), steer: true };
+    if (aiIdx >= 0) messages.splice(aiIdx, 0, steerMsg);
+    else messages.push(steerMsg);
     let taken = false;
     try {
       taken = await api.steerChat(job, text);
@@ -1041,25 +1091,28 @@
   // function bare as a click handler once fed it a MouseEvent, which is
   // truthy, and every Send click resent the previous message instead of
   // the text just typed. Only an explicit `true` resends.
-  const send = async (resendArg = false, queuedText?: string) => {
+  const send = async (resendArg = false, queuedText?: string, resumeArg = false) => {
     const resend = resendArg === true;
-    const fromQueue = !resend && queuedText !== undefined;
+    const resume = resumeArg === true;
+    const fromQueue = !resend && !resume && queuedText !== undefined;
     const lastUser = resend ? messages.at(-1) : undefined;
     const files = resend
       ? (lastUser?.attachments ?? []).filter((f) => !f.error)
       : fromQueue
         ? []
         : $state.snapshot(pendingFiles).filter((f) => !f.error);
-    const userMsg = resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
+    const userMsg = resume ? "" : resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
     const resendImages = resend ? (lastUser?.images ?? []) : [];
-    if ((!userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) || streaming) return;
-    if (!resend && !fromQueue) {
+    if (streaming) return;
+    if (!resume && !userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) return;
+    if (!resend && !fromQueue && !resume) {
       input = "";
     }
     suggestions = [];
     previousDraft = null;
     planReady = false;
     lastCacheRate = null;
+    stoppedAnswer = false;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
     for (const m of messages) {
@@ -1067,7 +1120,7 @@
         if (p.type === "question" && !p.answer && !p.dismissed) p.deferred = true;
       }
     }
-    if (activeChoice?.context && !fits(contextUsage(messages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
+    if (activeChoice?.context && !fits(contextUsage(sentMessages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
       if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
     }
 
@@ -1078,7 +1131,7 @@
     const history = $state
       .snapshot(priorMessages)
       .slice(historyFrom)
-      .filter((m) => m.content.trim() && !m.error && !m.content.startsWith("[Chat Error"))
+      .filter((m) => m.content.trim() && !m.error && !m.steer && !m.content.startsWith("[Chat Error"))
       .map((m) => ({
         role: m.role,
         content: m.content,
@@ -1086,7 +1139,7 @@
       }));
 
     const images = resend ? resendImages : fromQueue ? [] : $state.snapshot(pendingImages);
-    if (!resend) {
+    if (!resend && !resume) {
       if (!fromQueue) {
         pendingImages = [];
         pendingFiles = [];
@@ -1096,25 +1149,32 @@
     streaming = true;
     runStartedAt = Date.now();
     sendFailed = false;
-    liveStatus = "LocalAide is answering.";
+    liveStatus = resume ? "Continuing the answer." : "LocalAide is answering.";
     userScrolledUp = false;
     void savePrefs();
 
-    const assistantIdx = messages.length;
     // Where the history this request carries starts, for the engine's count.
     const sentFrom = historyFrom;
     const sentModel = activeChoice?.key ?? null;
-    messages.push({
-      role: "assistant",
-      content: "",
-      ts: Date.now(),
-      steps: [],
-      parts: [],
-      model: activeChoice?.name ?? undefined,
-    });
+    // A resume keeps the partial answer in place and appends to it; a
+    // fresh send adds a new empty answer.
+    const assistantIdx = resume ? messages.length - 1 : messages.length;
+    if (!resume) {
+      messages.push({
+        role: "assistant",
+        content: "",
+        ts: Date.now(),
+        steps: [],
+        parts: [],
+        model: activeChoice?.name ?? undefined,
+      });
+    }
     const started = performance.now();
     let firstTokenAt: number | null = null;
-    const answer = () => messages[assistantIdx];
+    // Captured by object, not index: a steering note inserted before this
+    // answer must not shift what the stream appends to.
+    const assistantMsg = messages[assistantIdx];
+    const answer = () => assistantMsg;
     const parts = () => {
       const msg = answer();
       if (!msg.parts) msg.parts = [];
@@ -1138,6 +1198,7 @@
       activeJobId = await api.streamChat(
         {
           message: userMsg,
+          resume,
           history,
           images,
           model,
@@ -1217,15 +1278,17 @@
               reportedTools = event.payload.tool_tokens ?? 0;
             }
             // The question as sent, estimated the way the meter estimates,
-            // against the engine's own count of it.
-            const sentEstimate = contextUsage(messages.slice(0, assistantIdx), null, {
+            // against the engine's own count of it. The answer's index is
+            // read fresh: a steering note inserted mid-stream moves it.
+            const answerIdx = messages.indexOf(answer());
+            const sentEstimate = contextUsage(messages.slice(0, answerIdx).filter((m) => !m.steer), null, {
               from: sentFrom,
               systemPrompt,
               overhead: reportedSystem !== null ? reportedSystem + (reportedTools ?? 0) : null,
             }).used;
             const first = event.payload.first_prompt_tokens ?? null;
-            if (first && first > 0 && assistantIdx > 0) {
-              measuredPrompt = { tokens: first, upTo: assistantIdx, from: sentFrom, anchor: messages[assistantIdx - 1]?.ts };
+            if (first && first > 0 && answerIdx > 0) {
+              measuredPrompt = { tokens: first, upTo: answerIdx, from: sentFrom, anchor: messages[answerIdx - 1]?.ts };
               measuredModel = sentModel;
               estimateRatio = calibration(first, sentEstimate);
             } else if (sentModel !== measuredModel) {
@@ -1243,6 +1306,12 @@
             activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
+            if (event.payload.finish_reason === "cancelled") {
+              // A stop lands here too (the run reports back after the
+              // cancel): the partial answer waits for Resume.
+              stoppedAnswer = true;
+              liveStatus = "Answer stopped.";
+            }
             parkSteers();
             // The next queued message goes once this answer is saved, unless
             // the user stopped it or the model is waiting on a question.
@@ -1283,7 +1352,17 @@
     const last = messages.at(-1);
     if (last?.role === "assistant" && last.parts) settleParts(last.parts, performance.now());
     liveStatus = "Answer stopped.";
+    stoppedAnswer = true;
     persistCurrentThread();
+  };
+
+  // Continue a stopped answer where it left off: the partial answer stays
+  // and the model is told to pick it up, instead of starting over.
+  const resumeGenerating = () => {
+    if (streaming) return;
+    const last = messages.at(-1);
+    if (last?.role !== "assistant" || !last.content.trim()) return;
+    void send(false, undefined, true);
   };
 
   // Answer the last question again, in place: the question stays in the
@@ -2033,6 +2112,7 @@
             parts={msg.parts}
             attachments={msg.attachments}
             model={msg.model}
+            steer={msg.steer}
             approvals={idx === messages.length - 1 ? approvals : {}}
             onDecide={(toolId, decision) => void decideTool(toolId, decision)}
             onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
@@ -2048,7 +2128,7 @@
             branchCount={activeThreadId ? branchCountAt(activeThreadId, idx) : 0}
             onRestoreBranch={() => restoreBranch(idx)}
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
-            onEdit={msg.role === "user" ? (newText) => editTurn(newText, idx) : undefined}
+            onEdit={msg.role === "user" && !msg.steer ? (newText) => editTurn(newText, idx) : undefined}
             onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
             collapseLong={collapseQuestions}
           />
@@ -2172,6 +2252,8 @@
         streaming={streaming}
         onSend={send}
         onCancel={stopGenerating}
+        canResume={stoppedAnswer}
+        onResume={resumeGenerating}
         onQueue={queueDraft}
         onSteer={steerDraft}
         onReadFile={readFile}

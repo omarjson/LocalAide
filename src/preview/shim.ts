@@ -306,11 +306,10 @@ const fixtures: Record<string, Handler> = {
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
   chat_prefs_set: () => null,
   usage_summary: (args) => usageSummaryFixture(args as Record<string, unknown>),
-  settings_model_prices: () => ({
+  openrouter_model_prices: () => ({
     "kimi-k2.5": { input: 0.6, output: 2.5, cache_read: 0.1 },
     "gpt-5-mini": { input: 0.25, output: 2.0, cache_read: 0.025 },
   }),
-  settings_set_model_prices: (args) => args?.prices ?? {},
   chat_target_set: (args) => {
     // Flip the active model, so the picker's active row and the effort
     // ladder follow the choice like the real backend does.

@@ -500,6 +500,14 @@ pub(crate) fn prepare_run(
         history = build_history(true);
     }
     let mut message = history_text(&req.message, &req.attachments);
+    if req.resume.unwrap_or(false) {
+        // Resuming a stopped answer: the history already ends with the
+        // partial answer, so the only new turn is the instruction to
+        // continue it. `req.message` (empty on resume) is ignored, and
+        // `user_message` stays empty so a tool-less model does not go
+        // gathering for the instruction text.
+        message = RESUME_MESSAGE.to_string();
+    }
     if let Some(now) = req.now.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         let now: String = now.chars().take(120).collect();
         message.push_str(&format!("\n\n[The user's current date and time: {now}.]"));
@@ -549,6 +557,11 @@ pub(crate) fn prepare_run(
 }
 
 const PLAN_GUIDANCE: &str = "Plan mode is on. Look around with the read-only tools as much as you need, then answer with a short numbered plan: what you would change, in which files, and which commands you would run. Do not try to make the changes; they will not run. End by saying the user can press Build to carry out the plan.";
+
+/// The only new turn when an answer resumes after the user stopped it.
+/// The partial answer is already the last history turn, so this tells the
+/// model to pick it up instead of starting over.
+const RESUME_MESSAGE: &str = "Continue your previous answer from exactly where it stopped. Do not repeat what you already wrote and do not start over.";
 
 const RICH_OUTPUT_GUIDANCE: &str = "The chat can draw visuals from fenced code blocks. Use one only when a visual helps more than text:\n- ```chart with JSON: {\"type\": \"bar\" | \"line\" | \"pie\", \"title\": \"...\", \"labels\": [\"...\"], \"series\": [{\"name\": \"...\", \"values\": [1, 2]}]}\n- ```mermaid for diagrams (flowchart, sequence, class, state, timeline, gantt).\n- ```html for an interface mockup or a small page. It runs in a sandbox with no network and no access to the user's files; inline all CSS and scripts. To let the user pick an option on it, call localaide.choose(\"the choice in a few words\") from a button; the choice comes back as the user's next message.\nFor tables, use markdown tables.";
 

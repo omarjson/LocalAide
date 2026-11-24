@@ -172,7 +172,7 @@ export function openChat(thread: ChatThread): void {
   const tab: ChatTab = {
     key: nextTabKey(),
     id: thread.id,
-    title: thread.title || "Chat",
+    title: thread.title || "New chat",
     folder: thread.folder ?? null,
     busy: false,
     lastUsed: stamp(),
@@ -201,7 +201,6 @@ export function tabThreadStarted(key: string, id: string): void {
   const tab = chats.tabs.find((t) => t.key === key);
   if (!tab) return;
   tab.id = id;
-  if (tab.title === "New chat") tab.title = "Chat";
   syncActive();
   persistTabs();
 }

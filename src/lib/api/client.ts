@@ -424,14 +424,9 @@ export class ApiClient {
     return invoke<UsageSummary>("usage_summary", { days: days ?? null, folder: folder ?? null });
   }
 
-  /** What each online model costs, USD per 1M tokens. */
-  async modelPrices(): Promise<Record<string, ModelPrice>> {
-    return invoke<Record<string, ModelPrice>>("settings_model_prices");
-  }
-
-  /** Replace the whole price table and return the saved one. */
-  async setModelPrices(prices: Record<string, ModelPrice>): Promise<Record<string, ModelPrice>> {
-    return invoke<Record<string, ModelPrice>>("settings_set_model_prices", { prices });
+  /** Model prices from OpenRouter, USD per 1M tokens, keyed by model id. */
+  async openrouterModelPrices(): Promise<Record<string, ModelPrice>> {
+    return invoke<Record<string, ModelPrice>>("openrouter_model_prices");
   }
 
   // Library status, folder presets and indexing with progress

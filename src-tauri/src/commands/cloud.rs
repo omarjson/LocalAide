@@ -3,9 +3,13 @@
 //! Providers live in the app config file on this machine. The API key never
 //! leaves the backend except as a bearer token to the provider's base URL.
 
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::config::{CloudProvider, is_local_host, validate_base_url};
+use crate::config::{CloudProvider, ModelPrice, is_local_host, validate_base_url};
 use crate::domain::cloud::{
     CloudConfigStatus, CloudModeRequest, CloudModelsRequest, CloudProviderDto,
     CloudProviderSaveRequest, ProviderEnableRequest,
@@ -470,6 +474,52 @@ pub async fn cloud_models_refresh(
     let models = list_models(&provider.base_url, &provider.api_key).await?;
     store_models(&state, &provider_id, &provider.base_url, &models)?;
     Ok(models)
+}
+
+/// Model prices from OpenRouter, USD per 1M tokens, keyed by model id.
+/// OpenRouter's `/models` list is public, so no key is needed. The Usage
+/// screen loads this on every visit and range change, so the list is cached
+/// for ten minutes. Keyed by the full id ("vendor/model") and, when it has
+/// one, the short id too, because the usage log records the id as the
+/// picker showed it, which is sometimes the short form.
+#[tauri::command]
+pub async fn openrouter_model_prices() -> Result<BTreeMap<String, ModelPrice>, AppError> {
+    const OPENROUTER_API: &str = "https://openrouter.ai/api/v1";
+    const CACHE_FOR: Duration = Duration::from_secs(600);
+    static CACHE: OnceLock<Mutex<Option<(Instant, BTreeMap<String, ModelPrice>)>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock()
+        && let Some((at, prices)) = guard.as_ref()
+        && at.elapsed() < CACHE_FOR
+    {
+        return Ok(prices.clone());
+    }
+    let models = list_models(OPENROUTER_API, "").await?;
+    let mut prices: BTreeMap<String, ModelPrice> = BTreeMap::new();
+    for m in &models {
+        let Some(prompt) = m.prompt_price_per_million else {
+            continue;
+        };
+        let Some(completion) = m.completion_price_per_million else {
+            continue;
+        };
+        let price = ModelPrice {
+            input: prompt,
+            output: completion,
+            cache_read: m.cache_price_per_million,
+        };
+        prices.insert(m.id.clone(), price.clone());
+        if let Some(short) = m.id.rsplit('/').next()
+            && short != m.id
+        {
+            prices.entry(short.to_string()).or_insert(price);
+        }
+    }
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((Instant::now(), prices.clone()));
+    }
+    Ok(prices)
 }
 
 /// Keep a provider's model list, when the address is still the one the
