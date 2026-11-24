@@ -16,6 +16,13 @@ The 0.1.9 batch (mockup: `docs/design/mockups/g-discovery-batch.html`) adds Read
 - `public/logo.svg`: a stitched ghost with one plain eye and one ember eye, plus a patch, on a dark rounded tile. The ember eye stands for the local model.
 - `src/components/LogoMark.svelte` draws the same tile, so the cream ghost reads on the light theme too.
 
+## First-run setup (`src/screens/SetupWizard.svelte`, 0.2.4)
+
+- The patched ghost (`src/components/GhostMascot.svelte`, the logo ghost without its tile, outlined for the light theme) leads each step from a speech bubble. Moods change only its eyes: hello, looking (checking the computer), working (downloading), done.
+- One recommended path, Tiny, with one ember button. Fit is said in words (Fits easily, Fits, Too big for this computer), never in GB. Other sizes, online providers and community models wait behind one "More options" disclosure, which opens by itself when nothing fits.
+- Motion: the ghost floats only while a download runs; the done check pops once with one ember ring. Both move HTML elements with transform/opacity, never SVG children (the 0.2.2 heat fix), and stop under reduced motion.
+- The Stitch `taste-design` checklist was applied by hand (no Stitch MCP in Kiro Web); the two items not taken (perpetual micro-loops, Geist/Satoshi fonts) and why are in `.kiro/specs/polish-0-2-4/design.md`.
+
 ## Layout shell (`src/App.svelte`)
 
 - Nav pane, 248px, on the darkest chrome. Under the wordmark sits a **New chat** button in a soft ember tint with its shortcut. Items are an icon plus a label, 36-40px tall. The selected item gets a raised fill, semibold text, and a 3px ember pill on the left, plus `aria-current="page"`.
