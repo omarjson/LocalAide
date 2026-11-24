@@ -4,30 +4,23 @@
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api, errorMessage } from "../lib/api/client";
-  import { popover } from "../lib/actions/popover";
   import { addQuestion, addSubagentStep, appendReasoning, appendText, effortLabel, finishTool, partsForSaving, setSkillChange, setTodos, setToolStatus, settleParts, startTool, textOf } from "../lib/chatParts";
-  import PermissionMenu from "../components/PermissionMenu.svelte";
-  import WorkStatus from "../components/WorkStatus.svelte";
   import PanelRail from "../components/PanelRail.svelte";
-  import { chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
-  import { fileManagerName } from "../lib/platform";
-  import { dur, motion, stagger } from "../lib/motion";
+  import { chats, loadThreads as loadSavedChats } from "../lib/chats.svelte";
+  import { dur, motion } from "../lib/motion";
   import { chatModes, dev, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
   import { branchCount as branchCountAt, saveBranch, swapBranch } from "../lib/branches.svelte";
-  import Button from "../components/Button.svelte";
-  import ErrorBanner from "../components/ErrorBanner.svelte";
   import Slider from "../components/Slider.svelte";
   import ToolApprovalModal from "../components/ToolApprovalModal.svelte";
   import type { ApprovalMode, ChatAttachment, CloudConfigStatus, ChatMessage, ChatModeId, ChatThread, EngineStatusEvent, McpServer, MessagePart, ModelChoice, ModelChoices, Skill, Starter, ToolAction, ToolExecutionResponse } from "../lib/api/bindings";
   import MessageBubble from "../components/MessageBubble.svelte";
+  import ChatHeader from "../components/ChatHeader.svelte";
+  import ChatEmptyState from "../components/ChatEmptyState.svelte";
+  import ChatComposer from "../components/ChatComposer.svelte";
   import Icon from "../components/Icon.svelte";
-  import LogoMark from "../components/LogoMark.svelte";
-  import ChatInput from "../components/ChatInput.svelte";
-  import ModelPicker from "../components/ModelPicker.svelte";
-  import ContextMeter from "../components/ContextMeter.svelte";
   import Modal from "../components/Modal.svelte";
   import SubagentTranscript from "../components/SubagentTranscript.svelte";
   import { A2uiChat, provideA2ui } from "../lib/a2ui.svelte";
@@ -37,6 +30,9 @@
   import { greetingAt, workedToday } from "../lib/greeting";
   import { loadLastUsedModel, resolveNewChatModel, saveLastUsedModel } from "../lib/lastModel";
   import { resolveChoreModel } from "../lib/modelPicker";
+  import { cleanTitle, isGoodTitle } from "../lib/chatTitle";
+  import { createVirtualizer } from "@tanstack/svelte-virtual";
+  import { ChatRunState } from "../lib/chatRun.svelte";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -67,9 +63,10 @@
   // shared workspace.
   let activeFolder = $state<string | null>(null);
 
+  // The streaming run and the message queue for this tab's chat. One
+  // instance per ChatScreen, so two tabs never share a run.
+  const run = new ChatRunState();
   let input = $state("");
-  let streaming = $state(false);
-  let activeJobId = $state<string | null>(null);
 
   let model = $state("Local model");
 
@@ -212,7 +209,7 @@
   let titleDraft = $state("");
 
   const generateTitle = async () => {
-    if (streaming || titleBusy || messages.length < 2) return;
+    if (run.streaming || titleBusy || messages.length < 2) return;
     const question = messages.find((m) => m.role === "user")?.content ?? "";
     const answer = [...messages].reverse().find((m) => m.role === "assistant" && !m.error)?.content ?? "";
     if (!question.trim()) return;
@@ -221,18 +218,28 @@
       // Chores run on the loaded local model when there is one (N5):
       // free, and never blocking the chat. Otherwise the chat's model.
       const chore = resolveChoreModel(choices);
-      const title = await api.chatTitle(
-        question.slice(0, 400),
-        answer.slice(-1200),
-        chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined),
-      );
-      if (title && title !== activeThreadTitle) {
-        activeThreadTitle = title;
+      const target = chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
+      // One retry on failure: a transient model or network error should
+      // not leave the tab titled with the raw first message.
+      let title: string | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          title = await api.chatTitle(question.slice(0, 400), answer.slice(-1200), target);
+          break;
+        } catch {
+          if (attempt === 1) return;
+        }
+      }
+      const clean = cleanTitle(title);
+      // A title that is empty or merely echoes the question is dropped,
+      // not saved: aiTitle stays false, so the next completed answer
+      // tries again (`if (!aiTitle) void generateTitle()` on done).
+      // Titles are a nicety; the first-line fallback stays meanwhile.
+      if (clean && isGoodTitle(title, question) && clean !== activeThreadTitle) {
+        activeThreadTitle = clean;
         aiTitle = true;
         void persistCurrentThread();
       }
-    } catch {
-      // Titles are a nicety; the first-line fallback stays.
     } finally {
       titleBusy = false;
     }
@@ -285,7 +292,7 @@
     [...messages].reverse().find((m) => (m.citations?.length ?? 0) > 0)?.citations ?? [],
   );
   const askFromRail = (text: string) => {
-    if (streaming) return;
+    if (run.streaming) return;
     input = text;
     void send();
   };
@@ -551,6 +558,33 @@
   /** The subagent whose work the read-only side view is showing. */
   let transcriptAgent = $state<ToolPart | null>(null);
   let scrollEl = $state<HTMLDivElement>();
+  // Virtualized message list: only the visible window (plus overscan) is
+  // in the DOM, so a long agent chat does not keep the whole thread
+  // rendered. Rows are measured per element (ResizeObserver), so the
+  // streaming answer re-measures as it grows. The gap and padding match
+  // the old full list (space-y-7 / space-y-4, py-6).
+  const messageVirtualizer = createVirtualizer({
+    count: 0,
+    getScrollElement: () => scrollEl ?? null,
+    estimateSize: () => 240,
+    overscan: 5,
+    gap: 28,
+    paddingStart: 24,
+    paddingEnd: 24,
+  });
+  // Keep the virtualizer's count and gap in sync with the thread. The
+  // guard stops the store update from re-triggering this effect.
+  let virtualCount = -1;
+  let virtualGap = -1;
+  $effect(() => {
+    const count = messages.length;
+    const gap = flag("compact") ? 16 : 28;
+    if (count !== virtualCount || gap !== virtualGap) {
+      virtualCount = count;
+      virtualGap = gap;
+      $messageVirtualizer.setOptions({ count, gap });
+    }
+  });
   let toolPath = $state("");
   let toolContent = $state("");
   // A pending write_file waiting for the user's approval decision, and a
@@ -627,6 +661,16 @@
     }
   };
 
+  // After a jump to the bottom of an estimated list, the real row heights
+  // land a frame later and can move the bottom; re-pin once they have.
+  // Only when the user is still following — never yanks a reader who
+  // scrolled up meanwhile.
+  const repinAfterMeasure = () => {
+    setTimeout(() => {
+      if (followStreaming && !userScrolledUp) void scrollToBottom(true);
+    }, 300);
+  };
+
   // Follow the answer while it streams: the last message grows without the
   // message count changing, so its length is tracked too. Progress also
   // moves the view: tool calls, subagent steps, to-dos and reasoning change
@@ -657,7 +701,7 @@
   const loadThreads = () => loadSavedChats();
 
   const newChat = (folder: string | null = null) => {
-    if (streaming) return;
+    if (run.streaming) return;
     activeThreadId = `t_${Date.now()}`;
     onThreadStarted?.(activeThreadId);
     activeThreadTitle = "New Conversation";
@@ -670,7 +714,7 @@
     approvals = {};
     compactedBefore = 0;
     compactionSummary = "";
-    stoppedAnswer = false;
+    run.stoppedAnswer = false;
     resetMeasurements();
     suggestions = [];
     void loadStarters();
@@ -683,10 +727,10 @@
     if (!active) return;
     chats.activeId = messages.length > 0 ? activeThreadId : null;
     chats.activeFolder = activeFolder;
-    chats.busy = streaming;
+    chats.busy = run.streaming;
   });
   $effect(() => {
-    onBusyChanged?.(streaming);
+    onBusyChanged?.(run.streaming);
   });
   $effect(() => {
     onTitleChanged?.(activeThreadTitle);
@@ -716,7 +760,7 @@
     approvals = {};
     compactedBefore = 0;
     compactionSummary = "";
-    stoppedAnswer = false;
+    run.stoppedAnswer = false;
     resetMeasurements();
     void refreshLedgerCacheRate();
     systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
@@ -733,6 +777,7 @@
       systemPrompt = saved.system_prompt || "You are a helpful local AI assistant.";
     }
     scrollToBottom(true);
+    repinAfterMeasure();
   };
 
   const persistCurrentThread = async () => {
@@ -877,7 +922,7 @@
   // A pressed form button is the user's next message; while an answer
   // runs it waits in the queue.
   const sendA2uiAction = (message: string) => {
-    if (streaming) queued.push({ id: ++noteSeq, text: message });
+    if (run.streaming) run.queueNote(message);
     else void send(false, message);
   };
 
@@ -891,8 +936,7 @@
   // (Compaction itself keeps the real array: its cut is an index into it.)
   const sentMessages = $derived(messages.filter((m) => !m.steer));
   // A stopped answer waits for Resume. Set when the user stops it (or the
-  // run reports cancelled); any new send clears it.
-  let stoppedAnswer = $state(false);
+  // run reports cancelled); any new send clears it. Lives in `run`.
 
   const usageOptions = (draft: string) => {
     const sameModel = measuredModel !== null && measuredModel === (activeChoice?.key ?? null);
@@ -1018,7 +1062,7 @@
     return undefined;
   };
   const answerQuestion = (text: string, questionId: string | null) => {
-    if (streaming || !text.trim()) return;
+    if (run.streaming || !text.trim()) return;
     const part = questionId ? findQuestion(questionId) : undefined;
     if (part) part.answer = text;
     input = text;
@@ -1059,7 +1103,7 @@
       // Same chore rule as titles (N5): the loaded local model first.
       const chore = resolveChoreModel(choices);
       const next = await api.suggestNext(question, answer, chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined));
-      if (ticket === suggestTicket && !streaming && !input.trim()) suggestions = next;
+      if (ticket === suggestTicket && !run.streaming && !input.trim()) suggestions = next;
     } catch {
       // A suggestion is a nicety; nothing to report.
     }
@@ -1101,28 +1145,24 @@
   // Messages written while an answer runs. A queued one is sent when the
   // answer ends; a steering note goes to the running answer and the model
   // reads it before its next step. A note the answer had no step left for
-  // joins the queue, so nothing typed is lost.
-  type PendingNote = { id: number; text: string };
-  let queued = $state<PendingNote[]>([]);
-  let steering = $state<PendingNote[]>([]);
-  let noteSeq = 0;
+  // joins the queue, so nothing typed is lost. The state lives in `run`
+  // (src/lib/chatRun.svelte.ts); the send loop below runs on it.
   const queueDraft = () => {
     const text = input.trim();
     if (!text) return;
-    queued.push({ id: ++noteSeq, text });
+    run.queueNote(text);
     input = "";
     showToast("Queued — it sends when this answer ends.");
   };
   const steerText = async (text: string) => {
-    const job = activeJobId;
-    const note = { id: ++noteSeq, text };
-    if (!job || !streaming) {
-      queued.push(note);
+    const job = run.activeJobId;
+    if (!job || !run.streaming) {
+      run.queueNote(text);
       return;
     }
     // Listed first, so a "steered" event that arrives before the reply
     // still finds it.
-    steering.push(note);
+    const note = run.steerNote(text);
     // The note also lands in the transcript, in full, before the answer it
     // steers — so the chat shows what was asked, not just the model's
     // truncated "Read your note" step. It is never sent back as history.
@@ -1145,11 +1185,8 @@
       console.warn("The note could not reach the answer", e);
     }
     if (!taken) {
-      const at = steering.findIndex((n) => n.id === note.id);
-      if (at >= 0) {
-        steering.splice(at, 1);
-        queued.push(note);
-        showToast("The answer had already finished — your note is queued as the next message.");
+      if (run.moveToQueue(note.id)) {
+        showToast("The answer had already finished — your note is run.queued as the next message.");
       }
     }
   };
@@ -1159,55 +1196,18 @@
     input = "";
     void steerText(text);
   };
-  const parkSteers = () => {
-    if (steering.length === 0) return;
-    queued = [...steering, ...queued];
-    steering = [];
-  };
   const sendNextQueued = () => {
-    if (streaming) return;
-    const next = queued.shift();
+    if (run.streaming) return;
+    const next = run.shiftNext();
     if (next) void send(false, next.text);
   };
   const sendQueuedNow = (id: number) => {
-    const at = queued.findIndex((n) => n.id === id);
-    if (at < 0) return;
-    const [note] = queued.splice(at, 1);
-    if (streaming) void steerText(note.text);
+    const note = run.takeNote(id);
+    if (!note) return;
+    if (run.streaming) void steerText(note.text);
     else void send(false, note.text);
   };
 
-  // Inline queue editing and reordering. Editing happens in the row itself
-  // (the old Edit moved the text back to the composer, which read as the
-  // queue not working); the up/down buttons move a note earlier or later.
-  let editingNoteId = $state<number | null>(null);
-  let editingNoteText = $state("");
-  const startNoteEdit = (id: number) => {
-    const note = queued.find((n) => n.id === id);
-    if (!note) return;
-    editingNoteId = id;
-    editingNoteText = note.text;
-  };
-  const saveNoteEdit = () => {
-    if (editingNoteId === null) return;
-    const text = editingNoteText.trim();
-    if (!text) return;
-    const note = queued.find((n) => n.id === editingNoteId);
-    if (note) note.text = text;
-    editingNoteId = null;
-    editingNoteText = "";
-  };
-  const cancelNoteEdit = () => {
-    editingNoteId = null;
-    editingNoteText = "";
-  };
-  const moveNote = (id: number, dir: -1 | 1) => {
-    const at = queued.findIndex((n) => n.id === id);
-    const to = at + dir;
-    if (at < 0 || to < 0 || to >= queued.length) return;
-    const [note] = queued.splice(at, 1);
-    queued.splice(to, 0, note);
-  };
 
   // `queuedText` sends a queued message: its text only, leaving the draft
   // and any files waiting in the box alone.
@@ -1227,7 +1227,7 @@
         : $state.snapshot(pendingFiles).filter((f) => !f.error);
     const userMsg = resume ? "" : resend ? (lastUser?.content ?? "") : fromQueue ? queuedText.trim() : input.trim();
     const resendImages = resend ? (lastUser?.images ?? []) : [];
-    if (streaming) return;
+    if (run.streaming) return;
     if (!resume && !userMsg && (resend || fromQueue ? resendImages.length === 0 : pendingImages.length === 0 && files.length === 0)) return;
     if (!resend && !fromQueue && !resume) {
       input = "";
@@ -1236,7 +1236,7 @@
     previousDraft = null;
     planReady = false;
     lastCacheRate = null;
-    stoppedAnswer = false;
+    run.stoppedAnswer = false;
     const sentInMode = approvalMode;
     // Questions left open count as moved past; they stay answerable.
     for (const m of messages) {
@@ -1277,8 +1277,8 @@
       }
       messages.push({ role: "user", content: userMsg, ts: Date.now(), images, attachments: files.length ? files : undefined });
     }
-    streaming = true;
-    runStartedAt = Date.now();
+    run.streaming = true;
+    run.runStartedAt = Date.now();
     sendFailed = false;
     liveStatus = resume ? "Continuing the answer." : "LocalAide is answering.";
     userScrolledUp = false;
@@ -1324,16 +1324,16 @@
       answer().error = true;
       chatError = message;
       sendFailed = true;
-      streaming = false;
-      activeJobId = null;
+      run.streaming = false;
+      run.activeJobId = null;
       approvals = {};
       liveStatus = "LocalAide could not answer.";
-      parkSteers();
+      run.parkSteers();
       void persistCurrentThread();
     };
 
     try {
-      activeJobId = await api.streamChat(
+      run.activeJobId = await api.streamChat(
         {
           message: userMsg,
           resume,
@@ -1370,8 +1370,8 @@
             answer().content = textOf(parts());
           } else if (event.type === "steered") {
             const text = event.payload.text;
-            const at = steering.findIndex((n) => n.text === text);
-            if (at >= 0) steering.splice(at, 1);
+            const at = run.steering.findIndex((n) => n.text === text);
+            if (at >= 0) run.steering.splice(at, 1);
             const short = text.length > 80 ? `${text.slice(0, 80)}…` : text;
             answer().steps = [...(answer().steps ?? []), `Read your note: “${short}”`];
           } else if (event.type === "reasoning") {
@@ -1441,21 +1441,21 @@
               ms: now - started,
               firstTokenMs: firstTokenAt === null ? null : firstTokenAt - started,
             };
-            streaming = false;
-            activeJobId = null;
+            run.streaming = false;
+            run.activeJobId = null;
             approvals = {};
             liveStatus = "Answer ready.";
             if (event.payload.finish_reason === "cancelled") {
               // A stop lands here too (the run reports back after the
               // cancel): the partial answer waits for Resume.
-              stoppedAnswer = true;
+              run.stoppedAnswer = true;
               liveStatus = "Answer stopped.";
             }
-            parkSteers();
+            run.parkSteers();
             // The next queued message goes once this answer is saved, unless
             // the user stopped it or the model is waiting on a question.
             const finish = event.payload.finish_reason;
-            if (queued.length > 0 && finish !== "cancelled" && finish !== "question") {
+            if (run.queued.length > 0 && finish !== "cancelled" && finish !== "question") {
               void tick().then(() => sendNextQueued());
             }
             if (!aiTitle) void generateTitle();
@@ -1477,28 +1477,28 @@
   };
 
   const stopGenerating = async () => {
-    if (!streaming) return;
-    if (activeJobId) {
+    if (!run.streaming) return;
+    if (run.activeJobId) {
       try {
-        await api.cancelChat(activeJobId);
+        await api.cancelChat(run.activeJobId);
       } catch (e: unknown) {
         chatError = `The response could not stop: ${errorMessage(e)}`;
       }
     }
-    streaming = false;
-    activeJobId = null;
+    run.streaming = false;
+    run.activeJobId = null;
     approvals = {};
     const last = messages.at(-1);
     if (last?.role === "assistant" && last.parts) settleParts(last.parts, performance.now());
     liveStatus = "Answer stopped.";
-    stoppedAnswer = true;
+    run.stoppedAnswer = true;
     persistCurrentThread();
   };
 
   // Continue a stopped answer where it left off: the partial answer stays
   // and the model is told to pick it up, instead of starting over.
   const resumeGenerating = () => {
-    if (streaming) return;
+    if (run.streaming) return;
     const last = messages.at(-1);
     if (last?.role !== "assistant" || !last.content.trim()) return;
     void send(false, undefined, true);
@@ -1508,7 +1508,7 @@
   // transcript with its attachments and only the old answer is replaced,
   // so the chat continues instead of starting over.
   const retryLast = () => {
-    if (streaming) return;
+    if (run.streaming) return;
     let userIdx = messages.length - 1;
     while (userIdx >= 0 && messages[userIdx].role !== "user") userIdx -= 1;
     if (userIdx < 0) return;
@@ -1519,7 +1519,7 @@
   };
 
   const editTurn = (newText: string, index: number) => {
-    if (streaming) return;
+    if (run.streaming) return;
     // The discarded future is parked as a branch, not thrown away.
     if (activeThreadId && messages.length > index + 1) {
       saveBranch(activeThreadId, index, messages.slice(index + 1));
@@ -1530,19 +1530,20 @@
   };
 
   const restoreBranch = (index: number) => {
-    if (streaming || !activeThreadId) return;
+    if (run.streaming || !activeThreadId) return;
     const tail = swapBranch(activeThreadId, index, messages.slice(index + 1));
     if (tail && tail.length > 0) {
       messages = [...messages.slice(0, index + 1), ...tail];
       void persistCurrentThread();
       scrollToBottom(true);
+      repinAfterMeasure();
     }
   };
 
   const summarizeLast = async () => {
     const last = messages.filter(m => m.role === "assistant").at(-1);
-    if (!last || streaming) return;
-    streaming = true;
+    if (!last || run.streaming) return;
+    run.streaming = true;
     const summaryIdx = messages.length;
     messages.push({ role: "assistant", content: "Summarizing…", ts: Date.now() });
     try {
@@ -1553,7 +1554,7 @@
       messages[summaryIdx].content = "I could not make a summary. Try again.";
       chatError = `The summary could not be made: ${errorMessage(e)}`;
     } finally {
-      streaming = false;
+      run.streaming = false;
     }
   };
 
@@ -1765,7 +1766,7 @@
   const workAgents = $derived(messages.flatMap((m) => (m.parts ?? []).filter((p): p is ToolPart => p.type === "tool" && p.group === "subagent")));
   // The run timeline above the chat box: when this answer started and how
   // many tool rounds it has used, so an autonomous run shows its pace.
-  let runStartedAt = $state<number | null>(null);
+  // The start time lives in `run`.
   const runToolRounds = $derived.by(() => {
     const last = messages.at(-1);
     return last?.role === "assistant" ? (last.parts ?? []).filter((p) => p.type === "tool").length : 0;
@@ -1800,17 +1801,23 @@
     chatSearchIndex = 0;
   };
   const jumpToMatch = (idx: number) => {
-    const container = scrollEl?.firstElementChild;
-    const target = container?.children[idx] as HTMLElement | undefined;
-    if (!target) return;
-    target.scrollIntoView({ block: "center", behavior: "smooth" });
-    target.style.transition = "outline-color 200ms ease-out";
-    target.style.outline = "2px solid color-mix(in oklab, var(--color-ember-500) 65%, transparent)";
-    target.style.outlineOffset = "6px";
-    target.style.borderRadius = "12px";
-    setTimeout(() => {
-      target.style.outline = "none";
-    }, 1400);
+    if (!scrollEl) return;
+    // The match may not be in the DOM (virtualized): scroll it into view
+    // through the virtualizer, then highlight the row once rendered.
+    $messageVirtualizer.scrollToIndex(idx, { align: "center", behavior: "auto" });
+    void tick().then(() => {
+      setTimeout(() => {
+        const target = scrollEl?.querySelector<HTMLElement>(`[data-index="${idx}"]`);
+        if (!target) return;
+        target.style.transition = "outline-color 200ms ease-out";
+        target.style.outline = "2px solid color-mix(in oklab, var(--color-ember-500) 65%, transparent)";
+        target.style.outlineOffset = "6px";
+        target.style.borderRadius = "12px";
+        setTimeout(() => {
+          target.style.outline = "none";
+        }, 1400);
+      }, 120);
+    });
   };
   const searchKeydown = (e: KeyboardEvent) => {
     const count = chatMatches.length;
@@ -1954,7 +1961,7 @@
         showSettingsPanel = false;
         return;
       }
-      if (event.key === "Escape" && streaming && !event.defaultPrevented) {
+      if (event.key === "Escape" && run.streaming && !event.defaultPrevented) {
         event.preventDefault();
         void stopGenerating();
       }
@@ -1965,88 +1972,46 @@
 
   // Leaving Chat while an answer streams stops it and keeps what arrived.
   onDestroy(() => {
-    if (!streaming) return;
-    if (activeJobId) void api.cancelChat(activeJobId).catch(() => undefined);
-    streaming = false;
-    activeJobId = null;
+    if (!run.streaming) return;
+    if (run.activeJobId) void api.cancelChat(run.activeJobId).catch(() => undefined);
+    run.streaming = false;
+    run.activeJobId = null;
     void persistCurrentThread();
   });
 </script>
 
 <div class="chat-root relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-  <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
-  <header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900 px-3 md:px-5">
-    <div class="flex min-w-0 items-center gap-2 px-1">
-      {#if editingTitle}
-        <!-- svelte-ignore a11y_autofocus -->
-        <input
-          bind:value={titleDraft}
-          onkeydown={(e) => {
-            if (e.key === "Enter") saveTitleEdit();
-            if (e.key === "Escape") editingTitle = false;
-          }}
-          onblur={saveTitleEdit}
-          aria-label="Chat title"
-          placeholder="Name this chat"
-          class="h-7 w-56 rounded-md border border-ember-500/50 bg-ink-950 px-2 text-sm text-ink-50 outline-none"
-          autofocus
-        />
-      {:else}
-        <div class="group/title flex min-w-0 items-center gap-1">
-          <!-- The title is a button: click opens the chat menu,
-               double-click renames. Hover says the full title when it is
-               cut off; "New chat" stays until the model titles it. -->
-          <button
-            type="button"
-            class="max-w-[18rem] truncate rounded-sm text-sm font-semibold text-ink-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ember-400"
-            title={activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}
-            aria-label={`Chat title: ${activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}. Open the chat menu, or double-click to rename.`}
-            onclick={onTitleClick}
-            ondblclick={onTitleDblClick}
-          >{activeThreadTitle === "New Conversation" ? "New chat" : activeThreadTitle}</button>
-          {#if messages.length > 0 && !streaming}
-            <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Rename this chat" title="Rename" onclick={startTitleEdit}><Icon name="pencil" class="h-3.5 w-3.5" /></button>
-            <button type="button" class="chat-icon-btn opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100" aria-label="Generate a title with the model" title="Generate title with the model" disabled={titleBusy} onclick={() => void generateTitle()}><Icon name="refresh" class={`h-3.5 w-3.5 ${titleBusy ? "animate-spin" : ""}`} /></button>
-          {/if}
-        </div>
-      {/if}
-      {#if activeFolder}
-        <button type="button" onclick={() => void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error"))} class="folder-chip" title={`This chat works in ${activeFolder}. Show it in ${fileManagerName()}.`}>
-          <Icon name="folder" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">{folderName(activeFolder)}</span>
-        </button>
-      {/if}
-    </div>
-
-    <div class="ml-auto flex items-center gap-1.5">
-      {#if onlineChoice}
-        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineChoice.provider_label}.`}>
-          <Icon name="cloud" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">Online · {onlineChoice.provider_label}</span>
-        </span>
-      {:else}
-        <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-2 rounded-full border border-ink-700 bg-veil/5 px-2.5 py-1 text-xs font-medium text-ink-300" title="Messages stay on this computer.">
-          <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500 shadow-[0_0_0_3px_rgba(255,122,26,0.18)]" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
-        </span>
-      {/if}
-
-      <button type="button" onclick={() => showSettingsPanel = !showSettingsPanel} aria-pressed={showSettingsPanel} aria-label="Chat settings" title="Chat settings" class="chat-icon-btn"><Icon name="sliders" class="h-[18px] w-[18px]" /></button>
-      <button type="button" onclick={() => (chatSearchOpen = true)} aria-label="Search in this chat" title="Search in this chat (Ctrl+F)" class="chat-icon-btn"><Icon name="search" class="h-[18px] w-[18px]" /></button>
-      <button type="button" onclick={toggleRail} aria-pressed={railOpen} aria-label="Chat panels" title="Chat panels — sources, work, skills (on wide screens)" class="hidden lg:inline-flex chat-icon-btn" class:rail-btn-on={railOpen}><Icon name="list-check" class="h-[18px] w-[18px]" /></button>
-      <div class="relative" use:popover={{ open: showMoreActions, onClose: () => showMoreActions = false }}>
-        <button type="button" aria-label="More chat actions" aria-expanded={showMoreActions} aria-haspopup="menu" onclick={() => showMoreActions = !showMoreActions} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
-        {#if showMoreActions}
-          <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-ink-700 bg-ink-900 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("markdown"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Export conversation as Markdown</button>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void copyCurrentThread(); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void exportCurrentThread("json"); }} disabled={messages.length === 0 || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void summarizeLast(); }} disabled={streaming || messages.length < 2} class="menu-item"><Icon name="file" class="h-4 w-4" />Summarize last answer</button>
-            <div class="my-1 h-px bg-ink-800" role="separator"></div>
-            <button type="button" role="menuitem" data-popover-item onclick={() => { showMoreActions = false; void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error")); }} class="menu-item"><Icon name="folder-open" class="h-4 w-4" />Open {activeFolder ? "the chat's folder" : "the workspace folder"} in {fileManagerName()}</button>
-          </div>
-        {/if}
-      </div>
-      <button type="button" onclick={() => (onNewChatRequested ? onNewChatRequested() : newChat(activeFolder))} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97]" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
-    </div>
-  </header>
+  <ChatHeader
+    title={activeThreadTitle}
+    bind:editingTitle
+    bind:titleDraft
+    canRename={messages.length > 0 && !run.streaming}
+    {titleBusy}
+    folder={activeFolder}
+    onlineLabel={onlineChoice?.provider_label ?? null}
+    settingsOpen={showSettingsPanel}
+    {railOpen}
+    moreOpen={showMoreActions}
+    hasMessages={messages.length > 0}
+    hasTwoMessages={messages.length >= 2}
+    streaming={run.streaming}
+    onTitleClick={onTitleClick}
+    onTitleDblClick={onTitleDblClick}
+    onStartTitleEdit={startTitleEdit}
+    onSaveTitleEdit={saveTitleEdit}
+    onGenerateTitle={() => void generateTitle()}
+    onToggleSettings={() => (showSettingsPanel = !showSettingsPanel)}
+    onOpenSearch={() => (chatSearchOpen = true)}
+    onToggleRail={toggleRail}
+    onToggleMore={() => (showMoreActions = !showMoreActions)}
+    onCloseMore={() => (showMoreActions = false)}
+    onExportMarkdown={() => void exportCurrentThread("markdown")}
+    onCopy={() => void copyCurrentThread()}
+    onExportJson={() => void exportCurrentThread("json")}
+    onSummarize={() => void summarizeLast()}
+    onRevealFolder={() => void api.revealFile("", activeFolder).catch((e: unknown) => showToast(errorMessage(e), "error"))}
+    onNewChat={() => (onNewChatRequested ? onNewChatRequested() : newChat(activeFolder))}
+  />
 
   {#if railOpen}
     <PanelRail
@@ -2054,9 +2019,9 @@
       skills={skills}
       todos={workTodos}
       subagents={workAgents}
-      startedAt={runStartedAt}
+      startedAt={run.runStartedAt}
       toolRounds={runToolRounds}
-      live={streaming}
+      live={run.streaming}
       {usage}
       {segments}
       cacheRate={lastCacheRate}
@@ -2096,7 +2061,7 @@
           </div>
           <div class="space-y-1">
             {#each [
-              { label: "Follow answers while streaming", hint: "Keep the newest text in view instead of fighting the scrollbar.", on: followStreaming, toggle: toggleFollowStreaming },
+              { label: "Follow answers while run.streaming", hint: "Keep the newest text in view instead of fighting the scrollbar.", on: followStreaming, toggle: toggleFollowStreaming },
               { label: "Collapse long questions", hint: "Show the first lines of a long prompt; click to expand.", on: collapseQuestions, toggle: toggleCollapseQuestions },
             ] as o (o.label)}
               <button type="button" role="switch" aria-checked={o.on} onclick={o.toggle} class="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-veil/5">
@@ -2190,117 +2155,88 @@
 
   <div bind:this={scrollEl} onscroll={handleScroll} role="region" aria-label="Conversation" class={`relative min-h-0 flex-1 overflow-y-auto ${railOpen ? "lg:pr-72" : ""}`}>
     {#if messages.length === 0}
-      <div class={`ember-glow mx-auto flex min-h-full ${chatWidth} flex-col items-center justify-center gap-8 px-5 py-10 text-center`}>
-        <div class="flex max-w-lg flex-col items-center gap-2" in:fly={{ y: 10, duration: dur(360), easing: motion.enter }}>
-          <div class="relative mb-3">
-            <div class="absolute inset-0 -z-10 scale-[1.8] rounded-full bg-ember-500/20 blur-3xl" aria-hidden="true"></div>
-            <LogoMark class="h-16 w-16 drop-shadow-xl" />
-          </div>
-          {#if !modelsChecked}
-            <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Getting ready…</h1>
-          {:else if !activeChoice}
-            <h1 class="text-2xl font-semibold tracking-tight text-ink-50">Pick a model to start</h1>
-            <p class="text-[15px] leading-6 text-ink-400">{choices && choices.models.length > 0 ? "Choose one in the model menu under the message box." : "Models run on this computer. Download one, or connect a free online provider such as Kilo Code in Settings."}</p>
-            <div class="mt-3 flex flex-wrap justify-center gap-2">
-              {#if onOpenModels}<Button variant="primary" class="h-9 px-4" onclick={onOpenModels}><Icon name="models" class="h-4 w-4" />Open Models</Button>{/if}
-              {#if moduleOn("online")}<Button variant="secondary" class="h-9 px-4" onclick={openAddProvider}><Icon name="cloud" class="h-4 w-4" />Use a free provider</Button>{/if}
-            </div>
-          {:else}
-            <h1 class="text-balance text-[30px] font-semibold tracking-tight text-ink-50">{greeting} What can I help with?</h1>
-            {#if modelNotice}
-              <p class="text-[15px] text-ink-400">{modelNotice}</p>
-            {/if}
-            {#if onlineChoice}
-              <p class="text-[15px] text-ink-400">Answers come from <span class="font-semibold text-ink-200">{onlineChoice.name}</span>, through {onlineChoice.provider_label}. Messages are sent to that provider.</p>
-            {:else if engineLoading || pickerBusy}
-              <p class="flex items-center gap-2 text-[15px] text-ink-400" role="status"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-edge border-t-ember-500"></span>Loading {activeChoice.name}. This can take a minute.</p>
-            {:else if !engineLoaded}
-              <p class="text-[15px] text-ink-400">{activeChoice.name} is not loaded yet. Choose it in the model menu under the message box.</p>
-            {:else}
-              <p class="text-[15px] text-ink-400">Running <span class="font-semibold text-ink-200">{activeChoice.name}</span> on this computer. Nothing you type leaves it{useWeb && webAvailable ? ", except web searches the model makes" : ""}.</p>
-            {/if}
-            {#if mode !== "standard" && currentModeInfo}
-              <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-ember-500/40 bg-ember-500/10 px-3 py-1 text-xs font-medium text-ember-200"><Icon name={MODE_ICONS[mode]} class="h-3.5 w-3.5" />{currentModeInfo.label} mode</span>
-            {/if}
-          {/if}
-        </div>
-
-        {#if activeChoice && (localDocs !== null || localNotes !== null || localBudgetGb !== null)}
-          <div class="flex max-w-lg flex-wrap items-center justify-center gap-x-3.5 gap-y-1 text-xs text-ink-500" in:fade={{ duration: dur(300), delay: dur(120) }}>
-            {#if localDocs !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localDocs}</span> documents indexed</span>{/if}
-            {#if localDocs !== null && localNotes !== null}<span class="h-3 w-px bg-ink-700" aria-hidden="true"></span>{/if}
-            {#if localNotes !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localNotes}</span> memory notes</span>{/if}
-            {#if (localDocs !== null || localNotes !== null) && localBudgetGb !== null}<span class="h-3 w-px bg-ink-700" aria-hidden="true"></span>{/if}
-            {#if localBudgetGb !== null}<span><span class="font-semibold tabular-nums text-ink-300">{localBudgetGb} GB</span> of model memory</span>{/if}
-          </div>
-        {/if}
-
-        {#if activeChoice}
-          <div class={`grid w-full ${chatWidth} grid-cols-1 gap-2.5 sm:grid-cols-2`}>
-            {#each starterPrompts as sp, i (sp.prompt)}
-              <button type="button" onclick={() => { input = sp.prompt; send(); }} in:fly={stagger(i + 2)} title={sp.learned ? "You often start chats like this" : undefined} class="lift group flex items-start gap-3 rounded-2xl border border-ink-700 bg-veil/5 p-3.5 text-left hover:border-ink-700 hover:bg-ink-800/60">
-                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-ember-500/12 text-ember-300 transition-colors group-hover:bg-ember-500/20"><Icon name={sp.icon} class="h-[17px] w-[17px]" /></span>
-                <span class="min-w-0">
-                  <span class="block truncate text-sm font-semibold text-ink-100">{sp.title}</span>
-                  <span class="line-clamp-2 block text-[13px] leading-5 text-ink-400">{sp.prompt}</span>
-                </span>
-              </button>
-            {/each}
-          </div>
-          {#if skills.length > 0 && moduleOn("skills")}
-            <div class={`flex w-full ${chatWidth} flex-wrap items-center justify-center gap-2`} in:fade={{ duration: dur(300), delay: dur(200) }}>
-              <span class="text-xs text-ink-500">Your skills</span>
-              {#each skills.slice(0, 6) as skill (skill.path)}
-                <button type="button" onclick={() => { input = skill.body; }} class="rounded-full border border-ink-700 bg-veil/5 px-3 py-1 font-mono text-xs text-ink-300 transition-colors hover:border-ember-500/50 hover:text-ember-200">/{skill.name}</button>
-              {/each}
-            </div>
-          {/if}
-        {/if}
-      </div>
+      <ChatEmptyState
+        {chatWidth}
+        {modelsChecked}
+        {activeChoice}
+        {choices}
+        {onOpenModels}
+        {moduleOn}
+        onOpenAddProvider={openAddProvider}
+        {greeting}
+        {modelNotice}
+        {onlineChoice}
+        {engineLoading}
+        {pickerBusy}
+        {engineLoaded}
+        {useWeb}
+        {webAvailable}
+        {mode}
+        modeLabel={currentModeInfo?.label ?? null}
+        {localDocs}
+        {localNotes}
+        {localBudgetGb}
+        {starterPrompts}
+        {skills}
+        onPickStarter={(prompt) => { input = prompt; send(); }}
+        onPickSkill={(body) => { input = body; }}
+      />
     {:else}
-      <div class={`mx-auto w-full ${chatWidth} px-4 py-6 md:px-6 ${flag("compact") ? "space-y-4" : "space-y-7"}`}>
-        {#each messages as msg, idx (idx)}
-          {#if idx === historyFrom && historyFrom > 0}
-            <div class="flex items-center gap-3 text-xs text-ink-500" role="separator">
-              <span class="h-px flex-1 bg-ink-800"></span>
-              <span class="flex items-center gap-1.5"><Icon name="layers" class="h-3.5 w-3.5" />Earlier messages are not sent to the model</span>
-              <button type="button" class="rounded px-1.5 py-0.5 text-ember-300 underline underline-offset-2 hover:text-ember-200" onclick={() => (compactedBefore = 0)}>Send them again</button>
-              <span class="h-px flex-1 bg-ink-800"></span>
+      <div class={`mx-auto w-full ${chatWidth} px-4 md:px-6`}>
+        <div style={`height: ${$messageVirtualizer.getTotalSize()}px; position: relative;`}>
+          {#each $messageVirtualizer.getVirtualItems() as vItem (vItem.key)}
+            {@const msg = messages[vItem.index]}
+            {@const idx = vItem.index}
+            <div
+              data-index={idx}
+              use:$messageVirtualizer.measureElement
+              style={`position: absolute; top: 0; left: 0; width: 100%; transform: translateY(${vItem.start}px);`}
+            >
+              {#if msg}
+                {#if idx === historyFrom && historyFrom > 0}
+                  <div class={`${flag("compact") ? "mb-4" : "mb-7"} flex items-center gap-3 text-xs text-ink-500`} role="separator">
+                    <span class="h-px flex-1 bg-ink-800"></span>
+                    <span class="flex items-center gap-1.5"><Icon name="layers" class="h-3.5 w-3.5" />Earlier messages are not sent to the model</span>
+                    <button type="button" class="rounded px-1.5 py-0.5 text-ember-300 underline underline-offset-2 hover:text-ember-200" onclick={() => (compactedBefore = 0)}>Send them again</button>
+                    <span class="h-px flex-1 bg-ink-800"></span>
+                  </div>
+                {/if}
+                <MessageBubble
+                  role={msg.role}
+                  content={msg.content}
+                  images={msg.images}
+                  ts={msg.ts}
+                  streaming={run.streaming && idx === messages.length - 1}
+                  citations={msg.citations}
+                  steps={msg.steps}
+                  parts={msg.parts}
+                  attachments={msg.attachments}
+                  model={msg.model}
+                  steer={msg.steer}
+                  approvals={idx === messages.length - 1 ? approvals : {}}
+                  onDecide={(toolId, decision) => void decideTool(toolId, decision)}
+                  onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !run.streaming ? answerQuestion : undefined}
+                  onA2uiAction={msg.role === "assistant" ? sendA2uiAction : undefined}
+                  onAnswerDeferred={!run.streaming ? (text, id) => answerQuestion(text, id) : undefined}
+                  onDismissQuestion={dismissQuestion}
+                  onUndoSkill={(id) => void undoSkill(id)}
+                  folder={activeFolder}
+                  onOther={focusComposer}
+                  stats={showStats ? msg.stats ?? null : null}
+                  allowRaw={flag("raw_messages")}
+                  isLast={idx === messages.length - 1}
+                  branchCount={activeThreadId ? branchCountAt(activeThreadId, idx) : 0}
+                  onRestoreBranch={() => restoreBranch(idx)}
+                  onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
+                  onEdit={msg.role === "user" && !msg.steer ? (newText) => editTurn(newText, idx) : undefined}
+                  onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
+                  onViewSubagent={(part) => (transcriptAgent = part)}
+                  collapseLong={collapseQuestions}
+                />
+              {/if}
             </div>
-          {/if}
-          <MessageBubble
-            role={msg.role}
-            content={msg.content}
-            images={msg.images}
-            ts={msg.ts}
-            streaming={streaming && idx === messages.length - 1}
-            citations={msg.citations}
-            steps={msg.steps}
-            parts={msg.parts}
-            attachments={msg.attachments}
-            model={msg.model}
-            steer={msg.steer}
-            approvals={idx === messages.length - 1 ? approvals : {}}
-            onDecide={(toolId, decision) => void decideTool(toolId, decision)}
-            onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !streaming ? answerQuestion : undefined}
-            onA2uiAction={msg.role === "assistant" ? sendA2uiAction : undefined}
-            onAnswerDeferred={!streaming ? (text, id) => answerQuestion(text, id) : undefined}
-            onDismissQuestion={dismissQuestion}
-            onUndoSkill={(id) => void undoSkill(id)}
-            folder={activeFolder}
-            onOther={focusComposer}
-            stats={showStats ? msg.stats ?? null : null}
-            allowRaw={flag("raw_messages")}
-            isLast={idx === messages.length - 1}
-            branchCount={activeThreadId ? branchCountAt(activeThreadId, idx) : 0}
-            onRestoreBranch={() => restoreBranch(idx)}
-            onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
-            onEdit={msg.role === "user" && !msg.steer ? (newText) => editTurn(newText, idx) : undefined}
-            onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
-            onViewSubagent={(part) => (transcriptAgent = part)}
-            collapseLong={collapseQuestions}
-          />
-        {/each}
+          {/each}
+        </div>
       </div>
     {/if}
   </div>
@@ -2333,158 +2269,88 @@
 
 
 
-  <div class={`shrink-0 bg-gradient-to-t from-ink-900 via-ink-900 to-ink-900/0 px-3 pb-3 pt-2 transition-[padding] duration-200 md:px-6 ${railOpen ? "lg:pr-[19.5rem]" : ""}`}>
-    <div class={`relative mx-auto ${chatWidth}`}>
-  {#if userScrolledUp}
-    <button
-      type="button"
-      onclick={() => scrollToBottom(true)}
-      aria-label="Scroll to the newest message"
-      in:fly={{ y: 8, duration: dur(motion.base) }}
-      out:fade={{ duration: dur(100) }}
-      class="absolute -top-12 right-2 z-10 grid h-9 w-9 place-items-center rounded-full border border-edge bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
-    ><Icon name="arrow-down" class="h-4 w-4" /></button>
-  {/if}
-      {#if chatError}
-        <div class="mb-2"><ErrorBanner message={chatError} onRetry={sendFailed && !streaming ? retryLast : undefined} onDismiss={() => { chatError = null; sendFailed = false; }} /></div>
-      {/if}
-      <WorkStatus todos={workTodos} subagents={workAgents} startedAt={runStartedAt} toolRounds={runToolRounds} live={streaming} />
-      {#if planReady && !streaming}
-        <div class="mb-2 flex items-center gap-3 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
-          <Icon name="lightbulb" class="h-4 w-4 shrink-0 text-sky-300" />
-          <span class="min-w-0 flex-1 text-ink-200">The plan is ready. Build carries it out with the {buildMode === "auto" ? "Full access" : buildMode === "smart" ? "Autonomous" : "Ask before changes"} permission.</span>
-          <button type="button" onclick={() => (planReady = false)} class="rounded-lg px-2.5 py-1 text-ink-300 hover:bg-veil/5">Keep planning</button>
-          <button type="button" onclick={buildPlan} class="rounded-lg bg-ember-500 px-3 py-1 font-semibold text-on-ember hover:bg-ember-400">Build</button>
-        </div>
-      {/if}
-      {#if useRecall && pinnedTitles.length > 0}
-        <div class="mb-2 flex flex-wrap items-center gap-1.5" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
-          {#each pinnedTitles as title (title)}
-            <span class="pinned-chip" title="Pinned note — always in context while Recall is on"><Icon name="pin" class="h-3 w-3 shrink-0 text-ember-300" /><span class="max-w-48 truncate">{title}</span></span>
-          {/each}
-        </div>
-      {/if}
-      {#if suggestions.length > 0 && !input.trim() && !streaming}
-        <div class="mb-2 flex flex-wrap items-stretch gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
-          {#each suggestions as option, i (option)}
-            <button type="button" class="suggest-chip min-w-0 flex-1 basis-0" onclick={() => { input = option; focusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="min-w-0 flex-1 truncate">{option}</span></button>
-          {/each}
-          <button type="button" aria-label="Hide the suggestions" class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestions = [])}><Icon name="close" class="h-3.5 w-3.5" /></button>
-        </div>
-      {/if}
-      {#if previousDraft && input.trim() && !streaming}
-        <div class="mb-2 flex items-center gap-2 text-xs text-ink-400">
-          <Icon name="wand" class="h-3.5 w-3.5 text-ember-300" />Improved by the model.
-          <button type="button" class="underline underline-offset-2 hover:text-ink-100" onclick={() => { input = previousDraft ?? input; previousDraft = null; }}>Undo</button>
-        </div>
-      {/if}
-      {#if queued.length > 0 || steering.length > 0}
-        <ul class="mb-2 space-y-1" aria-label="Messages waiting to be sent">
-          {#each steering as note (note.id)}
-            <li class="note-row">
-              <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ember-300" />
-              <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
-              <span class="shrink-0 text-xs text-ink-500">Steering · read at the next step</span>
-            </li>
-          {/each}
-          {#each queued as note, i (note.id)}
-            <li class="note-row">
-              <span class="shrink-0 text-xs tabular-nums text-ink-500">{i + 1}</span>
-              {#if editingNoteId === note.id}
-                <input
-                  type="text"
-                  bind:value={editingNoteText}
-                  aria-label="Edit this queued message"
-                  class="min-w-0 flex-1 rounded-md border border-edge bg-ink-950 px-2 py-1 text-sm text-ink-100 outline-none focus:border-ember-500"
-                  onkeydown={(e) => { if (e.key === "Enter") saveNoteEdit(); else if (e.key === "Escape") cancelNoteEdit(); }}
-                />
-                <button type="button" class="note-action" onclick={saveNoteEdit} disabled={!editingNoteText.trim()}>Save</button>
-                <button type="button" class="note-action" onclick={cancelNoteEdit}>Cancel</button>
-              {:else}
-                <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
-                <button type="button" class="note-action" onclick={() => moveNote(note.id, -1)} disabled={i === 0} aria-label="Move this queued message earlier" title="Move earlier">↑</button>
-                <button type="button" class="note-action" onclick={() => moveNote(note.id, 1)} disabled={i === queued.length - 1} aria-label="Move this queued message later" title="Move later">↓</button>
-                <button type="button" class="note-action" onclick={() => startNoteEdit(note.id)} title="Edit this queued message here">Edit</button>
-                <button type="button" class="note-action" onclick={() => sendQueuedNow(note.id)} title={streaming ? "Give it to the running answer now" : "Send it now"}>{streaming ? "Steer now" : "Send now"}</button>
-              {/if}
-              <button type="button" aria-label="Remove this queued message" class="grid h-6 w-6 shrink-0 place-items-center rounded text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => { if (editingNoteId === note.id) cancelNoteEdit(); queued = queued.filter((n) => n.id !== note.id); }}><Icon name="close" class="h-3 w-3" /></button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      <ChatInput
-        bind:input={input}
-        bind:toolPath={toolPath}
-        bind:toolContent={toolContent}
-        bind:showTools={showTools}
-        streaming={streaming}
-        onSend={send}
-        onCancel={stopGenerating}
-        canResume={stoppedAnswer}
-        onResume={resumeGenerating}
-        onQueue={queueDraft}
-        onSteer={steerDraft}
-        onReadFile={readFile}
-        onWriteFile={writeFile}
-        pendingImages={pendingImages}
-        onPickImages={addImages}
-        onRemoveImage={removeImage}
-        skills={moduleOn("skills") ? skills : []}
-        onPickSkill={(body) => { input = body; }}
-        onSlashCommand={handleSlashCommand}
-        onEnhance={() => void enhancePrompt()}
-        {enhancing}
-        memory={activeChoice?.local && localRam ? { usedGb: localRam.totalGb - localRam.availableGb, totalGb: localRam.totalGb, loaded: engineLoaded, modelName: activeChoice.name } : null}
-        onLoadModel={activeChoice?.local && !engineLoaded ? () => void selectModel(activeChoice) : undefined}
-        onUnloadModel={activeChoice?.local && engineLoaded ? () => void unloadLocalModel() : undefined}
-        {suggestions}
-        {useWeb}
-        {webAvailable}
-        onToggleWeb={() => useWeb = !useWeb}
-        {useRecall}
-        {recallAvailable}
-        onToggleRecall={() => useRecall = !useRecall}
-        attachments={pendingFiles}
-        {attaching}
-        onAttachFiles={() => void attachFiles()}
-        onRemoveAttachment={(i) => pendingFiles.splice(i, 1)}
-        {useFiles}
-        onToggleFiles={() => useFiles = !useFiles}
-        {useShell}
-        {shellAvailable}
-        onToggleShell={() => useShell = !useShell}
-        {useSkills}
-        skillsAvailable={moduleOn("skills")}
-        onToggleSkills={() => useSkills = !useSkills}
-        mcpServers={mcpList.map((m) => ({ id: m.id, name: m.name, on: !mcpOff.includes(m.id) }))}
-        mcpAvailable={moduleOn("mcp")}
-        onToggleMcp={toggleMcp}
-        onManageTools={() => requestSettings("tools")}
-      >
-        {#snippet leading()}
-          <PermissionMenu mode={approvalMode} onChange={setApprovalMode} />
-        {/snippet}
-        {#snippet trailing()}
-          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} cacheRateAverage={ledgerCacheRate} onCompact={() => handleSlashCommand("compact")} />
-          <ModelPicker
-            {effort}
-            onEffort={setEffort}
-            {choices}
-            activeKey={activeChoice?.key ?? null}
-            bind:open={pickerOpen}
-            busy={pickerBusy || engineLoading}
-            onSelect={(m) => void selectModel(m)}
-            onToggleFavorite={(key) => void toggleFavorite(key)}
-            onRefresh={(id) => void refreshProvider(id)}
-            refreshing={refreshingProvider}
-            onManageProviders={moduleOn("online") ? openAddProvider : undefined}
-            onGetModels={onOpenModels}
-          />
-        {/snippet}
-      </ChatInput>
-      <p class="mt-2 text-center text-xs text-ink-500">LocalAide can make mistakes. Check important facts.</p>
-    </div>
-  </div>
+  <ChatComposer
+    {run}
+    {railOpen}
+    {chatWidth}
+    {userScrolledUp}
+    bind:chatError
+    bind:sendFailed
+    {workTodos}
+    {workAgents}
+    {runToolRounds}
+    bind:planReady
+    {buildMode}
+    {pinnedTitles}
+    bind:suggestions
+    bind:input
+    bind:previousDraft
+    {usage}
+    {autoCompactAt}
+    {historyFrom}
+    {segments}
+    {lastCacheRate}
+    {ledgerCacheRate}
+    {approvalMode}
+    {effort}
+    {choices}
+    {activeChoice}
+    bind:pickerOpen
+    {pickerBusy}
+    {engineLoading}
+    {refreshingProvider}
+    bind:toolPath
+    bind:toolContent
+    bind:showTools
+    {pendingImages}
+    {pendingFiles}
+    {attaching}
+    {enhancing}
+    memory={activeChoice?.local && localRam ? { usedGb: localRam.totalGb - localRam.availableGb, totalGb: localRam.totalGb, loaded: engineLoaded, modelName: activeChoice.name } : null}
+    inputSkills={moduleOn("skills") ? skills : []}
+    bind:useWeb
+    {webAvailable}
+    bind:useRecall
+    {recallAvailable}
+    bind:useFiles
+    bind:useShell
+    {shellAvailable}
+    bind:useSkills
+    skillsAvailable={moduleOn("skills")}
+    mcpServers={mcpList.map((m) => ({ id: m.id, name: m.name, on: !mcpOff.includes(m.id) }))}
+    mcpAvailable={moduleOn("mcp")}
+    onManageProviders={moduleOn("online") ? openAddProvider : undefined}
+    onGetModels={onOpenModels}
+    onScrollToBottom={() => scrollToBottom(true)}
+    onRetryLast={retryLast}
+    onBuildPlan={buildPlan}
+    onSend={send}
+    onCancel={stopGenerating}
+    onResume={resumeGenerating}
+    onQueue={queueDraft}
+    onSteer={steerDraft}
+    onReadFile={readFile}
+    onWriteFile={writeFile}
+    onPickImages={addImages}
+    onRemoveImage={removeImage}
+    onPickSkill={(body) => { input = body; }}
+    onSlashCommand={handleSlashCommand}
+    onEnhance={() => void enhancePrompt()}
+    onLoadModel={activeChoice?.local && !engineLoaded ? () => void selectModel(activeChoice) : undefined}
+    onUnloadModel={activeChoice?.local && engineLoaded ? () => void unloadLocalModel() : undefined}
+    onAttachFiles={() => void attachFiles()}
+    onRemoveAttachment={(i) => pendingFiles.splice(i, 1)}
+    onToggleMcp={toggleMcp}
+    onSelectModel={(m) => void selectModel(m)}
+    onToggleFavorite={(key) => void toggleFavorite(key)}
+    onRefreshProvider={(id) => void refreshProvider(id)}
+    onChangeApprovalMode={setApprovalMode}
+    onEffortChange={setEffort}
+    onCompact={() => handleSlashCommand("compact")}
+    onFocusComposer={focusComposer}
+    onSendQueuedNow={sendQueuedNow}
+    onOpenAddProvider={openAddProvider}
+  />
 
   {#if addingProvider}
     <Modal title="Add an online provider" size="lg" onClose={() => (addingProvider = false)}>
@@ -2531,76 +2397,6 @@
     background: color-mix(in oklab, var(--color-veil) 6%, transparent);
     color: var(--color-ink-50);
   }
-  .folder-chip {
-    display: inline-flex;
-    max-width: 14rem;
-    align-items: center;
-    gap: 0.35rem;
-    border-radius: 9999px;
-    border: 1px solid var(--color-ink-700);
-    padding: 0.1rem 0.55rem;
-    font-size: 0.75rem;
-    color: var(--color-ink-300);
-    transition: border-color 150ms ease-out, color 150ms ease-out;
-  }
-  .folder-chip:hover {
-    border-color: var(--color-edge);
-    color: var(--color-ink-50);
-  }
-  .suggest-chip {
-    display: inline-flex;
-    min-width: 0;
-    max-width: 100%;
-    align-items: center;
-    gap: 0.45rem;
-    border-radius: 9999px;
-    border: 1px dashed var(--color-ink-700);
-    padding: 0.3rem 0.75rem;
-    font-size: 0.8125rem;
-    color: var(--color-ink-300);
-    transition: border-color 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
-  }
-  .note-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border: 1px solid var(--color-edge);
-    border-radius: 0.6rem;
-    background: var(--color-ink-950);
-    padding: 0.3rem 0.4rem 0.3rem 0.65rem;
-    font-size: 0.8125rem;
-    color: var(--color-ink-200);
-  }
-  .note-action {
-    flex-shrink: 0;
-    border-radius: 0.375rem;
-    padding: 0.125rem 0.45rem;
-    font-size: 0.75rem;
-    color: var(--color-ink-300);
-  }
-  .note-action:hover {
-    background: color-mix(in oklab, var(--color-veil) 7%, transparent);
-    color: var(--color-ink-50);
-  }
-  .suggest-chip:hover {
-    border-style: solid;
-    border-color: var(--color-edge);
-    background: color-mix(in oklab, var(--color-veil) 4%, transparent);
-    color: var(--color-ink-50);
-  }
-  .pinned-chip {
-    display: inline-flex;
-    min-width: 0;
-    max-width: 100%;
-    align-items: center;
-    gap: 0.4rem;
-    border-radius: 9999px;
-    border: 1px solid color-mix(in oklab, var(--color-ember-500) 40%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 8%, transparent);
-    padding: 0.25rem 0.65rem;
-    font-size: 0.75rem;
-    color: var(--color-ink-300);
-  }
   .sheet-switch {
     position: relative;
     margin-top: 0.2rem;
@@ -2626,24 +2422,5 @@
   }
   .sheet-switch-on span {
     transform: translateX(1rem);
-  }
-  .menu-item {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    gap: 0.6rem;
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.65rem;
-    text-align: left;
-    font-size: 0.875rem;
-    color: var(--color-ink-200);
-  }
-  .menu-item:hover,
-  .menu-item:focus {
-    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
-    outline: none;
-  }
-  .menu-item:disabled {
-    opacity: 0.4;
   }
 </style>

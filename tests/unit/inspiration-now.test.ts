@@ -8,11 +8,13 @@ const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 const stream = read("src-tauri/src/services/inference/openai_stream.rs");
 const agent = read("src-tauri/src/services/agent/mod.rs");
+const failover = read("src-tauri/src/services/agent/failover.rs");
 
 // N1 — provider failover. The classification lives in the stream layer
 // (openai_stream.rs); the chain and the switch live in the agent run
-// (agent/mod.rs). The chain's ordering is covered by Rust unit tests in
-// agent/mod.rs; these tests pin the wiring the Rust tests cannot see.
+// (agent/mod.rs for the arm, agent/failover.rs for the chain). The chain's
+// ordering is covered by Rust unit tests in agent/failover.rs; these tests
+// pin the wiring the Rust tests cannot see.
 
 test("a retryable error is only 429 / 408 / 5xx, never a 4xx or a stop", () => {
   const m = stream.match(
@@ -70,22 +72,22 @@ test("failover only fires on a retryable error before any token landed", () => {
 
 test("failover walks the user's provider order and ends on the local model", () => {
   assert.match(
-    agent,
+    failover,
     /fn failover_chain\(/,
     "the chain is a pure, unit-tested function",
   );
   assert.match(
-    agent,
+    failover,
     /chain\.push\(FailoverCandidate::Local\);/,
     "the local model is the last resort",
   );
   assert.match(
-    agent,
+    failover,
     /\.filter\(\|id\| Some\(id\.as_str\(\)\) != current_id && !tried\.contains\(\*id\)\)/,
     "the current and already-tried providers are skipped",
   );
   assert.match(
-    agent,
+    failover,
     /fn failover_chain_skips_current_and_tried_and_ends_local/,
     "Rust unit tests cover the chain",
   );
@@ -106,12 +108,12 @@ test("failover tells the user in one line and retries the same round", () => {
 
 test("failover is fail-open and never sends a local chat to the cloud", () => {
   assert.match(
-    agent,
+    failover,
     /let ChatTarget::Remote\(remote\) = current else \{\s*return None;/,
     "a local target never fails over",
   );
   assert.match(
-    agent,
+    failover,
     /let Ok\(cfg\) = crate::commands::cloud::load_config\(state\) else \{\s*return None;/,
     "an unreadable config means no failover, not a crash",
   );

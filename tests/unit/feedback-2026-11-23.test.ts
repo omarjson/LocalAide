@@ -32,7 +32,7 @@ test("chat search opens without motion and Settings sections switch without a fl
 });
 
 test("queued messages can be edited in place and reordered", () => {
-  const chat = read("src/screens/ChatScreen.svelte");
+  const chat = read("src/components/ChatComposer.svelte");
   assert.match(chat, /editingNoteId/, "a queued message edits in its own row");
   assert.match(chat, /moveNote\(note\.id, -1\)/, "a queued message moves earlier");
   assert.match(chat, /moveNote\(note\.id, 1\)/, "a queued message moves later");

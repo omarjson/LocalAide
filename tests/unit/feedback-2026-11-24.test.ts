@@ -47,8 +47,10 @@ test("the stop button does not pulse, and stopping offers a resume", () => {
   assert.match(input, /aria-label="Resume the stopped answer"/, "the resume button is there");
   assert.match(input, /Icon name="play"/, "resume reads as continue, not restart");
 
+  const composer = read("src/components/ChatComposer.svelte");
+  assert.match(composer, /canResume=\{run\.stoppedAnswer\}\s+onResume=\{onResume\}/, "the chat wires the resume button");
+
   const chat = read("src/screens/ChatScreen.svelte");
-  assert.match(chat, /canResume=\{stoppedAnswer\}\s+onResume=\{resumeGenerating\}/, "the chat wires the resume button");
   assert.match(chat, /stoppedAnswer = true/, "stopping marks the answer resumable");
   assert.match(chat, /void send\(false, undefined, true\)/, "resuming reuses send with the resume flag");
   assert.match(chat, /resume,\n\s+history,/, "the request carries the resume flag");

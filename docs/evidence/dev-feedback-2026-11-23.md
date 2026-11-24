@@ -715,3 +715,86 @@ now (now is enhancements).
 7. **Stop asserting on source text in tests.** `window-chrome.test.ts`
    regex-matches `.svelte` files — brittle. Prefer render/component
    tests where the behaviour is visual.
+
+## 16. Refactoring batch, all 7 items — 2026-11-24 (`dev` only)
+
+Omar first said "Not now… in future", then reversed: "Okay, do all of
+these now." All seven §15 items landed on `dev` the same evening, in
+three parallel tracks plus integration fixes. No merge to `main`, no
+release, no build sent.
+
+- **(1) ChatScreen split.** `src/lib/chatRun.svelte.ts` (`ChatRunState`,
+  per-tab instance: streaming, queue, steering, note edits) plus
+  `src/components/ChatHeader.svelte` (204 lines),
+  `ChatEmptyState.svelte` (135), `ChatComposer.svelte` (409). Honest
+  note: the screen is 2,426 lines after the split (was ~2,400) — the
+  markup moved out but the composer call site is ~85 props, so the gain
+  is separation, not length. Grouping the composer props is a possible
+  follow-up, not done here. One rename bug caught in verification: a
+  bulk rename produced invalid `live=streaming={run.streaming}` in three
+  places; fixed, `npm run check` green after.
+- **(2) Virtualization.** `@tanstack/svelte-virtual` 3.13.54 (new dep),
+  `estimateSize: 240`, `overscan: 5`, `gap: 28` (16 compact),
+  `measureElement` re-measures the streaming answer as it grows,
+  `jumpToMatch` reworked to `scrollToIndex` + delayed highlight (smooth
+  scrolling dropped — instant is deterministic). Streaming scroll
+  anchoring and follow-while-streaming preserved. End-to-end proof on
+  Omar's Mac (long chat, the ~500 MB question) still needs his machine.
+- **(3) Agent split.** `mod.rs` 1,796 → 503 lines; new `types.rs`,
+  `context.rs`, `failover.rs`, `dispatch.rs`, `handlers.rs`,
+  `subagent.rs`, `gather.rs`. Byte-identity check: all 33 moved items
+  match the original verbatim except intended `pub(crate)` insertions;
+  all 7 unit tests moved with their functions. One real bug caught: 
+  `next_failover_target` was private in `failover.rs` but imported by
+  the parent — fixed to `pub(crate)`. Public API preserved via
+  re-exports. Not compiled locally (GTK/WebKit libs missing on the VM);
+  CI is the Rust gate.
+- **(4) Title retry.** `src/lib/chatTitle.ts`: `cleanTitle()`,
+  `titleEchoesQuestion()`, `isGoodTitle()`; `generateTitle()` retries
+  once on failure, rejects empty/echoed titles, and leaves `aiTitle`
+  false so the existing `done`-event hook retries on later completed
+  answers. Deliberate deviation from §15: no synthetic fallback title
+  is invented — a bad title means "try again later", never an echo.
+  4 new tests, all pass.
+- **(5) Real `git push`.** No new PAT was needed: Omar's stored GitHub
+  token already works — `~/workspace/localaide-git-credential.py`
+  mints a fresh `hsurr:*` surrogate from authd per use (the real token
+  never leaves secure storage; the egress proxy swaps it in), configured
+  repo-locally as the credential helper. Verified with `git ls-remote`.
+  This batch is the first push via real `git push`; the API scripts are
+  now the fallback. Note: local and remote commits for identical trees
+  still differ in SHA from the API era — local was synced to
+  `origin/dev` before this push so it fast-forwards.
+- **(6) `scripts/bump-version.mjs`.** Bumps all 6 version files
+  (package.json, Cargo.toml, tauri.conf.json, Cargo.lock's
+  `ai-desktop-assistant` block only — the unrelated `cfg_aliases`
+  0.2.2 entry is untouched, CHANGELOG heading, README badge) with
+  `--dry-run` and `--check`; refuses a disagreeing tree or a
+  same-version bump. Verified against temp copies only (real bump,
+  dry-run, disagreement, bad semver — all behave). One bug found by
+  testing and fixed: the no-Unreleased fallback doubled the date in
+  the CHANGELOG heading.
+- **(7) Render-based tests.** `window-chrome.test.ts` now renders
+  through a real Vite + Svelte SSR harness (`tests/unit/ssr-harness.ts`,
+  `ssr-render-entry.ts` — 4/4 pass), macOS vs Linux via user agent.
+  Still source-text-based, with reasons in the file: double-click zoom
+  (never serialised into SSR HTML), window-menu contents (menu starts
+  closed), the dead `onMenu` handler name, and the `App.svelte`
+  assertions (rendering the app root would pull the whole app in).
+  Irony noted: the splits themselves broke other source-text tests —
+  the inspiration/batch tests that read `agent/mod.rs` and
+  `ChatScreen.svelte` were repointed to the new module/component files
+  (`failover.rs`, `handlers.rs`, `dispatch.rs`, `subagent.rs`,
+  `ChatHeader.svelte`, `ChatComposer.svelte`). The remaining
+  source-text tests still assert where code lives, not what it does;
+  converting them is a further step, not done here.
+
+Verification: `npm run check` 0 errors (1 pre-existing Icon.svelte
+warning), `npm run build` clean, `npm run test:unit` 203 pass / 0 fail,
+`cargo fmt --check` clean. Independent review of the combined diff
+before commit (reviewer subagent, verdict: changes requested — 3
+findings: a vacuous header-blur guard repointed to ChatHeader, the
+`isGoodTitle` helper wired into `generateTitle` instead of duplicated
+logic, dead `rail-btn-on` class toggle removed; all fixed, gates re-run
+green). CI run on `dev` is the Rust gate — run id recorded after the
+push below.

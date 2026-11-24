@@ -216,7 +216,7 @@ test("capabilities live in config and policy, defaulting to read-only", () => {
   assert.match(config, /means ask, never auto-approve/);
   const policy = read("src-tauri/src/commands/policy.rs");
   assert.match(policy, /auto_approve_capabilities: CapabilityAutoApprove/);
-  const agent = read("src-tauri/src/services/agent/mod.rs");
+  const agent = read("src-tauri/src/services/agent/dispatch.rs");
   assert.match(agent, /capability_auto_approved/);
   assert.match(agent, /auto-approved in Settings/);
 });

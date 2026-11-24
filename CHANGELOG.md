@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Fixed
+- **Chat titles no longer stay stuck on the raw first message.** Title generation retries once when it fails, rejects empty titles and titles that just echo the question back, and keeps retrying on later completed answers until the model gives a real title.
 - **macOS title bar has no logo.** The ghost tile sat in the chrome next to the traffic lights, which real Mac apps don't do — the reference is a clean bar with just the traffic lights and the drag area. The logo button and its Minimize / Restore / Close menu are now Windows/Linux only, where the logo is the window menu; on macOS the traffic lights already are the window controls. Tabs stay in their own row below the chrome.
 - **macOS title bar looks normal, not stacked lines.** Tabs were bordered boxes (top and side borders each) under a bordered chrome row — line over line over line. They are now flat pills (active one filled, the rest transparent) and the chrome carries no divider when the tab row follows it, so the single line under the tab row is the only divider, like VS Code or Linear.
+
+### Changed
+- **Long chats render only the visible messages.** The message list is virtualized (TanStack Virtual), so a long thread no longer keeps every message, tool output and subagent transcript in the DOM — the prime suspect for the ~500 MB report. Streaming scroll anchoring and follow-while-streaming are preserved.
+- **Codebase refactored for maintainability (no behaviour change).** `ChatScreen.svelte` split into a run-state class plus header, empty-state and composer components; the Rust chat loop `services/agent/mod.rs` split into focused modules (types, context, failover, dispatch, handlers, subagent, gather); one `scripts/bump-version.mjs` now bumps all six version files; the window-chrome tests render the component instead of regex-matching its source. Pushes now go through real `git push` instead of the hand-rolled API scripts.
 
 ## [0.2.3] - 2026-11-24
 
