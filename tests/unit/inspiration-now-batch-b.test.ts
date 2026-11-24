@@ -74,7 +74,9 @@ const choices = (over: Partial<ModelChoices> = {}): ModelChoices => ({
 test("auto-compact defaults to 95% of the window", () => {
   const screen = read("src/screens/ChatScreen.svelte");
   assert.match(screen, /autoCompactAt.*: 95\)/);
-  assert.match(screen, /Slider min=\{50\} max=\{95\}/);
+  // The slider moved with the chat settings sheet (0.2.4 split).
+  assert.match(screen, /bind:autoCompactAt/);
+  assert.match(read("src/components/ChatSettingsSheet.svelte"), /Slider min=\{50\} max=\{95\}/);
 });
 
 // (b) An auto-compact asks the loaded local model for an anchored
