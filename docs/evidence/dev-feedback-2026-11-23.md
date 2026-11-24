@@ -796,5 +796,11 @@ before commit (reviewer subagent, verdict: changes requested — 3
 findings: a vacuous header-blur guard repointed to ChatHeader, the
 `isGoodTitle` helper wired into `generateTitle` instead of duplicated
 logic, dead `rail-btn-on` class toggle removed; all fixed, gates re-run
-green). CI run on `dev` is the Rust gate — run id recorded after the
-push below.
+green). CI on `dev` is the Rust gate: first run 45446907834 on `54e4eff`
+FAILED — the split dropped the `InferenceEngine` trait import (needed
+for `.status()` to resolve, E0599) and `subagent.rs` imported the
+`status` helper it never calls; both fixed in commit `823c970` and
+pushed as `db00155`. Second run 45447724792 on `db00155`: SUCCESS, all
+jobs green. (The separate Dependency audit workflow stays red on the
+pre-existing unmaintained-chrono advisory, RUSTSEC-2026-0543 — not
+this change.)
