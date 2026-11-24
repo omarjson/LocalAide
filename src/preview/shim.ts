@@ -234,7 +234,15 @@ const usageSummaryFixture = (args: Record<string, unknown>) => {
 // run a terminal command, so the approval countdown can be seen.
 const query = new URLSearchParams(location.search);
 const previewSetup = query.has("setup");
-let approvalTimersFixture = { plan_auto_accept_secs: 0, terminal_approval_secs: 60 };
+// Kept in local storage so a reload keeps it, as config.json would.
+const TIMERS_KEY = "localaide-shim-approval-timers";
+let approvalTimersFixture = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(TIMERS_KEY) ?? "null") ?? { plan_auto_accept_secs: 0, terminal_approval_secs: 60 };
+  } catch {
+    return { plan_auto_accept_secs: 0, terminal_approval_secs: 60 };
+  }
+})() as { plan_auto_accept_secs: number; terminal_approval_secs: number };
 let pendingDecision: ((decision: string) => void) | null = null;
 
 /** Fake preset download: progress over about four seconds, then done. */
@@ -258,6 +266,11 @@ const fixtures: Record<string, Handler> = {
   settings_approval_timers: () => approvalTimersFixture,
   settings_set_approval_timers: (args) => {
     approvalTimersFixture = args.timers as typeof approvalTimersFixture;
+    try {
+      localStorage.setItem(TIMERS_KEY, JSON.stringify(approvalTimersFixture));
+    } catch {
+      // Preview only.
+    }
     return approvalTimersFixture;
   },
   chat_tool_decide: (args) => {
