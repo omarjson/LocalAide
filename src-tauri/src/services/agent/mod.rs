@@ -26,10 +26,10 @@ use crate::app::state::AppState;
 use crate::domain::memory::Citation;
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{
-    Adjustment, ChatTurn, Delta, Effort, TOOLS_UNSUPPORTED, ToolCall, initial_options,
+    Adjustment, ChatTurn, Delta, Effort, Endpoint, TOOLS_UNSUPPORTED, ToolCall, initial_options,
     stream_with_retries,
 };
-use crate::services::inference::router::ChatTarget;
+use crate::services::inference::router::{ChatTarget, RouterEngine};
 use crate::services::tools::sandbox::WorkspaceJail;
 use crate::services::usage;
 use approval::{APPROVAL_TIMEOUT, ApprovalHub, Decision};
@@ -404,6 +404,92 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// One step of the failover chain: another provider, or the local model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FailoverCandidate {
+    Provider(String),
+    Local,
+}
+
+/// The order to try after the current target fails with a retryable error:
+/// the user's provider order minus the current and already-tried providers,
+/// then the local model last. Pure, so it is unit-tested below.
+fn failover_chain(
+    provider_order: &[String],
+    current_id: Option<&str>,
+    tried: &HashSet<String>,
+) -> Vec<FailoverCandidate> {
+    let mut chain: Vec<FailoverCandidate> = provider_order
+        .iter()
+        .filter(|id| Some(id.as_str()) != current_id && !tried.contains(*id))
+        .map(|id| FailoverCandidate::Provider(id.clone()))
+        .collect();
+    if !tried.contains("local") {
+        chain.push(FailoverCandidate::Local);
+    }
+    chain
+}
+
+/// Compare provider addresses ignoring a trailing slash.
+fn same_base_url(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
+}
+
+/// Try the next failover target after a retryable error. Returns the new
+/// target and its endpoint, or None when the chain is exhausted.
+///
+/// Fail-open by design: any problem here (config unreadable, endpoint
+/// unbuildable, no model loaded locally) returns None and the caller
+/// reports the original error unchanged. A local chat never fails over to
+/// a cloud provider — that would send the conversation somewhere the user
+/// did not choose.
+fn next_failover_target(
+    state: &AppState,
+    engine: &RouterEngine,
+    current: &ChatTarget,
+    tried: &mut HashSet<String>,
+) -> Option<(ChatTarget, Endpoint)> {
+    let ChatTarget::Remote(remote) = current else {
+        return None;
+    };
+    let Ok(cfg) = crate::commands::cloud::load_config(state) else {
+        return None;
+    };
+    let current_id = cfg
+        .cloud_providers
+        .iter()
+        .find(|p| same_base_url(&p.base_url, &remote.base_url))
+        .map(|p| p.id.clone());
+    if let Some(id) = &current_id {
+        tried.insert(id.clone());
+    }
+    let order = cfg.provider_order();
+    for candidate in failover_chain(&order, current_id.as_deref(), tried) {
+        match candidate {
+            FailoverCandidate::Provider(id) => {
+                let Some(p) = cfg.cloud_providers.iter().find(|p| p.id == id && p.enabled) else {
+                    continue;
+                };
+                tried.insert(id.clone());
+                let target = ChatTarget::Remote(crate::commands::cloud::remote_target(p, None));
+                // No key override: the target carries its own stored key
+                // (the router's key pool belongs to the active provider).
+                if let Ok(endpoint) = engine.endpoint_for_with_key(&target, None) {
+                    return Some((target, endpoint));
+                }
+            }
+            FailoverCandidate::Local => {
+                tried.insert("local".to_string());
+                if let Ok(endpoint) = engine.endpoint_for(&ChatTarget::Local) {
+                    return Some((ChatTarget::Local, endpoint));
+                }
+                return None;
+            }
+        }
+    }
+    None
+}
+
 fn run_inner(
     state: &AppState,
     mut run: AgentRun,
@@ -411,7 +497,7 @@ fn run_inner(
     sink: &dyn Sink,
 ) -> Result<RunResult, AppError> {
     let engine = state.inference_engine.clone();
-    let endpoint = engine.endpoint_for(&run.target)?;
+    let mut endpoint = engine.endpoint_for(&run.target)?;
     // Notes the user pinned ride in every chat while recall is on.
     if run.perms.notes
         && let Ok(pinned) = state.memory.pinned_context()
@@ -419,7 +505,9 @@ fn run_inner(
     {
         run.turns.insert(1, ChatTurn::System(pinned));
     }
-    let key = format!("{}|{}", endpoint.url, endpoint.model);
+    // The no-tools tracking key follows the endpoint when failover switches
+    // providers mid-run (see below).
+    let mut key = format!("{}|{}", endpoint.url, endpoint.model);
 
     let mut specs: Vec<ToolSpec> = Vec::new();
     let tools_wanted = run.perms.any();
@@ -469,6 +557,9 @@ fn run_inner(
     let mut tool_tokens = schema_tokens(&opts.tools);
 
     let mut round = 0usize;
+    // Providers already tried by failover this run, so a provider that
+    // failed is never tried twice.
+    let mut tried: HashSet<String> = HashSet::new();
     while round < run.max_rounds {
         if cancel.load(Ordering::Relaxed) {
             return Ok(RunResult {
@@ -509,15 +600,22 @@ fn run_inner(
         );
         opts.max_tokens = round_limit(&run, &run.turns, tool_tokens);
 
+        // Tokens delivered this round. A failure after the first token
+        // must not fail over: the new provider would answer from scratch
+        // and its text would land after the partial answer.
+        let mut round_delivered = 0usize;
         let result = stream_with_retries(
             client,
             &endpoint,
             &mut run.turns,
             &mut opts,
             cancel,
-            &mut |delta| match delta {
-                Delta::Content(token) => sink.emit(ChatStreamEvent::Token { token }),
-                Delta::Reasoning(text) => sink.emit(ChatStreamEvent::Reasoning { text }),
+            &mut |delta| {
+                round_delivered += 1;
+                match delta {
+                    Delta::Content(token) => sink.emit(ChatStreamEvent::Token { token }),
+                    Delta::Reasoning(text) => sink.emit(ChatStreamEvent::Reasoning { text }),
+                }
             },
             &mut |label| status(sink, label),
         );
@@ -534,6 +632,39 @@ fn run_inner(
                 add_gathered_context(state, &mut run, &mut next_citation, sink);
                 // Same round again, without tools.
                 continue;
+            }
+            Err(e) if e.retryable && round_delivered == 0 => {
+                match next_failover_target(state, &engine, &run.target, &mut tried) {
+                    Some((next_target, next_endpoint)) => {
+                        let from = endpoint.label.clone();
+                        run.target = next_target;
+                        endpoint = next_endpoint;
+                        key = format!("{}|{}", endpoint.url, endpoint.model);
+                        // Rebuild the flavor-dependent options for the new
+                        // provider, keeping the tools state (a model that
+                        // cannot use tools stays tool-less) and the
+                        // last-round tool ban.
+                        let forbid = opts.forbid_tools;
+                        opts = initial_options(
+                            endpoint.flavor,
+                            opts.max_tokens,
+                            run.temperature,
+                            opts.tools.clone(),
+                            run.effort.clone(),
+                        );
+                        opts.forbid_tools = forbid;
+                        let to = match &run.target {
+                            ChatTarget::Local => "the local model".to_string(),
+                            ChatTarget::Remote(_) => endpoint.label.clone(),
+                        };
+                        status(sink, format!("{from} was busy — continued on {to}"));
+                        // Same round again, on the new provider.
+                        continue;
+                    }
+                    // Chain exhausted (or failover itself broke): the
+                    // original error stands, unchanged.
+                    None => return Err(e),
+                }
             }
             Err(e) => return Err(e),
         };
@@ -1540,5 +1671,56 @@ mod tests {
                 .any(|t| matches!(t, ChatTurn::User { text, .. } if text == "now"))
         );
         assert!(estimate_tokens(&turns) <= 400);
+    }
+
+    #[test]
+    fn failover_chain_skips_current_and_tried_and_ends_local() {
+        let order = ["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(
+            failover_chain(&order, Some("a"), &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("b".into()),
+                FailoverCandidate::Provider("c".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+        let mut tried = HashSet::new();
+        tried.insert("b".to_string());
+        assert_eq!(
+            failover_chain(&order, Some("a"), &tried),
+            vec![
+                FailoverCandidate::Provider("c".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+        let mut tried = HashSet::new();
+        tried.insert("b".to_string());
+        tried.insert("c".to_string());
+        tried.insert("local".to_string());
+        assert!(failover_chain(&order, Some("a"), &tried).is_empty());
+    }
+
+    #[test]
+    fn failover_chain_with_no_current_still_ends_local() {
+        let order = ["a".to_string()];
+        assert_eq!(
+            failover_chain(&order, None, &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("a".into()),
+                FailoverCandidate::Local,
+            ]
+        );
+    }
+
+    #[test]
+    fn failover_chain_keeps_the_users_order() {
+        let order = ["groq".to_string(), "openrouter".to_string()];
+        assert_eq!(
+            failover_chain(&order, Some("openrouter"), &HashSet::new()),
+            vec![
+                FailoverCandidate::Provider("groq".into()),
+                FailoverCandidate::Local,
+            ]
+        );
     }
 }

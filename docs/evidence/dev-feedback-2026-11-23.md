@@ -298,3 +298,54 @@ warning is the pre-existing `context="module"` deprecation in
 `Icon.svelte`); `cargo fmt --check` clean; `npm run build` passes and
 the built CSS contains the container-query rules. Rust verification is
 CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI run.
+
+## 10. Inspiration backlog, NOW items — 2026-11-24 (N1–N3, `dev` only)
+
+From Omar's approved inspiration backlog
+(`workspace/goals/kiroween-2026/files/inspiration-backlog.md`): the three
+NOW items, all small and off the Tiny demo path — the demo runs on the
+local model, and failover only ever triggers for a remote target.
+
+- **N1 — provider failover.** `stream_with_retries` now marks the error
+  retryable only for 429 / 408 / 500 / 502 / 503 / 504, for a network
+  failure ("Could not reach…") and for a stalled remote stream; 4xx and
+  user stops are never retryable. Same-provider retries are capped at 3
+  (`SAME_PROVIDER_RETRIES`, was 10) so a provider that stays down hands
+  over instead of burning ten waits. In `run_inner`, a retryable error
+  before any token of the round has landed walks the user's provider
+  order (pure `failover_chain`, unit-tested in Rust: skips the current
+  and already-tried providers, keeps the user's order) and ends on the
+  local model; the same round re-runs on the new provider, the
+  flavor-dependent request options are rebuilt (tools state and the
+  last-round tool ban are kept), and the chat gets one line:
+  "{from} was busy — continued on {to}". Fail-open throughout: an
+  unreadable config, an unbuildable endpoint, or no loaded local model
+  leaves the original error standing, unchanged. A local chat never
+  fails over to a cloud provider (that would send the conversation
+  somewhere the user did not choose), and a failure after the first
+  token never fails over (the new provider would answer from scratch
+  and its text would land after the partial answer). One known
+  inaccuracy, left as-is for this batch: the usage record attributes
+  the turn to the originally chosen provider, not the one that finally
+  answered.
+- **N2 — never stall-timeout local models.** The 10-minute
+  `STREAM_STALL_LIMIT` no longer applies when the endpoint flavor is
+  `LlamaServer`. The rule is written at the constant and at the check:
+  a local model's silent thinking phase is healthy. `0` = disabled
+  wherever a timeout is configurable. The 60-minute whole-request
+  timeout is untouched — it is a hard bound, not a stall budget.
+- **N3 — `__omit__` for `reasoning_effort`: no code change.** Checked
+  first, as instructed: `adjust_for_error` already drops the effort
+  (and then the field itself) when a provider refuses it with 400/422,
+  and the existing test proves the retry goes out without
+  `reasoning_effort`. No model is known to need the field omitted
+  up-front, so there is nothing to add.
+
+Tests: `tests/unit/inspiration-now.test.ts` (10 tests: retryable classes,
+retry cap, failover arm conditions, chain shape, the one-line message,
+fail-open guarantees, stall exemption, N3 already-handled) plus three
+Rust unit tests for `failover_chain`. 151 unit tests pass;
+`svelte-check` 0 errors (the 1 warning is the pre-existing
+`context="module"` deprecation in `Icon.svelte`); `cargo fmt --check`
+clean; `npm run build` passes. Rust verification is CI's job (no local
+GTK/WebKit libs): clippy + cargo test on the CI run.

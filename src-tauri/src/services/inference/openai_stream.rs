@@ -26,7 +26,16 @@ use crate::app::error::AppError;
 const STREAM_POLL: Duration = Duration::from_millis(200);
 /// Longest silence before a reply counts as stuck. Prompt processing on a
 /// large local context can take minutes, so the limit is generous.
+/// Never applied to the local server: a local model's silent thinking
+/// phase is healthy, and a cloud-style stall budget would cut a good
+/// answer mid-thought (see the loop below). `0` = disabled wherever a
+/// timeout is configurable — never a tiny budget.
 const STREAM_STALL_LIMIT: Duration = Duration::from_secs(10 * 60);
+/// Same-provider retries for a rate limit or server hiccup, before the
+/// caller gets a retryable error (the agent run may then fail over to
+/// another provider). Kept small on purpose: a provider that stays down
+/// should hand over, not burn ten waits.
+const SAME_PROVIDER_RETRIES: u32 = 3;
 /// Error bodies can be whole HTML pages; only this much is kept.
 const ERROR_BODY_CHARS: usize = 400;
 /// Error code when the model refused the tool list.
@@ -898,10 +907,15 @@ pub fn stream_once(
             if let Some(a) = audit {
                 a.finish(false, "could not connect");
             }
-            return Err(StreamError::Other(AppError::internal(format!(
-                "Could not reach {}: {e}. Check the address and your connection.",
-                endpoint.label
-            ))));
+            return Err(StreamError::Other(
+                AppError::internal(format!(
+                    "Could not reach {}: {e}. Check the address and your connection.",
+                    endpoint.label
+                ))
+                // A network error is retryable: the caller may fail over
+                // to the next provider instead of failing the turn.
+                .retryable(),
+            ));
         }
     };
     if !response.status().is_success() {
@@ -961,11 +975,20 @@ pub fn stream_once(
         let line = match lines_rx.recv_timeout(STREAM_POLL) {
             Ok(line) => line,
             Err(RecvTimeoutError::Timeout) => {
-                if last_activity.elapsed() > STREAM_STALL_LIMIT {
-                    return Err(StreamError::Other(AppError::internal(format!(
-                        "{} stopped responding. Try again.",
-                        endpoint.label
-                    ))));
+                // No stall budget for the local server: a local model's
+                // silent thinking phase is healthy. Only a remote provider
+                // going quiet counts as stuck — and that is a retryable
+                // timeout, so the caller may fail over to the next provider.
+                if endpoint.flavor != Flavor::LlamaServer
+                    && last_activity.elapsed() > STREAM_STALL_LIMIT
+                {
+                    return Err(StreamError::Other(
+                        AppError::internal(format!(
+                            "{} stopped responding. Try again.",
+                            endpoint.label
+                        ))
+                        .retryable(),
+                    ));
                 }
                 continue;
             }
@@ -1071,15 +1094,17 @@ pub fn stream_with_retries(
                     continue;
                 }
                 // Rate limits and server hiccups: wait and try again, up
-                // to ten tries. The provider's own wait time wins; other-
-                // wise each try waits longer than the one before.
-                if matches!(status, 429 | 408 | 502 | 503 | 504) && tries < 10 {
+                // to SAME_PROVIDER_RETRIES tries. The provider's own wait
+                // time wins; otherwise each try waits longer than the one
+                // before. After that the caller gets a retryable error and
+                // may fail over to another provider.
+                if matches!(status, 429 | 408 | 502 | 503 | 504) && tries < SAME_PROVIDER_RETRIES {
                     tries += 1;
                     let wait = retry_after
                         .unwrap_or_else(|| Duration::from_secs(2u64.saturating_pow(tries).min(60)))
                         .clamp(Duration::from_secs(1), Duration::from_secs(300));
                     on_status(format!(
-                        "{} returned {status}; trying again in {} s (try {tries} of 10).",
+                        "{} returned {status}; trying again in {} s (try {tries} of {SAME_PROVIDER_RETRIES}).",
                         endpoint.label,
                         wait.as_secs()
                     ));
@@ -1096,12 +1121,18 @@ pub fn stream_with_retries(
                     .bearer
                     .as_deref()
                     .is_some_and(|k| !k.trim().is_empty());
-                return Err(AppError::internal(http_error_message(
-                    &endpoint.label,
-                    status,
-                    &body,
-                    has_key,
-                )));
+                // 429 / 408 / 5xx: the provider is busy or down, not wrong.
+                // Mark it retryable so the caller may fail over to the next
+                // provider instead of failing the turn. 4xx stays
+                // non-retryable: a bad key or model name will not heal by
+                // switching providers, and a user cancellation is never
+                // retryable either.
+                let mut err =
+                    AppError::internal(http_error_message(&endpoint.label, status, &body, has_key));
+                if matches!(status, 429 | 408 | 500 | 502 | 503 | 504) {
+                    err = err.retryable();
+                }
+                return Err(err);
             }
             Err(StreamError::Other(e)) => return Err(e),
         }
