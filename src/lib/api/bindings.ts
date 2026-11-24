@@ -1372,6 +1372,18 @@ export interface PolicySettings {
   hooks: HooksConfig;
   routing: RoutingConfig;
   provider_order: string[];
+  /** Per-capability auto-approve. Defaults to read-only. */
+  auto_approve_capabilities: CapabilityAutoApprove;
+}
+
+/** Which capabilities run without asking. All off except reads by default. */
+export interface CapabilityAutoApprove {
+  read_files: boolean;
+  edit_files: boolean;
+  safe_commands: boolean;
+  all_commands: boolean;
+  browser: boolean;
+  external_tools: boolean;
 }
 
 /** Null/absent fields are left untouched by a partial policy update. */
@@ -1379,6 +1391,7 @@ export interface PolicyUpdate {
   permissions?: PermissionRule[] | null;
   hooks?: HooksConfig | null;
   routing?: RoutingConfig | null;
+  auto_approve_capabilities?: CapabilityAutoApprove | null;
 }
 
 /** A tracked goal (commands/goal.rs, services/goal.rs). */
@@ -1388,7 +1401,7 @@ export interface Goal {
   objective: string;
   /** Steps still available; a step decrements it by one. */
   budget: number;
-  /** "active" | "completed" | "abandoned". */
+  /** "active" | "paused" | "blocked" | "completed" | "abandoned". */
   status: string;
   /** Unix timestamp, seconds since the epoch (UTC). */
   created_at: number;

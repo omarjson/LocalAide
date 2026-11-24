@@ -16,7 +16,8 @@ use crate::services::inference::PromptMessage;
 use crate::services::inference::capabilities::effort_for_request;
 use crate::services::inference::context::ContextBudget;
 use crate::services::inference::modes::{
-    ChatMode, ToolGroups, compose_system_prompt, tool_guidance,
+    ChatMode, ToolGroups, compact_tool_guidance, compose_compact_system_prompt,
+    compose_system_prompt, tool_guidance,
 };
 use crate::services::inference::openai_stream::{ChatTurn, Effort};
 use crate::services::inference::router::ChatTarget;
@@ -411,18 +412,25 @@ pub(crate) fn prepare_run(
     // so the engine can reuse its cached prompt instead of reading the whole
     // chat again; the clock, which changes every minute, rides on the new
     // message instead (below).
+    //
+    // The compact prompt (N11) is local models only, and only when the
+    // user turns it on in Settings — it defaults off, so the prompt a
+    // local run gets without the toggle is byte-identical to before.
+    let compact_prompt = matches!(target, ChatTarget::Local) && cfg.use_compact_prompt;
     let mut extra = Vec::new();
-    let guidance = tool_guidance(
-        ToolGroups {
-            web: perms.web,
-            notes: perms.notes,
-            files: perms.files,
-            skills: perms.skills,
-            shell: perms.shell,
-            mcp: !perms.mcp.is_empty(),
-        },
-        mode,
-    );
+    let groups = ToolGroups {
+        web: perms.web,
+        notes: perms.notes,
+        files: perms.files,
+        skills: perms.skills,
+        shell: perms.shell,
+        mcp: !perms.mcp.is_empty(),
+    };
+    let guidance = if compact_prompt {
+        compact_tool_guidance(groups, mode)
+    } else {
+        tool_guidance(groups, mode)
+    };
     if caps.tools && !guidance.is_empty() {
         extra.push(guidance);
     }
@@ -457,7 +465,11 @@ pub(crate) fn prepare_run(
             extra.push(rules);
         }
     }
-    let system = compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"));
+    let system = if compact_prompt {
+        compose_compact_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"))
+    } else {
+        compose_system_prompt(req.system_prompt.as_deref(), mode, &extra.join("\n\n"))
+    };
 
     let thinking_room = if thinks {
         effort.thinking_allowance()
@@ -486,6 +498,9 @@ pub(crate) fn prepare_run(
                     m.attachments.as_deref().unwrap_or(&[]),
                     (cap_old && i < keep_from).then_some(OLD_FILE_CHARS),
                 ),
+                // Tool parts ride along so `build_messages` can prune old
+                // tool outputs instead of dropping them all unseen (N4).
+                parts: m.parts.clone(),
                 ..Default::default()
             })
             .collect()

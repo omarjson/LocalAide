@@ -450,3 +450,138 @@ parsing. 170 unit tests pass; `svelte-check` 0 errors (the 1 warning is
 the pre-existing `context="module"` deprecation in `Icon.svelte`);
 `cargo fmt --check` clean; `npm run build` passes. Rust verification is
 CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI run.
+
+## 12. Inspiration backlog, NOW items Batch B — 2026-11-24 (N4, N5, N8–N11, `dev` only)
+
+Behaviour batch. The send path was touched in three places, all
+fail-open (see each item); the Tiny demo path is unaffected — the
+compact prompt defaults off and the auto-compact default only moves the
+threshold, it does not change what a fresh short chat sends.
+
+- **N4 — auto-compact at ~95% + pruning.** (a) The threshold now
+  defaults to 95% (was 80; the slider already topped out at 95; a saved
+  value is kept). (b) Anchored summary: when auto-compact cuts the
+  history, the cut part is summarised by the loaded local model for free
+  (`summarize`, instruction: goal, decisions, progress, next steps) and
+  the summary rides on the system prompt of later sends, so the model
+  keeps the thread. It folds in the previous summary, so the anchor
+  covers the whole cut span. If no local model is loaded, or
+  summarising errors, the summary stays as it was and the plain cut
+  stands — the send never waits on it. The summary is session-only,
+  like the cut: the full history stays on screen and in the saved chat;
+  nothing is deleted by compaction, ever. Manual `/compact` is
+  unchanged: it always cuts and writes no summary. (c) Pruning: tool
+  parts now travel with the history (`ChatScreen` sends `parts`,
+  `build_history` keeps them) and `build_messages` folds them in —
+  the newest two messages keep one short line per tool (title + summary,
+  200 chars each, at most 4 per message), older ones become
+  "[Tool output from an earlier turn was omitted to save space.]".
+  A history with no tools builds exactly what it built before
+  (Rust test). Note: before this, tool outputs never reached the model
+  in later turns at all — they lived only in the on-screen parts. Now
+  the model sees recent tool results as short lines, which is the
+  backlog's intent, and old ones are pruned instead of silently dropped.
+- **N5 — per-task model roles.** `resolveChoreModel` in
+  `src/lib/modelPicker.ts`: when a local model is loaded, chores run on
+  it (the active local model, else the first local one); when none is
+  loaded it returns null and the caller keeps its current behaviour
+  instead of loading one. Wired for chat titles and "suggest next" in
+  `ChatScreen`. The N4 summary already runs on the loaded local engine
+  only (`summarize` errors when nothing is loaded, and the summary is
+  then skipped) — no extra wiring needed there. Memory writes have no
+  separate chore call to re-route: they happen inside the chat turn
+  (the SaveNote tool, on the chat's model) or by the user directly
+  (`memory_create`), so they are deliberately unchanged. Chores never
+  block the chat: title/suggestion failures were already swallowed,
+  and the summary is fire-and-forget.
+- **N8 — session goals as a state machine.** `GoalStatus` gains
+  `Paused` and `Blocked` (unknown values still parse as Active, so
+  existing rows stay valid). Pure transitions `apply_pause` /
+  `apply_block` / `apply_resume` plus `pause_at` / `block_at` /
+  `resume_at` and the `goal_pause` / `goal_block` / `goal_resume`
+  commands; `GoalPanel` shows the status (Paused amber, Blocked red)
+  with Pause / Resume / Mark blocked buttons. Auto-pause: `drive`
+  moves a goal to Paused when the step budget runs out without
+  completion and to Blocked when the caller reports a blocker, and
+  `decide_next` stops on Paused/Blocked (new `StopReason::Paused`);
+  the panel persists the same moves — budget used up pauses, a failed
+  command pauses (runNext/runAll catch), the user hitting Stop pauses,
+  and a refused permission pauses (the backend tells the model "The
+  user declined this action", so the runner spots those words in the
+  answer; best-effort detection, and the goal only pauses, never
+  auto-resumes). A paused/blocked goal takes no steps and cannot
+  complete until resumed. Goals survive restarts: they already persist
+  in SQLite, verified by a round-trip test that pauses, resumes,
+  blocks and resumes the same row.
+- **N9 — granular per-capability auto-approve, default read-only.**
+  New `CapabilityAutoApprove` in config (read / edit / safe commands /
+  all commands / browser / external tools), defaulting to read-only:
+  only reads are auto-approved, everything else asks; a missing field
+  in an old config falls back to the same default, so unknown/missing
+  config asks, never auto-approves. "All commands" covers safe ones.
+  Exposed as plain-language toggles in `PolicyPanel`, saved through
+  the existing `policy_config_set` (now carrying
+  `auto_approve_capabilities`). Consulted in the two places a tool
+  approval decision is made: the agent's `run_call` (a capability
+  approval skips the prompt and is recorded as "auto-approved in
+  Settings", distinct from "allowed for this chat") and
+  `ToolPolicy::decide_shell` (safe-commands allows a tame change,
+  all-commands allows any non-blocked command; deny rules still win,
+  and a blocked command can never become Allow). Reads and web lookups
+  never needed approval on their own, so their toggles are posture —
+  the behaviour change is edits, commands and MCP tools. Per-chat
+  `allowed_tools` and the per-server `auto_approve` are untouched.
+- **N10 — retry with backoff + plain-English errors. Deliberate
+  deviation: the per-target cap stays at 3, not 5.** The backlog asked
+  for up to 5, but the N1 failover work deliberately capped
+  same-provider retries at 3 because failover is the outer loop and
+  the chain already reaches 5+ attempts in total; raising it would
+  burn waits on a provider that stays down instead of handing over.
+  (a) Network errors now retry the same way as a busy provider:
+  `stream_once` connect failures (and the stall timeout) are
+  retryable, and `stream_with_retries` retries them with the same
+  exponential backoff (`2^tries` seconds, provider `retry_after`
+  wins, extracted as the pure `backoff_delay`), under the same cap of
+  3 — but only before any token arrived (a `saw_token` guard; retrying
+  mid-answer would show the start twice) and only while the user has
+  not stopped the run. A mid-stream break is not retryable and still
+  fails at once. (b) `http_error_message` now leads with plain English
+  — "Groq is busy right now. Wait a moment and try again, or switch
+  models." / "Couldn't reach Groq — check your connection and try
+  again." — with no bare status code; the provider's own error text
+  still follows, capped, for debugging, and the raw network error
+  moves to `AppError.detail`. The same helper now serves the second
+  error path (`remote.rs`, which had its own copy of the old wording),
+  so the chat shows the same sentence whichever route an online turn
+  took. The error reaches the UI unchanged otherwise: the `AppError`
+  message is what `ChatScreen` shows in the banner / failed answer.
+  One pre-existing test (`inspiration-now.test.ts`) asserted the old
+  "Could not reach …" wording; it now asserts the new wording, keeping
+  the retryable check.
+- **N11 — "Use Compact Prompt" toggle for local models.** New
+  `compose_compact_system_prompt` / `compact_tool_guidance` in
+  `modes.rs` (shorter mode instruction, one-line tool guidance) and a
+  `use_compact_prompt` config flag, default off, with a toggle in
+  Settings → Performance ("Use Compact Prompt", next to Conversation
+  memory) via new `settings_compact_prompt` /
+  `settings_set_compact_prompt` commands. The compact prompt is used
+  only when the target is local AND the setting is on; the default-off
+  path calls the original composers, so its prompt is byte-identical
+  to before (Rust test: compact is never longer than full, and agrees
+  exactly for Standard). The Tiny demo path is unaffected until Omar
+  turns it on.
+
+Tests: `tests/unit/inspiration-now-batch-b.test.ts` (14 tests: 95%
+default, anchored summary wiring + fail-open, manual compact
+unchanged, parts in history, chore resolver + title/suggestion
+wiring, paused/blocked planner + drive auto-pause, goal store +
+panel, policy toggles + config/policy wiring, cap-stays-3, plain
+errors + network retry, compact prompt local-only/default-off)
+plus Rust unit tests for the capability defaults, goal
+pause/block/resume + drive auto-pause + SQLite round-trip, compact
+vs full prompts, tool-output pruning, plain errors and backoff.
+184 unit tests pass; `svelte-check` 0 errors (the 1 warning is the
+pre-existing `context="module"` deprecation in `Icon.svelte`);
+`cargo fmt --check` clean; `npm run build` passes. Rust verification
+is CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI
+run.

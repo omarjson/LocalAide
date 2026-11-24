@@ -127,3 +127,26 @@ export function providerModels(choices: ModelChoices | null, key: string, query:
     .filter((m) => providerKey(m) === key && matchesModel(m, query, filters))
     .sort((a, b) => Number(b.favorite) - Number(a.favorite));
 }
+
+/**
+ * Per-task model roles (N5): the model a background chore runs on — chat
+ * titles, "suggest next", compaction summaries, memory writes. A chore
+ * never blocks the chat and never costs anything online when a local
+ * model is already loaded: prefer that loaded local model. When no local
+ * model is loaded, return null and the caller keeps its current
+ * behaviour (the chat's own model), instead of loading one.
+ */
+export interface ChoreTarget {
+  provider_id: string | null;
+  model: string;
+}
+
+export function resolveChoreModel(choices: ModelChoices | null): ChoreTarget | null {
+  if (!choices || !choices.local_loaded) return null;
+  const local = choices.models.filter((m) => m.provider_id === null);
+  if (local.length === 0) return null;
+  // The loaded local model is the active one; otherwise the first local
+  // model on the list (loading is the engine's job, never the chore's).
+  const loaded = local.find((m) => m.active) ?? local.find((m) => m.key === choices.active_key) ?? local[0];
+  return { provider_id: null, model: loaded.model };
+}

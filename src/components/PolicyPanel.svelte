@@ -7,6 +7,7 @@
   import Icon from "./Icon.svelte";
   import { api, errorMessage } from "../lib/api/client";
   import type {
+    CapabilityAutoApprove,
     PermissionDecision,
     PermissionRule,
     PolicySettings,
@@ -14,7 +15,18 @@
 
   const decisions: PermissionDecision[] = ["allow", "ask", "deny"];
 
+  /** Read-only default: only reads run without asking. */
+  const DEFAULT_CAPS: CapabilityAutoApprove = {
+    read_files: true,
+    edit_files: false,
+    safe_commands: false,
+    all_commands: false,
+    browser: false,
+    external_tools: false,
+  };
+
   let rules = $state<PermissionRule[]>([]);
+  let caps = $state<CapabilityAutoApprove>({ ...DEFAULT_CAPS });
   let preTool = $state("");
   let postTool = $state("");
   let timeout = $state(30);
@@ -28,6 +40,7 @@
       resource: r.resource,
       decision: r.decision,
     }));
+    caps = cfg.auto_approve_capabilities ?? { ...DEFAULT_CAPS };
     preTool = cfg.hooks.pre_tool ?? "";
     postTool = cfg.hooks.post_tool ?? "";
     timeout = cfg.hooks.timeout_secs;
@@ -65,6 +78,7 @@
       const seconds = Math.round(Number(timeout));
       const saved = await api.policyConfigSet({
         permissions: clean,
+        auto_approve_capabilities: { ...caps },
         hooks: {
           pre_tool: preTool.trim() || null,
           post_tool: postTool.trim() || null,
@@ -99,7 +113,36 @@
   {/if}
 
   {#if loaded}
-    <h3 class="mt-5 text-sm font-semibold text-ink-200">Permission rules</h3>
+    <h3 class="mt-5 text-sm font-semibold text-ink-200">What runs without asking</h3>
+    <p class="mt-1 text-xs text-ink-500">Read-only by default: only reading runs without asking. Switch on more only if you trust it — a missing or unknown setting always asks.</p>
+    <div class="mt-2 space-y-2">
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.read_files} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">Read files</span> — reading files and notes runs without asking.</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.edit_files} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">Edit files</span> — changing files runs without asking each time.</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.safe_commands} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">Safe commands</span> — tame terminal commands (making folders, checking status) run without asking.</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.all_commands} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">All commands</span> — any terminal command runs without asking. Blocked commands still never run.</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.browser} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">Browser</span> — searching the web and reading pages runs without asking.</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-ink-300">
+        <input type="checkbox" bind:checked={caps.external_tools} class="mt-0.5 h-4 w-4 rounded border-ink-700 bg-ink-950" />
+        <span><span class="font-medium text-ink-100">External tools</span> — tools from MCP servers run without asking.</span>
+      </label>
+    </div>
+
+    <h3 class="mt-7 text-sm font-semibold text-ink-200">Permission rules</h3>
     <div class="mt-2 grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-1 text-xs font-semibold text-ink-500">
       <span>Action</span><span>Resource</span><span>Decision</span><span class="w-16"></span>
     </div>

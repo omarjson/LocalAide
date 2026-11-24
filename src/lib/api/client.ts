@@ -660,6 +660,16 @@ export class ApiClient {
     return invoke<ContextInfo>("settings_context_info");
   }
 
+  /** Whether the compact prompt is on (Settings → Performance). */
+  async getCompactPrompt(): Promise<boolean> {
+    return invoke<boolean>("settings_compact_prompt");
+  }
+
+  /** Turn the compact prompt on or off. Local models only. */
+  async setCompactPrompt(on: boolean): Promise<boolean> {
+    return invoke<boolean>("settings_set_compact_prompt", { on });
+  }
+
   /** Share of memory models may use, in percent (20 to 90). */
   async getModelMemory(): Promise<number> {
     return invoke<number>("settings_model_memory");
@@ -1145,6 +1155,21 @@ export class ApiClient {
     const goal = await invoke<Goal>("goal_complete", { id });
     notifyGoalComplete(`Goal finished: ${goal.objective}`);
     return goal;
+  }
+
+  /** Pause a goal: progress stopped, but it is not done. */
+  async goalPause(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_pause", { id });
+  }
+
+  /** Mark a goal blocked: it waits on something outside the run. */
+  async goalBlock(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_block", { id });
+  }
+
+  /** Resume a paused or blocked goal. */
+  async goalResume(id: string): Promise<Goal> {
+    return invoke<Goal>("goal_resume", { id });
   }
 
   // Usage ledger (commands/usage_ledger.rs). The rate is caller-supplied;

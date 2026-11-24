@@ -32,3 +32,22 @@ pub async fn goal_step(id: String, progress: String) -> Result<Goal, AppError> {
 pub async fn goal_complete(id: String) -> Result<Goal, AppError> {
     run_blocking(move || goal::complete(&id)).await
 }
+
+/// Pause a goal: progress stopped, but it is not done. A paused goal
+/// takes no steps until it is resumed.
+#[tauri::command]
+pub async fn goal_pause(id: String) -> Result<Goal, AppError> {
+    run_blocking(move || goal::pause(&id)).await
+}
+
+/// Mark a goal blocked: it waits on something outside the run.
+#[tauri::command]
+pub async fn goal_block(id: String) -> Result<Goal, AppError> {
+    run_blocking(move || goal::block(&id)).await
+}
+
+/// Resume a paused or blocked goal.
+#[tauri::command]
+pub async fn goal_resume(id: String) -> Result<Goal, AppError> {
+    run_blocking(move || goal::resume(&id)).await
+}

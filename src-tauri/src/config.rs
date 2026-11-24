@@ -93,6 +93,15 @@ pub struct AppConfig {
     /// Provider failover order and per-provider API key pools.
     #[serde(default)]
     pub routing: RoutingConfig,
+    /// Per-capability auto-approve (Settings → Permissions). Defaults to
+    /// read-only: only reads run without asking. Unknown or missing config
+    /// means ask, never auto-approve.
+    #[serde(default)]
+    pub auto_approve_capabilities: CapabilityAutoApprove,
+    /// Shorter system prompt for local models (Settings → Performance).
+    /// Off by default: the full prompt is sent unless the user turns this on.
+    #[serde(default)]
+    pub use_compact_prompt: bool,
 }
 
 /// What a matching permission rule says to do with a tool call.
@@ -112,6 +121,69 @@ pub enum ToolDecision {
     Allow,
     Ask,
     Deny,
+}
+
+/// One capability a tool call can belong to, for per-capability
+/// auto-approve (N9). Serialized snake_case for config.json.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Capability {
+    ReadFiles,
+    EditFiles,
+    SafeCommands,
+    AllCommands,
+    Browser,
+    ExternalTools,
+}
+
+/// Which capabilities run without asking. Default is read-only: only
+/// reads are auto-approved, everything else asks first. A missing field
+/// in an old config file falls back to the same default, so an unknown
+/// or missing config never auto-approves a change.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct CapabilityAutoApprove {
+    #[serde(default = "default_true")]
+    pub read_files: bool,
+    #[serde(default)]
+    pub edit_files: bool,
+    #[serde(default)]
+    pub safe_commands: bool,
+    #[serde(default)]
+    pub all_commands: bool,
+    #[serde(default)]
+    pub browser: bool,
+    #[serde(default)]
+    pub external_tools: bool,
+}
+
+impl Default for CapabilityAutoApprove {
+    fn default() -> Self {
+        Self {
+            read_files: true,
+            edit_files: false,
+            safe_commands: false,
+            all_commands: false,
+            browser: false,
+            external_tools: false,
+        }
+    }
+}
+
+impl CapabilityAutoApprove {
+    /// Whether this capability runs without asking. "All commands"
+    /// covers safe commands too, so a safe command is auto-approved
+    /// when either toggle is on.
+    pub fn approves(&self, capability: Capability) -> bool {
+        match capability {
+            Capability::ReadFiles => self.read_files,
+            Capability::EditFiles => self.edit_files,
+            Capability::SafeCommands => self.safe_commands || self.all_commands,
+            Capability::AllCommands => self.all_commands,
+            Capability::Browser => self.browser,
+            Capability::ExternalTools => self.external_tools,
+        }
+    }
 }
 
 impl From<PermissionDecision> for ToolDecision {
@@ -556,6 +628,8 @@ impl Default for AppConfig {
             permissions: Vec::new(),
             hooks: HooksConfig::default(),
             routing: RoutingConfig::default(),
+            auto_approve_capabilities: CapabilityAutoApprove::default(),
+            use_compact_prompt: false,
         }
     }
 }
@@ -951,6 +1025,35 @@ mod tests {
             MAX_MODEL_MEMORY_PERCENT
         );
         assert_eq!(with(55).memory_percent_for_models(), 55);
+    }
+
+    #[test]
+    fn capability_auto_approve_defaults_to_read_only() {
+        // A fresh config and an old config file with no such key agree:
+        // only reads run without asking.
+        let fresh = CapabilityAutoApprove::default();
+        assert!(fresh.approves(Capability::ReadFiles));
+        assert!(!fresh.approves(Capability::EditFiles));
+        assert!(!fresh.approves(Capability::SafeCommands));
+        assert!(!fresh.approves(Capability::AllCommands));
+        assert!(!fresh.approves(Capability::Browser));
+        assert!(!fresh.approves(Capability::ExternalTools));
+        let old: AppConfig =
+            serde_json::from_str(r#"{"selected_models":[],"cloud_llm_enabled":false}"#).unwrap();
+        assert_eq!(
+            old.auto_approve_capabilities,
+            CapabilityAutoApprove::default()
+        );
+        assert!(!old.use_compact_prompt, "compact prompt defaults off");
+        // "All commands" covers safe commands too.
+        let mut caps = CapabilityAutoApprove::default();
+        caps.all_commands = true;
+        assert!(caps.approves(Capability::SafeCommands));
+        assert!(caps.approves(Capability::AllCommands));
+        caps.all_commands = false;
+        caps.safe_commands = true;
+        assert!(caps.approves(Capability::SafeCommands));
+        assert!(!caps.approves(Capability::AllCommands));
     }
 
     #[test]

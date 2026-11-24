@@ -18,7 +18,7 @@ import type {
 } from "./api/bindings";
 
 /** Why a bounded goal loop stopped (matches services/goal.rs StopReason). */
-export type StopReason = "budget_exhausted" | "blocked" | "completed" | "abandoned";
+export type StopReason = "budget_exhausted" | "blocked" | "paused" | "completed" | "abandoned";
 
 /** The next action for a goal (matches services/goal.rs StepDecision). */
 export type StepDecision =
@@ -63,6 +63,9 @@ export function decideNext(
 ): StepDecision {
   if (goal.status === "completed") return { kind: "stop", reason: "completed" };
   if (goal.status === "abandoned") return { kind: "stop", reason: "abandoned" };
+  // A paused or blocked goal only moves again after an explicit resume.
+  if (goal.status === "paused") return { kind: "stop", reason: "paused" };
+  if (goal.status === "blocked") return { kind: "stop", reason: "blocked" };
   if (blocked) return { kind: "stop", reason: "blocked" };
   if (goal.budget <= 0) return { kind: "stop", reason: "budget_exhausted" };
   return {
@@ -91,9 +94,12 @@ export function drive(
   if (!blocked) {
     for (const progress of queued) {
       // Unknown statuses are treated as active, matching GoalStatus::parse.
+      // Paused and blocked goals take no steps until resumed.
       if (
         current.status === "completed" ||
         current.status === "abandoned" ||
+        current.status === "paused" ||
+        current.status === "blocked" ||
         current.budget <= 0
       ) {
         break;
@@ -106,6 +112,13 @@ export function drive(
   const decision: StepDecision = blocked
     ? { kind: "stop", reason: "blocked" }
     : decideNext(current, steps, false);
+  // The state machine moves on its own when progress stops: a blocked
+  // turn waits as Blocked, a used-up budget waits as Paused. The caller
+  // persists the returned goal.
+  if (current.status !== "completed" && current.status !== "abandoned" && current.status !== "paused" && current.status !== "blocked") {
+    if (blocked) current.status = "blocked";
+    else if (decision.kind === "stop" && decision.reason === "budget_exhausted") current.status = "paused";
+  }
   return { goal: current, applied, decision };
 }
 
@@ -150,6 +163,9 @@ export interface AdvanceResult {
   recorded: boolean;
   /** The summary passed to goalStep, or "" when none was recorded. */
   summary: string;
+  /** The answer's full text, so the caller can tell a refused permission
+   * ("The user declined this action") from an empty answer. */
+  answer: string;
   /** Set when the planner stopped before running any turn. */
   reason?: StopReason;
 }
@@ -166,7 +182,7 @@ export async function advanceGoal(
   const { goal, steps = [], blocked = false } = options;
   const decision = decideNext(goal, steps, blocked);
   if (decision.kind === "stop") {
-    return { goal, ran: false, recorded: false, summary: "", reason: decision.reason };
+    return { goal, ran: false, recorded: false, summary: "", answer: "", reason: decision.reason };
   }
 
   const client: GoalChatClient = options.client ?? (await import("./api/client")).api;
@@ -180,7 +196,6 @@ export async function advanceGoal(
     resolveDone = resolve;
     rejectDone = reject;
   });
-
   const onEvent = (event: ChatStreamEvent): void => {
     if (event.type === "token") {
       answer += event.payload.token;
@@ -224,12 +239,12 @@ export async function advanceGoal(
   }
 
   if (finishReason === "cancelled" || options.signal?.aborted === true) {
-    return { goal, ran: true, recorded: false, summary: "" };
+    return { goal, ran: true, recorded: false, summary: "", answer: finalAnswer };
   }
 
   const summary = summarizeAnswer(finalAnswer);
-  if (!summary) return { goal, ran: true, recorded: false, summary: "" };
+  if (!summary) return { goal, ran: true, recorded: false, summary: "", answer: finalAnswer };
 
   const updated = await client.goalStep(goal.id, summary);
-  return { goal: updated, ran: true, recorded: true, summary };
+  return { goal: updated, ran: true, recorded: true, summary, answer: finalAnswer };
 }

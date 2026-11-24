@@ -23,10 +23,15 @@ pub fn default_db_path() -> PathBuf {
 }
 
 /// A goal's lifecycle state. Serialized as a lowercase string for the UI.
+/// `Paused` is where a goal waits when progress stops (budget used up,
+/// a failed step, the user stopping it, a rejected permission); `Blocked`
+/// is where it waits on something outside the run. Either can resume.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalStatus {
     Active,
+    Paused,
+    Blocked,
     Completed,
     Abandoned,
 }
@@ -35,6 +40,8 @@ impl GoalStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             GoalStatus::Active => "active",
+            GoalStatus::Paused => "paused",
+            GoalStatus::Blocked => "blocked",
             GoalStatus::Completed => "completed",
             GoalStatus::Abandoned => "abandoned",
         }
@@ -44,6 +51,8 @@ impl GoalStatus {
     /// an existing goal.
     pub fn parse(value: &str) -> Self {
         match value {
+            "paused" => GoalStatus::Paused,
+            "blocked" => GoalStatus::Blocked,
             "completed" => GoalStatus::Completed,
             "abandoned" => GoalStatus::Abandoned,
             _ => GoalStatus::Active,
@@ -95,6 +104,16 @@ pub fn apply_step(goal: &Goal) -> Result<Goal, AppError> {
 pub fn apply_complete(goal: &Goal) -> Result<Goal, AppError> {
     match goal.status {
         GoalStatus::Active => {}
+        GoalStatus::Paused => {
+            return Err(AppError::invalid_input(
+                "Resume a paused goal before completing it.",
+            ));
+        }
+        GoalStatus::Blocked => {
+            return Err(AppError::invalid_input(
+                "A blocked goal cannot be completed. Clear the blocker first.",
+            ));
+        }
         GoalStatus::Completed => {
             return Err(AppError::invalid_input("This goal is already completed."));
         }
@@ -109,13 +128,65 @@ pub fn apply_complete(goal: &Goal) -> Result<Goal, AppError> {
     Ok(next)
 }
 
+/// Pure state transition for pausing: progress stopped, but the goal is
+/// not done — budget used up, a step failed, the user stopped the run,
+/// or a permission was rejected. Only an active goal can pause.
+pub fn apply_pause(goal: &Goal) -> Result<Goal, AppError> {
+    if goal.status != GoalStatus::Active {
+        return Err(AppError::invalid_input(
+            "Only an active goal can be paused.",
+        ));
+    }
+    let mut next = goal.clone();
+    next.status = GoalStatus::Paused;
+    Ok(next)
+}
+
+/// Pure state transition for blocking: the goal waits on something
+/// outside the run. Only an active goal can be marked blocked.
+pub fn apply_block(goal: &Goal) -> Result<Goal, AppError> {
+    if goal.status != GoalStatus::Active {
+        return Err(AppError::invalid_input(
+            "Only an active goal can be marked blocked.",
+        ));
+    }
+    let mut next = goal.clone();
+    next.status = GoalStatus::Blocked;
+    Ok(next)
+}
+
+/// Pure state transition for resuming a paused or blocked goal.
+pub fn apply_resume(goal: &Goal) -> Result<Goal, AppError> {
+    match goal.status {
+        GoalStatus::Paused | GoalStatus::Blocked => {}
+        GoalStatus::Active => {
+            return Err(AppError::invalid_input("This goal is already active."));
+        }
+        GoalStatus::Completed => {
+            return Err(AppError::invalid_input(
+                "A completed goal cannot be resumed.",
+            ));
+        }
+        GoalStatus::Abandoned => {
+            return Err(AppError::invalid_input(
+                "An abandoned goal cannot be resumed.",
+            ));
+        }
+    }
+    let mut next = goal.clone();
+    next.status = GoalStatus::Active;
+    Ok(next)
+}
+
 /// Why a bounded goal loop stopped. `Blocked` is the independent check the
-/// caller makes before deciding a goal is finished.
+/// caller makes before deciding a goal is finished; `Paused` is where a
+/// goal waits when progress stops without finishing.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StopReason {
     BudgetExhausted,
     Blocked,
+    Paused,
     Completed,
     Abandoned,
 }
@@ -158,11 +229,14 @@ pub fn step_prompt(goal: &Goal, steps: &[GoalStep]) -> String {
 
 /// Decide the next action from a goal's state. A blocked report or a finished
 /// goal stops the loop even when budget remains, so completion is never
-/// inferred from budget alone.
+/// inferred from budget alone. A paused or blocked goal stops too: it only
+/// moves again after an explicit resume.
 pub fn decide_next(goal: &Goal, steps: &[GoalStep], blocked: bool) -> StepDecision {
     match goal.status {
         GoalStatus::Completed => return StepDecision::Stop(StopReason::Completed),
         GoalStatus::Abandoned => return StepDecision::Stop(StopReason::Abandoned),
+        GoalStatus::Paused => return StepDecision::Stop(StopReason::Paused),
+        GoalStatus::Blocked => return StepDecision::Stop(StopReason::Blocked),
         GoalStatus::Active => {}
     }
     if blocked {
@@ -210,6 +284,17 @@ pub fn drive(goal: &Goal, queued: &[String], blocked: bool) -> DriveResult {
     } else {
         decide_next(&current, &steps, false)
     };
+    // The state machine moves on its own when progress stops: a blocked
+    // turn waits as Blocked, a used-up budget waits as Paused. Only an
+    // active goal moves — a finished one keeps its state. The caller
+    // persists the returned goal; nothing here touches the database.
+    if current.status == GoalStatus::Active {
+        if blocked {
+            current.status = GoalStatus::Blocked;
+        } else if decision == StepDecision::Stop(StopReason::BudgetExhausted) {
+            current.status = GoalStatus::Paused;
+        }
+    }
     DriveResult {
         goal: current,
         applied,
@@ -463,6 +548,54 @@ pub fn complete(id: &str) -> Result<Goal, AppError> {
     complete_at(&default_db_path(), id)
 }
 
+/// Move a goal to a new status with a pure transition, atomically.
+fn set_status_at(
+    path: &Path,
+    id: &str,
+    next: fn(&Goal) -> Result<Goal, AppError>,
+) -> Result<Goal, AppError> {
+    let conn = open(path)?;
+    let goal = required(&conn, id)?;
+    let next = next(&goal)?;
+    conn.execute(
+        "UPDATE goals SET status = ?1 WHERE id = ?2",
+        params![next.status.as_str(), id],
+    )
+    .map_err(|e| AppError::storage(format!("Could not update the goal: {e}")))?;
+    Ok(next)
+}
+
+/// Pause a goal in the given database: progress stopped, but it is not done.
+pub fn pause_at(path: &Path, id: &str) -> Result<Goal, AppError> {
+    set_status_at(path, id, apply_pause)
+}
+
+/// Pause a goal in the default database.
+pub fn pause(id: &str) -> Result<Goal, AppError> {
+    pause_at(&default_db_path(), id)
+}
+
+/// Mark a goal blocked in the given database: it waits on something
+/// outside the run.
+pub fn block_at(path: &Path, id: &str) -> Result<Goal, AppError> {
+    set_status_at(path, id, apply_block)
+}
+
+/// Mark a goal blocked in the default database.
+pub fn block(id: &str) -> Result<Goal, AppError> {
+    block_at(&default_db_path(), id)
+}
+
+/// Resume a paused or blocked goal in the given database.
+pub fn resume_at(path: &Path, id: &str) -> Result<Goal, AppError> {
+    set_status_at(path, id, apply_resume)
+}
+
+/// Resume a paused or blocked goal in the default database.
+pub fn resume(id: &str) -> Result<Goal, AppError> {
+    resume_at(&default_db_path(), id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -567,12 +700,63 @@ mod tests {
     fn status_strings_round_trip() {
         for status in [
             GoalStatus::Active,
+            GoalStatus::Paused,
+            GoalStatus::Blocked,
             GoalStatus::Completed,
             GoalStatus::Abandoned,
         ] {
             assert_eq!(GoalStatus::parse(status.as_str()), status);
         }
         assert_eq!(GoalStatus::parse("something-new"), GoalStatus::Active);
+    }
+
+    #[test]
+    fn pause_block_and_resume_are_one_way_out_of_active() {
+        let active = goal(2, GoalStatus::Active);
+        let paused = apply_pause(&active).unwrap();
+        assert_eq!(paused.status, GoalStatus::Paused);
+        assert_eq!(paused.budget, 2, "pausing spends no budget");
+        assert!(apply_step(&paused).is_err(), "a paused goal takes no steps");
+        assert!(apply_complete(&paused).is_err());
+        assert!(apply_pause(&paused).is_err());
+        let resumed = apply_resume(&paused).unwrap();
+        assert_eq!(resumed.status, GoalStatus::Active);
+        assert!(apply_resume(&resumed).is_err());
+
+        let blocked = apply_block(&active).unwrap();
+        assert_eq!(blocked.status, GoalStatus::Blocked);
+        assert!(apply_step(&blocked).is_err());
+        assert_eq!(
+            decide_next(&blocked, &[], false),
+            StepDecision::Stop(StopReason::Blocked)
+        );
+        assert_eq!(
+            decide_next(&paused, &[], false),
+            StepDecision::Stop(StopReason::Paused)
+        );
+    }
+
+    #[test]
+    fn drive_auto_pauses_on_budget_and_blocks_when_blocked() {
+        let start = goal(1, GoalStatus::Active);
+        let result = drive(&start, &["a".to_string(), "b".to_string()], false);
+        assert_eq!(result.applied, 1);
+        assert_eq!(
+            result.decision,
+            StepDecision::Stop(StopReason::BudgetExhausted)
+        );
+        assert_eq!(result.goal.status, GoalStatus::Paused);
+
+        let blocked = drive(&start, &["a".to_string()], true);
+        assert_eq!(blocked.applied, 0);
+        assert_eq!(blocked.goal.status, GoalStatus::Blocked);
+
+        // A finished goal keeps its state when driven again.
+        let done = goal(0, GoalStatus::Completed);
+        assert_eq!(
+            drive(&done, &["a".to_string()], true).goal.status,
+            GoalStatus::Completed
+        );
     }
 
     #[test]
@@ -600,7 +784,29 @@ mod tests {
         assert_eq!(saved[0].seq, 1);
         assert_eq!(saved[1].seq, 2);
 
-        let done = complete_at(&db, &started.id).unwrap();
+        let done = {
+            // Pause, block and resume all persist: reopening the database
+            // shows the same status, so goals survive restarts.
+            let paused = pause_at(&db, &started.id).unwrap();
+            assert_eq!(paused.status, GoalStatus::Paused);
+            assert_eq!(
+                status_at(&db, &started.id).unwrap().unwrap().status,
+                GoalStatus::Paused
+            );
+            assert_eq!(
+                resume_at(&db, &started.id).unwrap().status,
+                GoalStatus::Active
+            );
+            assert_eq!(
+                block_at(&db, &started.id).unwrap().status,
+                GoalStatus::Blocked
+            );
+            assert_eq!(
+                resume_at(&db, &started.id).unwrap().status,
+                GoalStatus::Active
+            );
+            complete_at(&db, &started.id).unwrap()
+        };
         assert_eq!(done.status, GoalStatus::Completed);
         assert!(complete_at(&db, &started.id).is_err());
 

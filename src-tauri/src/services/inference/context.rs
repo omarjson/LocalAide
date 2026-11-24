@@ -1,4 +1,84 @@
-use crate::domain::chat::ChatMessage;
+use crate::domain::chat::{ChatMessage, MessagePart};
+
+/// How many of the newest history messages keep their tool outputs in
+/// full (as short one-line summaries). Older tool outputs are replaced
+/// with a placeholder, so a long-ago file read or command result does not
+/// eat the window turn after turn. The newest two messages always stay,
+/// matching `compactionStart` in the frontend.
+pub const TOOL_OUTPUT_RECENCY: usize = 2;
+
+/// What an old tool output becomes when it is pruned.
+pub const TOOL_OUTPUT_PLACEHOLDER: &str =
+    "[Tool output from an earlier turn was omitted to save space.]";
+
+/// Characters kept per tool when its output is rendered, and tools
+/// rendered per message at most.
+const TOOL_RENDER_CHARS: usize = 200;
+const MAX_TOOLS_PER_MESSAGE: usize = 4;
+
+/// One tool call, shortened to a line the model can still use.
+fn render_tool(part: &MessagePart) -> Option<String> {
+    let MessagePart::Tool {
+        title,
+        summary,
+        output,
+        ..
+    } = part
+    else {
+        return None;
+    };
+    let text = if !summary.trim().is_empty() {
+        summary.trim()
+    } else {
+        output.trim()
+    };
+    if text.is_empty() {
+        return Some(format!("[tool: {}]", title.trim()));
+    }
+    let short: String = text.chars().take(TOOL_RENDER_CHARS).collect();
+    let cut = text.chars().count() > TOOL_RENDER_CHARS;
+    Some(format!(
+        "[tool: {title} — {short}{}]",
+        if cut { " …" } else { "" }
+    ))
+}
+
+/// Fold each message's tool parts into its text: recent turns keep a
+/// short line per tool, older turns get the placeholder instead. Messages
+/// without tool parts pass through unchanged, so a history with no tools
+/// builds exactly what it built before. The transcript on screen is
+/// untouched — this only shapes what the model reads.
+pub fn prune_tool_outputs(history: &[ChatMessage]) -> Vec<ChatMessage> {
+    let recent_from = history.len().saturating_sub(TOOL_OUTPUT_RECENCY);
+    history
+        .iter()
+        .enumerate()
+        .map(|(i, msg)| {
+            let Some(parts) = msg.parts.as_ref() else {
+                return msg.clone();
+            };
+            if !parts.iter().any(|p| matches!(p, MessagePart::Tool { .. })) {
+                return msg.clone();
+            }
+            let mut next = msg.clone();
+            if i >= recent_from {
+                let rendered: Vec<String> = parts
+                    .iter()
+                    .filter_map(render_tool)
+                    .take(MAX_TOOLS_PER_MESSAGE)
+                    .collect();
+                if !rendered.is_empty() {
+                    next.content.push_str(&format!("\n{}", rendered.join("\n")));
+                }
+            } else {
+                next.content
+                    .push_str(&format!("\n{TOOL_OUTPUT_PLACEHOLDER}"));
+            }
+            next.parts = None;
+            next
+        })
+        .collect()
+}
 
 /// Approximate token count of a text, close to what common tokenizers give:
 /// about four characters per token for English and code, about two for
@@ -144,6 +224,10 @@ impl ContextBudget {
         let latest_tokens = Self::estimate_tokens(latest_message);
         let mut remaining = budget_available.saturating_sub(sys_tokens + latest_tokens);
 
+        // Old tool outputs are pruned before budgeting: recent turns keep
+        // a short line per tool, older ones become a placeholder, and a
+        // history with no tools is unchanged.
+        let history = prune_tool_outputs(history);
         // At most one turn per history message is kept; reserve once instead
         // of growing the vector as each kept turn is pushed.
         let mut kept: Vec<super::PromptMessage> = Vec::with_capacity(history.len());
@@ -321,5 +405,69 @@ mod tests {
     fn project_rules_are_capped_and_missing_roots_add_nothing() {
         let missing = std::path::PathBuf::from("/no/such/root/for/context/files");
         assert!(project_rules(std::slice::from_ref(&missing), 1024).is_none());
+    }
+
+    fn tool_msg(role: &str, content: &str, output: &str) -> ChatMessage {
+        ChatMessage {
+            role: role.to_string(),
+            content: content.to_string(),
+            parts: Some(vec![MessagePart::Tool {
+                id: "c1".into(),
+                name: "read_file".into(),
+                title: "Read notes.txt".into(),
+                detail: String::new(),
+                group: "files".into(),
+                arguments: String::new(),
+                status: "done".into(),
+                summary: "two lines about the plan".into(),
+                output: output.to_string(),
+                steps: None,
+                tokens: None,
+            }]),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tool_outputs_prune_outside_the_recency_window() {
+        let big = "x".repeat(2000);
+        let history = vec![
+            tool_msg("assistant", "first answer", &big),
+            msg("user", 10),
+            tool_msg("assistant", "latest answer", &big),
+        ];
+        let pruned = prune_tool_outputs(&history);
+        assert_eq!(pruned.len(), 3);
+        // The oldest tool output becomes the placeholder, not the 2000 chars.
+        assert!(pruned[0].content.contains(TOOL_OUTPUT_PLACEHOLDER));
+        assert!(!pruned[0].content.contains(&big));
+        assert!(pruned[0].parts.is_none());
+        // The newest two messages keep a short line with the summary.
+        assert!(pruned[2].content.contains("Read notes.txt"));
+        assert!(pruned[2].content.contains("two lines about the plan"));
+        assert!(!pruned[2].content.contains(&big));
+        // A plain message in the middle is untouched.
+        assert_eq!(pruned[1], history[1]);
+    }
+
+    #[test]
+    fn history_without_tools_builds_exactly_as_before() {
+        let history = vec![msg("user", 40), msg("assistant", 40)];
+        let budget = ContextBudget::new(8192, 512);
+        let before = budget.build_messages(Some("sys"), &history, "q", &[]);
+        let with_tools = {
+            let mut h = history.clone();
+            h.push(tool_msg("assistant", "did a thing", "short output"));
+            h
+        };
+        // No tools at all: pruning changes nothing.
+        assert_eq!(prune_tool_outputs(&history), history);
+        // With tools, only the tool line is added to the recent message
+        // (the short summary wins over the full output).
+        let after = budget.build_messages(Some("sys"), &with_tools, "q", &[]);
+        assert_eq!(after.len(), before.len() + 1);
+        assert!(after[3].content.contains("did a thing"));
+        assert!(after[3].content.contains("two lines about the plan"));
+        assert!(!after[3].content.contains("short output"));
     }
 }

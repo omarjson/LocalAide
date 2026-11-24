@@ -32,6 +32,7 @@
   const stopLabels: Record<StopReason, string> = {
     budget_exhausted: "Step budget used up.",
     blocked: "Goal is marked blocked.",
+    paused: "Goal is paused.",
     completed: "Goal is already completed.",
     abandoned: "Goal was abandoned.",
   };
@@ -124,6 +125,46 @@
     }
   };
 
+  // Persist a pause or a block. Best-effort: the run already stopped,
+  // so a failed save must not hide that. Only moves an active goal.
+  const pauseGoal = async () => {
+    if (!goal || goal.status !== "active") return;
+    try {
+      goal = await api.goalPause(goal.id);
+    } catch {
+      // The run already stopped; the status just stays active.
+    }
+  };
+  const blockGoal = async () => {
+    if (!goal || goal.status !== "active") return;
+    try {
+      goal = await api.goalBlock(goal.id);
+    } catch {
+      // As above.
+    }
+  };
+  const resumeGoal = async () => {
+    if (!goal || (goal.status !== "paused" && goal.status !== "blocked")) return;
+    busy = true;
+    notice = null;
+    try {
+      goal = await api.goalResume(goal.id);
+      notice = { ok: true, text: `Goal ${goal.id} is active again.` };
+    } catch (e: unknown) {
+      notice = { ok: false, text: errorMessage(e) };
+    } finally {
+      busy = false;
+    }
+  };
+  const pauseButton = async () => {
+    await pauseGoal();
+    notice = { ok: true, text: `Goal ${goal?.id ?? ""} is paused.` };
+  };
+  const blockButton = async () => {
+    await blockGoal();
+    notice = { ok: true, text: `Goal ${goal?.id ?? ""} is blocked.` };
+  };
+
   // One model turn. Returns true only when a step was actually recorded, so
   // a stop on blocked / completion / error / cancellation needs no extra flag.
   const runTurn = async (controller: AbortController): Promise<boolean> => {
@@ -131,7 +172,18 @@
     const decision = decideNext(goal, runnerSteps, blocked);
     if (decision.kind === "stop") {
       runnerPrompt = "";
-      runnerStatus = stopLabels[decision.reason];
+      // Progress stopped on its own: the goal waits in the matching
+      // state instead of spinning — budget used up pauses it, a
+      // blocker marks it blocked.
+      if (decision.reason === "budget_exhausted") {
+        await pauseGoal();
+        runnerStatus = "Step budget used up — goal paused.";
+      } else if (decision.reason === "blocked") {
+        await blockGoal();
+        runnerStatus = stopLabels[decision.reason];
+      } else {
+        runnerStatus = stopLabels[decision.reason];
+      }
       return false;
     }
     runnerPrompt = decision.prompt;
@@ -147,12 +199,25 @@
     });
     if (result.recorded) {
       runnerSteps = [...runnerSteps, result.summary];
-      goal = result.goal;
+      // A pause requested mid-turn (Stop) wins over the fresh step:
+      // the step is saved in the database, the goal stays paused.
+      if (goal?.status === "active") goal = result.goal;
       return true;
     }
-    runnerStatus = stopRequested || controller.signal.aborted
-      ? "Stopped by you."
-      : "Stopped: the answer had no progress to record.";
+    if (stopRequested || controller.signal.aborted) {
+      // The user stopped the run: the goal waits as Paused.
+      await pauseGoal();
+      runnerStatus = "Paused by you.";
+      return false;
+    }
+    // A refused permission pauses the goal: the backend tells the model
+    // "The user declined this action", so the answer carries those words.
+    if (result.answer.includes("declined this action")) {
+      await pauseGoal();
+      runnerStatus = "Paused: a permission was declined.";
+      return false;
+    }
+    runnerStatus = "Stopped: the answer had no progress to record.";
     return false;
   };
 
@@ -177,7 +242,10 @@
         }
       }
     } catch (e: unknown) {
-      runnerStatus = `Stopped: ${errorMessage(e)}`;
+      // A failed command pauses the goal instead of leaving it active
+      // with no way forward.
+      await pauseGoal();
+      runnerStatus = `Paused after an error: ${errorMessage(e)}`;
     } finally {
       runnerBusy = false;
       stopController = null;
@@ -206,7 +274,8 @@
           : "Stopped.";
       }
     } catch (e: unknown) {
-      runnerStatus = `Stopped: ${errorMessage(e)}`;
+      await pauseGoal();
+      runnerStatus = `Paused after an error: ${errorMessage(e)}`;
     } finally {
       runnerBusy = false;
       stopController = null;
@@ -217,6 +286,9 @@
     stopRequested = true;
     runnerStatus = "Stopping after this answer…";
     stopController?.abort();
+    // The user stopped the run: the goal waits as Paused. The turn
+    // itself reports back as stopped, so this only persists the state.
+    void pauseGoal();
   };
 </script>
 
@@ -226,7 +298,9 @@
   </h3>
   <p class="mb-3 text-sm text-ink-400">
     Track a multi-step objective in the local goals database. The runner can use the active chat model to
-    take the next step for you; manual steps still record progress text you write.
+    take the next step for you; manual steps still record progress text you write. A goal pauses on its own
+    when progress stops — budget used up, a failed step, you stopping it, a declined permission — and waits
+    as blocked when something outside the run is in the way. Goals survive restarts.
   </p>
 
   {#if notice}
@@ -267,7 +341,7 @@
           <p class="font-mono text-xs text-ink-500">{goal.id} · thread {goal.thread_id}</p>
         </div>
         <div class="flex items-center gap-2">
-          <StatusBadge label={goal.status} tone={goal.status === "active" ? "ok" : "idle"} />
+          <StatusBadge label={goal.status} tone={goal.status === "active" ? "ok" : goal.status === "paused" ? "warn" : goal.status === "blocked" ? "bad" : "idle"} />
           <span class="text-sm tabular-nums text-ink-300">{goal.budget} left</span>
         </div>
       </div>
@@ -275,6 +349,11 @@
         <input bind:value={stepText} placeholder="What happened in this step?" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-500 focus:border-edge" />
         <Button variant="secondary" disabled={busy || goal.status !== "active"} onclick={() => void step()}>Record step</Button>
         <Button variant="primary" disabled={busy || goal.status !== "active"} onclick={() => void complete()}>Complete</Button>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={busy || goal.status !== "active"} onclick={() => void pauseButton()}>Pause</Button>
+        <Button variant="secondary" disabled={busy || (goal.status !== "paused" && goal.status !== "blocked")} onclick={() => void resumeGoal()}>Resume</Button>
+        <Button variant="secondary" disabled={busy || goal.status !== "active"} onclick={() => void blockButton()}>Mark blocked</Button>
       </div>
       <div class="mt-4 border-t border-ink-700 pt-3">
         <div class="flex flex-wrap items-center justify-between gap-2">

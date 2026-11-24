@@ -292,6 +292,9 @@
   let ramBudget = $state(70);
   let contextTokens = $state(8192);
   let contextInfo = $state<ContextInfo | null>(null);
+  // Shorter system prompt for local models (N11). Off by default.
+  let compactPrompt = $state(false);
+  let compactBusy = $state(false);
   let reloadingModel = $state(false);
   let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let settingsNotice = $state<string | null>(null);
@@ -536,6 +539,19 @@
     }, 500);
   };
 
+  // Shorter system prompt for local models only; online models always
+  // get the full prompt. Off by default.
+  const setCompactPrompt = async (on: boolean) => {
+    compactBusy = true;
+    try {
+      compactPrompt = await api.setCompactPrompt(on);
+    } catch (e: unknown) {
+      settingsNotice = errorMessage(e);
+    } finally {
+      compactBusy = false;
+    }
+  };
+
   // Reads only this computer. GitHub is contacted by checkForUpdates alone.
   const loadDiagnostics = async () => {
     diagBusy = true;
@@ -772,6 +788,11 @@
       failed.push(`conversation memory (${errorMessage(e)})`);
     }
     try {
+      compactPrompt = await api.getCompactPrompt();
+    } catch (e: unknown) {
+      failed.push(`compact prompt (${errorMessage(e)})`);
+    }
+    try {
       appVersion = await getVersion();
     } catch (e: unknown) {
       console.error(e);
@@ -938,6 +959,11 @@
               {#snippet control()}
                 <Slider min={contextInfo?.min ?? 512} max={contextInfo?.max ?? 131072} step={512} bind:value={contextTokens} oninput={scheduleContextSave} class="w-44" label="Conversation memory" />
                 <span class="min-w-32 text-right text-sm tabular-nums text-ink-200"><span class="block">{tokensLabel(contextTokens)} tokens</span><span class="block text-xs text-ink-400">about {contextWords()} words</span></span>
+              {/snippet}
+            </SettingsRow>
+            <SettingsRow icon="chat" title="Use Compact Prompt" description="Shorter instructions for models on this computer, for faster first tokens. Off keeps the full instructions. Only affects local models." class="border-t border-ink-800">
+              {#snippet control()}
+                <Switch checked={compactPrompt} label="Use Compact Prompt" disabled={compactBusy} onchange={(on) => void setCompactPrompt(on)} />
               {/snippet}
             </SettingsRow>
             {#if contextNeedsReload && contextInfo?.loaded}

@@ -36,6 +36,7 @@
   import { conversationMarkdown, exportFileName } from "../lib/chatExport";
   import { greetingAt, workedToday } from "../lib/greeting";
   import { loadLastUsedModel, resolveNewChatModel, saveLastUsedModel } from "../lib/lastModel";
+  import { resolveChoreModel } from "../lib/modelPicker";
 
   let messages = $state<ChatMessage[]>([]);
   let pendingImages = $state<string[]>([]);
@@ -217,10 +218,13 @@
     if (!question.trim()) return;
     titleBusy = true;
     try {
+      // Chores run on the loaded local model when there is one (N5):
+      // free, and never blocking the chat. Otherwise the chat's model.
+      const chore = resolveChoreModel(choices);
       const title = await api.chatTitle(
         question.slice(0, 400),
         answer.slice(-1200),
-        activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined,
+        chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined),
       );
       if (title && title !== activeThreadTitle) {
         activeThreadTitle = title;
@@ -385,7 +389,7 @@
     if (saved && saved !== "auto") return saved;
     return activeChoice.efforts.includes("medium") ? "medium" : "auto";
   });
-  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 80);
+  let autoCompactAt = $state(typeof savedOptions.autoCompactAt === "number" ? Math.max(50, Math.min(95, savedOptions.autoCompactAt)) : 95);
   $effect(() => {
     try {
       localStorage.setItem(
@@ -665,6 +669,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    compactionSummary = "";
     stoppedAnswer = false;
     resetMeasurements();
     suggestions = [];
@@ -710,6 +715,7 @@
     allowedTools = [];
     approvals = {};
     compactedBefore = 0;
+    compactionSummary = "";
     stoppedAnswer = false;
     resetMeasurements();
     void refreshLedgerCacheRate();
@@ -794,6 +800,45 @@
   // model. It resets with each chat.
   let compactedBefore = $state(0);
   const historyFrom = $derived(Math.min(compactedBefore, messages.length));
+  // Anchored summary (N4): when auto-compact cuts the history, the cut
+  // part is summarised — goal, decisions, progress, next steps — and the
+  // summary rides on the system prompt of later sends, so the model keeps
+  // the thread. It is session-only, like the cut itself: the full history
+  // stays on screen and in the saved chat, nothing is deleted. Empty
+  // when nothing was ever auto-compacted (or summarising failed).
+  let compactionSummary = $state("");
+
+  /**
+   * Summarise what auto-compact just cut, folding in the previous
+   * summary so the anchor covers the whole cut span. Fire-and-forget:
+   * the summary runs on the loaded local model for free
+   * (`summarize`); when no local model is loaded, or it errors, the
+   * summary stays as it was and the plain cut still stands.
+   */
+  const requestCompactionSummary = (cut: ChatMessage[]) => {
+    const lines: string[] = [];
+    if (compactionSummary) lines.push(`Previous summary:\n${compactionSummary}`);
+    const rendered = cut
+      .filter((m) => m.content.trim() && !m.steer)
+      .map((m) => `${m.role}: ${m.content.slice(0, 2000)}`)
+      .join("\n");
+    if (!rendered && !compactionSummary) return;
+    const text = [
+      "Summarize the conversation below for the AI that will continue it. Cover: the goal, decisions made, progress so far, and next steps. A few short lines, no preamble.",
+      rendered,
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 8000);
+    void api
+      .summarize({ text })
+      .then((res) => {
+        if (res.summary.trim()) compactionSummary = res.summary.trim();
+      })
+      .catch(() => {
+        // Summarising is a nicety; the cut stands without it.
+      });
+  };
   // The same thinking room the backend keeps for this effort.
   const answerReserve = $derived(maxTokens + (activeChoice?.reasoning ? thinkingReserve(effort) : 0));
   // The engine's own count for the first request of the last answer, and
@@ -1011,7 +1056,9 @@
   const askSuggestion = async (question: string, answer: string) => {
     const ticket = ++suggestTicket;
     try {
-      const next = await api.suggestNext(question, answer, activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined);
+      // Same chore rule as titles (N5): the loaded local model first.
+      const chore = resolveChoreModel(choices);
+      const next = await api.suggestNext(question, answer, chore ?? (activeChoice ? { provider_id: activeChoice.provider_id, model: activeChoice.model } : undefined));
       if (ticket === suggestTicket && !streaming && !input.trim()) suggestions = next;
     } catch {
       // A suggestion is a nicety; nothing to report.
@@ -1198,7 +1245,11 @@
       }
     }
     if (activeChoice?.context && !fits(contextUsage(sentMessages, activeChoice.context, usageOptions(userMsg)), autoCompactAt)) {
-      if (compactConversation(autoCompactAt, userMsg)) showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
+      const cutFrom = historyFrom;
+      if (compactConversation(autoCompactAt, userMsg)) {
+        requestCompactionSummary($state.snapshot(messages).slice(cutFrom, historyFrom));
+        showToast(`The chat reached ${autoCompactAt}% of the context window, so older messages are no longer sent.`);
+      }
     }
 
     // Earlier turns only. The new message is sent separately as `message`.
@@ -1213,6 +1264,9 @@
         role: m.role,
         content: m.content,
         attachments: m.attachments?.filter((a) => a.kind === "text").map((a) => ({ ...a, data_url: null })),
+        // Tool parts ride along so the backend can prune old tool
+        // outputs instead of dropping them all unseen (N4).
+        parts: m.parts,
       }));
 
     const images = resend ? resendImages : fromQueue ? [] : $state.snapshot(pendingImages);
@@ -1248,6 +1302,13 @@
     }
     const started = performance.now();
     let firstTokenAt: number | null = null;
+    // The anchored summary rides on the system prompt, not the history:
+    // the context meter counts history by message index, and the summary
+    // is not a message. It is only sent while part of the history is cut.
+    const requestSystemPrompt =
+      historyFrom > 0 && compactionSummary
+        ? `${systemPrompt}\n\n[Summary of the earlier part of this conversation — those messages are no longer sent in full: ${compactionSummary}]`
+        : systemPrompt;
     // Captured by object, not index: a steering note inserted before this
     // answer must not shift what the stream appends to.
     const assistantMsg = messages[assistantIdx];
@@ -1280,7 +1341,7 @@
           images,
           model,
           thread_id: activeThreadId,
-          system_prompt: systemPrompt,
+          system_prompt: requestSystemPrompt,
           temperature,
           max_tokens: maxTokens,
           mode,

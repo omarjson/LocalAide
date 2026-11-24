@@ -26,7 +26,7 @@ test("a retryable error is only 429 / 408 / 5xx, never a 4xx or a stop", () => {
 test("a network error and a stalled stream are retryable timeouts", () => {
   assert.match(
     stream,
-    /Could not reach \{\}: \{e\}\. Check the address and your connection\."[\s\S]*?\.retryable\(\)/,
+    /Couldn't reach \{\} — check your connection and try again\."[\s\S]*?\.retryable\(\)/,
     "could-not-connect is retryable",
   );
   assert.match(

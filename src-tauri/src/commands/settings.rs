@@ -62,6 +62,32 @@ pub fn settings_set_context(state: State<'_, AppState>, tokens: u32) -> Result<u
     Ok(cfg.context_tokens)
 }
 
+/// Whether the compact prompt is on (Settings → Performance). Off by
+/// default: local models get the full system prompt unless the user
+/// turns this on.
+#[tauri::command]
+pub fn settings_compact_prompt(state: State<'_, AppState>) -> Result<bool, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    Ok(store.load().map_err(AppError::internal)?.use_compact_prompt)
+}
+
+/// Turn the compact prompt on or off. Only affects local models; online
+/// models always get the full prompt.
+#[tauri::command]
+pub fn settings_set_compact_prompt(state: State<'_, AppState>, on: bool) -> Result<bool, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.use_compact_prompt = on;
+    store.save(&cfg).map_err(AppError::internal)?;
+    Ok(cfg.use_compact_prompt)
+}
+
 /// What Settings → Conversation memory needs: the saved value, how far the
 /// slider may go (the model's own context window), and what is loaded now.
 #[derive(Debug, Clone, serde::Serialize)]

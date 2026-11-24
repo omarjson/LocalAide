@@ -8,7 +8,9 @@ use tauri::State;
 use crate::app::error::AppError;
 use crate::app::state::AppState;
 use crate::commands::cloud::{load_config, save_config};
-use crate::config::{AppConfig, HooksConfig, PermissionRule, RoutingConfig, ToolDecision};
+use crate::config::{
+    AppConfig, CapabilityAutoApprove, HooksConfig, PermissionRule, RoutingConfig, ToolDecision,
+};
 use crate::services::agents::{Agent, AgentsService};
 
 /// Everything the UI needs to show and edit the policy.
@@ -19,6 +21,8 @@ pub struct PolicySettings {
     pub routing: RoutingConfig,
     /// Effective provider order (from the priority list or config order).
     pub provider_order: Vec<String>,
+    /// Per-capability auto-approve (N9). Defaults to read-only.
+    pub auto_approve_capabilities: CapabilityAutoApprove,
 }
 
 impl From<&AppConfig> for PolicySettings {
@@ -28,6 +32,7 @@ impl From<&AppConfig> for PolicySettings {
             hooks: cfg.hooks.clone(),
             routing: cfg.routing.clone(),
             provider_order: cfg.provider_order(),
+            auto_approve_capabilities: cfg.auto_approve_capabilities,
         }
     }
 }
@@ -42,6 +47,8 @@ pub struct PolicyUpdate {
     pub hooks: Option<HooksConfig>,
     #[serde(default)]
     pub routing: Option<RoutingConfig>,
+    #[serde(default)]
+    pub auto_approve_capabilities: Option<CapabilityAutoApprove>,
 }
 
 #[tauri::command]
@@ -71,6 +78,9 @@ pub fn policy_config_set(
     }
     if let Some(routing) = update.routing {
         cfg.routing = routing;
+    }
+    if let Some(capabilities) = update.auto_approve_capabilities {
+        cfg.auto_approve_capabilities = capabilities;
     }
     save_config(&state, &cfg)?;
     // Make the new policy effective immediately: tool calls use the rules and

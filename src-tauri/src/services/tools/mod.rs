@@ -12,7 +12,7 @@ pub struct CommandRun {
 }
 
 use crate::app::error::AppError;
-use crate::config::{AppConfig, HooksConfig, PermissionRule, ToolDecision};
+use crate::config::{AppConfig, CapabilityAutoApprove, HooksConfig, PermissionRule, ToolDecision};
 use crate::domain::tool::{
     ToolActionType, ToolAuditEntry, ToolExecutionRequest, ToolExecutionResponse,
 };
@@ -27,6 +27,8 @@ use std::sync::{Arc, Mutex};
 struct PolicyState {
     rules: Vec<PermissionRule>,
     hooks: HooksConfig,
+    /// Per-capability auto-approve (N9). Default is read-only.
+    capabilities: CapabilityAutoApprove,
 }
 
 #[derive(Debug, Default)]
@@ -37,14 +39,33 @@ pub struct ToolPolicy {
 impl ToolPolicy {
     pub fn new(rules: Vec<PermissionRule>, hooks: HooksConfig) -> Self {
         Self {
-            state: Mutex::new(PolicyState { rules, hooks }),
+            state: Mutex::new(PolicyState {
+                rules,
+                hooks,
+                capabilities: CapabilityAutoApprove::default(),
+            }),
         }
     }
 
-    pub fn set(&self, rules: Vec<PermissionRule>, hooks: HooksConfig) {
+    pub fn set(
+        &self,
+        rules: Vec<PermissionRule>,
+        hooks: HooksConfig,
+        capabilities: CapabilityAutoApprove,
+    ) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.rules = rules;
         state.hooks = hooks;
+        state.capabilities = capabilities;
+    }
+
+    /// The per-capability auto-approve snapshot. Defaults to read-only
+    /// when no config was ever applied, so a fresh policy asks.
+    pub fn capabilities(&self) -> CapabilityAutoApprove {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .capabilities
     }
 
     /// The last matching rule's decision, or `Ask` when no rule matches.
@@ -82,10 +103,22 @@ impl ToolPolicy {
             return ToolDecision::Allow;
         }
         if read_only::can_skip_approval(command) {
-            ToolDecision::Allow
-        } else {
-            ToolDecision::Ask
+            return ToolDecision::Allow;
         }
+        // Per-capability auto-approve (N9): a tame command runs when safe
+        // commands are on, any non-blocked command when all commands are
+        // on. A blocked command never becomes Allow here — the caller
+        // refuses it before consulting the policy.
+        if shell::classify(command) != shell::Verdict::Blocked {
+            let caps = self.capabilities();
+            if caps.safe_commands && !shell::risky(command) {
+                return ToolDecision::Allow;
+            }
+            if caps.all_commands {
+                return ToolDecision::Allow;
+            }
+        }
+        ToolDecision::Ask
     }
 }
 
@@ -109,7 +142,11 @@ impl ToolService {
     /// Apply the current config's permission rules and hooks. Call this after
     /// loading or changing the config so the next tool call uses it.
     pub fn apply_config(&self, cfg: &AppConfig) {
-        self.policy.set(cfg.permissions.clone(), cfg.hooks.clone());
+        self.policy.set(
+            cfg.permissions.clone(),
+            cfg.hooks.clone(),
+            cfg.auto_approve_capabilities,
+        );
     }
 
     /// The shared policy snapshot, for callers that update it directly.
@@ -572,7 +609,9 @@ impl ToolService {
 mod tests {
     use super::ToolService;
     use super::sandbox::WorkspaceJail;
-    use crate::config::{AppConfig, HooksConfig, PermissionDecision, PermissionRule};
+    use crate::config::{
+        AppConfig, CapabilityAutoApprove, HooksConfig, PermissionDecision, PermissionRule,
+    };
     use crate::domain::tool::{ToolAction, ToolActionType, ToolExecutionRequest};
     use crate::services::library::db::LibraryDb;
     use std::sync::Arc;
@@ -754,6 +793,54 @@ mod tests {
         assert_eq!(
             tools.shell_decision("ls -la && git status"),
             crate::config::ToolDecision::Deny
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn capability_toggles_auto_approve_commands_by_tameness() {
+        // Default (read-only): a changing command still asks.
+        let (tools, dir) = service("shell-caps-default");
+        assert_eq!(
+            tools.shell_decision("git status"),
+            crate::config::ToolDecision::Allow,
+            "read-only commands need no toggle"
+        );
+        assert_eq!(
+            tools.shell_decision("mkdir -p notes"),
+            crate::config::ToolDecision::Ask,
+            "a changing command asks by default"
+        );
+
+        // Safe commands on: a tame change runs, a risky one still asks.
+        tools.apply_config(&AppConfig {
+            auto_approve_capabilities: CapabilityAutoApprove {
+                safe_commands: true,
+                ..CapabilityAutoApprove::default()
+            },
+            ..AppConfig::default()
+        });
+        assert_eq!(
+            tools.shell_decision("mkdir -p notes"),
+            crate::config::ToolDecision::Allow
+        );
+        assert_eq!(
+            tools.shell_decision("rm -rf /tmp/work"),
+            crate::config::ToolDecision::Ask,
+            "risky stays asking under safe-commands-only"
+        );
+
+        // All commands on: any non-blocked command runs.
+        tools.apply_config(&AppConfig {
+            auto_approve_capabilities: CapabilityAutoApprove {
+                all_commands: true,
+                ..CapabilityAutoApprove::default()
+            },
+            ..AppConfig::default()
+        });
+        assert_eq!(
+            tools.shell_decision("rm -rf /tmp/work"),
+            crate::config::ToolDecision::Allow
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

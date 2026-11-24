@@ -23,6 +23,7 @@ use serde_json::Value;
 use crate::app::error::AppError;
 use crate::app::events::{ChatStreamEvent, QuestionItem, QuestionOption, TodoItem};
 use crate::app::state::AppState;
+use crate::config::{Capability, CapabilityAutoApprove};
 use crate::domain::memory::Citation;
 use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{
@@ -1373,11 +1374,19 @@ fn run_call(
         return "This run only reads (Plan mode or a subagent), so this change did not run. Describe it in the plan or report instead.".into();
     }
     let allowed_here = auto_approve.contains(&spec.name);
-    let wait = must_ask(mode, needs, allowed_here, || spec.risky(&args, jail));
+    // Per-capability auto-approve (N9): the Settings toggles. A capability
+    // approval is not "allowed for this chat", so the note below names it
+    // separately; the decision itself just stops the prompt.
+    let capability_approved = capability_auto_approved(state, spec, &args, jail);
+    let wait = must_ask(mode, needs, allowed_here || capability_approved, || {
+        spec.risky(&args, jail)
+    });
     let mut note = None;
     if needs && !wait {
         note = if allowed_here {
             Some("allowed for this chat")
+        } else if capability_approved {
+            Some("auto-approved in Settings")
         } else {
             mode.note()
         };
@@ -1450,6 +1459,44 @@ fn run_call(
 
 /// Whether a call waits for the user's OK. Plan mode never gets here for
 /// a change (it refuses first).
+/// Which capability a tool call belongs to, for per-capability
+/// auto-approve (N9). Reads and web lookups never need approval on their
+/// own, so their toggles are posture; the ones that change behaviour are
+/// edits, commands and external tools. A command that is hard to undo
+/// counts as "all commands", a tame one as "safe commands" — and "all
+/// commands" covers safe ones (see `CapabilityAutoApprove::approves`).
+fn capability_for(spec: &ToolSpec, args: &Value, jail: &WorkspaceJail) -> Capability {
+    match spec.kind {
+        tools::ToolKind::WebSearch | tools::ToolKind::ReadPage => Capability::Browser,
+        tools::ToolKind::WriteFile
+        | tools::ToolKind::MakeDocument
+        | tools::ToolKind::SaveNote
+        | tools::ToolKind::SaveSkill => Capability::EditFiles,
+        tools::ToolKind::RunCommand => {
+            if spec.risky(args, jail) {
+                Capability::AllCommands
+            } else {
+                Capability::SafeCommands
+            }
+        }
+        tools::ToolKind::Mcp => Capability::ExternalTools,
+        _ => Capability::ReadFiles,
+    }
+}
+
+/// Whether the configured capabilities auto-approve this call. Fail-open:
+/// the policy snapshot defaults to read-only, so a policy that was never
+/// set (or a fresh install) asks instead of auto-approving.
+fn capability_auto_approved(
+    state: &AppState,
+    spec: &ToolSpec,
+    args: &Value,
+    jail: &WorkspaceJail,
+) -> bool {
+    let caps = state.tools.policy().capabilities();
+    caps.approves(capability_for(spec, args, jail))
+}
+
 fn must_ask(
     mode: ApprovalMode,
     needs: bool,

@@ -212,9 +212,10 @@ impl RemoteEngine {
                 return Err((
                     0,
                     AppError::internal(format!(
-                        "Could not reach {label}: {e}. Check the base URL and your connection.",
-                        label = target.label
-                    )),
+                        "Couldn't reach {} — check your connection and try again.",
+                        target.label
+                    ))
+                    .with_detail(e.to_string()),
                 ));
             }
         };
@@ -222,23 +223,16 @@ impl RemoteEngine {
         if !resp.status().is_success() {
             let code = resp.status();
             let text = resp.text().unwrap_or_default();
-            let hint = match code.as_u16() {
-                401 | 403 if target.api_key.trim().is_empty() => {
-                    " This provider needs an API key. Add one in Settings, Online providers."
-                }
-                401 | 403 => " The API key looks wrong or unauthorized.",
-                402 | 429 => {
-                    " The free limit is used up for now. Wait a minute and try again, or add your own key."
-                }
-                _ => "",
-            };
-            // Error bodies can be whole HTML pages; keep the message short.
-            let text: String = text.chars().take(400).collect();
+            // Plain words first, same helper as the streaming path, so the
+            // chat shows the same sentence whichever route an online turn
+            // took. The status number itself is not shown.
             return Err((
                 code.as_u16(),
-                AppError::internal(format!(
-                    "{label} returned {code}:{hint} {text}",
-                    label = target.label
+                AppError::internal(super::openai_stream::http_error_message(
+                    &target.label,
+                    code.as_u16(),
+                    &text,
+                    !target.api_key.trim().is_empty(),
                 )),
             ));
         }
