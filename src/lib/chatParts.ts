@@ -72,10 +72,12 @@ export function setTodos(parts: MessagePart[], items: TodoItem[], now = performa
   else parts.push({ type: "todos", items });
 }
 
-/** A subagent's newest step. */
-export function addSubagentStep(parts: MessagePart[], id: string, step: string): void {
+/** A subagent's newest step. `tokens` is its total use once its run
+ *  finishes; it sticks to the tool part even when the step text repeats. */
+export function addSubagentStep(parts: MessagePart[], id: string, step: string, tokens?: number | null): void {
   const tool = findTool(parts, id);
   if (!tool) return;
+  if (typeof tokens === "number") tool.tokens = tokens;
   const steps = tool.steps ?? [];
   if (steps.at(-1) !== step) tool.steps = [...steps, step].slice(-40);
 }

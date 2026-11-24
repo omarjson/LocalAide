@@ -936,6 +936,7 @@ impl Sink for SubSink<'_> {
         let step = |step: String| ChatStreamEvent::SubagentStep {
             id: self.id.clone(),
             step,
+            tokens: None,
         };
         match event {
             ChatStreamEvent::Token { token } => {
@@ -1074,6 +1075,7 @@ fn run_subagents(
                     sink.emit(ChatStreamEvent::SubagentStep {
                         id: id.clone(),
                         step: "Starting".into(),
+                        tokens: None,
                     });
                     let result = run_inner(state, child, cancel, &sub);
                     let text = sub.text.into_inner().unwrap_or_else(|e| e.into_inner());
@@ -1082,7 +1084,18 @@ fn run_subagents(
                         Ok(_) if text.trim().is_empty() => {
                             Err("It finished without a report.".to_string())
                         }
-                        Ok(_) => Ok(text),
+                        Ok(done) => {
+                            // The model only reports exact tokens when a
+                            // round ends, so the total lands here, with the
+                            // final step, rather than as a mid-run guess.
+                            let used = done.prompt_tokens.unwrap_or(0) + done.tokens;
+                            sink.emit(ChatStreamEvent::SubagentStep {
+                                id: id.clone(),
+                                step: "Done".into(),
+                                tokens: Some(used),
+                            });
+                            Ok(text)
+                        }
                         Err(e) => Err(e.message),
                     };
                     (id, title, result)

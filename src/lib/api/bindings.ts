@@ -141,6 +141,8 @@ export type MessagePart =
       output: string;
       /** Subagents: what it did, newest last. */
       steps?: string[];
+      /** Subagents: tokens the run used (prompt + answer), once known. */
+      tokens?: number | null;
       /** save_skill: the change Undo reverts, and whether it was undone. */
       skill?: { change_id: string; name: string; action: string; undone?: boolean } | null;
     }
@@ -482,7 +484,7 @@ export type ChatStreamEvent =
   | { type: "tool_result"; payload: { id: string; ok: boolean; summary: string; output: string } }
   | { type: "question"; payload: { id: string; question: string; options: string[]; multiple: boolean; items?: QuestionItem[] } }
   | { type: "todos"; payload: { items: TodoItem[] } }
-  | { type: "subagent_step"; payload: { id: string; step: string } }
+  | { type: "subagent_step"; payload: { id: string; step: string; tokens?: number | null } }
   | { type: "skill_change"; payload: { id: string; change_id: string; name: string; action: string } };
 
 /** How much the chat asks before tools run: Plan mode, Ask before changes,

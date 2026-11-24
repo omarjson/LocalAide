@@ -12,7 +12,7 @@
   import { chats, folderName, loadThreads as loadSavedChats } from "../lib/chats.svelte";
   import { fileManagerName } from "../lib/platform";
   import { dur, motion, stagger } from "../lib/motion";
-  import { chatModes, flag, moduleOn } from "../lib/dev.svelte";
+  import { chatModes, dev, flag, moduleOn } from "../lib/dev.svelte";
   import { isChatMode, MODE_ICONS } from "../lib/chatModes";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
@@ -29,6 +29,7 @@
   import ModelPicker from "../components/ModelPicker.svelte";
   import ContextMeter from "../components/ContextMeter.svelte";
   import Modal from "../components/Modal.svelte";
+  import SubagentTranscript from "../components/SubagentTranscript.svelte";
   import { A2uiChat, provideA2ui } from "../lib/a2ui.svelte";
   import ProviderForm from "../components/ProviderForm.svelte";
   import { calibration, compactionStart, contextSegments, contextUsage, fits, forcedCompactionStart, thinkingReserve, type MeasuredPrompt } from "../lib/contextUsage";
@@ -464,7 +465,9 @@
   let maxTokens = $state(2048);
   let persona = $state("General");
   // Answer statistics for everyone: tokens, time and speed under each
-  // answer. A normal switch in Chat settings; developer mode forces it on.
+  // answer. A normal switch in Chat settings; developer mode only seeds
+  // the default until the user picks — the switch is the control, so a
+  // developer flag can never force the stats back on after it is off.
   const STATS_KEY = "localaide-answer-stats";
   let answerStats = $state((() => {
     try {
@@ -481,10 +484,22 @@
       // Storage can be unavailable; the choice still applies now.
     }
   };
-  const showStats = $derived(answerStats || flag("answer_stats"));
+  // Developer settings arrive after this screen mounts. Until the user
+  // has chosen, the flag is the default; afterwards their choice stands.
+  $effect(() => {
+    if (!dev.settings) return;
+    try {
+      if (localStorage.getItem(STATS_KEY) === null) answerStats = flag("answer_stats");
+    } catch {
+      // Without storage there is nothing to seed from; the switch stays.
+    }
+  });
+  const showStats = $derived(answerStats);
   let skills = $state<Skill[]>([]);
   let showSystem = $state(false);
   let showTools = $state(false);
+  /** The subagent whose work the read-only side view is showing. */
+  let transcriptAgent = $state<ToolPart | null>(null);
   let scrollEl = $state<HTMLDivElement>();
   let toolPath = $state("");
   let toolContent = $state("");
@@ -648,6 +663,7 @@
     compactedBefore = 0;
     stoppedAnswer = false;
     resetMeasurements();
+    void refreshLedgerCacheRate();
     systemPrompt = chats.threads.find((t) => t.id === id)?.system_prompt || "You are a helpful local AI assistant.";
     try {
       messages = await api.loadChatThread(id);
@@ -745,6 +761,18 @@
   let reportedTools = $state<number | null>(null);
   // Cache hit rate of the last answer, when the provider reports cached tokens.
   let lastCacheRate = $state<number | null>(null);
+  // The same rate averaged over the usage log, for models that never
+  // report cached tokens (the local engine on older builds): the meter
+  // shows this when the last answer has no rate of its own.
+  let ledgerCacheRate = $state<number | null>(null);
+  const refreshLedgerCacheRate = async () => {
+    try {
+      const summary = await api.usageSummary();
+      ledgerCacheRate = summary.input_tokens > 0 && summary.cache_tokens > 0 ? (summary.cache_tokens / summary.input_tokens) * 100 : null;
+    } catch {
+      // The meter keeps the last answer's rate, or hides the row.
+    }
+  };
   // A2UI forms in this chat's answers: built once per finished block, in
   // chat order, so a later answer can update a form an earlier one drew.
   const a2ui = provideA2ui(new A2uiChat());
@@ -1254,7 +1282,7 @@
           } else if (event.type === "todos") {
             setTodos(parts(), event.payload.items);
           } else if (event.type === "subagent_step") {
-            addSubagentStep(parts(), event.payload.id, event.payload.step);
+            addSubagentStep(parts(), event.payload.id, event.payload.step, event.payload.tokens ?? null);
           } else if (event.type === "skill_change") {
             setSkillChange(parts(), event.payload);
             void api.skillsList().then((list) => (skills = list)).catch(() => undefined);
@@ -1273,6 +1301,7 @@
             lastCacheRate = event.payload.prompt_tokens && event.payload.cache_tokens
               ? Math.min(100, (event.payload.cache_tokens / event.payload.prompt_tokens) * 100)
               : null;
+            void refreshLedgerCacheRate();
             if (typeof event.payload.system_tokens === "number" && event.payload.system_tokens > 0) {
               reportedSystem = event.payload.system_tokens;
               reportedTools = event.payload.tool_tokens ?? 0;
@@ -1897,6 +1926,7 @@
       {usage}
       {segments}
       cacheRate={lastCacheRate}
+      cacheRateAverage={ledgerCacheRate}
       {autoCompactAt}
       onAsk={askFromRail}
       onSkill={skillFromRail}
@@ -2130,6 +2160,7 @@
             onRetry={msg.role === "assistant" && idx === messages.length - 1 ? retryLast : undefined}
             onEdit={msg.role === "user" && !msg.steer ? (newText) => editTurn(newText, idx) : undefined}
             onSendToOpenCode={moduleOn("opencode") ? () => void sendToOpenCode(idx) : undefined}
+            onViewSubagent={(part) => (transcriptAgent = part)}
             collapseLong={collapseQuestions}
           />
         {/each}
@@ -2294,7 +2325,7 @@
           <PermissionMenu mode={approvalMode} onChange={setApprovalMode} />
         {/snippet}
         {#snippet trailing()}
-          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} onCompact={() => handleSlashCommand("compact")} />
+          <ContextMeter {usage} {streaming} {autoCompactAt} compacted={historyFrom > 0} {segments} cacheRate={lastCacheRate} cacheRateAverage={ledgerCacheRate} onCompact={() => handleSlashCommand("compact")} />
           <ModelPicker
             {effort}
             onEffort={setEffort}
@@ -2341,6 +2372,7 @@
     onDeny={() => runApprovedTool(false)}
   />
 
+  <SubagentTranscript agent={transcriptAgent} onClose={() => (transcriptAgent = null)} />
 
 </div>
 

@@ -569,7 +569,7 @@
       {:else if screen === "usage"}
         <UsageScreen />
       {:else if screen === "settings"}
-        <SettingsScreen />
+        <SettingsScreen onSectionChange={() => { if (canvasEl) canvasEl.scrollTop = 0; }} />
       {/if}
         </div>
       {/key}

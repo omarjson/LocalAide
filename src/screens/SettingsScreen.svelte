@@ -57,6 +57,10 @@
   } from "../lib/api/bindings";
 
   type SettingsSection = SettingsSectionId;
+  /** Called when the section changes, so the app can scroll the page
+   *  back to the top: a short section must not inherit a long section's
+   *  scroll position and look empty. */
+  let { onSectionChange }: { onSectionChange?: () => void } = $props();
   type Confirmation = {
     title: string;
     message: string;
@@ -327,6 +331,10 @@
     activeTab = section;
     activeGroup = groupOf(section);
     settingsView.section = section as SettingsSectionId;
+    // A new section starts at the top: the old scroll position belongs
+    // to the old section, and a short one would otherwise open scrolled
+    // past its content, looking blank.
+    onSectionChange?.();
     if (section === "activity") void loadAudits();
     if (section === "backups") void loadBackup();
     if (section === "about") void loadDiagnostics();
@@ -845,7 +853,7 @@
       {/each}
     </nav>
 
-    <div class="min-w-0">
+    <div class="min-w-0 @container">
       {#if settingsNotice}
         <div class="mb-4"><ErrorBanner message={settingsNotice} onRetry={() => selectSection(activeTab)} onDismiss={() => settingsNotice = null} /></div>
       {/if}

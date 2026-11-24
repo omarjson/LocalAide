@@ -237,3 +237,64 @@ OpenRouter price parsing). 135 unit tests pass; `svelte-check` 0 errors
 (the 1 warning is the pre-existing `context="module"` deprecation in
 `Icon.svelte`); `cargo fmt --check` clean. Rust verification is CI's job
 (no local GTK/WebKit libs): clippy + cargo test on the CI run.
+
+## 9. Screenshot feedback — 2026-11-24 (Batch 4, `dev` only)
+
+Omar's four screenshots (Settings online section, the Memory sliders,
+answer stats under a message with the switch off, the Context window
+popover) plus two subagent asks, all on the `dev` build from Batch 3.
+
+- **Settings opened scrolled past its content.** `selectSection` swapped
+  the section without touching the scroll position, so a short section
+  inherited a tall section's `scrollTop` and the browser clamped it —
+  the section's own content sat above the viewport and the page looked
+  blank. `selectSection` now calls an `onSectionChange` hook and App
+  scrolls the canvas (`.app-canvas`) to the top. Per-screen scroll
+  memory in `navigate()` is untouched: coming back to Settings still
+  keeps the place.
+- **Settings rows wrapped a word a line.** At Omar's ~1024px window the
+  settings column is ~440px wide (220px section nav + sidebar +
+  padding) and the slider + value ate ~265px of it, leaving ~105px for
+  the title and description. `SettingsRow` used a viewport breakpoint
+  (`sm:flex-row`), which cannot see the column. The content column is
+  now a container (`@container`) and the row switches on `@md`
+  (28rem): stacked under the text when the column is narrow, side by
+  side when it is wide. Verified in the production CSS build
+  (`container-type:inline-size` + `@container (width>=28rem)` rules).
+- **Answer stats showed with the switch off.** `showStats` was
+  `answerStats || flag("answer_stats")`, and the developer flag forces
+  it on — so with developer mode on, the switch could never turn the
+  stats off. The switch is now the control (`showStats = answerStats`);
+  the flag only seeds the default, once, when developer settings load
+  and the user has never chosen (no stored choice).
+- **Context window had no cache hit rate.** `lastCacheRate` is set only
+  when the last answer's `Done` event carries both `prompt_tokens` and
+  `cache_tokens`; the local engine on older builds never sends
+  `prompt_tokens_details.cached_tokens`, so the row never rendered. The
+  chat now also loads the ledger average (`usage_summary`, same math as
+  the Usage screen) and the meter shows the last answer's rate, else
+  the recent average (labelled as one), else "—" with a note that the
+  model does not report cached tokens.
+- **Subagents: token use and a read-only side view.** The subagent
+  thread now emits a final `SubagentStep` with `tokens` (prompt +
+  answer, from the run's `RunResult`) when its run finishes; exact
+  tokens only exist at the end of a round, so no mid-run guess is
+  shown. The event, the IPC bindings and the saved tool part all carry
+  the total, and `ToolCallCard` shows it by the subagent's step. A View
+  button (sibling of the card header, not nested in it) opens
+  `SubagentTranscript.svelte`: a right slide-over with the task (parsed
+  from the tool call arguments), the step log, the report and the token
+  total — no composer, no steer. The full turn-by-turn transcript is
+  not kept by the backend (only the report comes back), so the step log
+  is the record; that limit is stated in the panel. The Rust
+  `MessagePart::Tool` also gained `steps` and `tokens`, because saved
+  threads round-trip through it and both used to be dropped on save —
+  reopened chats lost the subagent's step log.
+
+Tests: `tests/unit/feedback-2026-11-24-batch4.test.ts` (source-text
+regressions for every item above, plus unit tests for `addSubagentStep`
+with tokens). 141 unit tests pass; `svelte-check` 0 errors (the 1
+warning is the pre-existing `context="module"` deprecation in
+`Icon.svelte`); `cargo fmt --check` clean; `npm run build` passes and
+the built CSS contains the container-query rules. Rust verification is
+CI's job (no local GTK/WebKit libs): clippy + cargo test on the CI run.

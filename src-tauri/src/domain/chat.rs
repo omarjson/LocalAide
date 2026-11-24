@@ -67,6 +67,13 @@ pub enum MessagePart {
         summary: String,
         #[serde(default)]
         output: String,
+        /// Subagents: what it did, newest last. Kept so a chat opened
+        /// later still shows the subagent's work.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        steps: Option<Vec<String>>,
+        /// Subagents: tokens the run used (prompt + answer), once known.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens: Option<usize>,
     },
     /// A question the model asked with options (`ask_user`).
     Question {

@@ -60,6 +60,8 @@
     onDismissQuestion?: (questionId: string) => void;
     /** Undo a skill the model saved, by tool call id. */
     onUndoSkill?: (toolId: string) => void;
+    /** Open the read-only side view of a subagent, by tool part. */
+    onViewSubagent?: (part: Extract<MessagePart, { type: "tool" }>) => void;
     /** The chat's project folder, for file buttons. */
     folder?: string | null;
     /** An earlier question the user moved past can still be answered. */
@@ -96,6 +98,7 @@
     onOther,
     onDismissQuestion,
     onUndoSkill,
+    onViewSubagent,
     folder = null,
     onAnswerDeferred,
     collapseLong = false,
@@ -321,8 +324,10 @@
                 approval={approvals[part.id] ? { preview: approvals[part.id].preview } : null}
                 onDecide={(decision) => onDecide?.(part.id, decision)}
                 steps={part.steps ?? []}
+                tokens={part.tokens ?? null}
                 skill={part.skill ?? null}
                 onUndoSkill={onUndoSkill ? () => onUndoSkill?.(part.id) : undefined}
+                onViewTranscript={part.group === "subagent" && onViewSubagent ? () => onViewSubagent?.(part) : undefined}
                 {folder}
               />
             {:else if part.type === "text" && part.text.trim()}
