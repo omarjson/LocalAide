@@ -139,3 +139,23 @@ A running log of spec-driven work. Each entry names the change and the Kiro arti
 - **Watcher:** `src-tauri/tests/library_watch_test.rs` proves 500ms debouncing, ignore rules and removal forwarding without touching SQLite.
 - **Online providers:** `services/secrets.rs` moves API keys to the OS keychain and leaves only `keyring:` markers in config.json, with a deliberate owner-only-file fallback when no native store exists. Loopback HTTP tests for `RemoteEngine` and router mode switching close tasks 8–10 of the online-providers spec.
 - **Evidence:** `tests/unit/contrast.test.ts` recomputes WCAG ratios from the shipped CSS tokens for both themes; `tests/unit/readme-links.test.ts` fails on broken README links. The a11y evidence table now carries the current palette numbers. The on-screen re-measure remains open and is not claimed as done.
+
+## 2026-11-23 — Stream depth, Batch 1, heat fix (Hermes, not Kiro)
+
+- **Transparency:** this batch was implemented by Hermes Agent at the operator's request. It is recorded here so the log distinguishes Kiro-driven work from other tool-driven work; no Kiro session is claimed for it.
+- **Stream depth (A/B/C):** tab cap, session picker, policy/fusion UI, local notifications, follow-up streams, MCP PKCE OAuth sign-in end to end, and a bounded autonomous goal runner with a pure planner (`03cb66b`, `48cdac2`, `9d7597b`, `c085166`, `8fbbdf2`, `7dd646f`, `b91bb5a`).
+- **Batch 1 dev feedback (`1468aa0`):** send-button resend, durable setup flag, title-bar rewrite, steer fix, Kilo shown once, queue edit/reorder, update chip opens the changelog modal.
+- **Heat fix (`72cd722`):** the pulsing SVG logo eye was redrawing the whole page every frame on WebKit's main thread — the operator's Mac idled at 95 °C. The logo now pulses once on launch and stays still; the floating empty-state icon and header blur are gone. A 0.2.2 macOS build went to the operator; the re-measure is still open and is not claimed as done.
+- **Sharing and release prep:** pairing token and LAN option in share settings (`6ea7b9f`); next version corrected to 0.2.2 (`767d7cc`).
+
+## 2026-11-24 — Feedback batches, inspiration NOW items, title bar, refactoring, 0.2.3 (Hermes, not Kiro)
+
+- **Transparency:** implemented by Hermes Agent (sub-agent tracks) at the operator's request; no Kiro session is claimed for it.
+- **Feedback batches (`f35a324`, `1dff694`):** sources under finished answers, tab-title fix, stop/resume, manual compact, visible steer notes, autoscroll, skins removed, OpenRouter pricing, settings scroll reset, answer-stats switch, context cache-hit fallback, subagent token totals, read-only subagent side view.
+- **Inspiration NOW items:** provider failover N1 and no stall timeout for local models N2 (`57dcade`); Batch A N6/N7/N12–N18 (`b4ca5bc`); Batch B N4/N5/N8–N11 (`5c2c191`). N11 compact-prompt toggle defaults OFF; N10 per-target retry cap stays 3, not 5.
+- **A2UI gaps G1/G2 (`84282b2`):** full regex safety rules, error paths, contact-form fixture.
+- **Title bar (`bb70956`, `3febfd4`):** no logo tile in the macOS title bar; tabs are flat pills with one divider under the tab row.
+- **Refactoring (`54e4eff`, fix `db00155`):** ChatScreen split into ChatHeader/ChatEmptyState/ChatComposer plus `chatRun.svelte.ts`; message list virtualized (`@tanstack/svelte-virtual`); Rust agent split into seven modules; title generation retries once; `scripts/bump-version.mjs`; render-based window-chrome tests. 203 unit tests pass; CI green on dev.
+- **Release:** version bumped to 0.2.3 (`1053aa2`); 0.2.3 published from main.
+- **Git push:** the operator created a fine-grained PAT (Contents read/write, all repos); real `git push` verified working with a dry-run. The API push scripts are now the fallback.
+- **CI red fixes through the day:** `695e9d0`, `d3e03ea`, `de9d560`, `e2cab86`.
