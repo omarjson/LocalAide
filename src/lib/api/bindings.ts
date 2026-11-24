@@ -758,6 +758,14 @@ export interface ProviderCheck {
 }
 
 /** Settings → Conversation memory. */
+/** Settings → Tools: approval timers, in seconds. 0 = no timer. */
+export interface ApprovalTimers {
+  /** Plans are accepted after this long. 0 = Off (the default). */
+  plan_auto_accept_secs: number;
+  /** A terminal command runs after this long unless declined. 0 = wait. Default 60. */
+  terminal_approval_secs: number;
+}
+
 export interface ContextInfo {
   /** The saved setting, in tokens. */
   value: number;

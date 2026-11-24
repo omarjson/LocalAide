@@ -9,7 +9,8 @@
   import { chats, loadThreads as loadSavedChats } from "../lib/chats.svelte";
   import { dur, motion } from "../lib/motion";
   import { chatModes, dev, flag, moduleOn } from "../lib/dev.svelte";
-  import { isChatMode, MODE_ICONS } from "../lib/chatModes";
+  import { CHAT_OPTIONS_KEY, isChatMode, isPermissionMode, MODE_ICONS, onSharedApprovalMode, type PendingApproval } from "../lib/chatModes";
+  import { approvalTimers, loadApprovalTimers } from "../lib/approvalTimers.svelte";
   import { requestSettings } from "../lib/nav.svelte";
   import { showToast } from "../lib/toast.svelte";
   import { branchCount as branchCountAt, saveBranch, swapBranch } from "../lib/branches.svelte";
@@ -115,7 +116,7 @@
   };
   let pickerOpen = $state(false);
   // Mode and context switches, remembered between sessions.
-  const OPTIONS_KEY = "localaide-chat-options";
+  const OPTIONS_KEY = CHAT_OPTIONS_KEY;
   const savedOptions = (() => {
     try {
       return JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "{}") as {
@@ -334,7 +335,7 @@
   let attaching = $state(false);
   let dragging = $state(false);
   // Tool calls waiting for the user's OK, by tool call id.
-  let approvals = $state<Record<string, { approval_id: string; preview: string }>>({});
+  let approvals = $state<Record<string, PendingApproval>>({});
   // Tools the user allowed for the rest of this chat.
   let allowedTools = $state<string[]>([]);
   let mcpList = $state<McpServer[]>([]);
@@ -369,7 +370,7 @@
   let useShell = $state(savedOptions.shell !== false);
   // The permission icon in the chat box: Plan mode, Ask before changes,
   // Autonomous or Full access. Remembered for every chat.
-  const isMode = (v: unknown): v is ApprovalMode => v === "plan" || v === "ask" || v === "smart" || v === "auto";
+  const isMode = isPermissionMode;
   let approvalMode = $state<ApprovalMode>(isMode(savedOptions.approvals) ? savedOptions.approvals : "ask");
   // The mode Build switches back to after a plan.
   let buildMode = $state<ApprovalMode>(isMode(savedOptions.buildMode) && savedOptions.buildMode !== "plan" ? savedOptions.buildMode : "ask");
@@ -377,6 +378,12 @@
     approvalMode = next;
     if (next !== "plan") buildMode = next;
   };
+  // Settings → Tools can switch Plan mode and Autonomous mode for every
+  // open chat (chatModes.ts), and sets the approval timers.
+  onMount(() => {
+    void loadApprovalTimers();
+    return onSharedApprovalMode(setApprovalMode);
+  });
   let learnSkills = $state(savedOptions.learnSkills !== false);
   let suggestNext = $state(savedOptions.suggestNext !== false);
   let visuals = $state(savedOptions.visuals !== false);
@@ -1381,7 +1388,12 @@
             startTool(parts(), event.payload, now);
           } else if (event.type === "tool_approval") {
             setToolStatus(parts(), event.payload.id, "waiting");
-            approvals[event.payload.id] = { approval_id: event.payload.approval_id, preview: event.payload.preview };
+            approvals[event.payload.id] = {
+              approval_id: event.payload.approval_id,
+              preview: event.payload.preview,
+              mode: sentInMode,
+              countdown: approvalTimers.terminal,
+            };
             liveStatus = `LocalAide asks before it can ${event.payload.title.toLowerCase()}.`;
           } else if (event.type === "question") {
             addQuestion(parts(), event.payload, now);
@@ -2214,6 +2226,7 @@
                   model={msg.model}
                   steer={msg.steer}
                   approvals={idx === messages.length - 1 ? approvals : {}}
+                  approvalsPaused={!active}
                   onDecide={(toolId, decision) => void decideTool(toolId, decision)}
                   onAnswer={msg.role === "assistant" && idx === messages.length - 1 && !run.streaming ? answerQuestion : undefined}
                   onA2uiAction={msg.role === "assistant" ? sendA2uiAction : undefined}
@@ -2281,6 +2294,8 @@
     {runToolRounds}
     bind:planReady
     {buildMode}
+    planAutoAcceptSecs={approvalTimers.plan}
+    {active}
     {pinnedTitles}
     bind:suggestions
     bind:input
@@ -2373,6 +2388,7 @@
     show={showApproval}
     toolName={pendingTool?.tool_name ?? ""}
     action={pendingTool?.action ?? null}
+    mode={approvalMode}
     onApproveOnce={() => runApprovedTool(true)}
     onApproveSession={() => runApprovedTool(true, sessionToken)}
     onDeny={() => runApprovedTool(false)}

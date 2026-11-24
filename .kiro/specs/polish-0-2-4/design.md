@@ -53,7 +53,7 @@ Nothing in the backend approval path changes: the countdown ends in the same `ap
 
 ## Settings — R3.1, R4.1, R5
 
-`AgentApprovalSettings.svelte`, rendered at the top of Settings → Tools and MCP (before `PolicyPanel`), in the existing `SettingsGroup`/`SettingsRow`/`Tabs` kit:
+`AgentApprovalSettings.svelte`, rendered in Settings → Tools and MCP, just before `PolicyPanel` (Permissions), in the existing `SettingsGroup`/`SettingsRow`/`Tabs` kit:
 
 | Row | Control | Saved in |
 |---|---|---|

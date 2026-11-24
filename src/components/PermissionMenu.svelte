@@ -3,9 +3,10 @@
   // before changes, Autonomous (asks only when there is risk) and Full
   // access. Blocked commands never run in any mode.
   import { fly } from "svelte/transition";
-  import Icon, { type IconName } from "./Icon.svelte";
+  import Icon from "./Icon.svelte";
   import { popover } from "../lib/actions/popover";
   import { dur, motion } from "../lib/motion";
+  import { PERMISSION_MODES, permissionInfo } from "../lib/chatModes";
   import type { ApprovalMode } from "../lib/api/bindings";
 
   interface Props {
@@ -16,13 +17,8 @@
   let { mode, onChange }: Props = $props();
   let open = $state(false);
 
-  const PERMISSION_MODES: { id: ApprovalMode; label: string; hint: string; icon: IconName }[] = [
-    { id: "plan", label: "Plan mode", hint: "Plan before editing.", icon: "lightbulb" },
-    { id: "ask", label: "Ask before changes", hint: "Ask before file changes.", icon: "hand" },
-    { id: "smart", label: "Autonomous mode", hint: "Ask when there's risk.", icon: "shield" },
-    { id: "auto", label: "Full access", hint: "Run with fewer confirmations.", icon: "shield-check" },
-  ];
-  const current = $derived(PERMISSION_MODES.find((m) => m.id === mode) ?? PERMISSION_MODES[1]);
+  // The list is shared with the approval prompts and Settings (chatModes.ts).
+  const current = $derived(permissionInfo(mode));
 </script>
 
 <div class="relative" use:popover={{ open, onClose: () => (open = false) }}>

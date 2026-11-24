@@ -26,6 +26,7 @@
   import ContextMeter from "./ContextMeter.svelte";
   import ModelPicker from "./ModelPicker.svelte";
   import PermissionMenu from "./PermissionMenu.svelte";
+  import PlanReadyCard from "./PlanReadyCard.svelte";
   import WorkStatus from "./WorkStatus.svelte";
   import ErrorBanner from "./ErrorBanner.svelte";
   import Icon from "./Icon.svelte";
@@ -44,6 +45,10 @@
     runToolRounds: number;
     planReady: boolean;
     buildMode: ApprovalMode;
+    /** Settings → Tools → Plan auto-accept, in seconds. 0 = Off. */
+    planAutoAcceptSecs?: number;
+    /** False while the chat is not on screen; holds the plan countdown. */
+    active?: boolean;
     pinnedTitles: string[];
     suggestions: string[];
     input: string;
@@ -126,6 +131,8 @@
     runToolRounds,
     planReady = $bindable(),
     buildMode,
+    planAutoAcceptSecs = 0,
+    active = true,
     pinnedTitles,
     suggestions = $bindable(),
     input = $bindable(),
@@ -215,12 +222,14 @@
     {/if}
     <WorkStatus todos={workTodos} subagents={workAgents} startedAt={run.runStartedAt} toolRounds={runToolRounds} live={run.streaming} />
     {#if planReady && !run.streaming}
-      <div class="mb-2 flex items-center gap-3 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
-        <Icon name="lightbulb" class="h-4 w-4 shrink-0 text-sky-300" />
-        <span class="min-w-0 flex-1 text-ink-200">The plan is ready. Build carries it out with the {buildMode === "auto" ? "Full access" : buildMode === "smart" ? "Autonomous" : "Ask before changes"} permission.</span>
-        <button type="button" onclick={() => (planReady = false)} class="rounded-lg px-2.5 py-1 text-ink-300 hover:bg-veil/5">Keep planning</button>
-        <button type="button" onclick={onBuildPlan} class="rounded-lg bg-ember-500 px-3 py-1 font-semibold text-on-ember hover:bg-ember-400">Build</button>
-      </div>
+      <PlanReadyCard
+        {buildMode}
+        autoAcceptSecs={planAutoAcceptSecs}
+        typing={input.trim().length > 0}
+        {active}
+        onKeepPlanning={() => (planReady = false)}
+        onBuild={onBuildPlan}
+      />
     {/if}
     {#if useRecall && pinnedTitles.length > 0}
       <div class="mb-2 flex flex-wrap items-center gap-1.5" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>

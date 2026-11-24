@@ -1,6 +1,7 @@
 use crate::app::error::AppError;
 use crate::app::state::AppState;
-use crate::domain::settings::AppConfigDto;
+use crate::config::MAX_APPROVAL_TIMER_SECS;
+use crate::domain::settings::{AppConfigDto, ApprovalTimers};
 use tauri::State;
 
 /// The part of the config the app shell needs at startup. A corrupt config
@@ -86,6 +87,42 @@ pub fn settings_set_compact_prompt(state: State<'_, AppState>, on: bool) -> Resu
     cfg.use_compact_prompt = on;
     store.save(&cfg).map_err(AppError::internal)?;
     Ok(cfg.use_compact_prompt)
+}
+
+/// The approval timers (Settings → Tools): plan auto-accept (default off)
+/// and the terminal countdown (default 60 seconds). 0 means no timer.
+#[tauri::command]
+pub fn settings_approval_timers(state: State<'_, AppState>) -> Result<ApprovalTimers, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let cfg = store.load().map_err(AppError::internal)?;
+    Ok(ApprovalTimers {
+        plan_auto_accept_secs: cfg.plan_auto_accept_secs,
+        terminal_approval_secs: cfg.terminal_approval_secs,
+    })
+}
+
+/// Save the approval timers. Each is clamped to 0..=600 seconds, so a
+/// hand-made request cannot set a day-long timer.
+#[tauri::command]
+pub fn settings_set_approval_timers(
+    state: State<'_, AppState>,
+    timers: ApprovalTimers,
+) -> Result<ApprovalTimers, AppError> {
+    let store = state
+        .config_store
+        .lock()
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let mut cfg = store.load().map_err(AppError::internal)?;
+    cfg.plan_auto_accept_secs = timers.plan_auto_accept_secs.min(MAX_APPROVAL_TIMER_SECS);
+    cfg.terminal_approval_secs = timers.terminal_approval_secs.min(MAX_APPROVAL_TIMER_SECS);
+    store.save(&cfg).map_err(AppError::internal)?;
+    Ok(ApprovalTimers {
+        plan_auto_accept_secs: cfg.plan_auto_accept_secs,
+        terminal_approval_secs: cfg.terminal_approval_secs,
+    })
 }
 
 /// What Settings → Conversation memory needs: the saved value, how far the

@@ -3,12 +3,15 @@
   import { dur } from "../lib/motion";
   import FocusTrap from "./FocusTrap.svelte";
   import Icon from "./Icon.svelte";
-  import type { ToolAction } from "../lib/api/bindings";
+  import ModeChip from "./ModeChip.svelte";
+  import type { ApprovalMode, ToolAction } from "../lib/api/bindings";
 
   interface Props {
     show: boolean;
     toolName: string;
     action: ToolAction | null;
+    /** The chat's permission mode, shown so the user knows how the agent runs. */
+    mode?: ApprovalMode | null;
     onApproveOnce: () => void;
     onApproveSession: () => void;
     onDeny: () => void;
@@ -18,6 +21,7 @@
     show = false,
     toolName = "",
     action = null,
+    mode = null,
     onApproveOnce,
     onApproveSession,
     onDeny,
@@ -56,6 +60,7 @@
           <p class="text-sm text-ink-400 mt-1">
             LocalAide wants to change a file inside its safe workspace.
           </p>
+          {#if mode}<div class="mt-2"><ModeChip {mode} /></div>{/if}
         </div>
       </div>
 

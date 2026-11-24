@@ -12,3 +12,12 @@ pub struct AppConfigDto {
     /// True when at least one online provider is saved.
     pub has_online_providers: bool,
 }
+
+/// Settings → Tools: approval timers, in seconds. 0 means no timer.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalTimers {
+    /// A plan shown for approval is accepted after this long. 0 = Off.
+    pub plan_auto_accept_secs: u32,
+    /// A terminal command runs after this long unless declined. 0 = wait.
+    pub terminal_approval_secs: u32,
+}

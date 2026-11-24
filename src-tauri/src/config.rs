@@ -102,6 +102,21 @@ pub struct AppConfig {
     /// Off by default: the full prompt is sent unless the user turns this on.
     #[serde(default)]
     pub use_compact_prompt: bool,
+    /// Settings → Tools: a plan shown for approval is accepted after this
+    /// many seconds. 0 (the default) waits for the user.
+    #[serde(default)]
+    pub plan_auto_accept_secs: u32,
+    /// Settings → Tools: a terminal command the agent asks to run runs after
+    /// this many seconds unless the user declines. 0 waits for the user.
+    #[serde(default = "default_terminal_approval_secs")]
+    pub terminal_approval_secs: u32,
+}
+
+/// The longest approval timer Settings can save, in seconds.
+pub const MAX_APPROVAL_TIMER_SECS: u32 = 600;
+
+fn default_terminal_approval_secs() -> u32 {
+    60
 }
 
 /// What a matching permission rule says to do with a tool call.
@@ -630,6 +645,8 @@ impl Default for AppConfig {
             routing: RoutingConfig::default(),
             auto_approve_capabilities: CapabilityAutoApprove::default(),
             use_compact_prompt: false,
+            plan_auto_accept_secs: 0,
+            terminal_approval_secs: default_terminal_approval_secs(),
         }
     }
 }
@@ -1045,6 +1062,15 @@ mod tests {
             CapabilityAutoApprove::default()
         );
         assert!(!old.use_compact_prompt, "compact prompt defaults off");
+        assert_eq!(
+            old.plan_auto_accept_secs, 0,
+            "plan auto-accept defaults off"
+        );
+        assert_eq!(
+            old.terminal_approval_secs, 60,
+            "terminal countdown defaults to 60 s"
+        );
+        assert_eq!(AppConfig::default().terminal_approval_secs, 60);
         // "All commands" covers safe commands too.
         let caps = CapabilityAutoApprove {
             all_commands: true,

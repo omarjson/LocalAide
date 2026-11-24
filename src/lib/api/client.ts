@@ -35,6 +35,7 @@ import type {
   CompactResponse,
   CloudConfigStatus,
   CloudModeRequest,
+  ApprovalTimers,
   ContextInfo,
   CloudProviderPreset,
   ProviderModel,
@@ -668,6 +669,16 @@ export class ApiClient {
   /** Turn the compact prompt on or off. Local models only. */
   async setCompactPrompt(on: boolean): Promise<boolean> {
     return invoke<boolean>("settings_set_compact_prompt", { on });
+  }
+
+  /** Approval timers: plan auto-accept and the terminal countdown, in seconds (0 = no timer). */
+  async getApprovalTimers(): Promise<ApprovalTimers> {
+    return invoke<ApprovalTimers>("settings_approval_timers");
+  }
+
+  /** Save the approval timers. The backend clamps each to 0..600 seconds. */
+  async setApprovalTimers(timers: ApprovalTimers): Promise<ApprovalTimers> {
+    return invoke<ApprovalTimers>("settings_set_approval_timers", { timers });
   }
 
   /** Share of memory models may use, in percent (20 to 90). */

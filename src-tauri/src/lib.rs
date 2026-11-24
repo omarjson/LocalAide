@@ -253,6 +253,8 @@ pub fn run() {
             commands::settings_context_info,
             commands::settings_compact_prompt,
             commands::settings_set_compact_prompt,
+            commands::settings_approval_timers,
+            commands::settings_set_approval_timers,
             commands::selftest_run,
             commands::library_folder_presets,
             commands::library_index_start,

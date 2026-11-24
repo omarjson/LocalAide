@@ -40,6 +40,7 @@
   import { SETTINGS_GROUPS, SETTINGS_GROUP_OF, type SettingsGroupId } from "../lib/screens";
   import GoalPanel from "../components/GoalPanel.svelte";
   import UsagePanel from "../components/UsagePanel.svelte";
+  import AgentApprovalSettings from "../components/AgentApprovalSettings.svelte";
   import PolicyPanel from "../components/PolicyPanel.svelte";
   import NotificationsPanel from "../components/NotificationsPanel.svelte";
   import PluginPanels from "../components/PluginPanels.svelte";
@@ -104,7 +105,7 @@
   const SECTION_KEYWORDS: Record<SettingsSection, string> = {
     general: "theme dark light appearance scale font size engine memory ram model context startup language",
     online: "provider cloud api key openai kilo remote internet service",
-    tools: "mcp tools servers commands allow deny permissions integrations opencode",
+    tools: "mcp tools servers commands allow deny permissions integrations opencode plan autonomous agent mode approval timer countdown auto-accept terminal",
     web: "web search internet duckduckgo brave results",
     voice: "voice speech microphone dictation speak talk listen tts stt whisper",
     share: "share link token invite friend publish assistant",
@@ -1063,6 +1064,7 @@
         <McpSettings />
         <McpOAuthPanel />
         <div class="mt-8"><AgentsPanel /></div>
+        <AgentApprovalSettings />
         <PolicyPanel />
       {:else if activeTab === "web"}
         <div>
