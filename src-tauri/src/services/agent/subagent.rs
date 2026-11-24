@@ -13,7 +13,7 @@ use crate::services::inference::openai_stream::{ChatTurn, ToolCall};
 
 use super::tools;
 use super::tools::Permissions;
-use super::{AgentRun, ApprovalMode, Sink, run_inner, status};
+use super::{AgentRun, ApprovalMode, Sink, run_inner};
 
 /// Subagents that may run at once.
 pub(crate) const MAX_SUBAGENTS: usize = 4;

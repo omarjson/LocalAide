@@ -34,6 +34,7 @@ use crate::app::error::AppError;
 use crate::app::events::ChatStreamEvent;
 use crate::app::state::AppState;
 use crate::domain::memory::Citation;
+use crate::services::inference::InferenceEngine;
 use crate::services::inference::openai_stream::{
     Adjustment, ChatTurn, Delta, TOOLS_UNSUPPORTED, ToolCall, initial_options, stream_with_retries,
 };
