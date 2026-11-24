@@ -79,6 +79,10 @@
   .perm-plan {
     color: #7dd3fc;
   }
+  /* Sky-300 is ~1.6:1 on the light page; sky-700 clears 4.5:1. */
+  :global([data-theme="light"]) .perm-plan {
+    color: #0369a1;
+  }
   .perm-smart {
     color: var(--color-ink-200);
   }

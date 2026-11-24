@@ -428,7 +428,9 @@
   }
   .badge-free {
     background: color-mix(in oklab, #10b981 16%, transparent);
-    color: #6ee7b7;
+    /* The emerald token flips to #047857 in the light theme; a fixed mint
+       was ~1.5:1 on the light page. */
+    color: var(--color-emerald-300, #6ee7b7);
   }
   .refresh {
     display: inline-flex;
