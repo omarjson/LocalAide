@@ -879,6 +879,9 @@ mod tests {
                 reasoning: None,
                 vision: None,
                 tools: None,
+                prompt_price_per_million: None,
+                completion_price_per_million: None,
+                cache_price_per_million: None,
             }],
             check: None,
         };

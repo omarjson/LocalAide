@@ -482,12 +482,13 @@ pub async fn cloud_models_refresh(
 /// for ten minutes. Keyed by the full id ("vendor/model") and, when it has
 /// one, the short id too, because the usage log records the id as the
 /// picker showed it, which is sometimes the short form.
+type ModelPriceMap = BTreeMap<String, ModelPrice>;
+
 #[tauri::command]
-pub async fn openrouter_model_prices() -> Result<BTreeMap<String, ModelPrice>, AppError> {
+pub async fn openrouter_model_prices() -> Result<ModelPriceMap, AppError> {
     const OPENROUTER_API: &str = "https://openrouter.ai/api/v1";
     const CACHE_FOR: Duration = Duration::from_secs(600);
-    static CACHE: OnceLock<Mutex<Option<(Instant, BTreeMap<String, ModelPrice>)>>> =
-        OnceLock::new();
+    static CACHE: OnceLock<Mutex<Option<(Instant, ModelPriceMap)>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     if let Ok(guard) = cache.lock()
         && let Some((at, prices)) = guard.as_ref()
@@ -496,7 +497,7 @@ pub async fn openrouter_model_prices() -> Result<BTreeMap<String, ModelPrice>, A
         return Ok(prices.clone());
     }
     let models = list_models(OPENROUTER_API, "").await?;
-    let mut prices: BTreeMap<String, ModelPrice> = BTreeMap::new();
+    let mut prices: ModelPriceMap = BTreeMap::new();
     for m in &models {
         let Some(prompt) = m.prompt_price_per_million else {
             continue;
@@ -509,7 +510,7 @@ pub async fn openrouter_model_prices() -> Result<BTreeMap<String, ModelPrice>, A
             output: completion,
             cache_read: m.cache_price_per_million,
         };
-        prices.insert(m.id.clone(), price.clone());
+        prices.insert(m.id.clone(), price);
         if let Some(short) = m.id.rsplit('/').next()
             && short != m.id
         {
