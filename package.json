@@ -4,6 +4,7 @@
   "version": "0.2.4",
   "type": "module",
   "main": "electron/main.mjs",
+  "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=24"
   },
@@ -19,24 +20,6 @@
     "smoke": "node scripts/smoke-test.mjs",
     "test:unit": "node --test \"tests/unit/*.test.ts\"",
     "test": "node scripts/smoke-test.mjs && node --test \"tests/unit/*.test.ts\""
-  },
-  "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "electron": "^45.5.0",
-    "electron-builder": "^26.0.12",
-    "svelte-check": "^4.7.8",
-    "tailwindcss": "^4.3.5",
-    "typescript": "~5.9.3",
-    "vite": "^8.3.8",
-    "vite-plugin-checker": "^1.0.0"
-  },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.3.5",
-    "@tanstack/svelte-virtual": "^3.13.54",
-    "@tauri-apps/api": "^2.12.4",
-    "mermaid": "^12.3.0",
-    "svelte": "^5.57.3",
-    "qrcode": "^1.5.4"
   },
   "build": {
     "appId": "app.localaide.desktop",
@@ -93,5 +76,23 @@
       ],
       "category": "Utility"
     }
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.0.12",
+    "svelte-check": "^4.7.8",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.8",
+    "vite-plugin-checker": "^1.0.0"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/svelte-virtual": "^3.13.54",
+    "@tauri-apps/api": "^2.12.4",
+    "mermaid": "^12.3.0",
+    "svelte": "^5.57.3",
+    "qrcode": "^1.5.4"
   }
 }
