@@ -82,24 +82,11 @@ docs/adr/            14 ADRs, each carries a migration note
 
 ## Remaining work
 
-1. **Verify CI on GitHub**: a routine push runs the Node-only quality gate; `[build-all]` runs the
-   electron-builder builds. The workflow is correct-by-construction but has not run yet.
-2. **A packaged build**: `make dist` (electron-builder; `qrcode` + `electron-builder` need one
-   `pnpm install` first — npm is broken on Node 26).
-3. **Signing** (optional): `CSC_LINK`/Apple secrets in the repo enable it; see `docs/release.md`.
-4. **`electron-updater`**: wire the in-app "Install and restart" (`publish: github` is already in
-   package.json; `update_check` works and reports `can_install: false`).
-5. **Feature work** (the goal's "no ceiling"): GOAT's fleet/memories ideas, more local runtimes on
-   the discovery list, whatever Omar asks next.
-
-## Working rules that saved hours (keep following them)
-
-1. Model files sit **flat** in `models/` (`<dest ?? id>.gguf`), never in per-model folders.
-2. The preload wraps channel frames as `{message}`; the shim's `Channel` reads `{index, message}`.
-3. Config field names must match the Rust `AppConfig` exactly (`use_compact_prompt`,
-   `plan_auto_accept_secs`, `terminal_approval_secs`, the `web_search` shape).
-4. This machine's Node build lacks `Buffer.prototype.startsWith` — use `indexOf(magic) === 0`.
-5. npm is broken on Node 26 (`minipass-flush`); use the local binaries in `node_modules/.bin/`.
-6. Verify through CDP: `electron.exe . --remote-debugging-port=9222`, then
-   `fetch('http://127.0.0.1:9222/json')` → page target → WebSocket → `Runtime.evaluate` of
-   `window.__LOCALAIDE__.invoke(...)`; loopback mock providers are allowed by `validate_base_url`.
+1. **CI is verified green on GitHub** (Quality Gate, catalog pins, version gate) and a real installer
+   (release/LocalAide Setup 0.2.4.exe, x64 + arm64 NSIS) was built and boot-tested from its unpacked
+   build: the packaged app serves real commands over CDP. Signing is the only release step left,
+   and it is optional (CSC_LINK / Apple secrets; docs/release.md).
+2. **electron-updater**: wire the in-app Install-and-restart (publish: github is already in
+   package.json; update_check works and reports can_install: false).
+3. **Feature work** (the goal ceiling): GOAT fleet/memories ideas, more local runtimes on the
+   discovery list, whatever Omar asks next.
