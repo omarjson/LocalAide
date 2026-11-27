@@ -72,7 +72,7 @@
     aria-label="Chat settings"
     tabindex="-1"
     onkeydown={(e) => { if (e.key === "Escape") open = false; }}
-    class="absolute bottom-0 right-0 top-14 z-30 flex w-96 max-w-[90vw] flex-col border-l border-edge bg-ink-950 shadow-2xl"
+    class="absolute bottom-0 right-0 top-14 z-30 flex w-96 max-w-[90vw] flex-col border-l border-ink-800 bg-ink-950 shadow-2xl"
     transition:fly={{ x: 24, duration: dur(motion.base), easing: motion.enter }}
   >
     <div class="flex items-center justify-between border-b border-ink-800 px-4 py-3">
@@ -86,7 +86,7 @@
           <span class="mb-1.5 block text-sm text-ink-100">Chat width</span>
           <div class="grid grid-cols-3 gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1" role="group" aria-label="Chat width">
             {#each [["cozy", "Comfortable"], ["wide", "Wider"], ["full", "Full"]] as [value, label] (value)}
-              <button type="button" onclick={() => setChatWidth(value as "cozy" | "wide" | "full")} aria-pressed={chatWidthChoice === value} class={`rounded-md px-2 py-1.5 text-[13px] transition-colors ${chatWidthChoice === value ? "bg-ember-500/15 font-semibold text-ember-200" : "text-ink-300 hover:bg-veil/5"}`}>{label}</button>
+<button type="button" onclick={() => setChatWidth(value as "cozy" | "wide" | "full")} aria-pressed={chatWidthChoice === value} class={`rounded-md px-2 py-1.5 text-[13px] transition-colors ${chatWidthChoice === value ? "bg-veil/10 font-semibold text-ink-50" : "text-ink-300 hover:bg-veil/5"}`}>{label}</button>
             {/each}
           </div>
         </div>
@@ -107,7 +107,7 @@
         <h3 class="mb-2 text-[13px] font-semibold text-ink-300">Response style</h3>
         <div class="grid grid-cols-2 gap-2">
           {#each systemPresets as p (p.label)}
-            <button type="button" onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }} aria-pressed={systemPrompt === p.prompt} class={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${systemPrompt === p.prompt ? "border-ember-500/50 bg-ember-500/10 text-ink-50" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}>{p.label}</button>
+<button type="button" onclick={() => { systemPrompt = p.prompt; persona = p.label; void savePrefs(); }} aria-pressed={systemPrompt === p.prompt} class={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${systemPrompt === p.prompt ? "border-ink-600 bg-veil/8 text-ink-50" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}>{p.label}</button>
           {/each}
         </div>
       </section>
@@ -134,8 +134,8 @@
         <h3 class="mb-2 text-[13px] font-semibold text-ink-300">How LocalAide answers</h3>
         <div class="space-y-1.5">
           {#each chatModes() as m (m.id)}
-            <button type="button" onclick={() => changeMode(m.id)} aria-pressed={mode === m.id} class={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${mode === m.id ? "border-ember-500/50 bg-ember-500/10" : "border-ink-700 hover:border-edge"}`}>
-              <Icon name={MODE_ICONS[m.id]} class={`mt-0.5 h-4 w-4 shrink-0 ${mode === m.id ? "text-ember-300" : "text-ink-400"}`} />
+<button type="button" onclick={() => changeMode(m.id)} aria-pressed={mode === m.id} class={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${mode === m.id ? "border-ink-600 bg-veil/8" : "border-ink-700 hover:border-edge"}`}>
+              <Icon name={MODE_ICONS[m.id]} class={`mt-0.5 h-4 w-4 shrink-0 ${mode === m.id ? "text-ink-400" : "text-ink-400"}`} />
               <span><span class="block text-sm font-semibold text-ink-100">{m.label}</span><span class="block text-xs leading-5 text-ink-400">{m.description}</span></span>
             </button>
           {/each}
@@ -215,9 +215,10 @@
     transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   .sheet-switch-on {
-    background: var(--color-ember-500);
+    background: var(--color-ink-100);
   }
   .sheet-switch-on span {
     transform: translateX(1rem);
+    background: var(--color-ink-950);
   }
 </style>

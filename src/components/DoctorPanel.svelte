@@ -51,7 +51,7 @@
 <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h3 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="stethoscope" class="h-4 w-4 text-ember-300" />Setup doctor</h3>
+      <h3 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="stethoscope" class="h-4 w-4 text-ink-400" />Setup doctor</h3>
       <p class="mt-0.5 text-sm text-ink-400">Checks your local setup. Nothing is changed or sent anywhere.</p>
     </div>
     <div class="flex gap-2">

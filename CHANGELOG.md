@@ -5,6 +5,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+- **The backend is Electron now.** The Rust/Tauri backend is replaced by a Node ESM backend under `electron/` (no build step, no bundler, no native modules; SQLite via `node:sqlite`). The renderer is untouched: `@tauri-apps/api` specifiers are aliased to `src/lib/platform/tauri.ts`, so not one component was rewritten. `package.json` points at `electron/main.mjs` (`pnpm start`), the dev path is `pnpm dev` + `pnpm dev:electron`, and the build ships with relative asset paths (`base: "./"`) plus a strict CSP and a `localaide-file://` protocol for local images and frames.
+- **About 190 of the 204 IPC commands are live.** Boot-critical config, settings (context, memory share, approval timers, compact prompt, engine flags with full validation and flag mapping), the chat loop (modes with their instruction text, approval modes plan/ask/smart/auto, citations, subagents, learned skills with Undo, per-mode round limits and the strict temperature cap), threads, the model registry (catalog + the flat `models/` layout existing installs use), the chat model picker with provider groups, cloud providers (save/delete/test/load models, the 34 presets), local-server discovery (the 17-candidate probe), web search (DuckDuckGo, Wikipedia, Exa, Firecrawl, Jina), memory notes and suggestions, skills, usage (JSONL + ledger), goals, automations, developer mode, doctor, update check, attachments, desktop pickers and the UI scale.
+- **Model downloads.** The catalog downloader resumes `.part` files with HTTP Range, verifies SHA-256 before the atomic rename, streams progress over the channel, supports Pause/Cancel (the part file stays), refuses downloads the disk cannot hold, and fetches the pinned llama.cpp engine build (CPU, Vulkan or ROCm) with the same machinery. Catalog refresh verifies the integrity signature, validates every entry and refuses version rollback.
+- **The document library indexes folders again.** The walker matches the Rust limits (20,000 files, 32 levels, the same ignore rules), reads text and simple PDFs, chunks at natural boundaries (1500 characters, 250 overlap), skips unchanged files by content hash, and streams progress; watch mode re-indexes changed files as they settle.
+- **Semantic and hybrid search are back.** A second llama-server `--embedding` sidecar serves `/v1/embeddings` locally; chunk vectors are float32 blobs filled by the backfill command, and the Search screen's keyword/semantic/hybrid modes work — semantic and hybrid quietly fall back to keyword while the meaning model is off.
+- **MCP servers connect for real.** stdio programs and Streamable-HTTP servers both work (initialize handshake, tools/list, tools/call); their tools are offered to chat as `mcp_<server>_<tool>` specs with per-server auto-approve; the preset table (Context7, DeepWiki, Exa, Microsoft Learn, Hugging Face, GitHub, filesystem, memory, fetch, git, time, Playwright…) is back, plus ArtCraft presets from installed ZCode plugins and Claude-Desktop-format JSON import.
+- **Skill discovery and the OpenCode link.** The Skills screen can browse Anthropic's skill library, awesome-copilot, prompts.chat (CSV) and any GitHub repo of skill folders, preview, and import them; `opencode_send` hands a task to a linked OpenCode server.
+- **The ember sweep finished the GOAT look.** Every decorative ember reference became ink — selected chips, card tints, blue glows, primary fills, body text, list markers, shell prompts — leaving the blue on links, focus, live state, information and data only. Verified in the real window.
+- **CI and packaging are Electron-first.** The workflow runs a Node-only quality gate (check, typecheck, unit tests, build, smoke, catalog pins, version gate) and electron-builder builds for macOS (arm64/x64), Windows (x64/ARM64) and Linux, published as a draft with checksums and an SBOM; the audit workflow watches npm; `Makefile`, `bump-version.mjs` and the release scripts match. The electron-builder config lives in `package.json`.
+
+### Removed
+- `@tauri-apps/cli` and the Rust toolchain from the build path; the probe and log leftovers (`el*.log`, `einst*.log`, `probe*.cjs`, `tmp-*.mjs` and friends) are gone from the repo root.
+
+### Fixed
+- The streaming channel protocol: frames now arrive as `{index, message}` the renderer's `Channel` expects, so streamed answers actually reach the UI instead of delivering `undefined` per frame.
+- Approval decisions honor the tool's risk again: only tools that change something can ask (a regression made every tool ask under "Ask before changes").
+- `core/config.mjs` DEFAULTS mirror the real Rust `AppConfig` field for field (`use_compact_prompt`, `plan_auto_accept_secs`/`terminal_approval_secs`, the `web_search` shape), so a config written by the Tauri build loads without a migration.
+- `tests/unit/readme-links.test.ts` resolves the README path with `fileURLToPath`, so the test passes on Windows checkouts (`URL.pathname` yields `/C:/...` there, which made every link read as missing).
+
+## [0.2.4-pre-electron]
+- The entries below were shipped from the Rust/Tauri backend.
+
+### Changed
+- **A quieter, sharper look, after GOAT.** The warm "Deep Ember" palette is gone. The app now uses neutral near-black layers (canvas #181818, chrome #141414, raised #212121), hairline borders, an ink primary (white in dark, near-black in light) and one blue for links, focus and live state. Corners are tighter (6px controls, 8px surfaces, 12px cards), the composer is a glass 16px field, the sidebar carries the LOCALAIDE wordmark and a quiet New chat row, and switches, tabs and status dots follow the same rules in both themes. See DESIGN.md.
+
+### Added
+- **More engines you already run.** The provider presets now include llama.cpp, vLLM, MLX, LocalAI, LiteLLM, text-generation-webui, Jan, KoboldCpp, GPT4All, Tabby, SGLang, Aphrodite, Xinference and Docker Model Runner, each with its default local address, so a server on this computer can be added in one pick.
+ - **Engine flags.** Settings → Performance → Engine flags tunes llama-server itself: GPU layers (`-ngl`), threads (`-t`), flash attention (`-fa`), memory-mapping, `--mlock`, K/V cache types, parallel slots, prompt batch, RoPE scale and a raw-flag field for anything else. Every field is optional, so leaving them alone keeps llama.cpp's own defaults. Values are checked before they are saved, and a flag only takes effect the next time a model loads.
+ - **GPU engine builds.** Settings → Performance → Engine build picks the official llama.cpp CPU build, the Vulkan build (NVIDIA, AMD and Intel graphics in one download) or the ROCm build (AMD). Each is pinned by version, size and SHA-256, downloads once — either when picked or with **Download this build now** — and the picker shows the real size for this computer. A build this computer has none of is shown disabled, and a chosen build that is not downloaded yet is waited for instead of silently falling back to the CPU one.
+ - **Graphics card name.** Diagnostics read the GPU from the system (nvidia-smi, `/dev/kfd`, Apple), so the doctor names the card instead of only the vendor.
+ - **Find servers already running.** "Find servers" in Add a provider probes the usual local ports (Ollama 11434, LM Studio 1234, llama.cpp/MLX/LocalAI/Tabby 8080, vLLM 8000, LiteLLM 4000, text-generation-webui 5000, Jan 1337, KoboldCpp 5001, GPT4All 4891, SGLang 30000, Aphrodite 2242, Docker Model Runner 12434, Xinference 9997, 9Router 20128) and offers whatever answered with its model list already loaded. One click fills the form.
+
 ## [0.2.4] - 2026-11-24
 
 ### Fixed

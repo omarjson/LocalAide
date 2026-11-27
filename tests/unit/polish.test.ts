@@ -88,7 +88,7 @@ const LEGACY_NAMES: string[] = [
   "star-filled", "x-circle", "window", "terminal", "volume", "mic", "link", "lightbulb",
   "hand", "shield-check", "users", "list-check", "undo", "help", "chart", "folder-open",
   "wand", "compare", "calendar", "puzzle", "route", "shield_check", "keychain",
-  "stethoscope", "panel", "history", "merge",
+  "stethoscope", "panel", "history", "merge", "chevron-up", "square_pen",
 ];
 
 test("icon registry keeps every legacy IconName, exactly once", () => {

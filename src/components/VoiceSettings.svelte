@@ -141,8 +141,8 @@
       <span class="text-sm text-ink-500">Download once, then they work offline.</span>
     </div>
     {#if models && !engineReady}
-      <div class="mb-3 flex flex-col gap-3 rounded-xl border border-ember-500/30 bg-ember-500/[0.06] p-3 sm:flex-row sm:items-center">
-        <Icon name="download" class="hidden h-5 w-5 shrink-0 text-ember-300 sm:block" />
+      <div class="mb-3 flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-800 p-3 sm:flex-row sm:items-center">
+        <Icon name="download" class="hidden h-5 w-5 shrink-0 text-ink-400 sm:block" />
         <p class="flex-1 text-sm leading-6 text-ink-200">Local models run in the sherpa-onnx speech engine (version {models.engine.version}, {formatGb(models.engine.download_bytes ?? 0)}). It is downloaded once from its GitHub release and checked against a pinned checksum.</p>
         {#if models.engine.available}
           <Button variant="primary" disabled={engineBusy !== null} onclick={() => void fetchEngine()}>{engineBusy !== null ? `Downloading ${engineBusy}%` : "Download the engine"}</Button>
@@ -206,7 +206,7 @@
                 <input type="password" autocomplete="off" spellcheck="false" placeholder={p.has_key ? `Saved: ${s.key_hints[p.id]}` : "Paste your key"} aria-label={`${p.label} key`} bind:value={keyDraft[p.id]} class="h-9 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 font-mono text-[13px] text-ink-100 placeholder:text-ink-500" />
                 <Button variant="secondary" disabled={!keyDraft[p.id]?.trim()} onclick={() => void saveKey(p.id)}>Save key</Button>
                 {#if p.has_key}<Button variant="subtle" onclick={() => { keyDraft = { ...keyDraft, [p.id]: "" }; void saveKey(p.id); }}>Remove key</Button>{/if}
-                <a href={p.key_url} rel="noreferrer" class="inline-flex items-center gap-1 text-sm text-ember-300 hover:underline" onclick={(e) => openInBrowser(e, p.key_url)}>Get a key<Icon name="external" class="h-3.5 w-3.5" /></a>
+                <a href={p.key_url} rel="noreferrer" class="inline-flex items-center gap-1 text-sm text-ink-400 hover:underline" onclick={(e) => openInBrowser(e, p.key_url)}>Get a key<Icon name="external" class="h-3.5 w-3.5" /></a>
               </div>
               <p class="text-xs text-ink-500">Saved in this app's settings file on this computer, like your chat provider keys, and sent only to {p.host}.</p>
               <div role="radiogroup" aria-label={`${p.label} models`} class="space-y-1">
@@ -283,7 +283,7 @@
     border-top: 0;
   }
   .model-on {
-    background: color-mix(in oklab, var(--color-ember-500) 6%, transparent);
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
   }
   .pick {
     display: grid;
@@ -354,6 +354,6 @@
     opacity: 0.55;
   }
   .row-on {
-    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
+    background: var(--color-ink-700);
   }
 </style>

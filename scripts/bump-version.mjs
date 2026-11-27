@@ -7,9 +7,6 @@
 // The six files (same set scripts/ci/check-versions.mjs gates on, plus the
 // three it does not cover):
 //   package.json                  "version": "x.y.z"
-//   src-tauri/Cargo.toml          [package] version = "x.y.z"
-//   src-tauri/tauri.conf.json     "version": "x.y.z"
-//   src-tauri/Cargo.lock          the ai-desktop-assistant package entry
 //                                 ONLY — the unrelated cfg_aliases 0.2.2
 //                                 entry is left alone
 //   CHANGELOG.md                  the version section heading (see below)
@@ -97,9 +94,6 @@ function readmeVersion(text) {
 
 const READERS = [
   ["package.json", packageVersion],
-  ["src-tauri/Cargo.toml", cargoTomlVersion],
-  ["src-tauri/tauri.conf.json", tauriConfVersion],
-  ["src-tauri/Cargo.lock", cargoLockVersion],
   ["CHANGELOG.md", changelogVersion],
   ["README.md", readmeVersion],
 ];
@@ -169,9 +163,6 @@ function replaceReadmeVersion(text, next) {
 
 const WRITERS = [
   ["package.json", replaceJsonVersion],
-  ["src-tauri/Cargo.toml", replaceCargoTomlVersion],
-  ["src-tauri/tauri.conf.json", replaceJsonVersion],
-  ["src-tauri/Cargo.lock", replaceCargoLockVersion],
   ["CHANGELOG.md", replaceChangelogVersion],
   ["README.md", replaceReadmeVersion],
 ];

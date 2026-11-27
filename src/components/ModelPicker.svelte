@@ -213,7 +213,7 @@
   </button>
 
   {#if open && choices}
-    <div role="dialog" aria-label="Choose a model" tabindex="-1" onkeydown={onKeydown} class="picker" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+<div role="dialog" aria-label="Choose a model" tabindex="-1" onkeydown={onKeydown} class="picker surface-glass" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
       {#if choices.budget_note}
         <p class="border-b border-ink-800 px-3 py-2 text-xs leading-5 text-ink-400" role="status">{choices.budget_note}</p>
       {/if}
@@ -307,7 +307,7 @@
           <div class="border-t border-ink-800 px-3 pb-3 pt-2.5">
             <div class="flex items-center gap-2 text-sm">
               <span class="text-ink-400">Effort</span>
-              <span class={`font-semibold ${level === levels.length - 1 ? "text-ember-300" : "text-ink-50"}`}>{effortLabel(levels[level])}</span>
+              <span class="font-semibold text-ink-50">{effortLabel(levels[level])}</span>
               <kbd class="ml-auto rounded bg-ink-800 px-1.5 py-0.5 text-xs text-ink-400">Ctrl+T</kbd>
             </div>
             <!-- The whole capsule takes the pointer: press anywhere to jump to
@@ -315,7 +315,6 @@
                  the keyboard and screen readers. -->
             <div
               class="effort mt-2"
-              class:effort-max={level === levels.length - 1}
               class:effort-dragging={dragging}
               style={`--f:${fill / 100}`}
               role="presentation"
@@ -360,10 +359,9 @@
     z-index: 40;
     width: min(24rem, calc(100vw - 2rem));
     overflow: hidden;
-    border-radius: 0.85rem;
-    border: 1px solid var(--color-edge);
-    background: var(--color-ink-950);
-    box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.6);
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-ink-700);
+    box-shadow: var(--shadow-elev);
     transform-origin: bottom right;
   }
   .fchip {
@@ -378,9 +376,9 @@
     color: var(--color-ink-100);
   }
   .fchip-on {
-    border-color: color-mix(in oklab, var(--color-ember-500) 55%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 14%, transparent);
-    color: var(--color-ember-200);
+    border-color: var(--color-ink-600);
+    background: var(--color-ink-700);
+    color: var(--color-ink-50);
   }
   .prov-head {
     display: flex;
@@ -456,10 +454,10 @@
     background: color-mix(in oklab, var(--color-veil) 6%, transparent);
   }
   .row-active {
-    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
+    background: color-mix(in oklab, var(--color-veil) 8%, transparent);
   }
   .row-active.row-cursor {
-    background: color-mix(in oklab, var(--color-ember-500) 15%, transparent);
+    background: color-mix(in oklab, var(--color-veil) 12%, transparent);
   }
   .star {
     display: grid;
@@ -522,8 +520,8 @@
     width: calc(2.3rem + var(--f) * (100% - 2.3rem));
     overflow: hidden;
     border-radius: 9999px;
-    background: linear-gradient(90deg, var(--color-ember-600), var(--color-ember-400));
-    transition: width 340ms cubic-bezier(0.22, 1.35, 0.42, 1);
+    background: var(--color-ember-500);
+    transition: width 180ms ease-out;
   }
   .effort-fill::after {
     content: "";
@@ -535,15 +533,8 @@
     transform: translateY(-50%) scale(1);
     border-radius: 9999px;
     background: var(--color-ink-50);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 0 color-mix(in oklab, var(--color-ember-500) 35%, transparent);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     transition: transform 150ms ease-out, box-shadow 150ms ease-out;
-  }
-  .effort:hover .effort-fill::after {
-    transform: translateY(-50%) scale(1.06);
-  }
-  .effort:active .effort-fill::after {
-    transform: translateY(-50%) scale(1.12);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 5px color-mix(in oklab, var(--color-ember-500) 30%, transparent);
   }
   .effort-dragging .effort-fill {
     transition-duration: 120ms;
@@ -564,40 +555,10 @@
     outline: 2px solid var(--color-ink-50);
     outline-offset: 3px;
   }
-  /* Top rung: the bar breathes with an ember glow and a light sweeps the
-     fill, so maximum effort reads as power, not just another notch. */
-  .effort-max .effort-track {
-    animation: effort-glow 1.8s ease-in-out infinite;
-  }
-  .effort-max .effort-fill::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(105deg, transparent 32%, rgb(255 243 224 / 0.5) 50%, transparent 68%);
-    transform: translateX(-110%);
-    will-change: transform;
-    animation: effort-sheen 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-  .effort-max .effort-fill::after {
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4), 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 55%, transparent), 0 0 14px color-mix(in oklab, var(--color-ember-500) 45%, transparent);
-  }
-  @keyframes effort-glow {
-    0%, 100% { box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35), 0 0 10px color-mix(in oklab, var(--color-ember-500) 22%, transparent); }
-    50% { box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35), 0 0 24px color-mix(in oklab, var(--color-ember-500) 55%, transparent); }
-  }
-  @keyframes effort-sheen {
-    0% { transform: translateX(-110%); }
-    55%, 100% { transform: translateX(110%); }
-  }
   @media (prefers-reduced-motion: reduce) {
     .effort-fill,
     .effort-fill::after {
       transition: none;
-    }
-    .effort-max .effort-track,
-    .effort-max .effort-fill::before {
-      animation: none;
     }
   }
 </style>

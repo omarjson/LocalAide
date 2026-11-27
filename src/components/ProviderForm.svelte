@@ -12,27 +12,44 @@
   import { api, errorMessage } from "../lib/api/client";
   import { openInBrowser } from "../lib/links";
   import { dur } from "../lib/motion";
-  import type { CloudConfigStatus, CloudProviderDto, CloudProviderPreset, ProviderModel } from "../lib/api/bindings";
+  import type { CloudConfigStatus, CloudProviderDto, CloudProviderPreset, FoundServer, ProviderModel } from "../lib/api/bindings";
 
   interface Props {
     /** The provider being edited; null adds a new one. */
     editing: CloudProviderDto | null;
+    /** A server already found on this computer, prefilled when adding. */
+    seed?: FoundServer | null;
     onSaved: (status: CloudConfigStatus) => void;
     onCancel: () => void;
   }
-  let { editing, onSaved, onCancel }: Props = $props();
+  let { editing, seed = null, onSaved, onCancel }: Props = $props();
 
   let presets = $state<CloudProviderPreset[]>([]);
-  let presetId = $state<string | null>(null);
+  let presetId = $state<string | null>(untrack(() => (editing ? null : seed?.preset_id ?? null)));
   // The form starts from the provider being edited; Settings remounts it
   // for another provider.
   const initial = untrack(() => editing);
-  let label = $state(initial?.label ?? "");
-  let url = $state(initial?.base_url ?? "");
+  const seeded = untrack(() => (editing ? null : seed));
+  let label = $state(initial?.label ?? seeded?.label ?? "");
+  let url = $state(initial?.base_url ?? seeded?.base_url ?? "");
   let key = $state("");
-  let model = $state(initial?.model ?? "");
-  let models = $state<ProviderModel[]>([]);
-  let loaded = $state(false);
+  let model = $state(initial?.model ?? seeded?.models[0] ?? "");
+  let models = $state<ProviderModel[]>(
+    seeded?.models.map((id) => ({
+      id,
+      name: null,
+      owned_by: null,
+      context_length: null,
+      free: true,
+      reasoning: null,
+      vision: null,
+      tools: null,
+      prompt_price_per_million: null,
+      completion_price_per_million: null,
+      cache_price_per_million: null,
+    })) ?? [],
+  );
+  let loaded = $state((seeded?.models.length ?? 0) > 0);
   let loading = $state(false);
   let listError = $state<string | null>(null);
   let query = $state("");
@@ -40,6 +57,49 @@
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let nameEl = $state<HTMLInputElement>();
+  // Servers already running on this computer, found by probing their usual
+  // ports. Only looked for when the user asks, so opening the form never
+  // touches the network on its own.
+  let found = $state<FoundServer[]>([]);
+  let discovering = $state(false);
+  let discovered = $state(false);
+
+  const discover = async () => {
+    discovering = true;
+    try {
+      found = await api.discoverLocalServers();
+    } catch (e: unknown) {
+      console.error(e);
+      found = [];
+    } finally {
+      discovering = false;
+      discovered = true;
+    }
+  };
+
+  const useFound = (s: FoundServer) => {
+    presetId = s.preset_id;
+    label = s.label;
+    url = s.base_url;
+    key = "";
+    models = s.models.map((id) => ({
+      id,
+      name: null,
+      owned_by: null,
+      context_length: null,
+      free: true,
+      reasoning: null,
+      vision: null,
+      tools: null,
+      prompt_price_per_million: null,
+      completion_price_per_million: null,
+      cache_price_per_million: null,
+    }));
+    loaded = s.models.length > 0;
+    model = s.models[0] ?? "";
+    listError = null;
+    saveError = null;
+  };
 
   onMount(async () => {
     try {
@@ -145,6 +205,29 @@
   </div>
 
   {#if !editing}
+    <div class="mt-3 rounded-lg border border-ink-700 px-3 py-2.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <Icon name="computer" class="h-4 w-4 text-ink-400" />
+        <span class="text-sm text-ink-200">Already running on this computer?</span>
+        <Button variant="secondary" disabled={discovering} onclick={() => void discover()}>
+          {discovering ? "Looking…" : discovered ? "Look again" : "Find servers"}
+        </Button>
+      </div>
+      {#if discovered}
+        {#if found.length === 0}
+          <p class="mt-2 text-xs text-ink-500">Nothing answered on the usual ports. Start your server, then look again. You can also type its address below.</p>
+        {:else}
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            {#each found as s (s.base_url)}
+              <button type="button" onclick={() => useFound(s)} class="pick">
+                <Icon name="sparkle" class="h-3.5 w-3.5" />{s.label}
+                <span class="text-ink-500">{s.models.length} {s.models.length === 1 ? "model" : "models"}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
     <details class="mt-3 group" open={presetId === null}>
       <summary class="flex cursor-pointer list-none items-center gap-2 text-sm text-ink-300 hover:text-ink-50">
         <Icon name="chevron-right" class="h-4 w-4 transition-transform group-open:rotate-90" />
@@ -170,7 +253,7 @@
     {#if preset?.note}
       <p class="mt-3 text-[13px] leading-5 text-ink-400">
         {preset.note}
-        {#if preset.key_url}<a class="ml-1 inline-flex items-center gap-1 text-ember-300 hover:underline" href={preset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, preset?.key_url ?? "")}>{preset.needs_key ? "Get a key" : preset.local ? "How to install it" : "More about it"}<Icon name="external" class="h-3.5 w-3.5" /></a>{/if}
+        {#if preset.key_url}<a class="ml-1 inline-flex items-center gap-1 text-ink-400 hover:underline" href={preset.key_url} rel="noreferrer" onclick={(e) => openInBrowser(e, preset?.key_url ?? "")}>{preset.needs_key ? "Get a key" : preset.local ? "How to install it" : "More about it"}<Icon name="external" class="h-3.5 w-3.5" /></a>{/if}
       </p>
     {/if}
   {/if}
@@ -198,7 +281,7 @@
           <Icon name="refresh" class={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />{loading ? "Loading…" : loaded ? "Load again" : "Load models"}
         </Button>
       </div>
-      {#if listError}<p class="mt-2 text-[13px] text-ember-200" role="status">{listError}</p>{/if}
+      {#if listError}<p class="mt-2 text-[13px] text-rose-300" role="status">{listError}</p>{/if}
       {#if models.length > 0}
         <div class="mt-2 overflow-hidden rounded-[10px] border border-ink-700 bg-ink-950" in:slide={{ duration: dur(150) }}>
           <div class="flex items-center gap-2 border-b border-ink-800 px-2.5 py-2">
@@ -214,7 +297,7 @@
                 <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{m.id}</span>
                 {#if m.context_length}<span class="shrink-0 text-xs tabular-nums text-ink-500">{Math.round(m.context_length / 1000)}K</span>{/if}
                 {#if m.free}<span class="shrink-0 rounded bg-emerald-500/15 px-1.5 text-xs font-semibold text-emerald-300">Free</span>{/if}
-                {#if model === m.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ember-300" />{/if}
+                {#if model === m.id}<Icon name="check" class="h-4 w-4 shrink-0 text-ink-400" />{/if}
               </button>
             {:else}
               <p class="px-2 py-3 text-sm text-ink-400">No models match.</p>
@@ -287,8 +370,8 @@
     border-color: var(--color-edge);
   }
   .pick-on {
-    border-color: color-mix(in oklab, var(--color-ember-500) 55%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 12%, transparent);
+    border-color: var(--color-ink-600);
+    background: var(--color-ink-700);
     color: var(--color-ink-50);
   }
   .row {
@@ -305,7 +388,7 @@
     background: color-mix(in oklab, var(--color-veil) 5%, transparent);
   }
   .row-on {
-    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
+    background: var(--color-ink-700);
     color: var(--color-ink-50);
   }
 </style>

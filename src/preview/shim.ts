@@ -10,6 +10,27 @@
 
 type Handler = (args: Record<string, unknown>) => unknown;
 
+// The engine build picked in Settings stays picked for the preview session,
+// so the notes and download sizes match what the real backend reports.
+let shimAccel = "cpu";
+const engineInfoFixture = (installed = false) => ({
+  installed: true,
+  build: "b12359",
+  cpu: "x86_64 · AVX2",
+  download_bytes: null,
+  custom: false,
+  path: "C:\\Users\\Omar\\.aiassistant\\engine\\llama-server.exe",
+  accel: shimAccel,
+  accel_installed: installed,
+  accel_bytes: shimAccel === "vulkan" ? 38_090_643 : shimAccel === "rocm" ? 280_132_437 : null,
+  builds: [
+    { id: "cpu", bytes: 25_097_509, available: true },
+    { id: "vulkan", bytes: 38_090_643, available: true },
+    { id: "rocm", bytes: 280_132_437, available: true },
+  ],
+  gpu: "NVIDIA GeForce RTX 4070",
+});
+
 const now = Date.now();
 const ago = (minutes: number) => now - minutes * 60_000;
 // Memory timestamps cross the bridge in seconds, like the Rust backend.
@@ -279,7 +300,9 @@ const fixtures: Record<string, Handler> = {
     pendingDecision = null;
     return true;
   },
-  settings_theme: () => "dark",
+  // Follow the choice saved in localStorage so a reload keeps the theme
+  // being styled, instead of snapping back to dark.
+  settings_theme: () => (localStorage.getItem("localaide-theme") === "light" ? "light" : "dark"),
   settings_set_theme: () => null,
   ui_scale_get: () => 1,
   ui_scale_set: () => null,
@@ -349,7 +372,8 @@ const fixtures: Record<string, Handler> = {
   inference_status: () => ({ loaded: true, loading: false }),
   inference_load: () => "qwen3.5-9b",
   inference_unload: () => null,
-  engine_info: () => ({ installed: true, build: "b12359", cpu: "x86_64 · AVX2", download_bytes: null, custom: false, path: "C:\\Users\\Omar\\.aiassistant\\engine\\llama-server.exe" }),
+  engine_info: () => engineInfoFixture(),
+  engine_fetch: () => engineInfoFixture(true),
 
   chat_models: () => chatModelsFixture(),
   chat_prefs_get: () => ({ system_prompt: null, temperature: null, max_tokens: null, persona: null }),
@@ -550,7 +574,7 @@ const fixtures: Record<string, Handler> = {
       viewer_link: "https://quiet-lake-8f2a.trycloudflare.com/#k=viewer0123456789abcdef0123456789abcdef0123456789ab",
       remote_link: "https://quiet-lake-8f2a.trycloudflare.com/#k=remote0123456789abcdef0123456789abcdef0123456789ab",
       pair_code: "K7M3-XT2Q",
-      qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3zM6,6h1v1h-1z" fill="#14100c"/></svg>',
+      qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3zM6,6h1v1h-1z" fill="#0d0d0d"/></svg>',
     };
   },
   share_stop: () => {
@@ -559,7 +583,7 @@ const fixtures: Record<string, Handler> = {
   },
   share_pair: () => {
     const on = (globalThis as { __shimShareOn?: boolean }).__shimShareOn === true;
-    return { pair_code: "K7M3-XT2Q", on, qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3z" fill="#14100c"/></svg>' };
+    return { pair_code: "K7M3-XT2Q", on, qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#ffffff"/><path d="M2,2h3v3h-3zM28,2h3v3h-3zM2,28h3v3h-3z" fill="#0d0d0d"/></svg>' };
   },
   web_providers: () => [
     { id: "duckduckgo", label: "DuckDuckGo", needs_key: false, takes_key: true, supports: "search", note: "Works without a key.", key_set: false, is_default: true },
@@ -581,6 +605,30 @@ const fixtures: Record<string, Handler> = {
   settings_model_memory: () => 60,
   settings_set_context: () => 8192,
   settings_set_model_memory: () => 60,
+  settings_compact_prompt: () => false,
+  settings_set_compact_prompt: () => false,
+  settings_engine_flags: () => ({
+    accel: shimAccel,
+    gpu_layers: null,
+    threads: null,
+    flash_attn: null,
+    mmap: null,
+    mlock: false,
+    cache_type_k: null,
+    cache_type_v: null,
+    parallel: null,
+    batch_size: null,
+    rope_freq_scale: null,
+    extra_args: "",
+  }),
+  settings_set_engine_flags: (args?: { flags?: { accel?: string } }) => {
+    shimAccel = args?.flags?.accel || "cpu";
+    return args?.flags ?? null;
+  },
+  local_servers_discover: () => [
+    { preset_id: "ollama-local", label: "Ollama", base_url: "http://127.0.0.1:11434/v1", models: ["qwen3.5:9b", "llama3.3:8b"] },
+    { preset_id: "lmstudio-local", label: "LM Studio", base_url: "http://127.0.0.1:1234/v1", models: ["qwen2.5-coder-7b"] },
+  ],
 
   update_check: () => ({ current_version: "0.2.0", latest_version: "0.2.1", update_available: true, release_url: "https://github.com/omarjson/LocalAide/releases", can_install: true, notes: null }),
   update_install: () => null,

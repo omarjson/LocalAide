@@ -89,7 +89,7 @@
     <textarea id="fusion-prompt" bind:value={prompt} rows="3" class="min-h-20 w-full resize-y rounded-md border border-ink-700 bg-ink-950 px-2 py-2 text-sm text-ink-100 placeholder:text-ink-400" placeholder="Ask the same question of each model…"></textarea>
 
     <div class="mt-4 flex items-center justify-between">
-      <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="target" class="h-4 w-4 text-ember-300" />Targets ({drafts.length}/3)</h3>
+      <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="target" class="h-4 w-4 text-ink-400" />Targets ({drafts.length}/3)</h3>
       {#if drafts.length < 3}<Button variant="subtle" onclick={addTarget}><Icon name="plus" class="h-3.5 w-3.5" />Add target</Button>{/if}
     </div>
     <p class="mt-1 text-xs text-ink-500">A base URL such as <code>https://api.example.com/v1</code>. Keys stay in this form and are used only for this run.</p>
@@ -118,9 +118,9 @@
       <h3 class="text-sm font-semibold text-ink-100">Answers</h3>
       <div class="mt-2 grid gap-3 md:grid-cols-2">
         {#each answers as answer (answer.label + answer.text)}
-          <div class={`rounded-lg border p-3 ${answer.label === kept?.label ? "border-ember-500/50 bg-ember-500/5" : "border-ink-700 bg-ink-950"}`}>
+          <div class={`rounded-lg border p-3 ${answer.label === kept?.label ? "border-ink-600 bg-veil/5" : "border-ink-700 bg-ink-950"}`}>
             <div class="flex items-center justify-between gap-2">
-              <h4 class="flex items-center gap-2 font-medium text-ink-100"><Icon name="sparkle" class="h-4 w-4 text-ember-300" />{answer.label}</h4>
+              <h4 class="flex items-center gap-2 font-medium text-ink-100"><Icon name="sparkle" class="h-4 w-4 text-ink-400" />{answer.label}</h4>
               {#if !answer.error && answer.text.trim()}
                 <Button variant="subtle" onclick={() => { keptLabel = answer.label; choice = "keep"; }}>Keep this</Button>
               {/if}
@@ -136,10 +136,10 @@
 
       <div class="mt-6 rounded-lg border border-ink-700 bg-ink-950 p-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="merge" class="h-4 w-4 text-ember-300" />Result</h3>
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="merge" class="h-4 w-4 text-ink-400" />Result</h3>
           <div class="inline-flex rounded-md border border-ink-700 p-0.5" role="group" aria-label="Result mode">
-            <button type="button" onclick={() => choice = "keep"} aria-pressed={choice === "keep"} class={`rounded px-3 py-1 text-xs font-medium transition-colors ${choice === "keep" ? "bg-ember-500/15 text-ember-200" : "text-ink-400 hover:text-ink-100"}`}>Keep best</button>
-            <button type="button" onclick={() => choice = "fuse"} aria-pressed={choice === "fuse"} class={`rounded px-3 py-1 text-xs font-medium transition-colors ${choice === "fuse" ? "bg-ember-500/15 text-ember-200" : "text-ink-400 hover:text-ink-100"}`}>Fuse answers</button>
+            <button type="button" onclick={() => choice = "keep"} aria-pressed={choice === "keep"} class={`rounded px-3 py-1 text-xs font-medium transition-colors ${choice === "keep" ? "bg-veil/10 text-ink-50" : "text-ink-400 hover:text-ink-100"}`}>Keep best</button>
+            <button type="button" onclick={() => choice = "fuse"} aria-pressed={choice === "fuse"} class={`rounded px-3 py-1 text-xs font-medium transition-colors ${choice === "fuse" ? "bg-veil/10 text-ink-50" : "text-ink-400 hover:text-ink-100"}`}>Fuse answers</button>
           </div>
         </div>
         <p class="mt-2 text-xs text-ink-500">

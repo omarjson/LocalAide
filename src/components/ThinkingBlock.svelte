@@ -32,7 +32,7 @@
     onclick={() => (open = !open)}
     title={open ? "Hide the thinking" : "Show the thinking"}
   >
-    <Icon name="brain" class={`h-4 w-4 shrink-0 ${thinking ? "text-ember-300" : "text-ink-400"}`} />
+    <Icon name="brain" class={`h-4 w-4 shrink-0 ${thinking ? "text-ink-400" : "text-ink-400"}`} />
     <span class={thinking ? "shimmer font-medium" : "font-medium text-ink-300"}>{thinkingLabel(thinking ? null : ms)}</span>
     <Icon name="chevron-down" class={`h-3.5 w-3.5 shrink-0 text-ink-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
   </button>

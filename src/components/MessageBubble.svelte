@@ -208,9 +208,9 @@
         {/if}
       </div>
     {/if}
-    <div class={`flex max-w-[82%] flex-col ${steer ? "items-start" : "items-end"}`}>
+    <div class={`flex max-w-[80%] flex-col ${steer ? "items-start" : "items-end"}`}>
       {#if isEditing}
-        <div class="w-[min(36rem,80vw)] rounded-2xl border border-edge bg-ink-950 p-3">
+        <div class="w-[min(36rem,80vw)] rounded-2xl border border-ink-700 bg-ink-950 p-3">
           <textarea
             bind:this={editEl}
             bind:value={editDraft}
@@ -221,7 +221,7 @@
           ></textarea>
           <div class="mt-2 flex justify-end gap-2">
             <button type="button" onclick={() => isEditing = false} class="rounded-lg px-3 py-1.5 text-sm text-ink-300 hover:bg-veil/5">Cancel</button>
-            <button type="button" onclick={submitEdit} class="rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember hover:bg-ember-400">Send</button>
+            <button type="button" onclick={submitEdit} class="rounded-lg bg-ink-100 px-3 py-1.5 text-sm font-semibold text-on-ember hover:bg-ink-50">Send</button>
           </div>
         </div>
       {:else}
@@ -245,9 +245,9 @@
         {/if}
         {#if content}
           {#if steer}
-            <span class="mb-1 flex items-center gap-1.5 text-xs text-ink-500"><Icon name="wand" class="h-3.5 w-3.5 text-ember-300" />Steered this answer{#if timeLabel}<span>· {timeLabel}</span>{/if}</span>
+            <span class="mb-1 flex items-center gap-1.5 text-xs text-ink-500"><Icon name="wand" class="h-3.5 w-3.5 text-ink-400" />Steered this answer{#if timeLabel}<span>· {timeLabel}</span>{/if}</span>
           {/if}
-          <div class={`whitespace-pre-wrap break-words rounded-[18px] px-4 py-2.5 text-[15px] leading-6 ${steer ? "rounded-bl-md border border-edge bg-ink-900 text-sm text-ink-300" : "rounded-br-md border border-ember-500/25 bg-ember-500/12 text-ink-50"}`}>{shownContent}{#if sentFromForm.event}<span class="mt-1 flex items-center gap-1 text-xs text-ember-200/80"><Icon name="sparkle" class="h-3 w-3" />Sent from the form</span>{/if}</div>
+          <div class={`whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-[15px] leading-6 ${steer ? "rounded-bl-md border border-ink-700 bg-ink-900 text-sm text-ink-300" : "bg-message text-ink-50"}`}>{shownContent}{#if sentFromForm.event}<span class="mt-1 flex items-center gap-1 text-xs text-ink-400"><Icon name="sparkle" class="h-3 w-3" />Sent from the form</span>{/if}</div>
           {#if longQuestion && !questionExpanded}
             <button type="button" onclick={() => (questionExpanded = true)} class="mt-0.5 text-xs font-medium text-ember-300 transition-colors hover:text-ember-200">Show full question</button>
           {/if}
@@ -416,9 +416,9 @@
   >
     <FocusTrap>
       <button type="button" class="max-h-[85vh] max-w-[92vw] cursor-zoom-out border-none bg-transparent p-0" title="Close" onclick={(e) => e.stopPropagation()}>
-        <img src={lightbox} alt="" class="max-h-[85vh] max-w-[92vw] rounded-xl border border-edge" />
+        <img src={lightbox} alt="" class="max-h-[85vh] max-w-[92vw] rounded-xl border border-ink-700" />
       </button>
-      <button type="button" onclick={() => (lightbox = null)} aria-label="Close fullscreen image" class="absolute right-5 top-5 rounded-xl border border-edge bg-ink-900 p-2 text-ink-300 transition-colors hover:text-ink-100">
+      <button type="button" onclick={() => (lightbox = null)} aria-label="Close fullscreen image" class="absolute right-5 top-5 rounded-xl border border-ink-700 bg-ink-900 p-2 text-ink-300 transition-colors hover:text-ink-100">
         <Icon name="close" class="h-4 w-4" />
       </button>
     </FocusTrap>
@@ -441,14 +441,14 @@
       tabindex="-1"
       in:scale={{ start: 0.96, duration: dur(motion.base) }}
       out:scale={{ start: 0.98, duration: dur(80) }}
-      class="w-full max-w-lg space-y-3 rounded-xl border border-edge bg-ink-900 p-5 shadow-2xl"
+      class="w-full max-w-lg space-y-3 rounded-xl border border-ink-700 bg-ink-900 p-5 shadow-2xl"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => { if (e.key === 'Escape') activeCitation = null; e.stopPropagation(); }}
     >
       <FocusTrap>
         <div class="flex items-center justify-between border-b border-ink-800 pb-2">
           <div class="flex min-w-0 items-center gap-2">
-            <span class="rounded bg-ember-500/15 px-2 py-0.5 text-xs font-semibold text-ember-300">Source {activeCitation.index}</span>
+            <span class="rounded bg-veil/10 px-2 py-0.5 text-xs font-semibold text-ink-200">Source {activeCitation.index}</span>
             <span class="truncate text-sm font-medium text-ink-100">{activeCitation.title}</span>
           </div>
           <button type="button" aria-label="Close" onclick={() => activeCitation = null} class="rounded p-1 text-ink-400 hover:text-ink-100"><Icon name="close" class="h-4 w-4" /></button>
@@ -471,18 +471,18 @@
     flex-shrink: 0;
     align-items: center;
     border-radius: 0.375rem;
-    border: 1px solid color-mix(in oklab, var(--color-ember-500) 25%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 12%, transparent);
+    border: 1px solid var(--color-ink-700);
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
     padding: 0.05rem 0.45rem;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.75rem;
     line-height: 1.15rem;
-    color: var(--color-ember-200);
+    color: var(--color-ink-200);
     transition: background-color 150ms ease-out, border-color 150ms ease-out;
   }
   .reference-chip:hover {
-    background: color-mix(in oklab, var(--color-ember-500) 20%, transparent);
-    border-color: color-mix(in oklab, var(--color-ember-500) 40%, transparent);
+    background: color-mix(in oklab, var(--color-veil) 10%, transparent);
+    border-color: var(--color-ink-600);
   }
   .msg-action {
     display: grid;

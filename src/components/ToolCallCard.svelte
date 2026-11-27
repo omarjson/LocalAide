@@ -133,7 +133,7 @@
         <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-700 border-t-ember-500" aria-hidden="true"></span>
         <span class="text-ink-400">Working</span>
       {:else if status === "waiting"}
-        <span class="rounded-full bg-ember-500/15 px-2 py-0.5 font-medium text-ember-200">Needs your OK</span>
+        <span class="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-300">Needs your OK</span>
       {:else if status === "done"}
         <span class="max-w-[12rem] truncate text-ink-500">{summary}</span>
         <Icon name="check" class="h-3.5 w-3.5 text-emerald-400" />
@@ -156,7 +156,7 @@
 
   {#if skill}
     <div class="flex flex-wrap items-center gap-2 border-t border-ink-800 px-3 py-2 text-sm">
-      <Icon name="sparkle" class="h-4 w-4 shrink-0 text-ember-300" />
+      <Icon name="sparkle" class="h-4 w-4 shrink-0 text-ink-400" />
       <span class="min-w-0 flex-1 text-ink-300">
         {#if skill.undone}
           Undone. <span class="text-ink-500">The skill “{skill.name}” is as it was before.</span>
@@ -226,7 +226,7 @@
   {#if open && shell}
     <div class="border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
       <div class="term">
-        <div class="term-cmd"><span class="text-ember-300">$</span> {detail}{#if shell.cwd}<span class="ml-2 text-ink-500">in workspace/{shell.cwd}</span>{/if}</div>
+        <div class="term-cmd"><span class="text-ink-400">$</span> {detail}{#if shell.cwd}<span class="ml-2 text-ink-500">in workspace/{shell.cwd}</span>{/if}</div>
         {#if shell.text.trim()}<div class="term-out">{shell.text}</div>{:else}<div class="term-out text-ink-500">(no output)</div>{/if}
       </div>
       <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
@@ -237,7 +237,7 @@
     </div>
   {:else if open && isShell && output && status !== "running"}
     <div class="border-t border-ink-800 px-3 pb-3 pt-2.5" transition:slide={{ duration: dur(motion.base) }}>
-      <div class="term"><div class="term-cmd"><span class="text-ember-300">$</span> {detail}</div></div>
+      <div class="term"><div class="term-cmd"><span class="text-ink-400">$</span> {detail}</div></div>
       <p class="mt-2 flex items-start gap-2 text-[13px] leading-5 text-rose-300"><Icon name="shield" class="mt-0.5 h-4 w-4 shrink-0" />{output}</p>
     </div>
   {:else if open && hasDetails && !isSubagent}

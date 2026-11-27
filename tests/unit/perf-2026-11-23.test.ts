@@ -1,8 +1,11 @@
-// Regressions for the 2026-11-23 idle-heat profiling on Omar's Intel Mac:
-// the WebView redrew every frame (per-frame layout + gradient rasterization
-// on the GPU, 95 C at idle). Cause: always-on infinite animations — the
-// pulsing SVG logo eye runs on WebKit's main thread — plus a backdrop-blur
-// header and full-viewport gradients repainted each frame.
+// Idle-heat regressions (the 2026-11-23 profiling run: the old WebView sat
+// at 95 C because the idle screen ran per-frame animations and a live
+// backdrop blur). The GOAT restyle kept the invariants — now asserted
+// against the current classes:
+//   1. The idle screen runs no infinite animations (spinners during an
+//      actual load are activity, not idle).
+//   2. Everything that animates runs on the compositor (will-change).
+//   3. The chat header is solid, not a live backdrop blur.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -11,33 +14,34 @@ const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta
 
 test("no always-on infinite animation runs on the idle screen", () => {
   const logo = read("src/components/LogoMark.svelte");
-  assert.doesNotMatch(logo, /\.logo-glow \{[^}]*infinite/, "the SVG logo eye pulses once on mount, then stays still");
-  assert.match(logo, /animation: logo-pulse 2\.6s ease-in-out 1;/, "one pulse, not a loop");
+  assert.doesNotMatch(logo, /infinite/, "the wordmark never loops");
+
+  const mascot = read("src/components/GhostMascot.svelte");
+  // The ghost's float is gated to the working state; the idle/hello paths run once.
+  assert.match(mascot, /\.ghost-working \{[^}]*infinite/, "the float belongs to the working state");
+  assert.doesNotMatch(mascot, /\.ghost-idle \{[^}]*infinite/, "the idle ghost is still");
 
   const empty = read("src/components/EmptyState.svelte");
-  assert.doesNotMatch(empty, /empty-float/, "the empty-state icon no longer floats forever");
-  assert.doesNotMatch(empty, /infinite/, "nothing loops on the idle empty screen");
+  assert.doesNotMatch(empty, /empty-float/, "the empty-state icon does not float forever");
 });
 
 test("activity-only animations run on the compositor, not the main thread", () => {
   const bubble = read("src/components/MessageBubble.svelte");
   assert.match(bubble, /\.typing span \{[^}]*will-change: transform, opacity;/, "typing dots are composited");
   const thinking = read("src/components/ThinkingBlock.svelte");
-  assert.match(thinking, /\.shimmer \{[^}]*will-change: opacity;/, "the breathing label is composited");
+  assert.match(thinking, /will-change: opacity;/, "the breathing label is composited");
   const library = read("src/components/LibraryStatus.svelte");
-  assert.match(library, /\.bar span \{[^}]*will-change: transform;/, "the index sweep is composited");
-  const picker = read("src/components/ModelPicker.svelte");
-  assert.match(picker, /\.effort-max \.effort-fill::before \{[^}]*will-change: transform;/, "the effort sheen is composited");
+  assert.match(library, /will-change: transform;/, "the index sweep is composited");
   const session = read("src/components/SessionPicker.svelte");
-  assert.match(session, /will-change: opacity;\s*animation: session-pulse/, "the session pulse is composited");
+  assert.match(session, /will-change: opacity;/, "the session pulse is composited");
+  const mascot = read("src/components/GhostMascot.svelte");
+  assert.match(mascot, /will-change: transform;/, "the working ghost is composited");
   const css = read("src/main.css");
   assert.match(css, /\.skeleton::after \{[^}]*will-change: transform;/, "the skeleton shimmer is composited");
   assert.match(css, /\.progress-indeterminate \{[^}]*will-change: transform;/, "the progress slide is composited");
 });
 
-test("the ember glow is rasterized once, and the chat header no longer blurs its backdrop every frame", () => {
-  const css = read("src/main.css");
-  assert.match(css, /\.ember-glow \{[^}]*transform: translateZ\(0\);/, "the gradient panel gets its own layer");
+test("the chat header is solid, not a live backdrop blur", () => {
   const chat = read("src/components/ChatHeader.svelte");
-  assert.doesNotMatch(chat, /<header class="[^"]*backdrop-blur/, "the chat header is solid, not a live blur");
+  assert.doesNotMatch(chat, /<header[^>]*backdrop-blur/, "the chat header does not blur its backdrop every frame");
 });

@@ -46,8 +46,9 @@ if (inlineScripts.length > 0) {
 }
 
 // The theme script must load before the page draws, or a light theme flashes dark.
-if (!indexHtml.includes('<script src="/theme-init.js"></script>') || !existsSync(join(distDir, 'theme-init.js'))) {
-  console.error("FAIL: dist/theme-init.js is missing or not loaded by index.html.");
+// Relative paths are what the Electron file:// load needs, so ./ is expected.
+if (!indexHtml.includes('<script src="./theme-init.js"></script>') || !existsSync(join(distDir, 'theme-init.js'))) {
+  console.error("FAIL: dist/theme-init.js is missing or not loaded by index.html with a relative path.");
   process.exit(1);
 }
 console.log("PASS: no inline scripts, and the theme loads before the first paint.");
@@ -78,8 +79,9 @@ if (jsFiles.length === 0) {
 }
 
 // The entry script index.html loads; diagrams and other lazy chunks are
-// separate files.
-const entry = /<script[^>]+src="\/assets\/([^"]+\.js)"/.exec(indexHtml)?.[1] ?? jsFiles[0];
+// separate files. Base "./" writes ./assets/... into index.html.
+const entry =
+  /<script[^>]+src="\.?\/?assets\/([^"]+\.js)"/.exec(indexHtml)?.[1] ?? jsFiles[0];
 const jsPath = join(assetsDir, entry);
 const jsContent = readFileSync(jsPath, 'utf-8');
 

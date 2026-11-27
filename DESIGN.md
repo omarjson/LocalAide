@@ -1,59 +1,67 @@
 # LocalAide design
 
-Status: direction "Deep Ember" applied on 2026-11-21 (mockup: `docs/design/mockups/f-deep-ember.html`). It supersedes "At Home on Windows" (`docs/design/mockups/e-native.html`, 2026-11-14). The redesigned frontend has been checked in the browser preview harness (`preview.html`, fake backend) in both themes on the Chat (empty and conversation, with the in-chat search bar), Search, Settings and Models screens. Verified with `svelte-check` (0 findings) and the production build; not yet checked inside the real Tauri window.
-
-The 0.1.9 batch (mockup: `docs/design/mockups/g-discovery-batch.html`) adds Reading settings to the Chat settings sheet (chat width Comfortable/Wider/Full, follow-while-streaming, collapse long questions), a search box over the Settings section list, and totals on the Memory screen — all verified in the preview harness. The Usage dashboard and Automations screens from that mockup are **planned, not built**: they need new Rust-side stats and scheduling commands (no Rust toolchain on the dev machine), and were not shipped as dead UI.
+Status: direction "GOAT" applied 2026-11-27. LocalAide now takes its look and feel from [github.com/goat-si/goat](https://github.com/goat-si/goat): neutral near-black layers, an ink primary, one blue accent, hairlines, 8px controls and a glass composer. It supersedes "Deep Ember" (2026-11-21) and "At Home on Windows" (2026-11-14). The palette, sidebar, composer, buttons and empty state were migrated, and the 2026-11-27 sweep finished the job: every decorative ember reference became ink (selected chips, card tints, glows, primary fills, body text), leaving ember-blue only on links, focus, live state, information and data. Verified in the real Electron window on this machine.
 
 ## Surface and mode
 
 - Surface: a desktop app for chat, search, memory, and model management.
 - Mode: Operate. Scanning, consistency, and clear controls come first.
-- Direction: warm near-black layers. The window reads as one quiet, warm space in three depths — the darkest chrome (sidebar, status bar), the content layer, and raised cards (composer, popovers, tool cards) one step above with soft elevation shadows. The system UI font stays; corners stay small. On macOS the same font stack falls back to the system font.
-- The brand lives in one place: the ghost's ember eye. Ember marks the selected nav item, the live dot, the send button and the main action. Everything else stays quiet.
+- Direction: neutral near-black layers. The window reads as one quiet space in three depths — the darkest chrome (sidebar, title bar, status bar), the content canvas, and raised cards (composer, popovers, tool cards) one step above with soft elevation shadows. No warm cast anywhere.
+- The brand lives in one place: the ghost's blue eye. Filled primary actions are **ink** (white in dark, near-black in light); blue is reserved for links, focus, live state and information. Everything else stays quiet.
+- Motion is a colour change or a short fade. No springy icon transforms, no perpetual loops outside real progress.
 
 ## Logo
 
-- `public/logo.svg`: a stitched ghost with one plain eye and one ember eye, plus a patch, on a dark rounded tile. The ember eye stands for the local model.
-- `src/components/LogoMark.svelte` draws the same tile, so the cream ghost reads on the light theme too.
+- `public/logo.svg`: a stitched ghost with one plain eye and one blue eye, plus a patch, on a `#181818` rounded tile. The blue eye stands for the local model.
+- `src/components/LogoMark.svelte` is the chrome mark: a monochrome ghost in `currentColor`, one eye punched out and one in `ember-500` (blue). It sits beside the `LOCALAIDE` wordmark at the top of the sidebar, GOAT style.
+- `src/components/GhostMascot.svelte` is the same ghost at setup size, drawn in theme tokens so it reads on both themes.
 
 ## First-run setup (`src/screens/SetupWizard.svelte`, 0.2.4)
 
 - The patched ghost (`src/components/GhostMascot.svelte`, the logo ghost without its tile, outlined for the light theme) leads each step from a speech bubble. Moods change only its eyes: hello, looking (checking the computer), working (downloading), done.
-- One recommended path, Tiny, with one ember button. Fit is said in words (Fits easily, Fits, Too big for this computer), never in GB. Other sizes, online providers and community models wait behind one "More options" disclosure, which opens by itself when nothing fits.
-- Motion: the ghost floats only while a download runs; the done check pops once with one ember ring. Both move HTML elements with transform/opacity, never SVG children (the 0.2.2 heat fix), and stop under reduced motion.
+- One recommended path, Tiny, with one ink button. Fit is said in words (Fits easily, Fits, Too big for this computer), never in GB. Other sizes, online providers and community models wait behind one "More options" disclosure, which opens by itself when nothing fits.
+- Motion: the ghost floats only while a download runs; the done check pops once with one blue ring. Both move HTML elements with transform/opacity, never SVG children (the 0.2.2 heat fix), and stop under reduced motion.
 - The Stitch `taste-design` checklist was applied by hand (no Stitch MCP in Kiro Web); the two items not taken (perpetual micro-loops, Geist/Satoshi fonts) and why are in `.kiro/specs/polish-0-2-4/design.md`.
 
 ## Layout shell (`src/App.svelte`)
 
-- Nav pane, 248px, on the darkest chrome. Under the wordmark sits a **New chat** button in a soft ember tint with its shortcut. Items are an icon plus a label, 36-40px tall. The selected item gets a raised fill, semibold text, and a 3px ember pill on the left, plus `aria-current="page"`.
-- Settings sits at the bottom of the pane. Update notices sit just above it.
-- Content sits on the content layer (`ink-900`) with a hairline and an 8px top-left corner, warmed by a faint ember glow from the top (`.app-canvas`).
+- Nav pane, 256px, on the darkest chrome. The top row is the ghost glyph plus a 13px bold `LOCALAIDE` wordmark in `tracking-[0.04em]`. Under it sits a quiet **New chat** row (`h-8 rounded-md`, `hover:bg-veil/5`) with its shortcut, not a tinted CTA.
+- Items are an icon plus a label, `h-9 rounded-md gap-2.5 px-2.5`. The selected item is a soft `bg-veil/6` fill with `font-medium` text, plus `aria-current="page"`. No left pill.
+- Settings and Collapse sit at the bottom of the pane behind a hairline. Update notices sit just above them.
+- Content sits flat on `ink-900` with a `border-l border-ink-800` hairline. No glow, no rounded corner.
 - Status bar along the bottom: a green dot with free computer memory, the model memory limit, and a `?` kbd chip for the shortcut help.
 
 ## Palette
 
 All tokens live in `src/main.css` under `@theme`; the light theme re-declares them under `:root[data-theme="light"]`, so every utility flips automatically.
 
+Values mirror GOAT's `apps/web/src/index.css`.
+
 | Role | Token | Dark | Light |
 |---|---|---|---|
-| Chrome (sidebar, status bar) | `ink-950` | #14100c | #ece9e3 |
-| Content layer, inputs | `ink-900` | #1e1914 | #f7f5f0 |
-| Raised fills, hover | `ink-800` / `ink-700` | #2e261e / #3d342a | #e3dfd7 / #d3cec4 |
-| Meaningful borders | `edge` | #7c6f5e (3.9:1) | #767066 (4.1:1) |
-| Muted text | `ink-400` | #b3a696 (7.9:1) | #5c554b (6.1:1) |
-| Placeholders | `ink-500` / `ink-600` | #a2937f / #93836f | #6d675d / #6e675c |
-| Body text | `ink-100` | #f3ede3 | #201b15 |
-| Accent | `ember-500` | #ff7a1a | #c2540a |
-| Button fill | `ember-600` | #e8680c | #b54a00 |
-| Accent text | `ember-200/300` | #ffd0a3 / #ffb173 | #9a3f00 |
+| Chrome (sidebar, title bar, status bar) | `ink-950` | #141414 | #f7f7f7 |
+| Canvas | `ink-900` | #181818 | #ffffff |
+| Raised fills, cards, composer base | `ink-800` | #212121 | #f3f3f3 |
+| Meaningful borders | `edge` | #5c5c5c (3.1:1) | #767676 (4.6:1) |
+| Hairlines | `ink-700` / `ink-800` | #2d2d2d / #212121 | #e4e4e4 / #f3f3f3 |
+| Muted text | `ink-400` | #afafaf (7.4:1) | #5d5d5d (7.0:1) |
+| Placeholders | `ink-500` / `ink-600` | #8f8f8f / #868686 | #6b6b6b / #6e6e6e |
+| Body text | `ink-100` | #ececec | #0d0d0d |
+| Accent (links, focus, live, info) | `ember-500` | #339cff | #0169cc |
+| Primary fill | `ink-100` | #ececec | #0d0d0d |
+| Text on primary | `on-ember` | #0d0d0d | #ffffff |
 | Overlay tint | `veil` | white | black |
-| Focus ring | `ink-50` | warm white | near-black |
+
+Glass tokens: `--glass-blur: 16px`, `--glass-saturation: 1.08`, `--glass-opacity: 92%`. `.surface-glass` is the utility (backdrop blur with an opaque fallback under `@supports`). `.btn-ink` is the ink-filled primary.
+
+The composer glass uses `--glass-base`: `ink-800` (#212121) in dark, `ink-900` (#ffffff) in light, so the light composer reads as a white field held by its hairline, the way GOAT draws it. Its elevation is `--shadow-composer` (dark: `0 14px 32px -18px rgb(0 0 0 / 75%)`, light: `0 1px 2px rgb(0 0 0 / 5%)`).
 
 Contrast figures are WCAG 2.x ratios against the page colour, re-measured 2026-11-21 (script checked: body ≥ 15:1 dark / ≥ 14:1 light, muted ≥ 7.3:1 dark / ≥ 6.1:1 light, placeholders ≥ 4.75:1 both themes, `edge` ≥ 3.5:1).
 
 Rules:
 
-- Text on an ember fill uses `on-ember` (dark ink in dark, white in light). White on light `ember-600` is 5.3:1.
+- Text on an ink primary uses `on-ember` (dark ink in dark, white in light).
+- Blue never fills a primary button; it marks links, focus rings, live dots and info banners.
 - Hover and quiet fills use `bg-veil/5` or `bg-veil/10`, never `bg-white/N`, which disappears on the light theme.
 - Meaningful borders use `edge`; decorative hairlines use `ink-700` or `ink-800`.
 - Body text and placeholders meet 4.5:1 on both the page and the content layer.
@@ -61,9 +69,9 @@ Rules:
 
 ## Type and shape
 
-- Font: `Segoe UI Variable Text`, then `Segoe UI`, then the system font. It ships with Windows, so nothing has to be bundled and the app stays offline.
+- Font: `Inter Variable`, then `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, then the system font. Nothing is downloaded at runtime.
 - Base size 14px. Smallest size is `text-xs`, set to 13px in `@theme`. Do not use `text-[10px]` or `text-[11px]`.
-- Corners: `rounded-md` 4px, `rounded-lg` 6px, `rounded-xl` 8px, `rounded-2xl` 10px (overridden in `@theme`).
+- Corners: `rounded-md` 6px, `rounded-lg` 8px, `rounded-xl` 12px, `rounded-2xl` 16px (set in `@theme`). The composer is `rounded-2xl`; bubbles are `rounded-2xl`.
 
 ## Rules from the craft floor
 
@@ -75,7 +83,7 @@ Rules:
 
 ## Known gaps
 
-- The Deep Ember pass has not been checked inside the real Tauri window yet (it was verified in the browser preview harness, both themes).
+- The GOAT pass is verified in the real Electron window (CDP screenshots of Chat, Settings and Usage) plus `svelte-check` and the production build.
 - The Search screen cannot show a folder count because the backend only returns document count and storage size.
 - The Settings screen estimates words from the token limit; the model's real tokenizer can differ.
 - The Dev Config screen is gone (2026-11-15). Memory for models is set in Settings → General, and the Models screen and setup flag models that may not fit.

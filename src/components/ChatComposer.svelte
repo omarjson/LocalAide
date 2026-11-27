@@ -214,7 +214,7 @@
         aria-label="Scroll to the newest message"
         in:fly={{ y: 8, duration: dur(motion.base) }}
         out:fade={{ duration: dur(100) }}
-        class="absolute -top-12 right-2 z-10 grid h-9 w-9 place-items-center rounded-full border border-edge bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
+        class="absolute -top-12 right-2 z-10 grid h-9 w-9 place-items-center rounded-full border border-ink-700 bg-ink-800/95 text-ink-100 shadow-xl transition-colors hover:bg-ink-700"
       ><Icon name="arrow-down" class="h-4 w-4" /></button>
     {/if}
     {#if chatError}
@@ -234,21 +234,21 @@
     {#if useRecall && pinnedTitles.length > 0}
       <div class="mb-2 flex flex-wrap items-center gap-1.5" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
         {#each pinnedTitles as title (title)}
-          <span class="pinned-chip" title="Pinned note — always in context while Recall is on"><Icon name="pin" class="h-3 w-3 shrink-0 text-ember-300" /><span class="max-w-48 truncate">{title}</span></span>
+<span class="pinned-chip" title="Pinned note — always in context while Recall is on"><Icon name="pin" class="h-3 w-3 shrink-0 text-ink-400" /><span class="max-w-48 truncate">{title}</span></span>
         {/each}
       </div>
     {/if}
     {#if suggestions.length > 0 && !input.trim() && !run.streaming}
       <div class="mb-2 flex flex-wrap items-stretch gap-2" in:fly={{ y: 4, duration: dur(motion.base), easing: motion.enter }}>
         {#each suggestions as option, i (option)}
-          <button type="button" class="suggest-chip min-w-0 flex-1 basis-0" onclick={() => { input = option; onFocusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ember-300" /><span class="min-w-0 flex-1 truncate">{option}</span></button>
+<button type="button" class="suggest-chip min-w-0 flex-1 basis-0" onclick={() => { input = option; onFocusComposer(); }} title={`Use this prompt (${i === 0 ? "Tab" : "click"})`}><Icon name="sparkle" class="h-3.5 w-3.5 shrink-0 text-ink-400" /><span class="min-w-0 flex-1 truncate">{option}</span></button>
         {/each}
         <button type="button" aria-label="Hide the suggestions" class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-500 hover:bg-veil/5 hover:text-ink-200" onclick={() => (suggestions = [])}><Icon name="close" class="h-3.5 w-3.5" /></button>
       </div>
     {/if}
     {#if previousDraft && input.trim() && !run.streaming}
       <div class="mb-2 flex items-center gap-2 text-xs text-ink-400">
-        <Icon name="wand" class="h-3.5 w-3.5 text-ember-300" />Improved by the model.
+        <Icon name="wand" class="h-3.5 w-3.5 text-ink-400" />Improved by the model.
         <button type="button" class="underline underline-offset-2 hover:text-ink-100" onclick={() => { input = previousDraft ?? input; previousDraft = null; }}>Undo</button>
       </div>
     {/if}
@@ -256,7 +256,7 @@
       <ul class="mb-2 space-y-1" aria-label="Messages waiting to be sent">
         {#each run.steering as note (note.id)}
           <li class="note-row">
-            <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ember-300" />
+            <Icon name="wand" class="h-3.5 w-3.5 shrink-0 text-ink-400" />
             <span class="min-w-0 flex-1 truncate" title={note.text}>{note.text}</span>
             <span class="shrink-0 text-xs text-ink-500">Steering · read at the next step</span>
           </li>
@@ -408,10 +408,10 @@
     max-width: 100%;
     align-items: center;
     gap: 0.4rem;
-    border-radius: 9999px;
-    border: 1px solid color-mix(in oklab, var(--color-ember-500) 40%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 8%, transparent);
-    padding: 0.25rem 0.65rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-ink-700);
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
+    padding: 0.2rem 0.5rem;
     font-size: 0.75rem;
     color: var(--color-ink-300);
   }

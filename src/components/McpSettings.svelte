@@ -368,7 +368,7 @@
     <SettingsGroup>
       {#each artcraft as preset, i (preset.id)}
         <div class={`flex items-center gap-4 px-[18px] py-3 ${i > 0 ? "border-t border-ink-800" : ""}`}>
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ember-300"><Icon name="code" class="h-[18px] w-[18px]" /></span>
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-400"><Icon name="code" class="h-[18px] w-[18px]" /></span>
           <span class="min-w-0 flex-1">
             <span class="flex flex-wrap items-center gap-2">
               <span class="font-semibold text-ink-50">{preset.id.replace("artcraft-", "")}</span>

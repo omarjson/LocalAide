@@ -25,7 +25,7 @@
 
 <div class={`q ${active ? "q-live" : ""}`}>
   {#if showQuestion}
-    <p class="flex items-start gap-2 text-[15px] leading-6 text-ink-50"><Icon name="chat" class="mt-1 h-4 w-4 shrink-0 text-ember-300" /><span>{question}</span></p>
+    <p class="flex items-start gap-2 text-[15px] leading-6 text-ink-50"><Icon name="chat" class="mt-1 h-4 w-4 shrink-0 text-ink-400" /><span>{question}</span></p>
   {/if}
   {#if active || chosen}
     <div class={showQuestion ? "mt-3" : ""}>

@@ -1,6 +1,6 @@
 # LocalAide Architecture
 
-LocalAide is a local-first desktop AI assistant built on Tauri v2, Rust (edition 2024), Svelte 5, and SQLite. This page describes how the shipped code works; [docs/scope.md](docs/scope.md) describes what is in and out, and the [ADRs](docs/adr/0001-typed-ipc.md) record the decisions.
+LocalAide is a local-first desktop AI assistant built on Electron, Svelte 5, and SQLite. The backend is plain Node ESM under `electron/` — no build step, no bundler, no native modules; SQLite comes from Node's built-in `node:sqlite`. This page describes how the shipped code works; [docs/scope.md](docs/scope.md) describes what is in and out, and the [ADRs](docs/adr/0001-typed-ipc.md) record the decisions.
 
 ## 1. High-Level Architecture
 
@@ -10,70 +10,78 @@ LocalAide is a local-first desktop AI assistant built on Tauri v2, Rust (edition
                   │   Tailwind 4 • High-Contrast WCAG 2.2   │
                   └────────────────────┬────────────────────┘
                                        │ Typed IPC Client
-                                       │ (bindings.ts; dynamic JSON only for tool args & events)
+                                       │ (@tauri-apps/api specifiers aliased
+                                       │  to src/lib/platform/tauri.ts)
                                        ▼
                   ┌─────────────────────────────────────────┐
-                  │              Tauri Core                 │
-                  │   Strict CSP • Channel Event Streaming  │
+                  │            Electron Main                │
+                  │  preload bridge (__LOCALAIDE__) • CSP   │
+                  │  localaide-file:// • Channel streaming  │
                   └────────────────────┬────────────────────┘
-                                       │
+                                       │ one ipcMain channel ("localaide:invoke")
+                                       │ name → handler table (electron/ipc.mjs)
          ┌─────────────────────────────┼─────────────────────────────┐
          ▼                             ▼                             ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
-│  Chat & Memory   │         │  LibraryService   │         │   ToolService    │
-│  RouterEngine    │         │   SQLite (WAL)    │         │  Workspace Jail  │
-│  Token Budgeting │         │   FTS5 BM25       │         │  User Approval   │
-│  RAG Citations   │         │  Keyword+Vector   │         │  Audit Log       │
+│  Chat & Memory   │         │  Library + Indexer│         │   Tools + MCP    │
+│  chat.mjs        │         │  SQLite (WAL)     │         │  Workspace jail  │
+│  modes.mjs       │         │  FTS5 keyword +   │         │  Approval modes  │
+│  usage.mjs       │         │  float32 vectors  │         │  Audit log       │
 └────────┬─────────┘         └─────────┬─────────┘         └────────┬─────────┘
          │                             │                            │
          ▼                             ▼                            ▼
 ┌──────────────────┐         ┌───────────────────┐         ┌──────────────────┐
-│  InferenceEngine │         │  Embedded Storage │         │ Host Filesystem  │
-│  llama-server    │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
-│  sidecar / cloud │         │  index/library.db │         │ workspace/       │
+│  Engine sidecar  │         │  Embedded Storage │         │ Host Filesystem  │
+│  llama-server ×1 │         │  ~/.aiassistant/  │         │ ~/.aiassistant/  │
+│  (+ embedding ×1)│         │  index/library.db │         │ workspace/       │
+│  or cloud/OpenAI │         │  conversations/   │         │ models/ memory/  │
 └──────────────────┘         └───────────────────┘         └──────────────────┘
 ```
 
 ## 2. Core Service Boundaries
 
-### Single AppState (`src-tauri/src/app/state.rs`)
-One managed state owner holds `JobRegistry` (cancel flags, progress), `ModelManager`, `ModelService`, `RouterEngine`, `LibraryService`, `MemoryService`, `ToolService`, `SkillsService`, `BackupEngine`, `EmbeddingEngine`, `WebSearchEngine`, and `ConfigStore`. There is no distributed state and no ad-hoc file cache.
+### One main process (`electron/`)
+`main.mjs` owns the window, the preload bridge, the `localaide-file://` protocol and the CSP headers. `ipc.mjs` is the dispatcher: one `ipcMain` channel, a name → handler table wrapped in `guard()`, which turns every throw into the `{ code, message }` `AppError` shape the UI's `errorMessage()` already maps to plain words. An unported command throws `NOT_IMPLEMENTED` — the UI shows one honest error instead of a blank screen. Long-lived services (`engine`, `embedding`, `mcp`, `download`) shut down on quit.
 
-### Inference (`src-tauri/src/services/inference/`)
-- `RouterEngine` is the one `InferenceEngine` the rest of the app talks to. It forwards to the local sidecar by default and to the remote engine only while cloud mode is on; loading a model always returns to local.
-- `SidecarEngine` runs `llama-server` (llama.cpp v1.0.0) as a child process on `127.0.0.1` on a free port with a random 256-bit API key. It streams from `/v1/chat/completions`, passes `--mmproj` for vision models, and is killed on unload, model switch, or exit. See [ADR-0007](docs/adr/0007-sidecar-engine.md).
-- `RemoteEngine` (opt-in) streams from the user-configured OpenAI-compatible provider over HTTPS — or over HTTP for a loopback proxy. It is enabled only from Settings with a user-supplied key; the chat header shows a cloud badge while it is active.
-- Cancellation is an atomic flag checked per streamed token; Stop or `Esc` halts generation at the next token.
-- `ContextBudget` trims the oldest turns when history exceeds the model's context, preserving the system prompt, the RAG block, and the latest user message.
+### Inference (`electron/services/engine.mjs`, `chat.mjs`, `stream.mjs`)
+- The local sidecar runs `llama-server` as a child process on `127.0.0.1` on a free port with a random API key. It streams from `/v1/chat/completions`, passes `--mmproj` for vision models, and is killed on unload, model switch, or exit. The binary lives at `~/.aiassistant/tools/<tool>-<build>/llama-server`, where the downloader unpacked it. See [ADR-0007](docs/adr/0007-sidecar-engine.md).
+- Online providers (opt-in) stream from the user-configured OpenAI-compatible endpoint over HTTPS — or HTTP for a loopback proxy. The chat header shows a cloud badge while one is active.
+- `chat.mjs` runs the tool loop: up to `max_rounds` (16/6/8 for autonomous/strict/other), the four chat modes inject their instruction text (`modes.mjs`, ported verbatim), strict caps temperature at 0.3, and autonomous turns the web on by itself.
+- Approval modes: `plan` refuses every write outright; `ask` asks; `smart` auto-approves read-only shell work; `auto` never asks. Approval timers (plan auto-accept, terminal countdown) come from the config, clamped 0..600 s.
+- The `Channel` streams 14 event variants (`token`, `citation`, `reasoning`, `tool_call/approval/result`, `question`, `todos`, `subagent_step`, `skill_change`, …) through the preload as `{ index, message }` frames.
 
-### Document library (`src-tauri/src/services/library/`)
-- One transactional store: `~/.aiassistant/index/library.db`, SQLite in WAL mode (`journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 5000`).
-- Ingest: natural paragraph/sentence chunking (1500 characters, 250 overlap), pure-Rust PDF text extraction via `flate2`, content hashing for deduplication. When the embedding engine is running, chunk vectors are written at index time; a backfill command vectorizes indexes built without it.
-- `EmbeddingEngine` runs a second `llama-server --embedding` instance for an installed embedding model (EmbeddingGemma by default) and serves `/v1/embeddings` locally; `Drop` stops it.
-- Search: three modes — keyword BM25 over FTS5, semantic cosine over chunk vectors, and hybrid with reciprocal-rank fusion of both rankings. Semantic and hybrid quietly fall back to keyword while the embedding engine is off. When the reranker engine (a third `llama-server --rerank` instance) is running, the top fused candidates are re-ordered by query-document relevance through `/v1/rerank`; a rerank failure keeps the fused order.
+### Downloads (`electron/services/download.mjs`)
+- Model and engine downloads write to `<name>.part`, resume with an HTTP `Range` request, verify SHA-256 before the atomic rename, and keep the part file on Pause/Cancel so "Resume" appears. A disk-space check refuses early when the model would not fit.
+- The llama.cpp engine is pinned per platform/graphics build (CPU, Vulkan, ROCm) with URL + SHA-256 + size, unpacked with the system `tar`, and emitted on the `engine-download` event.
+- The model catalog (`catalog/models.json`) is verified by an integrity digest over ids, sizes and hashes, plus structural validation (safe ids, https URLs, `.gguf` names) and an anti-rollback version check; refreshed catalogs are fetched from the project's repository, capped at 512 KB.
 
-### Memory & RAG (`src-tauri/src/services/memory/`)
-- Markdown notes in `~/.aiassistant/memory/` are synchronized with the SQLite `notes` index.
-- Relevance gate `MIN_RELEVANCE_SCORE = 0.010` keeps low-scoring chunks out of the prompt; unrelated questions get zero injected context.
-- Citations are emitted as `ChatStreamEvent::Citation` payloads with deterministic keys `[1]`, `[2]` before tokens stream, and render as clickable pills with snippet, path, and score.
-- "Forget All" unlinks every note file and purges the database rows in one transaction.
+### Document library (`electron/services/indexer.mjs`, `library.mjs`, `embedding.mjs`)
+- One transactional store: `~/.aiassistant/index/library.db`, SQLite in WAL mode.
+- Ingest walks folders to 20,000 files / 32 levels, skipping dot-folders, `node_modules`, `target`, `dist`, `vendor`; reads text and simple PDFs (inflated streams, text operators), refuses binaries and empties with a reason; chunks at natural boundaries (1500 characters, 250 overlap) with a content hash so rescans skip unchanged files.
+- `EmbeddingEngine` runs a second `llama-server --embedding` instance for an installed embedding model and serves `/v1/embeddings` locally; chunk vectors are float32 blobs, filled by the backfill command.
+- Search has three modes — keyword BM25 over FTS5, semantic cosine over chunk vectors, and hybrid (both, best score per file). Semantic and hybrid quietly fall back to keyword while the embedding engine is off.
 
-### Tools & jail (`src-tauri/src/services/tools/`)
-- `WorkspaceJail` is rooted at `~/.aiassistant/workspace`. Paths are checked lexically (`..` depth) and canonically (`std::fs::canonicalize`); outside symlinks and symlink loops are rejected with `SANDBOX_DENIED`.
-- Actions are `list_dir`, `read_file`, `write_file`, `search_files`. Reads are auto-approved and bounded (1 MB read, 1000-entry listings); `write_file` (4 MB cap) requires interactive approval with a payload preview, honored once or for the session.
-- Every call — approved, denied, or failed — is written to the SQLite `tool_audit` table. The log is user-visible and clearable from Settings.
+### Memory (`electron/services/memory.mjs`)
+- Markdown notes in `~/.aiassistant/memory/` are mirrored into the SQLite `notes` table; pinned notes ride in every chat with recall on.
+- Suggestions the model offers wait in `~/.aiassistant/note_suggestions/` until the user accepts or dismisses them.
+- Recall (`memoryContext`) injects pinned notes and the best keyword matches above the answer, and citations are emitted as `citation` events the answer renders as source chips.
 
-### Web search (`src-tauri/src/services/websearch/`)
-- One blocking HTTP client with per-provider base URLs; the provider table fixes what exists: DuckDuckGo (lite page), Wikipedia REST search, Jina Reader, Exa, Firecrawl. Unknown ids are refused before any request.
-- Keyless providers need nothing; keyed ones fail with `WEB_NO_KEY` until the user stores a key in Settings → Web search. Keys live in `config.json`, travel only to their own provider, and are stripped from backups unless included.
-- Parsing is in pure functions (DuckDuckGo HTML with both class generations, Wikipedia pages, Exa results, Firecrawl search/scrape) tested without network; HTTP-level tests run against loopback servers, including 429/401 mapping and the 2 MB response cap. See [ADR-0011](docs/adr/0011-web-search.md).
+### Tools, MCP and the jail (`electron/services/tools.mjs`, `mcp.mjs`)
+- File tools are jailed to `~/.aiassistant/workspace/` — or the chat's own `folder` when one is set. Paths resolve inside the jail; escapes are rejected.
+- Reads, listings and searches run without prompts (per the approval mode); writes and terminal commands ask first, with payload previews; every call lands in the SQLite `tool_audit` table.
+- MCP servers (stdio programs or Streamable HTTP addresses) connect lazily; their tools are offered to the model as `mcp_<server>_<tool>` specs, executed through the server, with each server's `auto_approve` deciding whether a call asks first.
+
+### Web search (`electron/services/websearch.mjs`)
+- The provider table fixes what exists: DuckDuckGo (lite page), Wikipedia REST search, Jina Reader, Exa (API or keyless MCP), Firecrawl. Unknown ids are refused before any request.
+- Keyless providers need nothing; keys live in `config.json`, travel only to their own provider, and are excluded from backups unless included.
+- Crawl targets are validated against a private-host list, so addresses on the user's machine or network are never sent to an online reader. Responses are capped at 2 MB.
 
 ## 3. Threat Model & Invariants
 
 | Threat | Mitigation |
 |---|---|
-| Prompt-injection exfiltration | Tools confined to `WorkspaceJail`; absolute paths and outside symlinks rejected with `SANDBOX_DENIED`. |
-| Model weight tampering | Catalog integrity digest over ids, sizes, and hashes, checked before any download; streaming SHA-256 verification before atomic rename. |
-| XSS | Strict CSP (`default-src 'self' ...`), no remote scripts, typed IPC edges. |
+| Prompt-injection exfiltration | Tools confined to the workspace jail; escapes rejected. MCP tools ask unless the server is trusted. |
+| Model weight tampering | Catalog integrity digest checked before any download; streaming SHA-256 verification before atomic rename; https-only URLs. |
+| XSS | Strict CSP on every `file://` response (`script-src 'self'`, loopback-only `connect-src`), no remote scripts, context isolation on, no node in the page. |
 | Data exfiltration | Zero telemetry; with cloud mode off, the chat path makes no network requests. Cloud mode is opt-in, sends chat only to the configured provider, and shows a badge while active. Web search sends queries to the provider the user picked, only on an explicit click, with a 2 MB response cap. |
-| Memory exhaustion | Streaming SHA-256 in 64 KB buffers; bounded tool reads and writes; strict context budgeting. |
+| Memory exhaustion | Streaming SHA-256 in 64 KB buffers; the 2 MB web-response cap; bounded tool reads and writes; strict context budgeting; the index walk stops at 20,000 files. |

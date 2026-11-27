@@ -91,10 +91,10 @@
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 font-medium text-ink-100">
-                <Icon name="chat" class="h-4 w-4 shrink-0 text-ember-300" />
+                <Icon name="chat" class="h-4 w-4 shrink-0 text-ink-400" />
                 <span class="truncate">{hit.title || "Untitled"}</span>
                 {#if chats.tabs.some((t) => t.id === hit.thread_id && t.busy)}<span class="inline-block h-2 w-2 shrink-0 rounded-full bg-ember-400" title="This chat is working" aria-label="Busy"></span>{/if}
-                {#if chats.tabs.some((t) => t.id === hit.thread_id)}<span class="shrink-0 rounded-full bg-ember-500/10 px-2 py-0.5 text-xs font-normal text-ember-200">Open in tab</span>{/if}
+                {#if chats.tabs.some((t) => t.id === hit.thread_id)}<span class="shrink-0 rounded-full bg-veil/8 px-2 py-0.5 text-xs font-normal text-ink-300">Open in tab</span>{/if}
               </div>
               <p class="mt-1 break-words text-sm text-ink-300">{hit.snippet}</p>
               <p class="mt-1 truncate text-xs text-ink-500" title={hit.path}>{hit.path}</p>

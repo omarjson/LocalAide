@@ -9,8 +9,8 @@
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-v0.2.4-blue.svg)](https://github.com/omarjson/LocalAide/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Rust: 2024](https://img.shields.io/badge/Rust-2024%20Edition-orange.svg)](https://www.rust-lang.org/)
-[![Tauri: v2](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app/)
+[![Electron: 45](https://img.shields.io/badge/Electron-45-47848F.svg)](https://www.electronjs.org/)
+[![Node: 24](https://img.shields.io/badge/Node-24-339933.svg)](https://nodejs.org/)
 [![Svelte: 5](https://img.shields.io/badge/Svelte-5%20(Runes)-FF3E00.svg)](https://svelte.dev/)
 [![SQLite: WAL](https://img.shields.io/badge/SQLite-WAL%20Mode-003B57.svg)](https://www.sqlite.org/)
 [![Accessibility: WCAG 2.2 AA target](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20target-purple.svg)](docs/evidence/a11y.md)
@@ -21,7 +21,7 @@
 
 ---
 
-**Status:** `main` is the branch of record. CI checks every branch: rustfmt, clippy with `-D warnings` and `cargo test` on Ubuntu and on Windows, svelte-check, the frontend build, the smoke test, the catalog pins, the version numbers and the third-party licenses. Platform builds (macOS Apple Silicon and Intel, Windows, Linux) run for tags and `[build-all]` commits. The production-readiness work and what is still open are tracked in [docs/evidence/audit-2026-11-14.md](docs/evidence/audit-2026-11-14.md). The installers have not been run on real machines yet.
+**Status:** `main` is the branch of record. CI checks every branch: svelte-check, the TypeScript typecheck, the unit tests, the production build, the smoke test, the catalog pins and the version numbers. Platform builds (macOS Apple Silicon and Intel, Windows, Linux) run for tags and `[build-all]` commits. The production-readiness work and what is still open are tracked in [docs/evidence/audit-2026-11-14.md](docs/evidence/audit-2026-11-14.md). The installers have not been run on real machines yet.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@
 
 ## What is LocalAide?
 
-LocalAide is an open-source, local-first desktop AI assistant built on Tauri v2, Rust, Svelte 5, and SQLite. It runs quantized open-weights models (GGUF) through a `llama-server` sidecar process built from llama.cpp v1.0.0, talking to it over `127.0.0.1` — there is no browser runtime and no bundled Electron shell.
+LocalAide is an open-source, local-first desktop AI assistant built on Electron, Svelte 5, and SQLite. It runs quantized open-weights models (GGUF) through a `llama-server` sidecar process from llama.cpp, talking to it over `127.0.0.1` — the backend is plain Node ESM under `electron/`, with no build step, no bundler and no native modules.
 
 With cloud mode off — the default — it runs fully offline and collects no telemetry. Documents, conversations, and memory notes stay under `~/.aiassistant/` on your machine. If you add an online provider in Settings and switch cloud mode on, chat requests go only to that provider over HTTPS with your own API key, and the chat header shows a cloud badge the whole time.
 
@@ -92,7 +92,9 @@ Grab a package from the [Releases page](https://github.com/omarjson/LocalAide/re
 - **Windows on ARM**: the installer ending in `_arm64-setup.exe`
 - **Linux (x64)**: the `.deb` package or the `.AppImage`
 
-The first time a model loads, LocalAide downloads the llama.cpp engine built for your processor (about 13 to 25 MB, from github.com). Any 64-bit x64 or ARM64 processor works.
+The first time a model loads, LocalAide downloads the llama.cpp engine built for your processor (about 13 to 25 MB, from github.com). Any 64-bit x64 or ARM64 processor works. Settings → Performance → Engine build can switch to the official Vulkan build (NVIDIA, AMD and Intel graphics, one download for any card) or the ROCm build (AMD's own stack), each pinned by checksum and fetched only when you ask for it; the CPU build stays on disk as the fallback.
+
+**Servers you already run.** LocalAide also talks to OpenAI-compatible servers on this computer: Ollama, LM Studio, llama.cpp, MLX, vLLM, SGLang, Aphrodite, LiteLLM, LocalAI, Jan, KoboldCpp, GPT4All, text-generation-webui, Tabby, Xinference, Docker Model Runner and 9Router. Add a provider and press **Find servers**; LocalAide probes the usual ports, lists what answered and fills the form, model list included.
 
 **Check your download.** Each release has `SHA256SUMS.txt`. On Linux or macOS run `sha256sum -c SHA256SUMS.txt --ignore-missing` in the download folder. On Windows run `Get-FileHash <file>` in PowerShell and compare the result with the line for that file.
 
@@ -101,7 +103,7 @@ The first time a model loads, LocalAide downloads the llama.cpp engine built for
 - **Windows**: SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**.
 - **macOS**: Gatekeeper says the app cannot be checked. Open **System Settings → Privacy & Security**, then choose **Open Anyway** for LocalAide.
 
-**Updates.** Open **Settings → About → Check for updates**. When a new version exists, LocalAide shows what changed and offers **Install and restart**: it downloads the update, checks its signature, installs it and keeps your data. Nothing is checked unless you press the button. Builds made without the update key (see `docs/release.md`) link to the download page instead.
+**Updates.** Open **Settings → About → Check for updates**. When a newer release exists, LocalAide shows what changed and links to its download page. Nothing is checked unless you press the button; in-app auto-update (electron-updater) is a planned port.
 
 **Legal.** The [Privacy Policy](PRIVACY.md) and [Terms of Use](TERMS.md) ship inside the app (Settings → About → Legal).
 
@@ -109,32 +111,28 @@ How releases are built, and what signing needs, is in [docs/release.md](docs/rel
 
 ### Option B: build from source
 
-1. **Prerequisites**: Node.js 24+ (`nvm use 24`), a Rust stable toolchain with `rustfmt` and `clippy` (`rustup update stable`; the crate declares MSRV 1.90), and a C/C++ compiler:
-   - macOS: Xcode Command Line Tools (`xcode-select --install`)
-   - Linux: `sudo apt install build-essential libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev`
-   - Windows: Visual Studio 2022 C++ Build Tools (MSVC)
+1. **Prerequisites**: Node.js 24+ (`nvm use 24`). No Rust and no C compiler — the backend is plain Node ESM under `electron/`.
 2. **Clone and install**:
    ```bash
    git clone https://github.com/omarjson/LocalAide.git
    cd LocalAide
    npm ci
    ```
-3. **Run the local checks**:
+3. **Run the local checks** (the same gates CI runs):
    ```bash
-   make all   # check (svelte-check + cargo check), test (cargo test), smoke (build + smoke test)
-   make lint  # clippy, as the CI quality gate runs it
+   make all   # svelte-check, typecheck, unit tests, build + smoke test
    ```
 4. **Run in development**:
    ```bash
-   npx tauri dev   # or `npm run dev` for the frontend alone
+   npm run dev          # the Vite dev server, with the browser preview at /preview.html
+   npm run dev:electron # the real window against the dev server
+   npm start            # the packaged renderer from dist/
    ```
-5. **Build a package**: the app chats through a local `llama-server` (ADR-0007), which it downloads for the user's processor on first use (ADR-0012). Write the license file, then build:
+5. **Build a package**: the app chats through a local `llama-server`, which it downloads for the user's processor on first use. Build and package:
    ```bash
-   (cd src-tauri && cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html)
-   make release
+   make dist   # vite build + electron-builder → release/
    ```
-   `make release` passes the `src-tauri/tauri.release.conf.json` overlay, which bundles the license file. Artifacts land in `src-tauri/target/release/bundle/`. The full steps are in [docs/release.md](docs/release.md).
-
+   The full steps are in [docs/release.md](docs/release.md).
 ## Keyboard Navigation
 
 | Key | Action |
@@ -151,7 +149,7 @@ How releases are built, and what signing needs, is in [docs/release.md](docs/rel
 
 ## Verification & Quality Gates
 
-CI runs on every push: rustfmt, `clippy --all-targets -- -D warnings`, the full `cargo test --all-targets` suite (unit, contract, fault-injection, inference, library, memory/RAG, and tools/sandbox tests) on Ubuntu and Windows, `svelte-check`, the frontend production build, the smoke test, the version gate and the license check. A weekly job audits `Cargo.lock` and the npm runtime packages for known vulnerabilities, and Dependabot proposes updates. Release builds compile for macOS (Apple Silicon and Intel), Windows x64, and Linux x64, each bundling the matching `llama-server` sidecar, and go to a draft release with checksums and a software bill of materials.
+CI runs on every push: `svelte-check`, the TypeScript typecheck, the unit test suite, the production build and the smoke test, plus the catalog pin gate and the version gate. A weekly job audits the npm runtime packages for known vulnerabilities, and Dependabot proposes updates. Release builds package with electron-builder for macOS (Apple Silicon and Intel), Windows (x64 and ARM64) and Linux, and go to a draft release with checksums and a software bill of materials.
 
 Design and honesty are tracked against the rubric in [docs/evidence/scorecard.md](docs/evidence/scorecard.md). Known open items, kept visible on purpose:
 

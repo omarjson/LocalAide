@@ -446,7 +446,7 @@
               {/if}
               <div class="mt-3 space-y-1.5 max-h-72 overflow-auto">
                 {#each wfRepos as repo (repo.id)}
-                  <div class="rounded-lg border border-edge bg-ink-950/60">
+                  <div class="rounded-lg border border-ink-700 bg-ink-950/60">
                     <button
                       onclick={() => wfToggleRepo(repo.id)}
                       class="w-full text-left px-3 py-2 hover:bg-veil/[0.02] transition-colors"
@@ -475,7 +475,7 @@
                                 <button
                                   onclick={() => wfInstall(repo.id, file)}
                                   disabled={wfAdding !== null}
-                                  class="px-2 py-1 rounded bg-ember-600 text-on-ember text-xs font-medium disabled:opacity-40"
+                                  class="px-2 py-1 rounded bg-ink-100 text-on-ember text-xs font-medium disabled:opacity-40"
                                 >
                                   {wfAdding === file.path ? "Adding…" : "Install"}
                                 </button>
@@ -539,11 +539,11 @@
           <p class="mt-1 text-sm text-ink-400">{status}</p>
         </div>
       </div>
-      <div class="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-ink-950 px-4 py-3">
+      <div class="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-ink-700 bg-ink-950 px-4 py-3">
         <span class="text-sm text-ink-300">Look</span>
         <div class="flex gap-1.5" role="radiogroup" aria-label="Theme">
           {#each [{ id: "dark", label: "Dark" }, { id: "light", label: "Light" }] as option (option.id)}
-            <button type="button" role="radio" aria-checked={theme === option.id} onclick={() => void chooseTheme(option.id as Theme)} class={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${theme === option.id ? "border-ember-500/50 bg-ember-500/15 text-ember-200" : "border-edge text-ink-300 hover:bg-veil/5"}`}>{option.label}</button>
+            <button type="button" role="radio" aria-checked={theme === option.id} onclick={() => void chooseTheme(option.id as Theme)} class={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${theme === option.id ? "border-ember-500/50 bg-veil/10 text-ink-50" : "border-edge text-ink-300 hover:bg-veil/5"}`}>{option.label}</button>
           {/each}
         </div>
         <span class="text-xs text-ink-500">More in Settings → General → Appearance.</span>
@@ -557,9 +557,9 @@
   </div>
   <p class="mt-4 text-center text-xs text-ink-500">
     By using LocalAide you agree to the
-    <button type="button" class="underline hover:text-ember-300" onclick={() => openLegal("terms")}>Terms of Use</button>
+    <button type="button" class="text-ember-300 underline hover:text-ember-200" onclick={() => openLegal("terms")}>Terms of Use</button>
     and the
-    <button type="button" class="underline hover:text-ember-300" onclick={() => openLegal("privacy")}>Privacy Policy</button>.
+    <button type="button" class="text-ember-300 underline hover:text-ember-200" onclick={() => openLegal("privacy")}>Privacy Policy</button>.
     No account, no tracking.
   </p>
 </div>
@@ -608,8 +608,8 @@
   }
   .step-dot-done {
     border-color: transparent;
-    background: var(--color-ember-500);
-    color: var(--color-on-ember);
+    background: var(--color-ink-400);
+    color: var(--color-ink-950);
   }
   .btn-primary {
     display: inline-flex;
@@ -617,7 +617,7 @@
     align-items: center;
     gap: 0.5rem;
     border-radius: 0.6rem;
-    background: var(--color-ember-600);
+    background: var(--color-ink-100);
     padding: 0 1.25rem;
     font-size: 0.9375rem;
     font-weight: 600;
@@ -625,7 +625,7 @@
     transition: background-color 150ms ease-out, transform 120ms ease-out;
   }
   .btn-primary:hover {
-    background: var(--color-ember-500);
+    background: var(--color-ink-50);
   }
   .btn-primary:active {
     transform: translateY(1px);
@@ -702,7 +702,7 @@
     transition: background-color 150ms ease-out, border-color 150ms ease-out;
   }
   .option:hover:not(:disabled) {
-    border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent);
+    border-color: var(--color-ink-600);
     background: color-mix(in oklab, var(--color-veil) 4%, transparent);
   }
   .option-off {
@@ -737,8 +737,8 @@
     flex-shrink: 0;
     place-items: center;
     border-radius: 9999px;
-    background: var(--color-ember-500);
-    color: var(--color-on-ember);
+    background: var(--color-ink-100);
+    color: var(--color-ink-950);
     animation: done-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 1;
   }
   .done-check::after {
@@ -746,7 +746,7 @@
     position: absolute;
     inset: 0;
     border-radius: 9999px;
-    border: 2px solid var(--color-ember-500);
+    border: 2px solid var(--color-ink-400);
     opacity: 0;
     animation: done-ring 900ms ease-out 150ms 1;
   }

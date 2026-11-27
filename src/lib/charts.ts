@@ -6,8 +6,8 @@ export interface ChartSpec {
   series: { name: string; values: number[] }[];
 }
 
-/** Distinct on both themes; the first is the app's ember accent. */
-export const PALETTE = ["#ff7a1a", "#38bdf8", "#34d399", "#a78bfa", "#f472b6", "#facc15", "#94a3b8"];
+/** Distinct on both themes; the first is the app's blue accent. */
+export const PALETTE = ["#339cff", "#38bdf8", "#34d399", "#a78bfa", "#f472b6", "#facc15", "#94a3b8"];
 
 const num = (v: unknown): number => {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace(/[,%\s]/g, "")) : NaN;

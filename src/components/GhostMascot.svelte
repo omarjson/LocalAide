@@ -16,33 +16,33 @@
 
 <div class={`ghost ghost-${mood} ${className}`} aria-hidden="true">
   <svg viewBox="84 72 344 372" xmlns="http://www.w3.org/2000/svg">
-    <!-- Body, outlined so the cream ghost reads on the light theme too. -->
+    <!-- Monochrome body: light in dark theme, ink in light theme. -->
     <path
       d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z"
-      fill="#f3ead8"
-      stroke="#1f1630"
+      fill="var(--color-ink-100)"
+      stroke="var(--color-ink-950)"
       stroke-width="9"
       stroke-linejoin="round"
     />
     <!-- The stitched seam. -->
-    <path d="M176 316q80-26 160 0" fill="none" stroke="#1f1630" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 12" />
-    <!-- The ember patch. -->
-    <rect x="274" y="352" width="72" height="56" rx="12" fill="#ff7a1a" />
-    <rect x="274" y="352" width="72" height="56" rx="12" fill="none" stroke="#1f1630" stroke-width="5" stroke-dasharray="8 8" />
+    <path d="M176 316q80-26 160 0" fill="none" stroke="var(--color-ink-950)" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 12" />
+    <!-- The blue patch. -->
+    <rect x="274" y="352" width="72" height="56" rx="12" fill="var(--color-ember-500)" />
+    <rect x="274" y="352" width="72" height="56" rx="12" fill="none" stroke="var(--color-ink-950)" stroke-width="5" stroke-dasharray="8 8" />
     {#if mood === "done"}
       <!-- Happy eyes. -->
-      <path d="M192 242q20-26 40 0" fill="none" stroke="#1f1630" stroke-width="10" stroke-linecap="round" />
-      <path d="M280 242q20-26 40 0" fill="none" stroke="#ff7a1a" stroke-width="10" stroke-linecap="round" />
+      <path d="M192 242q20-26 40 0" fill="none" stroke="var(--color-ink-950)" stroke-width="10" stroke-linecap="round" />
+      <path d="M280 242q20-26 40 0" fill="none" stroke="var(--color-ember-500)" stroke-width="10" stroke-linecap="round" />
       <!-- Blush. -->
-      <ellipse cx="178" cy="278" rx="16" ry="9" fill="#ff7a1a" opacity="0.28" />
-      <ellipse cx="334" cy="278" rx="16" ry="9" fill="#ff7a1a" opacity="0.28" />
+      <ellipse cx="178" cy="278" rx="16" ry="9" fill="var(--color-ember-500)" opacity="0.28" />
+      <ellipse cx="334" cy="278" rx="16" ry="9" fill="var(--color-ember-500)" opacity="0.28" />
     {:else}
-      <circle cx={212 + gaze.x} cy={236 + gaze.y} r="20" fill="#1f1630" />
-      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="27" fill="#ff7a1a" opacity="0.22" />
-      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="20" fill="#1f1630" />
-      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="11" fill="#ff7a1a" />
+      <circle cx={212 + gaze.x} cy={236 + gaze.y} r="20" fill="var(--color-ink-950)" />
+      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="27" fill="var(--color-ember-500)" opacity="0.22" />
+      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="20" fill="var(--color-ink-950)" />
+      <circle cx={300 + gaze.x} cy={236 + gaze.y} r="11" fill="var(--color-ember-500)" />
       <!-- Catch-lights. -->
-      <circle cx={206 + gaze.x} cy={229 + gaze.y} r="5" fill="#f3ead8" />
+      <circle cx={206 + gaze.x} cy={229 + gaze.y} r="5" fill="var(--color-ink-100)" />
     {/if}
   </svg>
 </div>
@@ -56,7 +56,6 @@
     display: block;
     height: 100%;
     width: 100%;
-    filter: drop-shadow(0 10px 14px rgb(31 22 48 / 0.28));
   }
   .ghost-hello {
     animation: ghost-hello 900ms cubic-bezier(0.23, 1, 0.32, 1) 1;

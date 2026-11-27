@@ -1,5 +1,8 @@
 # ADR-0012: Model engine downloaded for the processor
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 Status: accepted (0.1.7)
 
 ## Context

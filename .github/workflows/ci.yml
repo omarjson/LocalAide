@@ -21,46 +21,21 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Pinned, so a new Rust release cannot add lints or change behaviour in the
-  # middle of a release. Raise it on purpose, with any clippy fixes it needs.
-  RUST_TOOLCHAIN: '1.100.0'
-  CARGO_ABOUT_VERSION: '0.9.3'
-
 # Third-party actions are pinned to commit SHAs (the comment names the tag).
 # Dependabot (.github/dependabot.yml) proposes updates.
 
 jobs:
   quality-gate:
-    name: Quality Gate (Lint, Typecheck, Test, Smoke)
+    name: Quality Gate (Check, Typecheck, Test, Build, Smoke)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy, rustfmt
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: 'npm'
-
-      - name: Install Linux Build & WebKitGTK Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev
-
-      # Saved even when the job fails, so the next fix does not rebuild
-      # every dependency.
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          cache-on-failure: true
 
       - name: Install npm dependencies
         run: npm ci
@@ -88,119 +63,8 @@ jobs:
       - name: Smoke Test
         run: npm run smoke
 
-      - name: Frontend Unit Tests
+      - name: Unit Tests
         run: npm run test:unit
-
-      # The Rust steps run even when an earlier step failed, so one run
-      # reports formatting, lint and test problems together.
-      - name: Rust Formatting Check
-        if: ${{ !cancelled() }}
-        run: |
-          if ! cargo fmt --check --manifest-path src-tauri/Cargo.toml 2> fmt_err.txt; then
-            cargo fmt --manifest-path src-tauri/Cargo.toml 2> fmt_out_err.txt || true
-            git diff -- src-tauri > fmt.diff
-            {
-              echo '### rustfmt stderr'
-              echo '```'
-              head -c 1500 fmt_err.txt
-              echo '```'
-              echo '### git diff'
-              echo '```diff'
-              head -c 6000 fmt.diff
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            # Error annotations are readable through the check-run API.
-            # One annotation per file with its changed lines joined, so the
-            # 10-annotation cap is not wasted on headers and context lines.
-            awk '/^diff --git/ { file=$3; out[file]="" }
-                 /^[+-][^+-]/ { line=substr($0,2); gsub(/%/,"%25",line); if (length(out[file] line) < 800) out[file] = out[file] (out[file]==""?"":" | ") line }
-                 END { for (f in out) printf "::error title=fmt:%s::%s\n", f, out[f] }' fmt.diff
-            exit 1
-          fi
-
-      # cargo-annotate.mjs turns failures into annotations, which the
-      # check-run API serves without log access.
-      - name: Rust Clippy
-        if: ${{ !cancelled() }}
-        run: node scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings
-
-      - name: Rust Tests
-        if: ${{ !cancelled() }}
-        run: node scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast
-
-  # The app ships for Windows first, and Windows-only code (job objects,
-  # message boxes, console flags) does not compile on the Linux gate.
-  windows-check:
-    name: Rust on Windows (Clippy, Test)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy
-
-      - name: Install Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: 'npm'
-
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          cache-on-failure: true
-
-      # tauri::generate_context! embeds ../dist, so the frontend is built first.
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Frontend Build
-        run: npm run build
-
-      - name: Rust Clippy
-        run: node scripts/ci/cargo-annotate.mjs clippy -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --message-format=json -- -D warnings
-
-      - name: Rust Tests
-        if: ${{ !cancelled() }}
-        run: node scripts/ci/cargo-annotate.mjs test -- cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-fail-fast
-
-  # Feature branches only: apply `cargo fmt` and record new dependencies in
-  # Cargo.lock, then push that as a commit. A push made with GITHUB_TOKEN
-  # starts no new workflow run, so this cannot loop.
-  rust-fixup:
-    name: Rust fmt and Cargo.lock fixup
-    if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name != 'main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt
-
-      - name: Format and refresh the lockfile
-        run: |
-          cargo fmt --manifest-path src-tauri/Cargo.toml
-          cargo metadata --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
-
-      - name: Push the fixup commit
-        run: |
-          if git diff --quiet; then
-            echo "Nothing to fix."
-            exit 0
-          fi
-          git config user.name "ci-rust-fixup"
-          git config user.email "ci-rust-fixup@users.noreply.github.com"
-          git commit -am "style: cargo fmt and Cargo.lock refresh (CI)"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
 
   # Every catalog pin (sha256 + size) is checked against the Hugging Face
   # API. No model downloads: only repo tree metadata. This is the permanent
@@ -219,8 +83,8 @@ jobs:
       - name: Verify catalog pins against the HF API
         run: node scripts/verify-catalog.mjs
 
-  # package.json, Cargo.toml and tauri.conf.json must carry one version, and
-  # on a tag build it must match the tag.
+  # package.json carries one version, and on a tag build it must match the
+  # tag and have a CHANGELOG section.
   version-gate:
     name: Version numbers agree
     runs-on: ubuntu-latest
@@ -233,58 +97,20 @@ jobs:
         id: versions
         run: node scripts/ci/check-versions.mjs
 
-  # Every Rust package's license must be on the list in src-tauri/about.toml.
-  # Release builds ship the generated file inside the app.
-  licenses:
-    name: Third-party licenses
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - name: Install cargo-about
-        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
-        with:
-          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
-
-      - name: Generate THIRD_PARTY_LICENSES.html
-        working-directory: src-tauri
-        run: |
-          set -o pipefail
-          if ! cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html 2> about.log; then
-            head -c 4000 about.log | fold -w 300 | head -12 | while IFS= read -r line; do
-              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
-              echo "::error title=licenses::$enc"
-            done
-            exit 1
-          fi
-          ls -l ../THIRD_PARTY_LICENSES.html
-
   # Platform builds only run for release tags, manual dispatch, or pushes
   # whose commit message contains [build-all]. Routine pushes verify with the
-  # checks above.
+  # checks above. electron-builder packages the dist/ build plus electron/.
   build-macos:
-    name: Build macOS (${{ matrix.target }})
-    needs: [quality-gate, licenses]
+    name: Build macOS (${{ matrix.arch }})
+    needs: [quality-gate, version-gate]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: macos-latest
     strategy:
-      # Each target reports its own result; one failure does not cancel the other.
       fail-fast: false
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+        arch: [arm64, x64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: ${{ matrix.target }}
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -292,100 +118,50 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          key: ${{ matrix.target }}
-
-      - name: Install npm deps
+      - name: Install npm dependencies
         run: npm ci
 
       - name: Build frontend
         run: npm run build
 
-      - name: Install cargo-about
-        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
-        with:
-          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
-
-      - name: Write THIRD_PARTY_LICENSES.html
-        working-directory: src-tauri
-        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
-
       # Signing and notarization turn on when the repository has these
       # secrets. Without them the build is unsigned. See docs/release.md.
       - name: Use the Apple signing secrets when they exist
-        shell: bash
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
+          if [ -z "$CSC_LINK" ]; then
             echo "::warning::No Apple certificate is set, so this macOS build is not signed."
-            exit 0
           fi
-          # The delimiter form keeps a value that spans lines (wrapped base64) intact.
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            if [ -n "${!name}" ]; then
-              {
-                echo "$name<<LOCALAIDE_SECRET_END"
-                printf '%s\n' "${!name}"
-                echo "LOCALAIDE_SECRET_END"
-              } >> "$GITHUB_ENV"
-            fi
-          done
 
-      - name: Use the update signing key when it exists
-        shell: bash
-        env:
-          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-          UPDATER_PUBKEY: ${{ vars.LOCALAIDE_UPDATER_PUBKEY }}
-        run: node scripts/ci/updater-config.mjs
-
-      # Run through cargo-annotate.mjs, so a failure's last lines become an
-      # annotation that can be read without log access.
-      - name: Build Tauri Package
-        shell: bash
-        env:
-          # Signs update packages when the updater overlay is on. Empty when
-          # the secrets are not set; nothing is signed then.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: node scripts/ci/cargo-annotate.mjs tauri-build -- node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json ${UPDATER_CONFIG:+--config "$UPDATER_CONFIG"}
+      - name: Package (electron-builder)
+        run: node node_modules/electron-builder/cli.js --mac --arch ${{ matrix.arch }} --publish never
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: macos-${{ matrix.target }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          name: macos-${{ matrix.arch }}
+          path: release/*.dmg
 
   build-windows:
-    name: Build Windows (${{ matrix.target }})
-    needs: [quality-gate, windows-check, licenses]
+    name: Build Windows (${{ matrix.arch }})
+    needs: [quality-gate, version-gate]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
-    # ARM64 builds natively on GitHub's Windows on ARM runner.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-msvc
+          - arch: x64
             os: windows-latest
-          - target: aarch64-pc-windows-msvc
+          - arch: arm64
             os: windows-11-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: ${{ matrix.target }}
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -393,90 +169,38 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          key: ${{ matrix.target }}
-
-      - name: Install npm deps
+      - name: Install npm dependencies
         run: npm ci
 
       - name: Build frontend
         run: npm run build
 
-      - name: Install cargo-about
-        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
-        with:
-          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
-
-      - name: Write THIRD_PARTY_LICENSES.html
-        shell: bash
-        working-directory: src-tauri
-        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
-
-      # Code signing turns on when the WINDOWS_SIGN_COMMAND secret exists: a
-      # command that signs the file named by %1, for example Azure Trusted
-      # Signing or a signtool call. Without it the build is unsigned. See
-      # docs/release.md.
-      - name: Use the Windows signing command when it exists
-        shell: pwsh
+      # Code signing turns on when the CSC_LINK secret exists (a certificate
+      # bundle, or Azure Trusted Signing via the azure-signing option).
+      # Without it the build is unsigned. See docs/release.md.
+      - name: Package (electron-builder)
         env:
-          WINDOWS_SIGN_COMMAND: ${{ secrets.WINDOWS_SIGN_COMMAND }}
-        run: |
-          if (-not $env:WINDOWS_SIGN_COMMAND) {
-            Write-Output "::warning::No Windows signing command is set, so this Windows build is not signed."
-            exit 0
-          }
-          $path = Join-Path $env:RUNNER_TEMP 'signing.conf.json'
-          @{ bundle = @{ windows = @{ signCommand = $env:WINDOWS_SIGN_COMMAND } } } |
-            ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 -Path $path
-          "SIGNING_CONFIG=$path" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
-
-      - name: Use the update signing key when it exists
-        shell: bash
-        env:
-          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-          UPDATER_PUBKEY: ${{ vars.LOCALAIDE_UPDATER_PUBKEY }}
-        run: node scripts/ci/updater-config.mjs
-
-      - name: Build Tauri Package
-        shell: pwsh
-        env:
-          # Credentials a signing command may need. Empty when not set.
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          # Signs update packages when the updater overlay is on.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          $cliArgs = @('scripts/ci/cargo-annotate.mjs', 'tauri-build', '--', 'node', 'node_modules/@tauri-apps/cli/tauri.js', 'build', '--target', '${{ matrix.target }}', '--config', 'src-tauri/tauri.release.conf.json')
-          if ($env:SIGNING_CONFIG) { $cliArgs += @('--config', $env:SIGNING_CONFIG) }
-          if ($env:UPDATER_CONFIG) { $cliArgs += @('--config', $env:UPDATER_CONFIG) }
-          node @cliArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: node node_modules/electron-builder/cli.js --win --arch ${{ matrix.arch }} --publish never
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-${{ matrix.target }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          name: windows-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.blockmap
 
   # Built on the oldest supported Ubuntu, so the .deb and AppImage run on
   # older distributions too (a newer glibc would lock them out).
   build-linux:
     name: Build Linux (x86_64)
-    needs: [quality-gate, licenses]
+    needs: [quality-gate, version-gate]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-all]')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -484,53 +208,22 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Install Linux Build & WebKitGTK Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev
-
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          key: linux-release
-
-      - name: Install npm deps
+      - name: Install npm dependencies
         run: npm ci
 
       - name: Build frontend
         run: npm run build
 
-      - name: Install cargo-about
-        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
-        with:
-          tool: cargo-about@${{ env.CARGO_ABOUT_VERSION }}
-
-      - name: Write THIRD_PARTY_LICENSES.html
-        working-directory: src-tauri
-        run: cargo about generate about.hbs > ../THIRD_PARTY_LICENSES.html
-
-      - name: Use the update signing key when it exists
-        shell: bash
-        env:
-          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-          UPDATER_PUBKEY: ${{ vars.LOCALAIDE_UPDATER_PUBKEY }}
-        run: node scripts/ci/updater-config.mjs
-
-      - name: Build Tauri Package
-        shell: bash
-        env:
-          # Signs update packages when the updater overlay is on. Empty when
-          # the secrets are not set; nothing is signed then.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: node scripts/ci/cargo-annotate.mjs tauri-build -- node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.release.conf.json ${UPDATER_CONFIG:+--config "$UPDATER_CONFIG"}
+      - name: Package (electron-builder)
+        run: node node_modules/electron-builder/cli.js --linux --publish never
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-x86_64
-          path: src-tauri/target/release/bundle/
+          path: |
+            release/*.AppImage
+            release/*.deb
 
   # Releases start as drafts: a person checks the files, then publishes.
   # Each release carries SHA256SUMS.txt and an SPDX software bill of materials.
@@ -553,18 +246,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          # Only the installer build folders.
-          find release-artifacts/macos-* release-artifacts/windows-* release-artifacts/linux-* -type f \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} release/ \;
+          find release-artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} release/ \;
           ls -l release
           if [ -z "$(ls -A release)" ]; then
             echo "::error title=release::No installers were found in the build artifacts."
             exit 1
           fi
-
-      # Signed update packages and the update feed (latest.json), when the
-      # builds were signed. Without the key this only prints a warning.
-      - name: Write the update feed
-        run: node scripts/ci/make-latest-json.mjs release-artifacts release
 
       - name: Write the software bill of materials
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3

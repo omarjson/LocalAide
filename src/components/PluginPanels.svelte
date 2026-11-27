@@ -39,7 +39,7 @@
 
 <section class="mt-9" aria-labelledby="plugin-panels-title">
   <h3 id="plugin-panels-title" class="mb-2 flex items-center gap-2 text-[15px] font-semibold text-ink-50">
-    <Icon name="plug" class="h-4 w-4 text-ember-300" />Plugin panels
+    <Icon name="plug" class="h-4 w-4 text-ink-400" />Plugin panels
   </h3>
   <p class="mb-3 text-sm text-ink-400">
     HTML panels listed by plugins installed on this computer. Each one runs in a sandboxed frame:
@@ -64,7 +64,7 @@
       {#each plugins as plugin (plugin.id)}
         <div class="overflow-hidden rounded-lg border border-ink-700 bg-ink-900">
           <div class="flex items-center gap-2 border-b border-ink-800 px-3 py-2 text-sm text-ink-200">
-            <Icon name="plug" class="h-4 w-4 text-ember-300" />
+            <Icon name="plug" class="h-4 w-4 text-ink-400" />
             <span class="truncate font-semibold">{labelOf(plugin)}</span>
             <span class="ml-auto text-xs text-ink-500">Sandboxed</span>
           </div>

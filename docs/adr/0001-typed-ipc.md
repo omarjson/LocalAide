@@ -1,5 +1,8 @@
 # ADR-0001: Strongly Typed IPC Boundary via Code-Generated Bindings
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 ## Status
 Accepted
 

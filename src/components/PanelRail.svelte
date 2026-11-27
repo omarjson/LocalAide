@@ -41,7 +41,7 @@
 
 <aside
   aria-label="Chat panels"
-  class="absolute bottom-0 right-0 top-14 z-10 hidden w-72 flex-col border-l border-edge bg-ink-950/95 lg:flex"
+  class="absolute bottom-0 right-0 top-14 z-10 hidden w-72 flex-col border-l border-ink-800 bg-ink-950/95 lg:flex"
   in:fly={{ x: 24, duration: dur(motion.base), easing: motion.enter }}
 >
   <div class="flex shrink-0 items-center justify-between border-b border-ink-800 px-4 py-2.5">
@@ -68,7 +68,7 @@
           {#each todos as todo, i (i)}
             <li class="flex items-start gap-2 text-sm" aria-label={`Todo ${i + 1}: ${todo.text}`}>
               {#if todo.status === "done"}
-                <span class="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-ember-500/20 text-ember-300"><Icon name="check" class="h-2.5 w-2.5" /></span>
+                <span class="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-veil/10 text-ink-200"><Icon name="check" class="h-2.5 w-2.5" /></span>
               {:else if todo.status === "in_progress"}
                 <span class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ink-700 border-t-ember-400" aria-label="In progress"></span>
               {:else}
@@ -127,7 +127,7 @@
               title={`Type /${skill.name} in the composer`}
               onclick={() => onSkill(skill.name)}
             >
-              <span class="shrink-0 rounded-md bg-ink-800 px-1.5 py-0.5 text-xs text-ember-300">/{skill.name}</span>
+              <span class="shrink-0 rounded-md bg-ink-800 px-1.5 py-0.5 text-xs text-ink-300">/{skill.name}</span>
               <span class="min-w-0 flex-1 truncate text-xs text-ink-400">{skill.description}</span>
             </button>
           {/each}

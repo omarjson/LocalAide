@@ -29,10 +29,12 @@
   import { clearRequestLog, requestLog } from "../lib/requestLog.svelte";
   import { buildDiagnosticReport, requestStats } from "../lib/diagnostics";
   import { platform } from "../lib/platform";
-  import type { EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
+  import type { EngineConfig, EngineInfo, OpenCodeSettings } from "../lib/api/bindings";
   import { scale, setScale } from "../lib/scale.svelte";
   import MarkdownDoc from "../components/MarkdownDoc.svelte";
   import McpSettings from "../components/McpSettings.svelte";
+  import EngineFlagsPanel from "../components/EngineFlagsPanel.svelte";
+  import LocalServersPanel from "../components/LocalServersPanel.svelte";
   import McpOAuthPanel from "../components/McpOAuthPanel.svelte";
   import AgentsPanel from "../components/AgentsPanel.svelte";
   import DoctorPanel from "../components/DoctorPanel.svelte";
@@ -50,6 +52,7 @@
     BackupEntry,
     CloudConfigStatus,
     CloudProviderPreset,
+    FoundServer,
     ContextInfo,
     SystemHealthResponse,
     ToolAuditEntry,
@@ -216,7 +219,7 @@
   let density = $state<Density>(currentDensity());
 
   const accentSwatches: { id: Accent; label: string; fill: string }[] = [
-    { id: "ember", label: "Deep Ember", fill: "#ff7a1a" },
+    { id: "ember", label: "Blue", fill: "#339cff" },
     { id: "ocean", label: "Ocean", fill: "oklch(73% 0.17 245)" },
     { id: "violet", label: "Violet", fill: "oklch(73% 0.17 305)" },
     { id: "forest", label: "Forest", fill: "oklch(73% 0.17 155)" },
@@ -280,9 +283,18 @@
   // Shorter system prompt for local models (N11). Off by default.
   let compactPrompt = $state(false);
   let compactBusy = $state(false);
+  // llama-server flags (Settings → Performance → Engine flags).
+  let engineFlags = $state<EngineConfig | null>(null);
+  let flagsOpen = $state(false);
+  let flagsBusy = $state(false);
+  let flagsError = $state<string | null>(null);
+let flagsFetching = $state(false);
   let reloadingModel = $state(false);
   let contextSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let settingsNotice = $state<string | null>(null);
+  // A confirmation, not a failure: shown in the page's quiet tone so a
+  // successful save never looks like an error.
+  let settingsSaved = $state<string | null>(null);
 
   let audits = $state<ToolAuditEntry[]>([]);
   let loadingAudits = $state(false);
@@ -293,6 +305,8 @@
   let cloudBusy = $state(false);
   let showProviderForm = $state(false);
   let editingProviderId = $state<string | null>(null);
+  // A server found on this computer, used to prefill the provider form.
+  let providerSeed = $state<FoundServer | null>(null);
   // Presets tell which saved providers need a key, for the card status.
   let cloudPresets = $state<CloudProviderPreset[]>([]);
   let testingProvider = $state<string | null>(null);
@@ -393,12 +407,20 @@
 
   const openAddProvider = () => {
     editingProviderId = null;
+    providerSeed = null;
     showProviderForm = true;
   };
 
   const openEditProvider = (id: string) => {
     if (!cloud?.providers.some((item) => item.id === id)) return;
     editingProviderId = id;
+    providerSeed = null;
+    showProviderForm = true;
+  };
+
+  const addFoundServer = (server: FoundServer) => {
+    editingProviderId = null;
+    providerSeed = server;
     showProviderForm = true;
   };
 
@@ -489,6 +511,40 @@
       settingsNotice = errorMessage(e);
     } finally {
       compactBusy = false;
+    }
+  };
+
+  /** Save the engine flags. They take effect the next time a model loads. */
+  const saveEngineFlags = async () => {
+    if (!engineFlags) return;
+    flagsBusy = true;
+    flagsError = null;
+    try {
+      engineFlags = await api.setEngineFlags(engineFlags);
+      settingsSaved = "Engine flags saved. They apply the next time a model loads.";
+      // The build note under the picker follows the saved choice.
+      engine = await api.engineInfo();
+    } catch (e: unknown) {
+      flagsError = errorMessage(e);
+    } finally {
+      flagsBusy = false;
+    }
+  };
+
+  /** Download the chosen graphics build now, so the next load has no wait. */
+  const fetchEngineBuild = async () => {
+    if (!engineFlags) return;
+    flagsFetching = true;
+    flagsError = null;
+    try {
+      // Save first: the engine fetches the build the saved flags ask for.
+      engineFlags = await api.setEngineFlags(engineFlags);
+      engine = await api.engineFetch();
+      settingsSaved = "Engine build downloaded. Models load with it from now on.";
+    } catch (e: unknown) {
+      flagsError = errorMessage(e);
+    } finally {
+      flagsFetching = false;
     }
   };
 
@@ -710,6 +766,17 @@
   };
   const modelMemory = () => usableRamGb > 0 ? `${(usableRamGb * ramBudget / 100).toFixed(1)} GB` : `${ramBudget}%`;
 
+  // One line about the chosen engine build's download, shown under the
+  // build picker: the size before it is fetched, "ready" after.
+  const accelNote = $derived.by(() => {
+    if (!engine) return null;
+    const accel = engineFlags?.accel || "cpu";
+    if (accel === "cpu") return null;
+    if (engine.accel === accel && engine.accel_installed) return `${accel === "vulkan" ? "Vulkan" : "ROCm"} build is ready. Models load with the GPU after the next load.`;
+    if (engine.accel !== accel && engine.accel !== "cpu" && engine.accel_installed) return `The ${engine.accel === "vulkan" ? "Vulkan" : "ROCm"} build is still on disk and used until this one is downloaded.`;
+    return engine.accel_bytes ? `Downloads once, the next time a model loads: ${formatBytes(engine.accel_bytes)} from github.com.` : null;
+  });
+
   onMount(async () => {
     // Load what the remembered section shows.
     selectSection(activeTab);
@@ -731,6 +798,11 @@
       compactPrompt = await api.getCompactPrompt();
     } catch (e: unknown) {
       failed.push(`compact prompt (${errorMessage(e)})`);
+    }
+    try {
+      engineFlags = await api.getEngineFlags();
+    } catch (e: unknown) {
+      failed.push(`engine flags (${errorMessage(e)})`);
     }
     try {
       appVersion = await getVersion();
@@ -817,6 +889,12 @@
       {#if settingsNotice}
         <div class="mb-4"><ErrorBanner message={settingsNotice} onRetry={() => selectSection(activeTab)} onDismiss={() => settingsNotice = null} /></div>
       {/if}
+      {#if settingsSaved}
+        <div class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-ink-700 bg-ink-800/60 p-3 text-sm text-ink-200" role="status">
+          <span class="flex min-w-0 items-start gap-2"><Icon name="check" class="mt-0.5 h-[18px] w-[18px] shrink-0 text-emerald-400" /><span class="break-words">{settingsSaved}</span></span>
+          <button type="button" onclick={() => (settingsSaved = null)} aria-label="Dismiss" class="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-400 hover:bg-veil/8 hover:text-ink-100"><Icon name="close" class="h-4 w-4" /></button>
+        </div>
+      {/if}
 
       <!-- No entrance animation here: switching sections used to replay a
            fly-in every time, which read as the panel flipping to a new
@@ -836,7 +914,7 @@
                 <Tabs items={themeTabs} value={theme} onChange={(value) => { if (value === "dark" || value === "light") void setTheme(value); }} ariaLabel="Theme" />
               {/snippet}
             </SettingsRow>
-            <SettingsRow icon="sparkle" title="Accent" description="The color behind every highlight, fill and glow. Contrast is kept for each one." class="border-t border-ink-800">
+            <SettingsRow icon="sparkle" title="Accent" description="The color behind links, focus and live state. Contrast is kept for each one." class="border-t border-ink-800">
               {#snippet control()}
                 <div class="flex items-center gap-1.5" role="radiogroup" aria-label="Accent">
                   {#each accentSwatches as swatch (swatch.id)}
@@ -846,11 +924,11 @@
                       aria-checked={accent === swatch.id}
                       aria-label={swatch.label}
                       title={swatch.label}
-                      class={`grid h-7 w-7 place-items-center rounded-full border-2 transition-transform hover:scale-110 ${accent === swatch.id ? "border-ink-100" : "border-transparent"}`}
+                      class={`grid h-7 w-7 place-items-center rounded-full border-2 transition-colors ${accent === swatch.id ? "border-ink-100" : "border-transparent hover:border-ink-600"}`}
                       style={`background:${swatch.fill}`}
                       onclick={() => { accent = swatch.id; applyAccent(swatch.id); }}
                     >
-                      {#if accent === swatch.id}<Icon name="check" class="h-3.5 w-3.5 text-white drop-shadow" />{/if}
+                      {#if accent === swatch.id}<Icon name="check" class="h-3.5 w-3.5 text-[#0d0d0d]" />{/if}
                     </button>
                   {/each}
                 </div>
@@ -907,11 +985,38 @@
             </SettingsRow>
             {#if contextNeedsReload && contextInfo?.loaded}
               <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-800 px-4 py-3 text-sm text-ink-300" transition:slide={{ duration: dur(150) }}>
-                <span class="flex items-center gap-2"><Icon name="info" class="h-4 w-4 shrink-0 text-ember-300" />The loaded model still uses {tokensLabel(contextInfo.loaded)} tokens. The new size applies the next time it loads.</span>
+                <span class="flex items-center gap-2"><Icon name="info" class="h-4 w-4 shrink-0 text-ink-400" />The loaded model still uses {tokensLabel(contextInfo.loaded)} tokens. The new size applies the next time it loads.</span>
                 <Button variant="secondary" disabled={reloadingModel} onclick={() => void reloadForContext()}>{reloadingModel ? "Reloading…" : "Reload model"}</Button>
               </div>
             {/if}
           </SettingsGroup>
+
+          <div class="mt-3">
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg border border-ink-700 px-4 py-3 text-left text-sm text-ink-200 transition-colors hover:bg-veil/5"
+              aria-expanded={flagsOpen}
+              onclick={() => (flagsOpen = !flagsOpen)}
+            >
+              <Icon name="sliders" class="h-4 w-4 text-ink-400" />
+              <span class="font-semibold text-ink-50">Engine flags</span>
+              <span class="text-xs text-ink-500">GPU layers, threads, flash attention, cache types</span>
+              <Icon name={flagsOpen ? "chevron-up" : "chevron-down"} class="ml-auto h-4 w-4 text-ink-400" />
+            </button>
+            {#if flagsOpen}
+              <EngineFlagsPanel
+                bind:flags={engineFlags}
+                busy={flagsBusy}
+                error={flagsError}
+                builds={engine?.builds ?? []}
+                gpu={engine?.gpu ?? null}
+                {accelNote}
+                fetching={flagsFetching}
+                onFetch={() => void fetchEngineBuild()}
+                onSave={() => void saveEngineFlags()}
+              />
+            {/if}
+          </div>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Where chats run</h3>
           <SettingsGroup>
@@ -938,11 +1043,12 @@
           <p class="mt-1 text-sm text-ink-400">Optional cloud chat with providers you choose. Some are free, and some need no key at all. Turn on as many as you like: their models appear in the chat's model menu, and a message goes online only when you pick one of them.</p>
 
           {#if cloudError}<div class="mt-4"><ErrorBanner message={cloudError} onRetry={() => void loadCloud()} onDismiss={() => cloudError = null} /></div>{/if}
-          <div class="mt-6 rounded-lg border border-ember-500/30 bg-ember-500/10 p-4 text-sm leading-6 text-ember-200">
+          <div class="mt-6 rounded-lg border border-ink-700 bg-ink-800 p-4 text-sm leading-6 text-ink-300">
             While chat uses an online model, your messages go to that model's provider. With a model on this computer, nothing leaves it.
           </div>
 
           <h3 class="mb-2 mt-7 text-[15px] font-semibold text-ink-50">Your providers</h3>
+          <div class="mb-3"><LocalServersPanel providers={cloud?.providers ?? []} onAdd={addFoundServer} /></div>
           <SettingsGroup>
             <SettingsRow icon="cloud" title="Chat can use online models" description={cloud?.online_allowed ? "On. The providers switched on below appear in the chat's model menu. Pick one of their models there to use it." : "Off. Chat uses the model on this computer, and the providers below are not available."}>
               {#snippet control()}
@@ -953,9 +1059,10 @@
 
           {#if showProviderForm}
             <div class="mt-3">
-              {#key editingProviderId}
+              {#key `${editingProviderId}:${providerSeed?.base_url ?? ""}`}
               <ProviderForm
                 editing={editingProviderId ? cloud?.providers.find((p) => p.id === editingProviderId) ?? null : null}
+                seed={providerSeed}
                 onSaved={(status) => { cloud = status; showProviderForm = false; }}
                 onCancel={() => (showProviderForm = false)}
               />
@@ -1016,7 +1123,7 @@
           <p class="mt-1 text-sm text-ink-400">Connect LocalAide to tools you already run on this computer.</p>
           <div class="mt-6 rounded-lg border border-ink-700 bg-ink-900 p-5">
             <div class="flex items-start gap-3">
-              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ember-300"><Icon name="code" class="h-5 w-5" /></span>
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-400"><Icon name="code" class="h-5 w-5" /></span>
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2"><h3 class="font-semibold text-ink-50">OpenCode</h3>{#if opencode?.base_url}<StatusBadge label="Linked" tone="ok" dot />{/if}</div>
                 <p class="mt-1 text-sm leading-6 text-ink-400">Hand coding tasks from chat to OpenCode, the open-source coding agent. Start its server with <code class="rounded bg-ink-800 px-1 font-mono text-[0.85em]">opencode serve</code>, link it here, then use the <Icon name="code" class="inline h-3.5 w-3.5" /> button under any message. Front ends for OpenCode, such as OpenChamber, see the same sessions.</p>
@@ -1036,7 +1143,7 @@
           </div>
           <div class="mt-3 rounded-lg border border-ink-700 bg-ink-900 p-5">
             <div class="flex items-start gap-3">
-              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ember-300"><Icon name="cloud" class="h-5 w-5" /></span>
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-400"><Icon name="cloud" class="h-5 w-5" /></span>
               <div class="min-w-0 flex-1">
                 <h3 class="font-semibold text-ink-50">OpenCode Zen and Kilo Code models</h3>
                 <p class="mt-1 text-sm leading-6 text-ink-400">To chat with OpenCode's or Kilo Code's free models directly, add them as online providers. Neither needs a sign-up.</p>
@@ -1064,7 +1171,7 @@
               </SettingsRow>
             </SettingsGroup>
 
-            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="flask" class="h-4 w-4 text-ember-300" />Experimental features</h3>
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="flask" class="h-4 w-4 text-ink-400" />Experimental features</h3>
             <div class={`space-y-2 transition-opacity ${ds.enabled ? "" : "pointer-events-none opacity-50"}`} aria-disabled={!ds.enabled}>
               {#each ds.flag_list as f (f.id)}
                 <div class="flex items-center justify-between gap-4 rounded-lg border border-ink-700 bg-ink-900 p-3.5 transition-colors hover:border-edge">
@@ -1074,7 +1181,7 @@
               {/each}
             </div>
 
-            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="layers" class="h-4 w-4 text-ember-300" />Modules</h3>
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="layers" class="h-4 w-4 text-ink-400" />Modules</h3>
             <p class="mb-2 text-sm text-ink-400">Switch off parts of LocalAide you do not use. They stay off until you switch them on here, even outside developer mode.</p>
             <div class="grid gap-2 sm:grid-cols-2">
               {#each ds.module_list as m (m.id)}
@@ -1085,7 +1192,7 @@
               {/each}
             </div>
 
-            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="chat" class="h-4 w-4 text-ember-300" />Mode instructions</h3>
+            <h3 class="mb-2 mt-7 flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="chat" class="h-4 w-4 text-ink-400" />Mode instructions</h3>
             <div class="space-y-2">
               {#each ds.modes as m (m.id)}
                 <details class="group rounded-lg border border-ink-700 bg-ink-900">
@@ -1097,7 +1204,7 @@
 
             {#if flag("request_log")}
               <div class="mb-2 mt-7 flex items-center justify-between">
-                <h3 class="flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="file" class="h-4 w-4 text-ember-300" />Request log</h3>
+                <h3 class="flex items-center gap-2 text-[15px] font-semibold text-ink-50"><Icon name="file" class="h-4 w-4 text-ink-400" />Request log</h3>
                 <Button variant="subtle" onclick={clearRequestLog}>Clear</Button>
               </div>
               <div class="max-h-80 overflow-y-auto rounded-lg border border-ink-700 bg-ink-950 font-mono text-[12px]">
@@ -1175,8 +1282,8 @@
             {#if backups.length === 0}
               <p class="mt-2 text-sm text-ink-400">No backup files are in that folder yet.</p>
             {:else}
-              <div class="mt-3 space-y-2">{#each backups as backup (backup.file_name)}<button type="button" onclick={() => selectedBackup = backup.file_name} class={`w-full rounded-md border p-3 text-left text-sm ${selectedBackup === backup.file_name ? "border-ember-500/50 bg-ember-500/10 text-ember-200" : "border-ink-700 text-ink-300 hover:bg-veil/5"}`}>{backup.file_name} · {(backup.size_bytes / 1024).toFixed(0)} KB</button>{/each}</div>
-              <div class="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center"><input type="password" bind:value={restorePass} placeholder="Passphrase for the selected backup" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /><label class="flex items-center gap-2 text-sm text-ink-400"><input type="checkbox" bind:checked={restoreConfigFlag} class="accent-ember-600" />Also restore settings</label><Button variant="secondary" disabled={backupBusy || !selectedBackup || !restorePass} onclick={() => void runRestore()}>Restore</Button></div>
+              <div class="mt-3 space-y-2">{#each backups as backup (backup.file_name)}<button type="button" onclick={() => selectedBackup = backup.file_name} class={`w-full rounded-md border p-3 text-left text-sm ${selectedBackup === backup.file_name ? "border-ink-600 bg-veil/8 text-ink-100" : "border-ink-700 text-ink-300 hover:bg-veil/5"}`}>{backup.file_name} · {(backup.size_bytes / 1024).toFixed(0)} KB</button>{/each}</div>
+              <div class="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center"><input type="password" bind:value={restorePass} placeholder="Passphrase for the selected backup" class="h-10 min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-950 px-3 text-sm text-ink-100 outline-none placeholder:text-ink-400 focus:border-edge" /><label class="flex items-center gap-2 text-sm text-ink-400"><input type="checkbox" bind:checked={restoreConfigFlag} class="accent-ember-500" />Also restore settings</label><Button variant="secondary" disabled={backupBusy || !selectedBackup || !restorePass} onclick={() => void runRestore()}>Restore</Button></div>
             {/if}
           </div>
           {#if backupNotice}<div class="mt-3 border-l-2 border-ember-500/50 pl-3 text-sm text-ink-300">{backupNotice}</div>{/if}
@@ -1213,7 +1320,7 @@
               </Button>
             </div>
             {#if updateInfo?.update_available}
-              <div class="mt-4 rounded-md border border-ember-500/30 bg-ember-500/5 p-4">
+              <div class="mt-4 rounded-md border border-ink-700 bg-ink-800 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div class="font-semibold text-ink-50">Version {updateInfo.latest_version} is ready</div>
@@ -1259,7 +1366,7 @@
                 {/if}
                 {#if updateInfo.notes}
                   <details class="group mt-3">
-                    <summary class="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-ember-300 hover:underline">
+                    <summary class="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-ink-200 hover:underline">
                       <Icon name="chevron-right" class="h-4 w-4 transition-transform duration-200 group-open:rotate-90" />
                       What's new
                     </summary>

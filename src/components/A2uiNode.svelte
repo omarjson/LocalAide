@@ -337,9 +337,9 @@
   .a2ui-btn :global(p) { margin: 0; }
   .a2ui-btn-default { border: 1px solid var(--color-edge); background: color-mix(in oklab, var(--color-veil) 5%, transparent); color: var(--color-ink-50); }
   .a2ui-btn-default:hover:not(:disabled) { background: color-mix(in oklab, var(--color-veil) 10%, transparent); }
-  .a2ui-btn-primary { background: var(--color-ember-500); color: var(--color-on-ember); }
-  .a2ui-btn-primary:hover:not(:disabled) { background: var(--color-ember-400); }
-  .a2ui-btn-borderless { color: var(--color-ember-300); padding-inline: 0.35rem; }
+  .a2ui-btn-primary { background: var(--color-ink-100); color: var(--color-ink-950); }
+  .a2ui-btn-primary:hover:not(:disabled) { background: var(--color-ink-50); }
+  .a2ui-btn-borderless { color: var(--color-ink-300); padding-inline: 0.35rem; }
   .a2ui-btn-borderless:hover:not(:disabled) { text-decoration: underline; }
   .a2ui-btn:disabled { cursor: not-allowed; opacity: 0.45; }
   .a2ui-field { width: 100%; border: 1px solid var(--color-edge); border-radius: 0.5rem; background: var(--color-ink-950); padding: 0.4rem 0.6rem; font-size: 0.875rem; color: var(--color-ink-50); }
@@ -347,8 +347,8 @@
   .a2ui-field[aria-invalid="true"] { border-color: rgb(253 164 175 / 0.6); }
   .a2ui-check { accent-color: var(--color-ember-500); height: 1rem; width: 1rem; }
   .a2ui-chip { border: 1px solid var(--color-edge); border-radius: 9999px; padding: 0.2rem 0.7rem; font-size: 0.8125rem; color: var(--color-ink-200); }
-  .a2ui-chip-on { border-color: color-mix(in oklab, var(--color-ember-500) 50%, transparent); background: color-mix(in oklab, var(--color-ember-500) 15%, transparent); color: var(--color-ember-200); }
-  .a2ui-rec { margin-left: 0.35rem; border-radius: 9999px; background: color-mix(in oklab, var(--color-ember-500) 16%, transparent); padding: 0.05rem 0.45rem; font-size: 0.6875rem; font-weight: 600; color: var(--color-ember-200); white-space: nowrap; }
+  .a2ui-chip-on { border-color: var(--color-ink-600); background: var(--color-ink-700); color: var(--color-ink-50); }
+  .a2ui-rec { margin-left: 0.35rem; border-radius: 9999px; background: var(--color-ink-700); padding: 0.05rem 0.45rem; font-size: 0.6875rem; font-weight: 600; color: var(--color-ink-200); white-space: nowrap; }
   .a2ui-tab { padding: 0.35rem 0.75rem; font-size: 0.8125rem; color: var(--color-ink-400); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .a2ui-tab-on { color: var(--color-ink-50); border-bottom-color: var(--color-ember-500); font-weight: 600; }
   .a2ui-link { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; color: var(--color-ember-300); }

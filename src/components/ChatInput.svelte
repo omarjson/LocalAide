@@ -325,7 +325,7 @@
 <div class="relative">
   {#if slashList.length > 0}
     <div
-      class="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[min(22rem,60vh)] overflow-y-auto rounded-xl border border-edge bg-ink-950 shadow-2xl"
+      class="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[min(22rem,60vh)] overflow-y-auto rounded-xl border border-ink-700 bg-ink-950 shadow-2xl"
       role="listbox"
       aria-label="Slash commands and skills"
       in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}
@@ -342,11 +342,11 @@
           class={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${i === skillCursor ? "bg-veil/10" : ""}`}
         >
           {#if item.kind === "command"}
-            <Icon name={item.value.icon} class="h-4 w-4 shrink-0 text-ember-300" />
+            <Icon name={item.value.icon} class="h-4 w-4 shrink-0 text-ink-400" />
             <span class="shrink-0 font-mono text-ink-100">/{item.value.id}</span>
             <span class="truncate text-ink-400">{item.value.description}</span>
           {:else}
-            <Icon name="skills" class="h-4 w-4 shrink-0 text-ember-400" />
+            <Icon name="skills" class="h-4 w-4 shrink-0 text-ink-400" />
             <span class="shrink-0 font-mono text-ink-100">/{item.value.name}</span>
             <span class="truncate text-ink-400">{item.value.description || item.value.body.slice(0, 80)}</span>
           {/if}
@@ -355,7 +355,7 @@
     </div>
   {/if}
 
-  <div class="composer field-shell rounded-[18px] border border-ink-700 bg-ink-800/75 shadow-[var(--shadow-elev)]" data-fold={fold}>
+<div class="composer surface-glass field-shell rounded-2xl border border-ink-700 shadow-[var(--shadow-composer)]" data-fold={fold}>
     {#if showTools}
       <div class="space-y-2 border-b border-ink-800 p-3" in:fly={{ y: -4, duration: dur(motion.base) }}>
         <div class="flex items-center justify-between text-xs text-ink-400">
@@ -452,7 +452,7 @@
       <div class="relative" use:popover={{ open: attachMenuOpen, onClose: () => (attachMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={attachMenuOpen} onclick={() => (attachMenuOpen = !attachMenuOpen)} disabled={streaming} aria-label="Attach" title="Attach files or images" class="composer-tool"><Icon name="plus" class="h-4 w-4" /></button>
         {#if attachMenuOpen}
-          <div role="menu" aria-label="Attach" class="menu bottom-full left-0 mb-2 w-72" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+          <div role="menu" aria-label="Attach" class="menu surface-glass bottom-full left-0 mb-2 w-72" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
             <button type="button" role="menuitem" data-popover-item onclick={() => { attachMenuOpen = false; onAttachFiles?.(); }} class="menu-row">
               <Icon name="paperclip" class="h-4 w-4 text-ink-300" /><span><span class="block text-sm text-ink-50">Attach files</span><span class="block text-xs text-ink-400">Text, code, Markdown, CSV, JSON or PDF. You can also drop files here.</span></span>
             </button>
@@ -481,10 +481,10 @@
 
       <div class="relative" use:popover={{ open: toolsMenuOpen, onClose: () => (toolsMenuOpen = false) }}>
         <button type="button" aria-haspopup="menu" aria-expanded={toolsMenuOpen} onclick={() => (toolsMenuOpen = !toolsMenuOpen)} class={`composer-chip ${toolsOn > 0 ? "" : "opacity-80"}`} title="Tools the model may use">
-          <Icon name="wrench" class="h-3.5 w-3.5" /><span data-fold-label="tools" class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
+          <Icon name="wrench" class="h-3.5 w-3.5" /><span data-fold-label="tools" class="hidden sm:inline">Tools</span>{#if toolsOn > 0}<span class="rounded-full bg-ink-800 px-1.5 text-2xs leading-4 tabular-nums text-ink-200">{toolsOn}</span>{/if}
         </button>
         {#if toolsMenuOpen}
-          <div role="menu" aria-label="Tools the model may use" class="menu bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+          <div role="menu" aria-label="Tools the model may use" class="menu surface-glass bottom-full left-0 mb-2 w-80" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
             <div class="px-2.5 pb-1 pt-1.5 text-xs text-ink-500">The model decides when to use these.</div>
             {#each toolRows as row (row.id)}
               <button type="button" role="menuitemcheckbox" aria-checked={row.on} data-popover-item onclick={() => row.toggle?.()} class="menu-row items-center">
@@ -543,8 +543,8 @@
           onclick={onCancel}
           aria-label="Stop the answer"
           title="Stop (Esc)"
-          class="stop-btn ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950"
-        ><Icon name="stop" class="h-5 w-5" /></button>
+          class="stop-btn ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-950"
+        ><Icon name="stop" class="h-[18px] w-[18px]" /></button>
       {:else}
         <!-- Never pass the handler bare: a click's MouseEvent would land in
              `send`'s first parameter (`resend`) and resend the last message
@@ -556,8 +556,8 @@
             onclick={() => onResume?.()}
             aria-label="Resume the stopped answer"
             title="Resume — continue from where it stopped"
-            class="ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ember-500 text-on-ember transition-[transform,background-color] duration-150 hover:scale-105 hover:bg-ember-400 active:scale-95"
-          ><Icon name="play" class="h-5 w-5" /></button>
+            class="ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink-100 text-on-ember transition-colors duration-150 hover:bg-ink-50"
+          ><Icon name="play" class="h-[18px] w-[18px]" /></button>
         {/if}
         <button
           type="button"
@@ -565,8 +565,8 @@
           disabled={!canSend}
           aria-label="Send"
           title={ctrlEnterSends ? "Send (Ctrl+Enter)" : "Send (Enter)"}
-          class={`ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-full transition-[transform,background-color,opacity] duration-150 active:scale-95 ${canSend ? "bg-ember-500 text-on-ember shadow-[var(--shadow-glow)] hover:scale-105 hover:bg-ember-400" : "bg-ink-700 text-ink-500"}`}
-        ><Icon name="arrow-up" class="h-5 w-5" /></button>
+          class={`ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-150 ${canSend ? "bg-ink-100 text-on-ember hover:bg-ink-50" : "bg-ink-700 text-ink-500"}`}
+        ><Icon name="arrow-up" class="h-[18px] w-[18px]" /></button>
       {/if}
     </div>
 
@@ -589,10 +589,10 @@
 <style>
   .composer-tool {
     display: grid;
-    height: 2rem;
-    width: 2rem;
+    height: 1.75rem;
+    width: 1.75rem;
     place-items: center;
-    border-radius: 0.6rem;
+    border-radius: 0.5rem;
     color: var(--color-ink-400);
     transition: background-color 150ms ease-out, color 150ms ease-out;
   }
@@ -604,35 +604,33 @@
   .composer-tool:disabled {
     opacity: 0.4;
   }
+  /* GOAT composer chips: borderless soft fills, not outlined pills. */
   .composer-chip {
     display: inline-flex;
     height: 1.75rem;
     align-items: center;
-    gap: 0.3rem;
-    border-radius: 9999px;
-    border: 1px solid var(--color-ink-700);
-    padding: 0 0.6rem;
-    font-size: 0.75rem;
-    color: var(--color-ink-300);
-    transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+    gap: 0.35rem;
+    border-radius: 0.375rem;
+    padding: 0 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--color-ink-400);
+    transition: background-color 150ms ease-out, color 150ms ease-out;
   }
   .composer-chip:hover,
   .composer-chip[aria-expanded="true"] {
-    border-color: var(--color-edge);
-    color: var(--color-ink-50);
+    background: color-mix(in oklab, var(--color-veil) 6%, transparent);
+    color: var(--color-ink-100);
   }
   .composer-chip-on {
-    border-color: color-mix(in oklab, var(--color-ember-500) 45%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 12%, transparent);
-    color: var(--color-ember-200);
+    background: var(--color-ink-700);
+    color: var(--color-ink-50);
   }
   .menu {
     position: absolute;
     z-index: 40;
     overflow: hidden;
     border-radius: 0.75rem;
-    border: 1px solid var(--color-edge);
-    background: var(--color-ink-950);
+    border: 1px solid var(--color-ink-700);
     padding: 0.375rem;
     box-shadow: var(--shadow-elev);
   }
@@ -685,11 +683,11 @@
     transition: transform 180ms ease-out, background-color 150ms ease-out;
   }
   .switch-on {
-    border-color: var(--color-ember-600);
-    background: var(--color-ember-600);
+    border-color: transparent;
+    background: var(--color-ink-100);
   }
   .switch-on span {
     transform: translate(0.85rem, -50%);
-    background: var(--color-on-ember);
+    background: var(--color-ink-950);
   }
 </style>

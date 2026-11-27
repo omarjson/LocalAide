@@ -539,7 +539,7 @@
     <div class="rounded-lg border border-ink-700 bg-ink-900">
       <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
         <div class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-ink-50">
-          <Icon name="models" class="h-6 w-6 text-ember-500" />
+          <Icon name="models" class="h-6 w-6 text-ink-400" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -566,7 +566,7 @@
               <Icon name="more" class="h-[18px] w-[18px]" />
             </Button>
             {#if openModelMenu === activeModel.id}
-              <div role="menu" aria-label="Options for the active model" class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+              <div role="menu" aria-label="Options for the active model" class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-ink-700 bg-ink-900 p-1 shadow-xl">
                 <button type="button" role="menuitem" onclick={() => void verifyModel(activeModel.id)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">
                   <Icon name="check" class="h-4 w-4" />
                   {verifying === activeModel.id ? "Checking…" : "Check file"}
@@ -747,7 +747,7 @@
                     </Button>
                   {/if}
                   {#if openModelMenu === model.id && model.status === "installed"}
-                    <div role="menu" aria-label={`Options for ${model.name}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                    <div role="menu" aria-label={`Options for ${model.name}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-ink-700 bg-ink-900 p-1 shadow-xl">
                       {#if !verifyStatus[model.id]}
                         <button type="button" role="menuitem" onclick={() => { openModelMenu = null; void verifyModel(model.id); }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink-200 hover:bg-veil/5 focus:bg-veil/5 focus:outline-none">
                           <Icon name="check" class="h-4 w-4" />
@@ -858,7 +858,7 @@
                   type="button"
                   aria-pressed={hfSort === option.value}
                   onclick={() => { hfSort = option.value; void hfSearchRepos(); }}
-                  class={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors duration-150 ${hfSort === option.value ? "border-ember-500/50 bg-ember-500/10 text-ember-200" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}
+                  class={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors duration-150 ${hfSort === option.value ? "border-ink-600 bg-veil/8 text-ink-100" : "border-ink-700 text-ink-300 hover:border-edge hover:text-ink-50"}`}
                 >
                   <Icon name={option.icon} class="h-4 w-4" />{option.label}
                 </button>
@@ -911,7 +911,7 @@
                           <div class="mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-400">
                             <span>Use as:</span>
                             {#each [["chat", "Chat"], ["embedding", "Meaning"], ["reranker", "Ranking"], ["code", "Code"]] as [kindValue, label]}
-                              <button type="button" onclick={() => { hfKinds = { ...hfKinds, [repo.id]: (hfKinds[repo.id] ?? "chat") === kindValue ? "chat" : kindValue }; }} class={`rounded-full border px-2.5 py-1 text-sm ${((hfKinds[repo.id] ?? "chat") === kindValue) ? 'border-ember-500/40 bg-ember-500/10 text-ember-300' : 'border-ink-700 text-ink-400 hover:border-edge'}`}>{label}</button>
+                              <button type="button" onclick={() => { hfKinds = { ...hfKinds, [repo.id]: (hfKinds[repo.id] ?? "chat") === kindValue ? "chat" : kindValue }; }} class={`rounded-full border px-2.5 py-1 text-sm ${((hfKinds[repo.id] ?? "chat") === kindValue) ? 'border-ink-600 bg-veil/8 text-ink-200' : 'border-ink-700 text-ink-400 hover:border-edge'}`}>{label}</button>
                             {/each}
                           </div>
                           {#each (hfFiles[repo.id] ?? []).filter((file) => !file.is_mmproj) as file (file.path)}

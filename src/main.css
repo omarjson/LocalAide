@@ -2,11 +2,10 @@
 
 /*
  * LocalAide design tokens. See DESIGN.md at the repo root.
- * Direction: "At Home on Windows" (docs/design/mockups/e-native.html).
- * The app runs on this computer, so it looks like part of it: neutral Mica
- * greys, the system UI font, small corners. The brand lives in one place,
- * the ghost's ember eye, used for the selected-item marker, the live dot
- * and the main action.
+ * Direction: "GOAT" (github.com/goat-si/goat). Neutral near-black layers, an
+ * ink primary (white in dark, near-black in light), one blue accent for
+ * links, focus, live state and info, hairline borders, 8px controls and a
+ * glass composer. No warm cast anywhere.
  *
  * Neutrals are "ink" (dark is the default theme). Text on ember fills must use
  * `text-on-ember`, which flips with the theme. Borders that carry meaning use
@@ -15,59 +14,86 @@
  * never `bg-white/5`, so the tint stays visible in both themes.
  */
 @theme {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, Roboto, sans-serif;
 
   /* Smallest text is 13px (was 12px, with many 10-11px labels). Labels,
      hints and captions all use text-xs; do not add text-[10px]/text-[11px]. */
   --text-xs: 0.8125rem;
   --text-xs--line-height: 1.25rem;
 
+  /* Metadata below body text: keyboard hints, timestamps, token counts and
+     the work log. GOAT's scale, kept one step under text-xs so labels and
+     data never compete with the message itself. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: calc(0.875 / 0.625);
+  --text-work-log: 0.78125rem;
+  --text-work-log--line-height: 1.625;
+
   /* Soft, modern corners: 6px controls, 8-12px surfaces, 16px+ for the
      chat composer and bubbles. */
+  --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
   --radius-3xl: 1.25rem;
 
-  /* Dark: "Deep Ember" — warm near-black layers, measured 2026-11-21.
-     Contrast on ink-950 (#14100c) / ink-900 (#1e1914): ink-100 16.3 / 15.0,
-     ink-400 7.9 / 7.3, ink-500 6.3 / 5.8, ink-600 5.2 / 4.8, edge 3.9 / 3.6. */
-  --color-ink-50: #fbf7f0;
-  --color-ink-100: #f3ede3;
-  --color-ink-200: #e2dacc;
-  --color-ink-300: #cbc0b1;
-  --color-ink-400: #b3a696;
-  --color-ink-500: #a2937f;
-  --color-ink-600: #93836f;
-  --color-ink-700: #3d342a;
-  --color-ink-800: #2e261e;
-  --color-ink-900: #1e1914;
-  --color-ink-950: #14100c;
+  /* Dark: GOAT neutrals. Canvas #181818, sidebar/chrome #141414, raised
+     surfaces #212121, muted text #afafaf. Contrast on #141414 / #181818:
+     ink-100 15.9 / 14.6, ink-400 8.0 / 7.4, ink-500 5.5 / 5.1, edge 3.5 / 3.4. */
+  --color-ink-50: #ffffff;
+  --color-ink-100: #ececec;
+  --color-ink-200: #dedede;
+  --color-ink-300: #c8c8c8;
+  --color-ink-400: #afafaf;
+  --color-ink-500: #8f8f8f;
+  --color-ink-600: #868686;
+  --color-ink-700: #2d2d2d;
+  --color-ink-800: #212121;
+  --color-ink-900: #181818;
+  --color-ink-950: #141414;
 
-  --color-ember-50: #fff5ec;
-  --color-ember-100: #ffe7d1;
-  --color-ember-200: #ffd0a3;
-  --color-ember-300: #ffb173;
-  --color-ember-400: #ff9248;
-  --color-ember-500: #ff7a1a;
-  --color-ember-600: #e8680c;
-  --color-ember-700: #b9520a;
-  --color-ember-800: #8a3d0b;
-  --color-ember-900: #5e2a0a;
-  --color-ember-950: #331505;
+  /* The one accent: GOAT blue. Links, focus, live dots, info and selection.
+     Filled primary actions use ink, not this ramp. */
+  --color-ember-50: #eaf4ff;
+  --color-ember-100: #d3e9ff;
+  --color-ember-200: #a6d3ff;
+  --color-ember-300: #6fbaff;
+  --color-ember-400: #4aa8ff;
+  --color-ember-500: #339cff;
+  --color-ember-600: #2b8ae6;
+  --color-ember-700: #0169cc;
+  --color-ember-800: #0157a8;
+  --color-ember-900: #013361;
+  --color-ember-950: #01213f;
 
-  --color-on-ember: #22150a;
-  --color-edge: #7c6f5e;
+  --color-on-ember: #0d0d0d;
+  --color-edge: #6b6b6b;
   --color-veil: #ffffff;
+  /* Menus and popovers sit above the raised surfaces, one step lighter
+     than the canvas (GOAT: #282828). */
+  --color-popover: #282828;
+  /* The person's message pill: GOAT's neutral #3a3a3a in dark. */
+  --color-message: #3a3a3a;
 }
 
 /* Elevation for the raised chat surfaces (composer, cards, popovers). */
 :root {
   /* Shareable skins (lib/theme.ts) override design tokens inline on <html>.
      These values are the defaults a skin falls back to. */
-  --shadow-elev: 0 18px 44px -20px rgb(0 0 0 / 0.75);
-  --shadow-glow: 0 6px 16px -6px color-mix(in oklab, var(--color-ember-500) 60%, transparent);
+  --shadow-elev: 0 14px 32px -18px rgb(0 0 0 / 0.75);
+  /* Glass: the composer and floating surfaces blur what sits behind them,
+     with a floor under the tint so text never reads through. */
+  --glass-blur: 16px;
+  --glass-saturation: 1.08;
+  --glass-opacity: 92%;
+  /* Glass floats on the popover layer, not the card layer: menus, the
+     composer and every popover read as one material (GOAT does the same). */
+  --glass-base: var(--color-popover);
+  /* Composer elevation: a soft edge in light, a lift in dark. */
+  --shadow-composer: 0 14px 32px -18px rgb(0 0 0 / 0.75);
   /* Motion tokens. lib/motion.ts reads these same values for JS transitions. */
   --dur-fast: 120ms;
   --dur-base: 180ms;
@@ -76,54 +102,50 @@
      interaction but still derive from --dur-slow, so one dial tunes them. */
   --dur-loop: calc(var(--dur-slow) * 5.5);
 }
+/* Light: GOAT paper. White canvas, #f7f7f7 sidebar, #ececec hairlines and
+ * ink near-black text. Contrast on ink-950 (#f7f7f7) / ink-900 (#ffffff):
+ * ink-100 18.9 / 19.6, ink-400 6.7 / 7.0, ink-500 5.4 / 5.6, edge 4.4 / 4.6. */
 :root[data-theme="light"] {
-  --shadow-elev: 0 14px 36px -18px rgb(78 50 24 / 0.28);
-}
+  --color-ink-50: #000000;
+  --color-ink-100: #0d0d0d;
+  --color-ink-200: #303030;
+  --color-ink-300: #454545;
+  --color-ink-400: #5d5d5d;
+  --color-ink-500: #6b6b6b;
+  --color-ink-600: #6e6e6e;
+  --color-ink-700: #e4e4e4;
+  --color-ink-800: #f3f3f3;
+  --color-ink-900: #ffffff;
+  --color-ink-950: #f7f7f7;
 
-/* Light: warm bone paper, the same Deep Ember hue family. Contrast on
- * ink-950 (#ece9e3) / ink-900 (#f7f5f0): ink-100 14.1 / 15.7, ink-400 6.1 / 6.8,
- * ink-500 4.6 / 5.1, ink-600 4.6 / 5.0, edge 4.1 / 4.6. Ember fills darken so
- * white text on them clears 4.5:1. Shadows soften too: the dark theme's
- * near-black elevation reads as dirt on paper. */
-:root[data-theme="light"] {
-  --color-ink-50: #17130e;
-  --color-ink-100: #201b15;
-  --color-ink-200: #302b25;
-  --color-ink-300: #45403a;
-  --color-ink-400: #5c554b;
-  --color-ink-500: #6d675d;
-  --color-ink-600: #6e675c;
-  --color-ink-700: #d3cec4;
-  --color-ink-800: #e3dfd7;
-  --color-ink-900: #f7f5f0;
-  --color-ink-950: #ece9e3;
-
-  --color-ember-200: #9a3f00;
-  --color-ember-300: #9a3f00;
-  --color-ember-400: #b04800;
-  --color-ember-500: #c2540a;
-  --color-ember-600: #b54a00;
+  --color-ember-200: #0157a8;
+  --color-ember-300: #0157a8;
+  --color-ember-400: #0169cc;
+  --color-ember-500: #0169cc;
+  --color-ember-600: #0157a8;
   --color-emerald-300: #047857;
   --color-emerald-400: #047857;
   --color-rose-300: #be123c;
   --color-rose-400: #be123c;
-  /* Warnings: pale yellow vanishes on the light page, so the whole amber
-     ramp turns into the deep ember family here. Text roles (200 to 400)
-     clear 4.5:1 on ink-950; fills and borders keep their alpha. */
-  --color-amber-200: #9a3f00;
-  --color-amber-300: #9a3f00;
-  --color-amber-400: #a84300;
-  --color-amber-500: #c2540a;
-  --color-amber-600: #b54a00;
+  --color-amber-200: #92400e;
+  --color-amber-300: #92400e;
+  --color-amber-400: #92400e;
+  --color-amber-500: #b45309;
+  --color-amber-600: #b45309;
 
   --color-on-ember: #ffffff;
-  --color-edge: #767066;
+  --color-edge: #767676;
   --color-veil: #000000;
+  --color-popover: #ffffff;
+  --color-message: #f3f3f3;
+  /* GOAT's light composer is a white field on the white canvas, held by its
+     hairline rather than by a grey fill. */
+  --glass-base: var(--color-popover);
+  --shadow-composer: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
 :root[data-theme="light"] {
-  --shadow-elev: 0 18px 44px -24px rgb(30 20 10 / 0.35);
-  --shadow-glow: 0 6px 16px -8px color-mix(in oklab, var(--color-ember-500) 45%, transparent);
+  --shadow-elev: 0 14px 32px -18px rgb(0 0 0 / 0.18);
 }
 
 html {
@@ -155,12 +177,12 @@ input {
   caret-color: var(--color-ember-500);
 }
 
-/* Windows-style focus: a solid ring in the text color, so it reads on every
- * surface in both themes. Text fields are the exception (below): they show
- * focus on their own border, so no second box is drawn inside them. */
+/* GOAT focus: a solid blue ring, the same token as links and live state.
+ * Text fields are the exception (below): they show focus on their own
+ * border, so no second box is drawn inside them. */
 :focus-visible {
-  outline: 2px solid var(--color-ink-50) !important;
-  outline-offset: 2px !important;
+  outline: 2px solid var(--color-ember-500) !important;
+  outline-offset: -2px !important;
 }
 
 /* ---- Text fields ------------------------------------------------------ */
@@ -318,14 +340,6 @@ select option {
   }
 }
 
-/* A soft ember glow behind hero areas (empty states, setup). Own layer, so
- * the big radial gradient is rasterized once and composited, not repainted
- * every frame while anything above it animates. */
-.ember-glow {
-  transform: translateZ(0);
-  background-image: radial-gradient(60% 80% at 50% 0%, color-mix(in oklab, var(--color-ember-500) 12%, transparent), transparent 70%);
-}
-
 /* Developer → "Turn off animations" does the same as the system setting. */
 :root[data-motion="off"] *,
 :root[data-motion="off"] ::before,
@@ -360,20 +374,41 @@ select option {
   }
 }
 
-/* The content canvas: a faint warm light from the top, so screens do not
- * look flat. Pure decoration; it never sits under text at full strength. */
+/* The content canvas is flat: GOAT keeps the transcript on one quiet plane
+ * and lets the glass composer and cards carry the depth. */
 .app-canvas {
-  background-image:
-    radial-gradient(1100px 460px at 82% -12%, color-mix(in oklab, var(--color-ember-500) 7%, transparent), transparent 62%),
-    radial-gradient(900px 420px at -8% 112%, color-mix(in oklab, var(--color-ember-500) 4%, transparent), transparent 60%);
+  background-image: none;
 }
 
 /* Raised chat surfaces: the composer, message cards and popovers sit one
  * layer above the content canvas, with a hairline that reads on it. */
 .surface-raised {
-  background: color-mix(in oklab, var(--color-ink-800) 82%, var(--color-ink-900));
+  background: var(--color-ink-800);
   border: 1px solid var(--color-ink-700);
   box-shadow: var(--shadow-elev);
+}
+
+/* Glass: floating surfaces tint the canvas behind them instead of painting
+ * an opaque slab. Falls back to the solid fill where blur is unsupported. */
+.surface-glass {
+  background: color-mix(in srgb, var(--glass-base) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .surface-glass {
+    background: var(--glass-base);
+  }
+}
+
+/* Primary actions are ink, not the accent: white in dark, near-black in
+ * light, with the label flipped. Hover lifts a step toward the accent tint. */
+.btn-ink {
+  background: var(--color-ink-100);
+  color: var(--color-ink-950);
+}
+.btn-ink:hover {
+  background: var(--color-ink-50);
 }
 
 /* Shared entrance for raised panels: a short fade and lift on the base
@@ -433,61 +468,16 @@ aside nav:focus-within::-webkit-scrollbar-thumb {
   background-color: var(--color-ink-700);
 }
 
-/* Sidebar icons each get their own springy greeting on hover: the chat
-   bubble tilts, the gear turns, the usage pulse lifts. The overshoot in
-   the curve makes them feel like physical things, not tinted rectangles. */
+/* Sidebar icons take a quiet color shift on hover. GOAT keeps chrome still;
+   the only motion is color and the selection fill. */
 .nav-ico {
   display: inline-flex;
-  transition: transform var(--dur-slow) cubic-bezier(0.34, 1.56, 0.64, 1), color var(--dur-fast) ease-out;
-}
-.nav-item:hover .nav-ico,
-.nav-item:focus-visible .nav-ico {
-  transform: scale(1.15);
-}
-.nav-item[data-nav="chat"]:hover .nav-ico,
-.nav-item[data-nav="chat"]:focus-visible .nav-ico {
-  transform: scale(1.15) rotate(-8deg);
-}
-.nav-item[data-nav="search"]:hover .nav-ico,
-.nav-item[data-nav="search"]:focus-visible .nav-ico {
-  transform: scale(1.15) translateX(1.5px);
-}
-.nav-item[data-nav="memory"]:hover .nav-ico,
-.nav-item[data-nav="memory"]:focus-visible .nav-ico {
-  transform: scale(1.15) rotate(8deg);
-}
-.nav-item[data-nav="skills"]:hover .nav-ico,
-.nav-item[data-nav="skills"]:focus-visible .nav-ico {
-  transform: scale(1.15) rotate(-15deg);
-}
-.nav-item[data-nav="models"]:hover .nav-ico,
-.nav-item[data-nav="models"]:focus-visible .nav-ico {
-  transform: scale(1.15) rotate(90deg);
-}
-.nav-item[data-nav="usage"]:hover .nav-ico,
-.nav-item[data-nav="usage"]:focus-visible .nav-ico {
-  transform: scale(1.15) translateY(-2px);
-}
-.nav-item[data-nav="settings"]:hover .nav-ico,
-.nav-item[data-nav="settings"]:focus-visible .nav-ico {
-  transform: scale(1.15) rotate(60deg);
-}
-/* Arriving at a screen makes its icon pop once. */
-.nav-item[aria-current="page"] .nav-ico {
-  animation: nav-pop var(--dur-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes nav-pop {
-  0% {
-    transform: scale(0.6);
-  }
-  100% {
-    transform: scale(1);
-  }
+  transition: color var(--dur-fast) ease-out;
 }
 
-/* Appearance → Accent. The Deep Ember ramp stays hex and exact; choosing
-   another accent rebuilds the same lightness-and-chroma ramp around the new
-   hue, so contrast stays where the audit put it while the color turns. */
+/* Appearance → Accent. The blue ramp stays hex and exact; choosing another
+   accent rebuilds the same lightness-and-chroma ramp around the new hue, so
+   contrast stays where the audit put it while the color turns. */
 :root[data-accent="ocean"] {
   --accent-h: 245;
 }

@@ -44,10 +44,10 @@
   const keepOpen = () => clearTimeout(leaveTimer);
 
   const known = $derived(usage.limit > 0);
-  // Ember until close to the auto-compact line, then a deeper burnt orange,
-  // so the meter warns without leaving the palette.
+  // Quiet grey while there is room; rose only near the auto-compact line, so
+  // the meter warns without spending the blue accent.
   const warn = $derived(known && (usage.overflow || usage.percent >= autoCompactAt));
-  const tone = $derived(!known ? "var(--color-ink-600)" : warn ? "var(--color-ember-700)" : "var(--color-ember-500)");
+  const tone = $derived(!known ? "var(--color-ink-600)" : warn ? "var(--color-rose-400)" : "var(--color-ink-400)");
   const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n));
 </script>
 
@@ -71,7 +71,7 @@
     <span class="meter" style={`--usage:${known ? usage.percent : 0}%;--tone:${tone}`} aria-hidden="true"></span>
   </button>
   {#if open}
-    <div class={`meter-popover ${direction === "down" ? "meter-popover-down" : ""}`} role="dialog" aria-label="Context window" in:fly={{ y: direction === "down" ? -6 : 6, duration: dur(motion.base), easing: motion.enter }}>
+<div class={`meter-popover surface-glass ${direction === "down" ? "meter-popover-down" : ""}`} role="dialog" aria-label="Context window" in:fly={{ y: direction === "down" ? -6 : 6, duration: dur(motion.base), easing: motion.enter }}>
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-semibold text-ink-50">Context window</span>
         <span class="tabular-nums text-ink-300">{known ? `~${fmt(usage.used)} / ${contextLabel(usage.limit)}` : "Size unknown"}</span>
@@ -99,7 +99,7 @@
             <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Cache hit rate</dt><dd class="tabular-nums text-ink-500" title="This model does not report cached tokens.">—</dd></div>
           {/if}
           <div class="flex justify-between border-t border-ink-800 pt-1"><dt class="text-ink-400">Kept free for the answer</dt><dd class="tabular-nums text-ink-200">{fmt(usage.reserve)}</dd></div>
-          <div class="flex justify-between"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-ember-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-400">Room left</dt><dd class={`tabular-nums ${usage.overflow ? "font-semibold text-amber-300" : "text-ink-200"}`}>{usage.overflow ? "Not enough for the answer" : `~${fmt(usage.limit - usage.total)}`}</dd></div>
         </dl>
       {:else}
         <dl class="mt-3 space-y-1 text-xs">
@@ -117,7 +117,7 @@
         {streaming ? "The answer is still growing." : known ? `At ${autoCompactAt}%, older messages stop being sent.` : ""}
       </p>
       {#if onCompact}
-        <button type="button" onclick={() => { open = false; onCompact?.(); }} class="mt-2 w-full rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-100 transition-colors hover:bg-veil/5">
+        <button type="button" onclick={() => { open = false; onCompact?.(); }} class="mt-2 w-full rounded-lg border border-ink-700 px-3 py-1.5 text-sm text-ink-100 transition-colors hover:bg-veil/5">
           {compacted ? "Compact further" : "Compact now"}
         </button>
       {/if}
@@ -130,7 +130,7 @@
   .meter-button:hover, .meter-button[aria-expanded="true"] { background: color-mix(in oklab, var(--color-veil) 7%, transparent); }
   .meter { height: 1.15rem; width: 1.15rem; border-radius: 9999px; background: conic-gradient(var(--tone) var(--usage), var(--color-ink-700) 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); transition: background 300ms ease-out; }
   /* Opens upward from the composer by default; the rail's copy opens down. */
-  .meter-popover { position: absolute; right: 0; bottom: calc(100% + 0.5rem); z-index: 45; max-height: min(28rem, 70vh); overflow-y: auto; width: 17.5rem; border: 1px solid var(--color-edge); border-radius: 0.75rem; background: var(--color-ink-950); padding: 0.75rem; box-shadow: var(--shadow-elev); }
+  .meter-popover { position: absolute; right: 0; bottom: calc(100% + 0.5rem); z-index: 45; max-height: min(28rem, 70vh); overflow-y: auto; width: 17.5rem; border: 1px solid var(--color-ink-700); border-radius: 0.75rem; padding: 0.75rem; box-shadow: var(--shadow-elev); }
   .meter-popover-down { top: calc(100% + 0.5rem); bottom: auto; right: auto; left: -0.75rem; width: 16.5rem; }
-  .segment-dot { height: 0.4rem; width: 0.4rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-ember-400); }
+  .segment-dot { height: 0.4rem; width: 0.4rem; flex-shrink: 0; border-radius: 9999px; background: var(--color-ink-400); }
 </style>

@@ -43,7 +43,7 @@
     aria-label={title}
     in:scale={animate ? enterDialog() : { start: 1, duration: 0 }}
     out:scale={animate ? leaveDialog() : { start: 1, duration: 0 }}
-    class={`flex max-h-[85vh] w-full ${width} flex-col overflow-hidden rounded-xl border border-edge bg-ink-900 shadow-2xl`}
+  class={`flex max-h-[85vh] w-full ${width} flex-col overflow-hidden rounded-xl border border-ink-700 bg-ink-900 shadow-2xl`}
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => { if (e.key === "Escape") onClose(); e.stopPropagation(); }}
   >

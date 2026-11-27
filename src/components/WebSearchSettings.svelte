@@ -85,7 +85,7 @@
     {#if webNotice}<div class="mt-4 rounded-md border border-ink-700 bg-ink-900 p-3 text-sm text-ink-300" in:slide={{ duration: dur(150) }}>{webNotice}</div>{/if}
     <div class="mt-6 space-y-2">
       {#each webProviders as provider (provider.id)}
-        <div class={`rounded-lg border p-4 transition-colors ${provider.is_default ? "border-ember-500/40 bg-ember-500/5" : "border-ink-700 bg-ink-900"}`}>
+<div class={`rounded-lg border p-4 transition-colors ${provider.is_default ? "border-ink-600 bg-veil/5" : "border-ink-700 bg-ink-900"}`}>
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">

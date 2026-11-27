@@ -51,7 +51,7 @@
 </script>
 
 <div class="rounded-lg border border-ink-700 bg-ink-900 p-4">
-  <h3 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="users" class="h-4 w-4 text-ember-300" />Agents</h3>
+  <h3 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="users" class="h-4 w-4 text-ink-400" />Agents</h3>
   <p class="mt-0.5 text-sm text-ink-400">Local personas saved on this computer. They are markdown files you can edit outside the app.</p>
 
   {#if error}<p class="mt-3 text-sm text-rose-300" role="alert">{error}</p>{/if}

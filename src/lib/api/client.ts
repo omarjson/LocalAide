@@ -37,6 +37,8 @@ import type {
   CloudModeRequest,
   ApprovalTimers,
   ContextInfo,
+  EngineConfig,
+  FoundServer,
   CloudProviderPreset,
   ProviderModel,
   CloudProviderSaveRequest,
@@ -669,6 +671,22 @@ export class ApiClient {
   /** Turn the compact prompt on or off. Local models only. */
   async setCompactPrompt(on: boolean): Promise<boolean> {
     return invoke<boolean>("settings_set_compact_prompt", { on });
+  }
+
+  /** llama-server flags tuned in Settings → Performance → Engine flags. */
+  async getEngineFlags(): Promise<EngineConfig> {
+    return invoke<EngineConfig>("settings_engine_flags");
+  }
+
+  /** Save engine flags. They apply the next time a model loads. */
+  async setEngineFlags(flags: EngineConfig): Promise<EngineConfig> {
+    return invoke<EngineConfig>("settings_set_engine_flags", { flags });
+  }
+
+  /** Chat servers already running on this computer. Read-only probes of
+   *  well-known localhost ports; nothing leaves the machine. */
+  async discoverLocalServers(): Promise<FoundServer[]> {
+    return invoke<FoundServer[]>("local_servers_discover");
   }
 
   /** Approval timers: plan auto-accept and the terminal countdown, in seconds (0 = no timer). */

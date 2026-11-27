@@ -78,7 +78,7 @@
 </script>
 
 <!-- Top bar: saved chats, the engine that answers, and chat actions. -->
-<header class="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900 px-3 md:px-5">
+<header class="relative z-20 flex h-12 shrink-0 items-center gap-2 border-b border-ink-800 bg-ink-900 px-3 md:px-5">
   <div class="flex min-w-0 items-center gap-2 px-1">
     {#if editingTitle}
       <!-- svelte-ignore a11y_autofocus -->
@@ -91,7 +91,7 @@
         onblur={onSaveTitleEdit}
         aria-label="Chat title"
         placeholder="Name this chat"
-        class="h-7 w-56 rounded-md border border-ember-500/50 bg-ink-950 px-2 text-sm text-ink-50 outline-none"
+        class="h-7 w-56 rounded-md border border-edge bg-ink-950 px-2 text-sm text-ink-50 outline-none"
         autofocus
       />
     {:else}
@@ -122,12 +122,12 @@
 
   <div class="ml-auto flex items-center gap-1.5">
     {#if onlineLabel}
-      <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-full border border-ember-500/30 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-200" title={`Messages go to ${onlineLabel}.`}>
-        <Icon name="cloud" class="h-3.5 w-3.5 shrink-0" /><span class="truncate">Online · {onlineLabel}</span>
+      <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-md bg-veil/5 px-2 py-1 text-xs font-medium text-ink-300" title={`Messages go to ${onlineLabel}.`}>
+        <Icon name="cloud" class="h-3.5 w-3.5 shrink-0 text-ember-400" /><span class="truncate">Online · {onlineLabel}</span>
       </span>
     {:else}
-      <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-2 rounded-full border border-ink-700 bg-veil/5 px-2.5 py-1 text-xs font-medium text-ink-300" title="Messages stay on this computer.">
-        <span class="h-2 w-2 shrink-0 rounded-full bg-ember-500 shadow-[0_0_0_3px_rgba(255,122,26,0.18)]" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
+      <span class="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 rounded-md bg-veil/5 px-2 py-1 text-xs font-medium text-ink-400" title="Messages stay on this computer.">
+        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true"></span><span class="truncate">Offline · this computer</span>
       </span>
     {/if}
 
@@ -137,7 +137,7 @@
     <div class="relative" use:popover={{ open: moreOpen, onClose: onCloseMore }}>
       <button type="button" aria-label="More chat actions" aria-expanded={moreOpen} aria-haspopup="menu" onclick={onToggleMore} class="chat-icon-btn"><Icon name="more" class="h-[18px] w-[18px]" /></button>
       {#if moreOpen}
-        <div role="menu" aria-label="More chat actions" class="absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-ink-700 bg-ink-900 p-1.5 shadow-2xl" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
+        <div role="menu" aria-label="More chat actions" class="surface-glass absolute right-0 top-10 z-30 min-w-52 rounded-xl border border-ink-700 p-1.5 shadow-[var(--shadow-elev)]" in:fly={{ y: -4, duration: dur(motion.base), easing: motion.enter }}>
           <button type="button" role="menuitem" data-popover-item onclick={() => { onCloseMore(); onExportMarkdown(); }} disabled={!hasMessages || streaming} class="menu-item"><Icon name="download" class="h-4 w-4" />Export conversation as Markdown</button>
           <button type="button" role="menuitem" data-popover-item onclick={() => { onCloseMore(); onCopy(); }} disabled={!hasMessages || streaming} class="menu-item"><Icon name="copy" class="h-4 w-4" />Copy full conversation</button>
           <button type="button" role="menuitem" data-popover-item onclick={() => { onCloseMore(); onExportJson(); }} disabled={!hasMessages || streaming} class="menu-item"><Icon name="file" class="h-4 w-4" />Export conversation as JSON</button>
@@ -147,7 +147,7 @@
         </div>
       {/if}
     </div>
-    <button type="button" onclick={onNewChat} class="ml-1 flex items-center gap-1.5 rounded-lg bg-ember-500 px-3 py-1.5 text-sm font-semibold text-on-ember shadow-[0_6px_18px_-8px_rgba(255,122,26,0.55)] transition-[background-color,transform] hover:bg-ember-400 active:scale-[0.97]" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
+    <button type="button" onclick={onNewChat} class="btn-ink ml-1 flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors" title="New chat (Ctrl+N)"><Icon name="plus" class="h-4 w-4" /><span class="hidden sm:inline">New chat</span></button>
   </div>
 </header>
 

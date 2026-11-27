@@ -322,11 +322,11 @@
   {/if}
 
   {#if suggestions.length > 0}
-    <div class="mb-5 rounded-lg border border-ember-500/40 bg-ember-500/5 p-4" transition:slide={{ duration: 150 }}>
+    <div class="mb-5 rounded-lg border border-ink-700 bg-ink-800 p-4" transition:slide={{ duration: 150 }}>
       <div class="flex items-center justify-between">
         <h2 class="flex items-center gap-2 font-semibold text-ink-50">
           Review suggestions
-          <span class="rounded-full border border-ember-500/40 bg-ember-500/10 px-2 py-0.5 text-sm text-ember-200">{suggestions.length}</span>
+          <span class="rounded-full border border-ink-600 bg-veil/8 px-2 py-0.5 text-sm text-ink-300">{suggestions.length}</span>
         </h2>
         <p class="text-sm text-ink-400">The model noticed these while chatting.</p>
       </div>
@@ -385,7 +385,7 @@
           <textarea rows={12} bind:value={selectedContent} class="w-full resize-y rounded-md border border-ink-700 bg-ink-950 px-3 py-2 text-sm leading-6 text-ink-100 outline-none focus:border-edge"></textarea>
         </div>
       {:else}
-        {#if selectedNote.tags.length > 0}<div class="mt-4 flex flex-wrap gap-2">{#each selectedNote.tags as tag}<span class="rounded-full border border-ink-700 bg-ink-800 px-2.5 py-1 text-sm text-ember-300">#{tag}</span>{/each}</div>{/if}
+        {#if selectedNote.tags.length > 0}<div class="mt-4 flex flex-wrap gap-2">{#each selectedNote.tags as tag}<span class="rounded-full border border-ink-700 bg-ink-800 px-2.5 py-1 text-sm text-ink-300">#{tag}</span>{/each}</div>{/if}
         <div class="mt-4 max-h-96 overflow-y-auto rounded-md border border-ink-700 bg-ink-950 p-4"><pre class="whitespace-pre-wrap text-sm leading-6 text-ink-200">{selectedContent}</pre></div>
       {/if}
     </div>
@@ -400,13 +400,13 @@
           <span class="rounded-full border border-ink-700 bg-ink-900 px-2.5 py-1 text-sm text-ink-300">{formatBytes(totals.bytes)}</span>
         {/if}
         {#if searching}
-          <span class="rounded-full border border-ember-500/40 bg-ember-500/10 px-2.5 py-1 text-sm text-ember-200" role="status">Searching…</span>
+          <span class="rounded-full border border-ink-600 bg-veil/8 px-2.5 py-1 text-sm text-ember-200" role="status">Searching…</span>
         {/if}
       </div>
     {/if}
     {#if query}<Button variant="subtle" onclick={() => { query = ""; void load(); }}>Clear search</Button>{/if}
     {#if allTags.length > 1}
-      <div class="flex flex-wrap items-center gap-2">{#each allTags as tag}<button type="button" onclick={() => selectedTag = tag} class={`rounded-full px-3 py-1 text-sm transition-colors ${selectedTag === tag ? "bg-ember-600 font-semibold text-on-ember" : "border border-ink-700 bg-ink-900 text-ink-400 hover:text-ink-50"}`}>{tag === "All" ? "All notes" : `#${tag}`}</button>{/each}</div>
+      <div class="flex flex-wrap items-center gap-2">{#each allTags as tag}<button type="button" onclick={() => selectedTag = tag} class={`rounded-full px-3 py-1 text-sm transition-colors ${selectedTag === tag ? "bg-ink-100 font-semibold text-on-ember" : "border border-ink-700 bg-ink-900 text-ink-400 hover:text-ink-50"}`}>{tag === "All" ? "All notes" : `#${tag}`}</button>{/each}</div>
     {/if}
   </div>
 
@@ -421,8 +421,8 @@
   {:else}
     <div class="space-y-3">
       {#if pinnedNotes.length > 0}
-        <div class="rounded-lg border border-ember-500/40 bg-ember-500/5 p-4">
-          <h2 class="flex items-center gap-2 text-sm font-semibold text-ember-200"><Icon name="pin" class="h-4 w-4" />Pinned — always in context while Recall is on</h2>
+        <div class="rounded-lg border border-ink-700 bg-ink-800 p-4">
+          <h2 class="flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="pin" class="h-4 w-4" />Pinned — always in context while Recall is on</h2>
           <div class="mt-3 space-y-3">
             {#each pinnedNotes as note (note.path)}
               {#snippet pinnedRow()}
@@ -432,7 +432,7 @@
                     <p class="line-clamp-2 text-sm leading-6 text-ink-400">{note.preview}</p>
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
-                    <Button variant="subtle" class="h-8 w-8 px-0" ariaLabel={`Unpin ${note.title}`} onclick={() => void togglePin(note)}><Icon name="pin" class="h-4 w-4 text-ember-300" /></Button>
+                    <Button variant="subtle" class="h-8 w-8 px-0" ariaLabel={`Unpin ${note.title}`} onclick={() => void togglePin(note)}><Icon name="pin" class="h-4 w-4 text-ink-400" /></Button>
                     <Button variant="danger" class="h-8 w-8 px-0" ariaLabel={`Delete ${note.title}`} onclick={() => askDelete(note.path)}><Icon name="trash" class="h-4 w-4" /></Button>
                   </div>
                 </div>
@@ -455,7 +455,7 @@
                 <div class="min-w-0 flex-1 space-y-2">
                   <div class="flex flex-wrap items-center gap-2"><button type="button" onclick={() => void openNote(note)} class="truncate text-left font-semibold text-ink-50 hover:text-ember-300">{note.title}</button><span class="text-sm text-ink-400">{note.updated}</span></div>
                   <p class="line-clamp-2 text-sm leading-6 text-ink-400">{note.preview}</p>
-                  {#if note.tags.length > 0}<div class="flex flex-wrap gap-2">{#each note.tags as tag}<button type="button" onclick={() => selectedTag = tag} class="rounded-full bg-ink-800 px-2 py-0.5 text-sm text-ember-300 hover:bg-ink-700">#{tag}</button>{/each}</div>{/if}
+                  {#if note.tags.length > 0}<div class="flex flex-wrap gap-2">{#each note.tags as tag}<button type="button" onclick={() => selectedTag = tag} class="rounded-full bg-ink-800 px-2 py-0.5 text-sm text-ink-300 hover:bg-ink-700">#{tag}</button>{/each}</div>{/if}
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
                   <Button variant="subtle" class="h-8 w-8 px-0" ariaLabel={`Pin ${note.title}`} onclick={() => void togglePin(note)}><Icon name="pin" class="h-4 w-4" /></Button>

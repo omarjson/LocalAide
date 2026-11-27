@@ -86,7 +86,7 @@
     {/if}
 
     {#if openPanel}
-      <div class="ws-panel" role="dialog" aria-label={openPanel === "todos" ? "Plan" : "Subagents"} in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+      <div class="ws-panel surface-glass" role="dialog" aria-label={openPanel === "todos" ? "Plan" : "Subagents"} in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
         {#if openPanel === "todos" && todos}
           <div class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-100"><Icon name="list-check" class="h-4 w-4 text-ink-400" />Plan<span class="text-xs font-normal tabular-nums text-ink-500">{done} of {todos.length} done</span></div>
           {#if planPercent !== null}
@@ -172,9 +172,8 @@
     width: min(26rem, calc(100vw - 2rem));
     transform: translateX(-50%);
     border-radius: 0.85rem;
-    border: 1px solid var(--color-edge);
-    background: var(--color-ink-950);
+    border: 1px solid var(--color-ink-700);
     padding: 0.75rem;
-    box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.6);
+    box-shadow: var(--shadow-elev);
   }
 </style>

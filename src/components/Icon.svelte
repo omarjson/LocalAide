@@ -1,4 +1,4 @@
-<script lang="ts" context="module">
+<script lang="ts" module>
   // One icon set: 24px grid, 1.75 stroke, rounded caps and joins, drawn inline so it
   // takes the surrounding text color and needs no icon font or extra package.
   // Every name maps to one SVG fragment string; a single <svg> renders the chosen
@@ -129,6 +129,9 @@
     "chevron-down": `
       <path d="m6 9 6 6 6-6" />
     `,
+    "chevron-up": `
+      <path d="m6 15 6-6 6 6" />
+    `,
     flame: `
       <path d="M12 21c-3.9 0-7-2.7-7-6.5 0-3 2-5 3.5-6.5.3 1.6 1.2 2.8 2.5 3.3C11 8 12.5 5 15 3c0 3 4 5.5 4 10.5 0 4-3.1 7.5-7 7.5z" />
       <path d="M12 21c-1.7 0-3-1.3-3-3 0-1.5 1-2.5 2-3.5.3 1 1 1.6 2 1.8.6-.9 1-2 1-3.3 1.2 1 2 2.6 2 4.5 0 2-1.6 3.5-4 3.5z" />
@@ -181,6 +184,11 @@
     pencil: `
       <path d="M4 20h4L19 9l-4-4L4 16z" />
       <path d="m13.5 6.5 4 4" />
+    `,
+    square_pen: `
+      <path d="M4 7a3 3 0 0 1 3-3h6" />
+      <path d="M4 7v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-5" />
+      <path d="M13 15h3l5-5-3-3-5 5z" />
     `,
     image: `
       <rect x="3" y="5" width="18" height="14" rx="2" />

@@ -51,7 +51,7 @@
   <div class="relative" use:popover={{ open: menuOpen, onClose: () => (menuOpen = false) }}>
     <button type="button" class="file-btn" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => void openMenu()}>Open with<Icon name="chevron-down" class="h-3 w-3" /></button>
     {#if menuOpen}
-      <div role="menu" aria-label={`Open ${name} with`} class="file-menu" in:fly={{ y: 4, duration: dur(motion.fast), easing: motion.enter }}>
+<div role="menu" aria-label={`Open ${name} with`} class="file-menu surface-glass" in:fly={{ y: 4, duration: dur(motion.fast), easing: motion.enter }}>
         {#if apps === null}
           <div class="px-3 py-2 text-sm text-ink-500">Looking for apps…</div>
         {:else if apps.length === 0}
@@ -91,10 +91,9 @@
     z-index: 30;
     min-width: 12rem;
     border-radius: 0.6rem;
-    border: 1px solid var(--color-edge);
-    background: var(--color-ink-950);
+    border: 1px solid var(--color-ink-700);
     padding: 0.3rem;
-    box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.5);
+    box-shadow: var(--shadow-elev);
     transform-origin: top left;
   }
   .file-menu-item {

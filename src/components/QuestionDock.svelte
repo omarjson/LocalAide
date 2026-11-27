@@ -101,7 +101,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section class={`qd ${active ? "qd-live" : ""}`} aria-label="Questions" onkeydown={onKey}>
   <header class="qd-head">
-    <Icon name="help" class="h-4 w-4 shrink-0 text-ember-300" />
+    <Icon name="help" class="h-4 w-4 shrink-0 text-ink-400" />
     <button type="button" class="qd-toggle" aria-expanded={!collapsed} onclick={() => (collapsed = !collapsed)}>
       <Icon name="chevron-down" class={`h-3.5 w-3.5 transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`} />
       <span class="font-semibold text-ink-100">Questions</span>
@@ -183,7 +183,7 @@
   }
   .qd-live {
     border-color: color-mix(in oklab, var(--color-ember-500) 45%, var(--color-ink-700));
-    box-shadow: 0 10px 30px -18px color-mix(in oklab, var(--color-ember-500) 60%, transparent);
+    box-shadow: var(--shadow-elev);
   }
   .qd-head {
     display: flex;
@@ -230,11 +230,11 @@
   .qd-rec {
     margin-left: 0.4rem;
     border-radius: 9999px;
-    background: color-mix(in oklab, var(--color-ember-500) 16%, transparent);
+    background: var(--color-ink-700);
     padding: 0.05rem 0.45rem;
     font-size: 0.6875rem;
     font-weight: 600;
-    color: var(--color-ember-200);
+    color: var(--color-ink-200);
     white-space: nowrap;
   }
   .qd-mark {
@@ -275,14 +275,14 @@
     color: var(--color-ink-300);
   }
   .qd-btn-primary {
-    border-color: color-mix(in oklab, var(--color-ember-500) 55%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 18%, transparent);
-    color: var(--color-ember-100);
+    border-color: var(--color-ink-100);
+    background: var(--color-ink-100);
+    color: var(--color-ink-950);
   }
   .qd-btn:hover:not(:disabled) {
     background: color-mix(in oklab, var(--color-veil) 7%, transparent);
   }
   .qd-btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--color-ember-500) 26%, transparent);
+    background: var(--color-ink-50);
   }
 </style>

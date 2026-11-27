@@ -92,7 +92,9 @@
     try { localStorage.setItem(WIDTH_KEY, choice); } catch { /* storage unavailable */ }
   };
   const chatWidth = $derived(
-    chatWidthChoice === "cozy" ? "max-w-3xl" : chatWidthChoice === "wide" ? "max-w-5xl" : "max-w-none",
+    // Comfortable is GOAT's reading measure: 42rem. Wider is for tables and
+    // long code, Full for side-by-side work.
+    chatWidthChoice === "cozy" ? "max-w-2xl" : chatWidthChoice === "wide" ? "max-w-5xl" : "max-w-none",
   );
 
   // Follow answers while streaming: keep the newest text in view unless you
@@ -2277,7 +2279,7 @@
   {#if dragging}
     <div class="pointer-events-none absolute inset-3 z-40 grid place-items-center rounded-2xl border-2 border-dashed border-ember-500/60 bg-ink-950/80" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(motion.fast) }}>
       <div class="flex flex-col items-center gap-2 text-center">
-        <Icon name="paperclip" class="h-8 w-8 text-ember-300" />
+        <Icon name="paperclip" class="h-8 w-8 text-ink-400" />
         <p class="text-base font-semibold text-ink-50">Drop files to attach them</p>
         <p class="text-sm text-ink-400">Text, code, PDF and images. The model reads them with your message.</p>
       </div>

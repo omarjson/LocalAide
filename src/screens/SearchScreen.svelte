@@ -672,7 +672,7 @@
                 <Icon name="more" class="h-[18px] w-[18px]" />
               </Button>
               {#if openMenuPath === doc.path}
-                <div role="menu" aria-label={`Actions for ${doc.title}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-edge bg-ink-900 p-1 shadow-xl">
+                <div role="menu" aria-label={`Actions for ${doc.title}`} class="absolute right-0 top-9 z-10 min-w-44 rounded-md border border-ink-700 bg-ink-900 p-1 shadow-xl">
                   <button type="button" role="menuitem" onclick={() => askRemoveDoc(doc.path)} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-rose-400 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:outline-none">
                     <Icon name="trash" class="h-4 w-4" />
                     Remove from library

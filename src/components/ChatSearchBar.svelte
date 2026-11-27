@@ -22,7 +22,7 @@
 
 {#if open}
   <div
-    class="absolute left-1/2 top-3 z-30 flex w-[min(30rem,90%)] -translate-x-1/2 items-center gap-1 rounded-xl border border-ink-700 bg-ink-900 px-2 py-1.5 shadow-[var(--shadow-elev)]"
+  class="surface-glass absolute left-1/2 top-3 z-30 flex w-[min(30rem,90%)] -translate-x-1/2 items-center gap-1 rounded-xl border border-ink-700 px-2 py-1.5 shadow-[var(--shadow-elev)]"
     role="search"
     in:fly={{ y: -6, duration: dur(motion.base), easing: motion.enter }}
   >

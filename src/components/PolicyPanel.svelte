@@ -99,7 +99,7 @@
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <h2 id="policy-title" class="flex items-center gap-2 text-lg font-semibold text-ink-50">
-        <Icon name="shield_check" class="h-5 w-5 text-ember-300" />Permissions and tool hooks
+        <Icon name="shield_check" class="h-5 w-5 text-ink-400" />Permissions and tool hooks
       </h2>
       <p class="mt-1 text-sm text-ink-400">Decide which actions may run, and which local scripts run before or after a tool. All rules stay in your settings.</p>
     </div>

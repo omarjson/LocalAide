@@ -16,7 +16,7 @@ if (!out) {
 }
 
 const REPO = "omarjson/LocalAide";
-const version = JSON.parse(readFileSync(join("src-tauri", "tauri.conf.json"), "utf8")).version;
+const version = JSON.parse(readFileSync("package.json", "utf8")).version;
 const section = changelogSection(version);
 if (!section) {
   console.log(`::error title=changelog::CHANGELOG.md has no "## [${version}] - date" section. Write it before releasing.`);
@@ -30,10 +30,10 @@ const notes = `${section}
 
 | Your computer | File |
 |---|---|
-| Windows 10 or 11 | \`LocalAide_${version}_x64-setup.exe\` |
-| Windows 11 on ARM (Snapdragon and similar) | \`LocalAide_${version}_arm64-setup.exe\` |
-| Mac with Apple Silicon (M1 or newer) | \`LocalAide_${version}_aarch64.dmg\` |
-| Mac with an Intel processor | \`LocalAide_${version}_x64.dmg\` |
+| Windows 10 or 11 | \`LocalAide Setup ${version}.exe\` |
+| Windows on ARM | \`LocalAide Setup ${version} arm64.exe\` |
+| Mac with Apple Silicon (M1 or newer) | \`LocalAide-${version}-arm64.dmg\` |
+| Mac with an Intel processor | \`LocalAide-${version}.dmg\` |
 | Linux | \`.AppImage\` or \`.deb\` |
 
 The first time a model loads, LocalAide downloads the llama.cpp engine built for your processor (13 to 25 MB, from github.com).

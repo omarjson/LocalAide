@@ -1,5 +1,8 @@
 # ADR-0006: Gating and Deferral of Optional Features (Voice, Vision, Cloud, Modular Updates)
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 ## Status
 Accepted. Amended 2026-11-13: cloud LLM shipped as the opt-in Online Providers mode (plan §0 in `.kiro/specs/kiroween-2026/plan.md`), with keys in the local config file rather than the OS keychain, and image input shipped through the sidecar's multimodal path (ADR-0007) instead of the Candle vision plan below.
 

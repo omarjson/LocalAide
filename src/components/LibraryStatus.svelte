@@ -126,8 +126,8 @@
     <div class="stat">
       <span class="stat-label">Search</span>
       {#if status}
-        <span class={`stat-value flex items-center gap-1.5 ${semantic ? "text-emerald-300" : "text-ember-200"}`}>
-          <span class={`h-2 w-2 rounded-full ${semantic ? "bg-emerald-400" : "bg-ember-500"}`} aria-hidden="true"></span>
+        <span class={`stat-value flex items-center gap-1.5 ${semantic ? "text-emerald-300" : "text-ink-300"}`}>
+          <span class={`h-2 w-2 rounded-full ${semantic ? "bg-emerald-400" : "bg-ink-400"}`} aria-hidden="true"></span>
           {semantic ? "By meaning" : "Exact words only"}
         </span>
       {:else}<span class="skeleton h-5 w-24"></span>{/if}
@@ -148,8 +148,8 @@
 
   <div class="space-y-4 p-4">
     {#if status && !semantic}
-      <div class="flex flex-col gap-3 rounded-lg border border-ember-500/30 bg-ember-500/[0.06] p-3 sm:flex-row sm:items-center">
-        <Icon name="info" class="hidden h-4 w-4 shrink-0 text-ember-300 sm:block" />
+      <div class="flex flex-col gap-3 rounded-lg border border-ink-700 bg-ink-800 p-3 sm:flex-row sm:items-center">
+        <Icon name="info" class="hidden h-4 w-4 shrink-0 text-ink-400 sm:block" />
         <p class="flex-1 text-sm leading-6 text-ink-200">{status.reason}</p>
         {#if installed.length > 0}
           <Button variant="primary" disabled={!!busyModel} onclick={() => void useModel((installed.find((c) => c.id === status?.embedding_model) ?? installed[0]).id)}>
@@ -224,7 +224,7 @@
           <span class="text-sm text-ink-400">{report.indexed.toLocaleString()} {report.indexed === 1 ? "file" : "files"} in the library · {report.skipped.toLocaleString()} skipped · {(report.ms / 1000).toFixed(1)} s</span>
           <button type="button" class="ml-auto text-xs text-ink-500 hover:text-ink-200" onclick={() => (report = null)}>Dismiss</button>
         </div>
-        {#if report.limited}<p class="mt-1.5 text-xs text-ember-200">The folder is very large, so the scan stopped at 20,000 files or 32 folder levels.</p>{/if}
+        {#if report.limited}<p class="mt-1.5 text-xs text-amber-300">The folder is very large, so the scan stopped at 20,000 files or 32 folder levels.</p>{/if}
         {#if report.reasons.length > 0}
           <div class="mt-2 flex flex-wrap gap-1.5">
             {#each report.reasons as [reason, count] (reason)}<span class="rounded-md bg-ink-800 px-2 py-0.5 text-xs text-ink-300">{reason}: {count.toLocaleString()}</span>{/each}

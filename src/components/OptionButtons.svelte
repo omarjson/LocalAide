@@ -135,14 +135,14 @@
     color: var(--color-ink-300);
   }
   .opt-primary {
-    border-color: var(--color-ember-600);
-    background: var(--color-ember-600);
+    border-color: transparent;
+    background: var(--color-ink-100);
     color: var(--color-on-ember);
     font-weight: 600;
   }
   .opt-primary:not(:disabled):hover {
-    background: var(--color-ember-500);
-    border-color: var(--color-ember-500);
+    background: var(--color-ink-50);
+    border-color: transparent;
   }
   .opt-primary .opt-key {
     background: color-mix(in oklab, var(--color-on-ember) 18%, transparent);
@@ -153,20 +153,20 @@
     color: var(--color-ink-300);
   }
   .opt-on {
-    border-color: color-mix(in oklab, var(--color-ember-500) 60%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 14%, transparent);
+    border-color: var(--color-ink-600);
+    background: var(--color-ink-700);
     color: var(--color-ink-50);
   }
   .opt-on .opt-key {
-    background: var(--color-ember-600);
-    color: var(--color-on-ember);
+    background: var(--color-ink-800);
+    color: var(--color-ink-200);
   }
   .opt-rec {
     border-radius: 9999px;
-    background: color-mix(in oklab, var(--color-ember-500) 16%, transparent);
+    background: var(--color-ink-700);
     padding: 0.05rem 0.45rem;
     font-size: 0.6875rem;
     font-weight: 600;
-    color: var(--color-ember-200);
+    color: var(--color-ink-200);
   }
 </style>

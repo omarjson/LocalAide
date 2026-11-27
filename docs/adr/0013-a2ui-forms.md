@@ -1,5 +1,8 @@
 # ADR-0013: Interactive Forms with A2UI 1.0
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 Date: 2026-11-22. Status: accepted.
 
 ## Context

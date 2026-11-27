@@ -66,27 +66,24 @@
 
 {#snippet row(t: ChatThread)}
   <div class={`chat-row group ${t.id === chats.activeId ? "chat-row-on" : ""}`}>
-    <button type="button" class="min-w-0 flex-1 truncate py-1.5 pl-2 text-left" aria-current={t.id === chats.activeId ? "true" : undefined} onclick={() => open(t)} title={t.title}>{t.title}</button>
+    <button type="button" class="min-w-0 flex-1 truncate py-1.5 pl-2.5 pr-1 text-left" aria-current={t.id === chats.activeId ? "true" : undefined} onclick={() => open(t)} title={t.title}>{t.title}</button>
     <button type="button" class="chat-row-del" aria-label={`Delete chat ${t.title}`} title="Delete chat" onclick={() => (pendingDelete = t)}><Icon name="trash" class="h-3.5 w-3.5" /></button>
   </div>
 {/snippet}
 
 <div class="mt-2 space-y-0.5 pb-2" aria-label="Saved chats" role="group">
-  <div class="flex items-center gap-1 px-2 pb-1 pt-2">
-    <span class="flex-1 text-xs font-semibold text-ink-500">Chats</span>
-    <button type="button" class="side-icon" aria-label="New chat" title="New chat (Ctrl+N)" onclick={() => start(null)}><Icon name="plus" class="h-3.5 w-3.5" /></button>
-    <button type="button" class="side-icon" aria-label="New chat in a folder" title="New chat in a project folder" onclick={() => void startInFolder()}><Icon name="folder-plus" class="h-3.5 w-3.5" /></button>
+  <!-- GOAT's thread header: one row, a quiet search field that grows, then
+       the new-thread icons. No section label. -->
+  <div class="flex items-center gap-1 px-1.5 pb-1 pt-2">
+    <input type="search" bind:value={query} aria-label="Find a chat" placeholder="Search chats" class="h-8 min-w-0 flex-1 rounded-md bg-transparent px-2 text-sm text-ink-100 placeholder:text-ink-500 transition-colors hover:bg-veil/5 focus:bg-veil/5" />
+    <button type="button" class="side-icon" aria-label="New chat" title="New chat (Ctrl+N)" onclick={() => start(null)}><Icon name="square_pen" class="h-4 w-4" /></button>
+    <button type="button" class="side-icon" aria-label="New chat in a folder" title="New chat in a project folder" onclick={() => void startInFolder()}><Icon name="folder-plus" class="h-4 w-4" /></button>
   </div>
-  {#if chats.threads.length > 8}
-    <div class="px-1.5 pb-1">
-      <input type="search" bind:value={query} aria-label="Find a chat" placeholder="Find a chat" class="h-7 w-full rounded-md border border-ink-800 bg-ink-900 px-2 text-[13px] text-ink-100 placeholder:text-ink-500" />
-    </div>
-  {/if}
 
   {#each groups.folders as g (g.path)}
     <div>
       <div class="folder-row group">
-        <button type="button" class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1.5 text-left" aria-expanded={!closed[g.path]} onclick={() => (closed[g.path] = !closed[g.path])} title={g.path}>
+        <button type="button" class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2.5 text-left" aria-expanded={!closed[g.path]} onclick={() => (closed[g.path] = !closed[g.path])} title={g.path}>
           <Icon name={closed[g.path] ? "folder" : "folder-open"} class="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <span class="truncate font-medium">{g.name}</span>
           <span class="text-xs tabular-nums text-ink-600">{g.threads.length || ""}</span>
@@ -168,7 +165,7 @@
     height: 1.5rem;
     width: 1.5rem;
     place-items: center;
-    border-radius: 0.4rem;
+    border-radius: 0.375rem;
     color: var(--color-ink-500);
     transition: background-color 120ms ease-out, color 120ms ease-out;
   }
@@ -180,21 +177,22 @@
   .folder-row {
     display: flex;
     align-items: center;
-    border-radius: 0.45rem;
-    font-size: 0.8125rem;
-    color: var(--color-ink-300);
+    min-height: 2.25rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--color-ink-400);
     transition: background-color 120ms ease-out, color 120ms ease-out;
   }
   .folder-row {
-    color: var(--color-ink-200);
+    color: var(--color-ink-300);
   }
   .chat-row:hover,
   .folder-row:hover {
     background: color-mix(in oklab, var(--color-veil) 5%, transparent);
-    color: var(--color-ink-50);
+    color: var(--color-ink-100);
   }
   .chat-row-on {
-    background: var(--color-ink-800);
+    background: color-mix(in oklab, var(--color-veil) 7%, transparent);
     color: var(--color-ink-50);
   }
   .chat-row-del {

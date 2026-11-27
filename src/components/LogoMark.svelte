@@ -1,6 +1,8 @@
 <script lang="ts">
-  // The stitched-ghost mark, inlined so the ember eye can glow. Same art as
-  // public/logo.svg; that file stays the favicon and any <img> use.
+  // The ghost mark, drawn in currentColor so it reads as a plain glyph in
+  // chrome, message headers and tabs (GOAT's monochrome brand treatment).
+  // One eye is punched out; the other is the blue accent. public/logo.svg
+  // stays the tiled favicon.
   let { class: className = "" }: { class?: string } = $props();
 </script>
 
@@ -11,61 +13,18 @@
   aria-label="LocalAide logo"
   xmlns="http://www.w3.org/2000/svg"
 >
-  <!-- App-icon tile, same as public/logo.svg, so the cream ghost reads on the light theme too. -->
-  <rect width="512" height="512" rx="112" fill="#1b1b1f" />
+  <mask id="la-ghost-eyes">
+    <rect width="512" height="512" fill="#000" />
+    <path
+      d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z"
+      fill="#fff"
+    />
+    <circle cx="212" cy="236" r="22" fill="#000" />
+  </mask>
   <path
     d="M256 92c-88 0-152 66-152 156v170c0 14 14 22 25 15l32-21 32 21c7 5 15 5 22 0l27-20 27 20c7 5 15 5 22 0l32-21 32 21c11 7 25-1 25-15V248c0-90-64-156-152-156z"
-    fill="#f3ead8"
+    fill="currentColor"
+    mask="url(#la-ghost-eyes)"
   />
-  <path
-    d="M176 316q80-26 160 0"
-    fill="none"
-    stroke="#1f1630"
-    stroke-width="6"
-    stroke-linecap="round"
-    stroke-dasharray="10 12"
-  />
-  <rect x="274" y="352" width="72" height="56" rx="12" fill="#ff7a1a" />
-  <rect
-    x="274"
-    y="352"
-    width="72"
-    height="56"
-    rx="12"
-    fill="none"
-    stroke="#1f1630"
-    stroke-width="5"
-    stroke-dasharray="8 8"
-  />
-  <circle cx="212" cy="236" r="20" fill="#1f1630" />
-  <circle cx="300" cy="236" r="27" fill="#ff7a1a" opacity="0.22" class="logo-glow" />
-  <circle cx="300" cy="236" r="20" fill="#1f1630" />
-  <circle cx="300" cy="236" r="11" fill="#ff7a1a" />
+  <circle cx="300" cy="236" r="11" fill="var(--color-ember-500)" />
 </svg>
-
-<style>
-  /* One gentle pulse when the logo mounts, then still. An infinite
-     animation on an SVG child runs on WebKit's main thread (SVG has no
-     compositor layer), so it kept the whole page re-laying-out and
-     re-painting every frame — the 95 C idle heat on Omar's Intel Mac. */
-  .logo-glow {
-    animation: logo-pulse 2.6s ease-in-out 1;
-    transform-origin: 300px 236px;
-  }
-  @keyframes logo-pulse {
-    0%,
-    100% {
-      opacity: 0.18;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.4;
-      transform: scale(1.12);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .logo-glow {
-      animation: none;
-    }
-  }
-</style>

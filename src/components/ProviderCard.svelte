@@ -145,8 +145,8 @@
     color: #34d399;
   }
   .status-warn {
-    background: color-mix(in oklab, var(--color-ember-500) 14%, transparent);
-    color: var(--color-ember-200);
+    background: color-mix(in oklab, #f59e0b 14%, transparent);
+    color: var(--color-amber-300);
   }
   .status-bad {
     background: color-mix(in oklab, #f43f5e 14%, transparent);
@@ -171,7 +171,7 @@
     color: var(--color-ink-200);
   }
   .chip-default {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-ember-500) 45%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-ink-600);
   }
   .chip-more {
     background: transparent;

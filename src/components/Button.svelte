@@ -29,8 +29,8 @@
   } = $props();
 
   const variants: Record<ButtonVariant, string> = {
-    primary: "bg-ember-600 text-on-ember font-semibold shadow-sm shadow-ember-900/30 hover:bg-ember-500",
-    secondary: "bg-ink-900 border border-ink-700 border-b-edge text-ink-100 hover:bg-ink-800",
+    primary: "btn-ink font-semibold",
+    secondary: "bg-ink-900 border border-ink-700 text-ink-100 hover:bg-ink-800",
     subtle: "text-ink-300 hover:bg-veil/5 hover:text-ink-50",
     danger: "text-rose-400 hover:bg-rose-500/10",
   };
@@ -44,7 +44,7 @@
   aria-expanded={ariaExpanded}
   aria-haspopup={ariaHaspopup}
   onclick={onclick}
-  class={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm whitespace-nowrap transition-[background-color,color,border-color,transform,box-shadow] duration-150 ease-out active:scale-[0.97] disabled:cursor-default disabled:opacity-50 disabled:active:scale-100 ${variants[variant]} ${className}`}
+  class={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm whitespace-nowrap transition-[background-color,color,border-color,box-shadow] duration-150 ease-out disabled:cursor-default disabled:opacity-50 ${variants[variant]} ${className}`}
 >
   {@render children?.()}
 </button>

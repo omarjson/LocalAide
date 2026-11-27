@@ -62,7 +62,7 @@
 
 <section class="mt-9" aria-labelledby="usage-panel-title">
   <h3 id="usage-panel-title" class="mb-2 flex items-center gap-2 text-[15px] font-semibold text-ink-50">
-    <Icon name="usage" class="h-4 w-4 text-ember-300" />Usage ledger
+    <Icon name="usage" class="h-4 w-4 text-ink-400" />Usage ledger
   </h3>
   <p class="mb-3 text-sm text-ink-400">
     Record one model call and read the local ledger. This is separate from the aggregated Usage screen;

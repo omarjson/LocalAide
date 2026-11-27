@@ -1,5 +1,8 @@
 # ADR-0005: Cryptographic Verification of App Updates and Model Catalog
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 ## Status
 Accepted for the model pipeline and shipped. The application updater is designed but not wired: no update check exists in the current build, and Ed25519 signing remains future work.
 

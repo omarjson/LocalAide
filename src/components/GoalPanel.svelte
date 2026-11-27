@@ -294,7 +294,7 @@
 
 <section class="mt-9" aria-labelledby="goal-panel-title">
   <h3 id="goal-panel-title" class="mb-2 flex items-center gap-2 text-[15px] font-semibold text-ink-50">
-    <Icon name="target" class="h-4 w-4 text-ember-300" />Goals
+    <Icon name="target" class="h-4 w-4 text-ink-400" />Goals
   </h3>
   <p class="mb-3 text-sm text-ink-400">
     Track a multi-step objective in the local goals database. The runner can use the active chat model to

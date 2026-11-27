@@ -34,7 +34,7 @@
     <Icon name={current.icon} class="h-[18px] w-[18px]" />
   </button>
   {#if open}
-    <div role="menu" aria-label="Permissions" class="perm-menu" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
+<div role="menu" aria-label="Permissions" class="perm-menu surface-glass" in:fly={{ y: 6, duration: dur(motion.base), easing: motion.enter }}>
       {#each PERMISSION_MODES as m, i (m.id)}
         {#if i === 1}<div class="my-1 h-px bg-ink-800" role="separator"></div>{/if}
         <button
@@ -92,10 +92,9 @@
     z-index: 40;
     width: 16.5rem;
     border-radius: 0.8rem;
-    border: 1px solid var(--color-edge);
-    background: var(--color-ink-950);
+    border: 1px solid var(--color-ink-700);
     padding: 0.35rem;
-    box-shadow: 0 20px 44px -18px rgb(0 0 0 / 0.6);
+    box-shadow: var(--shadow-elev);
     transform-origin: bottom left;
   }
   .perm-item {

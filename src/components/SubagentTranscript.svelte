@@ -47,14 +47,14 @@
       aria-label={`Subagent: ${a.detail || "Subagent"}`}
       in:fly={{ x: 24, duration: dur(motion.base), easing: motion.enter }}
       out:fly={{ x: 24, duration: dur(motion.fast) }}
-      class="absolute bottom-0 right-0 top-0 flex w-full max-w-md flex-col overflow-hidden border-l border-edge bg-ink-900 shadow-2xl"
+      class="absolute bottom-0 right-0 top-0 flex w-full max-w-md flex-col overflow-hidden border-l border-ink-800 bg-ink-900 shadow-2xl"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => { if (e.key === "Escape") onClose(); e.stopPropagation(); }}
     >
       <FocusTrap>
         <header class="flex shrink-0 items-start justify-between gap-3 border-b border-ink-800 px-5 py-3.5">
           <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs font-medium text-ember-300"><Icon name="users" class="h-3.5 w-3.5" />Subagent</div>
+            <div class="flex items-center gap-2 text-xs font-medium text-ink-400"><Icon name="users" class="h-3.5 w-3.5" />Subagent</div>
             <h2 class="mt-1 truncate font-semibold text-ink-50">{a.detail || "Subagent"}</h2>
             <p class="mt-0.5 text-xs text-ink-500">{statusLabel}{#if tokenLabel} · {tokenLabel}{/if}</p>
           </div>

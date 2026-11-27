@@ -202,7 +202,7 @@
               type="button"
               onclick={() => setRange(range.days)}
               aria-pressed={days === range.days}
-              class={`rounded-md px-3 py-1.5 text-sm transition-colors ${days === range.days ? "bg-ember-600 font-semibold text-on-ember" : "text-ink-400 hover:text-ink-50"}`}
+              class={`rounded-md px-3 py-1.5 text-sm transition-colors ${days === range.days ? "bg-ink-100 font-semibold text-on-ember" : "text-ink-400 hover:text-ink-50"}`}
             >{range.label}</button>
           {/each}
         </div>
@@ -275,7 +275,7 @@
           <p class="text-sm text-ink-400">Longest streak (days)</p>
           <p class="mt-1 text-3xl font-semibold text-ink-50">{summary.longest_streak}</p>
           {#if streak >= 2}
-            <p class="mt-1 flex items-center gap-1 text-sm text-ember-200"><Icon name="flame" class="h-3.5 w-3.5" />{streak} now</p>
+            <p class="mt-1 flex items-center gap-1 text-sm text-ink-300"><Icon name="flame" class="h-3.5 w-3.5" />{streak} now</p>
           {/if}
         </div>
       </div>
@@ -440,7 +440,7 @@
                       style={`width:${Math.max(2, (project.output / maxProject) * 100)}%`}
                     ></div>
                   </div>
-                  <span class={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition-colors ${folder === project.folder ? "border-ember-500/40 bg-ember-500/10 text-ember-200" : "border-ink-700 text-ink-400"}`}>{project.answers} answers</span>
+                  <span class={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition-colors ${folder === project.folder ? "border-ink-600 bg-veil/8 text-ink-100" : "border-ink-700 text-ink-400"}`}>{project.answers} answers</span>
                 </div>
               </button>
             {/each}
@@ -479,7 +479,7 @@
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-ink-50">This computer</h2>
             {#if localSpeed !== null}
-              <span class="rounded-full border border-ember-500/40 bg-ember-500/10 px-2.5 py-1 text-sm text-ember-200">{localSpeed.toFixed(1)} tok/s on this machine</span>
+              <span class="rounded-full border border-ink-600 bg-veil/8 px-2.5 py-1 text-sm text-ink-300">{localSpeed.toFixed(1)} tok/s on this machine</span>
             {/if}
           </div>
           <div class="mt-4">

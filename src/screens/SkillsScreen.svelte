@@ -293,8 +293,8 @@
   <div in:fly={enterScreen()}>
   {#if view === "mine"}
     {#if suggestions.length > 0 && !showEditor}
-      <div class="mb-5 rounded-lg border border-ember-500/30 bg-ember-500/5 p-4">
-        <div class="flex items-center gap-2 font-semibold text-ember-200"><Icon name="sparkle" class="h-[18px] w-[18px]" />Suggested prompts</div>
+      <div class="mb-5 rounded-lg border border-ink-700 bg-ink-800 p-4">
+        <div class="flex items-center gap-2 font-semibold text-ink-100"><Icon name="sparkle" class="h-[18px] w-[18px]" />Suggested prompts</div>
         <p class="mt-1 text-sm text-ink-400">You used these prompts more than once. Save one for later?</p>
         <div class="mt-3 space-y-2">
           {#each suggestions.slice(0, 3) as suggestion (suggestion.prompt)}
@@ -368,9 +368,9 @@
           aria-pressed={activeSource === source.id}
           onclick={() => void openSource(source.id)}
           in:fly={stagger(i)}
-          class={`lift flex flex-col rounded-lg border p-4 text-left ${activeSource === source.id ? "border-ember-500/60 bg-ember-500/5" : "border-ink-700 bg-ink-900 hover:border-edge"}`}
+          class={`lift flex flex-col rounded-lg border p-4 text-left ${activeSource === source.id ? "border-ink-500 bg-veil/8" : "border-ink-700 bg-ink-900 hover:border-edge"}`}
         >
-          <span class={`grid h-9 w-9 place-items-center rounded-md ${activeSource === source.id ? "bg-ember-500/15 text-ember-300" : "bg-ink-800 text-ink-200"}`}><Icon name={sourceIcon(source.id)} class="h-[18px] w-[18px]" /></span>
+          <span class={`grid h-9 w-9 place-items-center rounded-md ${activeSource === source.id ? "bg-veil/10 text-ink-200" : "bg-ink-800 text-ink-200"}`}><Icon name={sourceIcon(source.id)} class="h-[18px] w-[18px]" /></span>
           <span class="mt-3 font-semibold text-ink-50">{source.label}</span>
           <span class="mt-1 text-sm leading-6 text-ink-400">{source.description}</span>
           <span class="mt-2 text-xs text-ink-500">{source.license_note}</span>

@@ -3,12 +3,17 @@
   "private": true,
   "version": "0.2.4",
   "type": "module",
+  "main": "electron/main.mjs",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "dev": "vite",
+    "dev:electron": "electron . --dev",
+    "start": "electron .",
+    "app": "electron .",
     "build": "tsc --noEmit && vite build",
+    "build:electron": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "smoke": "node scripts/smoke-test.mjs",
@@ -17,7 +22,8 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tauri-apps/cli": "^2.12.4",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.0.12",
     "svelte-check": "^4.7.8",
     "tailwindcss": "^4.3.5",
     "typescript": "~5.9.3",
@@ -29,6 +35,63 @@
     "@tanstack/svelte-virtual": "^3.13.54",
     "@tauri-apps/api": "^2.12.4",
     "mermaid": "^12.3.0",
-    "svelte": "^5.57.3"
+    "svelte": "^5.57.3",
+    "qrcode": "^1.5.4"
+  },
+  "build": {
+    "appId": "app.localaide.desktop",
+    "productName": "LocalAide",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "catalog/models.json",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "catalog/models.json"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "omarjson",
+      "repo": "LocalAide"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/logo.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
   }
 }

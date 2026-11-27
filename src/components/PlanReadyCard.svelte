@@ -30,7 +30,7 @@
     <span class="min-w-0 flex-1 text-ink-200">The plan is ready. Build carries it out with the {permissionLabel(buildMode === "plan" ? "ask" : buildMode).replace(/ mode$/, "")} permission.</span>
     <ModeChip mode="plan" />
     <button type="button" onclick={onKeepPlanning} class="rounded-lg px-2.5 py-1 text-ink-300 hover:bg-veil/5">Keep planning</button>
-    <button type="button" onclick={onBuild} class="rounded-lg bg-ember-500 px-3 py-1 font-semibold text-on-ember hover:bg-ember-400">Build</button>
+    <button type="button" onclick={onBuild} class="rounded-lg bg-ink-100 px-3 py-1 font-semibold text-on-ember hover:bg-ink-50">Build</button>
   </div>
   {#if autoAcceptSecs > 0}
     <div class="mt-2 pl-7">

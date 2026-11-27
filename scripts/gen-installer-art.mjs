@@ -1,9 +1,9 @@
 // Builds the installer artwork from the LocalAide ghost in public/logo.svg:
 //
-//   src-tauri/installer/nsis-header.bmp    150x57   Windows installer header
-//   src-tauri/installer/nsis-sidebar.bmp   164x314  Windows welcome/finish pages
-//   src-tauri/installer/dmg-background.png 660x400  macOS disk image window (2x, 144 dpi)
-//   src-tauri/installer/icon-macos.svg     macOS icon source (Apple grid padding)
+//   build/installer/nsis-header.bmp    150x57   Windows installer header
+//   build/installer/nsis-sidebar.bmp   164x314  Windows welcome/finish pages
+//   build/installer/dmg-background.png 660x400  macOS disk image window (2x, 144 dpi)
+//   build/installer/icon-macos.svg     macOS icon source (Apple grid padding)
 //
 // Run it after changing the logo:
 //   npx -y -p @resvg/resvg-js node scripts/gen-installer-art.mjs
@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 const { Resvg } = require("@resvg/resvg-js");
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const out = join(root, "src-tauri", "installer");
+const out = join(root, "build", "installer");
 mkdirSync(out, { recursive: true });
 
 const logo = readFileSync(join(root, "public", "logo.svg"), "utf8");

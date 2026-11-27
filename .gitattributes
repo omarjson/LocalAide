@@ -1,3 +1,15 @@
+# Normalize every text file to LF in the repository, on every platform.
+# Windows checkouts with core.autocrlf=true otherwise show every file as
+# modified and hide the real changes in review. (*.sh stays explicit below.)
+* text=auto eol=lf
+
 # Shell scripts run under bash on every CI runner, Windows included.
 # Windows runners check out with core.autocrlf=true, and bash fails on CRLF.
 *.sh text eol=lf
+
+# Windows-only artifacts keep CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Generated locks and vendored binaries are never diffed.
+pnpm-lock.yaml -diff

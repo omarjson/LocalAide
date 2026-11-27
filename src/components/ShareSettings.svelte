@@ -117,13 +117,13 @@
       <p class="mt-2 break-all font-mono text-[13px] text-ink-200">{status.url}</p>
       <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <div class="flex gap-1.5"><dt class="text-ink-500">Requests</dt><dd class="tabular-nums text-ink-100">{status.requests.toLocaleString()}</dd></div>
-        <div class="flex gap-1.5"><dt class="text-ink-500">Refused</dt><dd class={`tabular-nums ${status.refused > 0 ? "text-ember-200" : "text-ink-100"}`}>{status.refused.toLocaleString()}</dd></div>
+        <div class="flex gap-1.5"><dt class="text-ink-500">Refused</dt><dd class={`tabular-nums ${status.refused > 0 ? "text-amber-300" : "text-ink-100"}`}>{status.refused.toLocaleString()}</dd></div>
         <div class="flex gap-1.5"><dt class="text-ink-500">Last visit</dt><dd class="text-ink-100">{status.last_seen ? since(status.last_seen) : "none yet"}</dd></div>
       </dl>
 
       {#if links}
         <div class="mt-4 space-y-2" transition:slide={{ duration: dur(150) }}>
-          <p class="flex items-center gap-2 text-sm font-medium text-ember-200"><Icon name="key" class="h-4 w-4" />Copy the links now. They are shown only once; to get new ones, stop and share again.</p>
+          <p class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="key" class="h-4 w-4" />Copy the links now. They are shown only once; to get new ones, stop and share again.</p>
           {#each [["Pairing link", links.pairing_url], ["Pairing password", links.pairing_token], ["Viewer", links.viewer_link], ["Remote user", links.remote_link]] as [label, link] (label)}
             <div class="link">
               <span class="w-24 shrink-0 text-sm font-medium text-ink-200">{label}</span>
@@ -143,7 +143,7 @@
             {@html pair.qr_svg}
           </div>
           <div class="min-w-0">
-            <h4 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="link" class="h-4 w-4 text-ember-300" />Pair your phone</h4>
+            <h4 class="flex items-center gap-2 font-semibold text-ink-50"><Icon name="link" class="h-4 w-4 text-ink-400" />Pair your phone</h4>
             <p class="mt-1 text-sm leading-6 text-ink-400">Scan the code with your phone's camera, or open the Remote link and look for the small code it shows. Match it against this one:</p>
             <p class="pair-code mt-2 w-fit">{pair.pair_code}</p>
             <p class="mt-2 text-sm text-ink-500">Matching codes mean the phone and this computer are the same session. Codes change every time sharing restarts.</p>
@@ -155,7 +155,7 @@
     <section class="mt-6 rounded-xl border border-ink-700 bg-ink-900 p-4">
       {#if tool && !tool.installed}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Icon name="download" class="hidden h-5 w-5 shrink-0 text-ember-300 sm:block" />
+          <Icon name="download" class="hidden h-5 w-5 shrink-0 text-ink-400 sm:block" />
           <p class="flex-1 text-sm leading-6 text-ink-300">A public link needs <b class="font-semibold text-ink-100">cloudflared</b>, Cloudflare's tunnel program. LocalAide downloads version {tool.version} from Cloudflare's GitHub ({formatBytes(tool.download_bytes ?? 0)}) and checks its checksum before using it.</p>
           {#if tool.available}
             <Button variant="primary" disabled={busy !== null} onclick={() => void fetchTool()}>{busy === "fetch" ? `Downloading ${pct ?? 0}%` : "Download cloudflared"}</Button>
@@ -203,8 +203,8 @@
   }
   .on {
     border-radius: 12px;
-    border: 1px solid color-mix(in oklab, var(--color-ember-500) 45%, transparent);
-    background: color-mix(in oklab, var(--color-ember-500) 6%, var(--color-ink-900));
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink-800);
     padding: 16px;
   }
   .pulse {
@@ -228,11 +228,11 @@
     font-size: 1.375rem;
     font-weight: 700;
     letter-spacing: 0.3em;
-    color: var(--color-ember-200);
-    border: 1px solid color-mix(in oklab, var(--color-ember-500) 40%, transparent);
+    color: var(--color-ink-100);
+    border: 1px solid var(--color-edge);
     border-radius: 0.5rem;
     padding: 0.5rem 0.875rem;
-    background: color-mix(in oklab, var(--color-ember-500) 10%, transparent);
+    background: var(--color-ink-900);
   }
   @media (prefers-reduced-motion: reduce) {
     .pulse {

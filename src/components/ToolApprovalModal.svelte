@@ -64,7 +64,7 @@
         </div>
       </div>
 
-      <div class="bg-ink-950 border border-edge rounded-xl p-3 space-y-2 text-sm">
+      <div class="bg-ink-950 border border-ink-700 rounded-xl p-3 space-y-2 text-sm">
         <div class="flex justify-between text-ink-400">
           <span>Action:</span>
           <span class="text-ink-300 font-semibold font-mono">{toolName}</span>
@@ -82,7 +82,7 @@
       {#if action.content}
         <div>
           <div class="text-sm font-medium text-ink-400 mb-1">File content preview:</div>
-          <pre class="bg-ink-950 border border-edge rounded-xl p-3 text-xs font-mono text-ink-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{action.content}</pre>
+          <pre class="bg-ink-950 border border-ink-700 rounded-xl p-3 text-xs font-mono text-ink-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{action.content}</pre>
         </div>
       {/if}
 
@@ -106,7 +106,7 @@
         <button
           onclick={onApproveSession}
           title="Allows changes to files in this folder for the next 30 minutes"
-          class="px-3 py-1.5 text-xs rounded-xl bg-ember-600 hover:bg-ember-500 text-on-ember font-medium transition-colors"
+          class="px-3 py-1.5 text-xs rounded-xl bg-ink-100 hover:bg-ink-100 text-on-ember font-medium transition-colors"
         >
           Allow in this folder for 30 min
         </button>

@@ -34,7 +34,7 @@
       {#if block.ordered}
         <ol class="list-decimal space-y-1 pl-5">{#each block.items as item, j (j)}<li>{@render inline(item)}</li>{/each}</ol>
       {:else}
-        <ul class="list-disc space-y-1 pl-5 marker:text-ember-500">{#each block.items as item, j (j)}<li>{@render inline(item)}</li>{/each}</ul>
+        <ul class="list-disc space-y-1 pl-5 marker:text-ink-400">{#each block.items as item, j (j)}<li>{@render inline(item)}</li>{/each}</ul>
       {/if}
     {:else if block.kind === "table"}
       <div class="overflow-x-auto rounded-md border border-ink-700">

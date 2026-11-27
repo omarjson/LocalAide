@@ -97,13 +97,13 @@
     <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-ink-500">Open in tabs</h3>
     <ul class="mt-2 space-y-1.5" aria-label="Open chat tabs">
       {#each chats.tabs as tab (tab.key)}
-        <li class="flex items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/5 px-3 py-2">
-          <Icon name="chat" class="h-4 w-4 shrink-0 text-ember-300" />
+        <li class="flex items-center gap-2 rounded-lg border border-ink-700 bg-veil/5 px-3 py-2">
+          <Icon name="chat" class="h-4 w-4 shrink-0 text-ink-300" />
           <span class="min-w-0 flex-1 truncate text-sm text-ink-100">{tab.title || "New chat"}</span>
           {#if tab.busy}
             <span class="session-busy" title="This chat is working" aria-label="Busy"></span>
           {/if}
-          <span class="shrink-0 text-xs font-medium text-ember-200">Open in tab</span>
+          <span class="shrink-0 text-xs font-medium text-ink-400">Open in tab</span>
           {#if tab.id}<Button variant="subtle" onclick={() => onOpen({ thread_id: String(tab.id ?? ""), title: tab.title, snippet: "", path: "" })}>Focus</Button>{/if}
         </li>
       {/each}
@@ -116,7 +116,7 @@
       <ul class="mt-2 space-y-1.5" aria-label="Session search results">
         {#each hits as hit (hit.thread_id + hit.path)}
           <li class="flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-950 px-3 py-2">
-            <Icon name="chat" class="h-4 w-4 shrink-0 text-ember-300" />
+            <Icon name="chat" class="h-4 w-4 shrink-0 text-ink-400" />
             <span class="min-w-0 flex-1">
               <span class="block truncate text-sm font-medium text-ink-100">{hit.title || "Untitled"}</span>
               <span class="block truncate text-xs text-ink-500">{hit.snippet}</span>
@@ -157,7 +157,7 @@
     width: 8px;
     flex: none;
     border-radius: 9999px;
-    background: var(--color-ember-400, #fb923c);
+    background: var(--color-ember-400);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ember-500) 22%, transparent);
     will-change: opacity;
     animation: session-pulse 1.4s ease-in-out infinite;

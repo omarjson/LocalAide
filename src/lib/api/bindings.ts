@@ -506,6 +506,25 @@ export interface EngineInfo {
   download_bytes: number | null;
   custom: boolean;
   path: string | null;
+  /** The graphics build in use: "cpu", "vulkan" or "rocm". */
+  accel: string;
+  /** True when the chosen graphics build is downloaded. */
+  accel_installed: boolean;
+  /** The chosen graphics build's download size, when it has one. */
+  accel_bytes: number | null;
+  /** Every engine build the picker can offer on this computer. */
+  builds: EngineBuildInfo[];
+  /** The graphics processor the system reports, when it can name one. */
+  gpu: string | null;
+}
+
+/** One llama.cpp build the engine picker offers. */
+export interface EngineBuildInfo {
+  /** "cpu", "vulkan" or "rocm". */
+  id: string;
+  /** The tarball size before it is fetched, when this computer has one. */
+  bytes: number | null;
+  available: boolean;
 }
 
 export interface EngineDownloadEvent {
@@ -766,6 +785,35 @@ export interface ApprovalTimers {
   terminal_approval_secs: number;
 }
 
+/** Settings → Performance → Engine flags. Only what is set is passed to
+ *  llama-server, so the defaults stay llama.cpp's own. */
+export interface EngineConfig {
+  /** "cpu", "vulkan" or "rocm": which build of llama.cpp runs. */
+  accel: string;
+  /** Layers to keep on the GPU (-ngl). 999 = all. null = llama.cpp's default. */
+  gpu_layers: number | null;
+  /** Worker threads (-t). null = llama.cpp's default (physical cores). */
+  threads: number | null;
+  /** Flash attention (-fa). null = llama.cpp's default. */
+  flash_attn: boolean | null;
+  /** Memory-map the model file. null = default. */
+  mmap: boolean | null;
+  /** Lock the model in memory so the OS cannot swap it (--mlock). */
+  mlock: boolean;
+  /** KV cache type for keys (-ctk): f16, bf16, q8_0, q4_0, q4_1. */
+  cache_type_k: string | null;
+  /** KV cache type for values (-ctv). */
+  cache_type_v: string | null;
+  /** Parallel request slots (-np). More slots need more KV cache. */
+  parallel: number | null;
+  /** Batch size for prompt processing (-b). */
+  batch_size: number | null;
+  /** RoPE frequency scale, for extending context past training. */
+  rope_freq_scale: number | null;
+  /** Extra raw flags, split on whitespace. */
+  extra_args: string;
+}
+
 export interface ContextInfo {
   /** The saved setting, in tokens. */
   value: number;
@@ -893,6 +941,16 @@ export interface OpenCodeHealth {
 export interface OpenCodeHandoff {
   session_id: string;
   title: string;
+}
+
+/** A chat server found running on this computer. */
+export interface FoundServer {
+  /** Matches the id of an entry in the provider presets. */
+  preset_id: string;
+  label: string;
+  base_url: string;
+  /** Model ids it listed. Empty when it answered but listed none. */
+  models: string[];
 }
 
 /** A curated starting point for the provider form (from the 9Router registry). */

@@ -126,7 +126,7 @@
        empty chrome zooms the window, like a native title bar; the header
        itself is not interactive content. -->
   <header
-    class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-edge bg-ink-950 ${tabsBelow && visible && tabs.length > 0 ? "" : "border-b"} ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
+    class={`chrome flex h-10 shrink-0 select-none items-center gap-2 border-ink-800 bg-ink-950 ${tabsBelow && visible && tabs.length > 0 ? "" : "border-b"} ${isMac ? "pl-[80px] pr-1.5" : "pl-3"}`}
     aria-label="Window and open chats"
     ondblclick={onChromeDblClick}
   >
@@ -144,7 +144,7 @@
           <LogoMark class="h-4 w-4" />
         </button>
         {#if menuOpen}
-          <div role="menu" aria-label="Window" class="absolute left-0 top-9 z-50 w-44 overflow-hidden rounded-lg border border-edge bg-ink-900 py-1 shadow-2xl">
+        <div role="menu" aria-label="Window" class="surface-glass absolute left-0 top-9 z-50 w-44 overflow-hidden rounded-lg border border-ink-700 py-1 shadow-[var(--shadow-elev)]">
             <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; minimizeWindow(); }}>Minimize</button>
             <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; toggleMaximizeWindow(); }}>{maximized ? "Restore" : "Maximize"}</button>
             <button type="button" role="menuitem" class="menu-item" onclick={() => { menuOpen = false; closeWindow(); }}>Close</button>
@@ -189,7 +189,7 @@
   </header>
 
   {#if tabsBelow && visible && tabs.length > 0}
-    <div class="flex h-10 shrink-0 items-stretch gap-2 border-b border-edge bg-ink-950 px-2">
+    <div class="flex h-10 shrink-0 items-stretch gap-2 border-b border-ink-800 bg-ink-950 px-2">
       {@render tabStrip()}
     </div>
   {/if}

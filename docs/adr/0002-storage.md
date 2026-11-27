@@ -1,5 +1,8 @@
 # ADR-0002: Unified Storage Engine with SQLite WAL, FTS5, and Vector Index
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 ## Status
 Accepted. The vector half is designed but not wired: see the honesty note in Decision 3.
 

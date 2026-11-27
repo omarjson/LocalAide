@@ -66,7 +66,7 @@
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <h2 id="notifications-title" class="flex items-center gap-2 text-lg font-semibold text-ink-50">
-        <Icon name="info" class="h-5 w-5 text-ember-300" />Notifications and sound
+        <Icon name="info" class="h-5 w-5 text-ink-400" />Notifications and sound
       </h2>
       <p class="mt-1 text-sm text-ink-400">Quiet, local alerts for things that need you. No messages are sent anywhere.</p>
     </div>

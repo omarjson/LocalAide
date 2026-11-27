@@ -22,6 +22,7 @@
   import ChatScreen from "./screens/ChatScreen.svelte";
   import FocusTrap from "./components/FocusTrap.svelte";
   import Icon from "./components/Icon.svelte";
+  import LogoMark from "./components/LogoMark.svelte";
   import ProgressBar from "./components/ProgressBar.svelte";
   import MemoryScreen from "./screens/MemoryScreen.svelte";
   import SkillsScreen from "./screens/SkillsScreen.svelte";
@@ -459,23 +460,33 @@
       <button aria-label="Close navigation" onclick={() => mobileNav = false} class="p-2 rounded-md hover:bg-veil/5"><Icon name="close" class="w-4 h-4" /></button>
     </div>
     {#if showLabels}
+      <div class="mx-0.5 mb-1.5 flex h-8 shrink-0 items-center gap-2 px-2.5 text-ink-50">
+        <LogoMark class="h-4 w-4 shrink-0" />
+        <span class="text-[13px] font-bold uppercase leading-none tracking-[0.04em]">LocalAide</span>
+      </div>
+    {:else}
+      <div class="mb-1.5 flex h-8 shrink-0 items-center justify-center text-ink-50" title="LocalAide">
+        <LogoMark class="h-4 w-4" />
+      </div>
+    {/if}
+    {#if showLabels}
       <button
         type="button"
         onclick={() => { if (navigate("chat")) newChat(chats.activeFolder); }}
-        class="mx-1 mb-2 flex h-9 shrink-0 items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/10 px-3 text-[13px] font-semibold text-ember-200 transition-colors hover:bg-ember-500/15"
-        title="New chat (Ctrl+N)"
+        class="mx-0.5 mb-1 flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
+        title="New chat ({mod}N)"
       >
-        <Icon name="plus" class="h-4 w-4" />
+        <Icon name="plus" class="h-4 w-4 shrink-0" />
         New chat
-        <kbd class="ml-auto rounded bg-veil/5 px-1.5 py-0.5 font-mono text-xs font-normal text-ink-400">{mod}N</kbd>
+        <kbd class="ml-auto font-mono text-xs font-normal text-ink-600">{mod}N</kbd>
       </button>
     {:else}
       <button
         type="button"
         onclick={() => { if (navigate("chat")) newChat(chats.activeFolder); }}
         aria-label="New chat"
-        title="New chat (Ctrl+N)"
-        class="mx-1 mb-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ember-500/25 bg-ember-500/10 text-ember-200 transition-[background-color,transform] duration-200 hover:scale-110 hover:bg-ember-500/15 active:scale-95"
+        title="New chat ({mod}N)"
+        class="mx-auto mb-1 grid h-9 w-9 shrink-0 place-items-center rounded-md text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-100"
       ><Icon name="plus" class="h-4 w-4" /></button>
     {/if}
     {#snippet navItem(id: NavId, label: string)}
@@ -485,10 +496,9 @@
         aria-current={screen === id ? "page" : undefined}
         aria-label={showLabels ? undefined : label}
         title={showLabels ? undefined : label}
-        class={`nav-item group relative w-full flex items-center h-10 rounded-lg text-sm text-left transition-[background-color,color] duration-150 ${showLabels ? 'gap-3.5 px-3' : 'justify-center px-0'} ${screen === id ? 'bg-ink-800 text-ink-50 font-semibold shadow-sm' : 'text-ink-300 hover:bg-veil/5 hover:text-ink-50'}`}
+        class={`nav-item group relative w-full flex items-center h-9 rounded-md text-sm text-left transition-[background-color,color] duration-150 ${showLabels ? 'gap-2.5 px-2.5' : 'justify-center px-0'} ${screen === id ? 'bg-veil/6 text-ink-50 font-medium' : 'text-ink-400 hover:bg-veil/5 hover:text-ink-100'}`}
       >
-        <span class={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-ember-500 transition-[height,opacity] duration-200 ease-out ${screen === id ? 'h-4 opacity-100' : 'h-0 opacity-0'}`} aria-hidden="true"></span>
-        <span class={`nav-ico ${screen === id ? 'text-ember-300' : ''}`}><Icon name={id} class="w-[18px] h-[18px] shrink-0" /></span>
+        <span class="nav-ico"><Icon name={id} class="w-[18px] h-[18px] shrink-0" /></span>
         {#if showLabels}<span class="truncate">{label}</span>{/if}
       </button>
     {/snippet}
@@ -511,7 +521,7 @@
         aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
         title={collapsed ? "Expand the sidebar (Ctrl+B)" : "Collapse the sidebar (Ctrl+B)"}
         aria-expanded={!collapsed}
-        class={`hidden lg:flex w-full items-center h-9 rounded-lg text-sm text-ink-400 transition-colors hover:bg-veil/5 hover:text-ink-50 ${showLabels ? 'gap-3.5 px-3' : 'justify-center'}`}
+        class={`hidden lg:flex w-full items-center h-9 rounded-md text-sm text-ink-500 transition-colors hover:bg-veil/5 hover:text-ink-100 ${showLabels ? 'gap-2.5 px-2.5' : 'justify-center'}`}
       >
         <Icon name="sidebar" class={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
         {#if showLabels}<span>Collapse</span>{/if}
@@ -519,7 +529,7 @@
     </div>
   </aside>
 
-  <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l lg:border-t border-ink-700 lg:rounded-tl-xl ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+  <section bind:this={canvasEl} class={`app-canvas min-h-0 min-w-0 flex-1 flex flex-col bg-ink-900 lg:border-l border-ink-800 ${screen === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
     {#if chatMounted && !startupError}
       <div class="min-h-0 flex-1 flex flex-col" class:hidden={screen !== "chat"}>
         {#each chats.tabs as tab (tab.key)}
@@ -547,7 +557,7 @@
           <p class="text-sm text-ink-300 mb-6 break-words">{startupError}</p>
           <div class="flex justify-center gap-3">
             <button onclick={() => void decideStartScreen()} class="px-4 py-2 rounded-xl bg-veil/10 hover:bg-veil/20 text-sm font-medium transition-colors">Try again</button>
-            <button onclick={() => { startupError = null; screen = "chat"; }} class="px-4 py-2 rounded-xl border border-edge hover:bg-veil/5 text-sm text-ink-300 transition-colors">Continue anyway</button>
+            <button onclick={() => { startupError = null; screen = "chat"; }} class="px-4 py-2 rounded-xl border border-ink-700 hover:bg-veil/5 text-sm text-ink-300 transition-colors">Continue anyway</button>
           </div>
         </div>
       {:else if screen === null}
@@ -580,7 +590,7 @@
   </section>
   </div>
 
-  <footer class="h-8 shrink-0 flex items-center gap-5 px-4 text-xs text-ink-500 bg-ink-950" aria-label="Status">
+  <footer class="h-7 shrink-0 flex items-center gap-5 border-t border-ink-800 px-4 text-xs text-ink-600 bg-ink-950" aria-label="Status">
     {#if ramTotal > 0}
       <span class="flex items-center gap-2.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400/80" aria-hidden="true"></span>{formatBytes(ramUsable)} free of {formatBytes(ramTotal)}</span>
       <span class="hidden md:inline">Models can use up to {formatBytes(budget)}</span>
@@ -638,11 +648,11 @@
       {#snippet footer()}
         <button type="button" onclick={() => (updateModalOpen = false)} class="rounded-lg px-4 py-2 text-sm text-ink-300 hover:bg-veil/5">Later</button>
         {#if update.can_install}
-          <button type="button" onclick={() => void installFromChip()} disabled={updateStage === "running" || updateStage === "done"} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400 disabled:opacity-50">
+          <button type="button" onclick={() => void installFromChip()} disabled={updateStage === "running" || updateStage === "done"} class="rounded-lg bg-ink-100 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ink-50 disabled:opacity-50">
             {updateStage === "running" ? `Updating… ${updatePercent}%` : updateStage === "done" ? "Installed — restarting" : "Install and restart"}
           </button>
         {:else}
-          <button type="button" onclick={() => void api.openLink(update.release_url)} class="rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ember-400">Open the download page</button>
+          <button type="button" onclick={() => void api.openLink(update.release_url)} class="rounded-lg bg-ink-100 px-4 py-2 text-sm font-semibold text-on-ember hover:bg-ink-50">Open the download page</button>
         {/if}
       {/snippet}
     </Modal>
@@ -650,7 +660,7 @@
 
   {#if cmdOpen}
     <div role="presentation" in:fade={{ duration: dur(motion.fast) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/60 backdrop-blur-sm grid place-items-start pt-[18vh] px-4 z-50" onclick={closePalette} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-lg mx-auto rounded-xl border border-edge bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); e.stopPropagation(); }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-lg mx-auto rounded-xl border border-ink-700 bg-ink-950 shadow-2xl overflow-hidden" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') closePalette(); e.stopPropagation(); }}>
         <FocusTrap>
         <div class="flex items-center gap-3 px-4 py-3 border-b border-edge">
           <span class="text-ink-400"><Icon name="search" /></span>
@@ -682,7 +692,7 @@
               onclick={() => runCommand(c)}
               class={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors duration-100 ${i === cmdIndex ? 'bg-veil/10 text-ink-50' : 'text-ink-200'}`}
             >
-              <span class={`size-8 grid place-items-center rounded-md transition-colors ${i === cmdIndex ? 'bg-ember-500/15 text-ember-300' : 'bg-veil/5'}`}><Icon name={c.icon} /></span>
+              <span class={`size-8 grid place-items-center rounded-md transition-colors ${i === cmdIndex ? 'bg-veil/10 text-ink-200' : 'bg-veil/5'}`}><Icon name={c.icon} /></span>
               <span class="flex-1 text-sm">{c.label}</span>
               {#if c.hint}<kbd class="text-xs text-ink-500">{c.hint}</kbd>{/if}
             </button>
@@ -696,8 +706,8 @@
   {/if}
 
   {#if engineDownload && engineDownload.state === "downloading"}
-    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-edge bg-ink-950 p-3 shadow-2xl" role="status" in:slideUp={{ y: 8 }} out:fade={{ duration: dur(motion.fast) }}>
-      <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ember-300" />Getting the model engine</div>
+    <div class="fixed bottom-12 right-4 z-50 w-72 rounded-xl border border-ink-700 bg-ink-950 p-3 shadow-2xl" role="status" in:slideUp={{ y: 8 }} out:fade={{ duration: dur(motion.fast) }}>
+      <div class="flex items-center gap-2 text-sm font-medium text-ink-100"><Icon name="download" class="h-4 w-4 text-ink-400" />Getting the model engine</div>
       <p class="mt-1 text-xs leading-5 text-ink-400">Once only: the llama.cpp build for this processor, from github.com.</p>
       <ProgressBar value={engineDownload.percent} min={3} label="Getting the model engine" class="mt-2 h-1.5" />
       <p class="mt-1 text-right text-xs tabular-nums text-ink-500">{formatBytes(engineDownload.downloaded_bytes)} of {formatBytes(engineDownload.total_bytes)}</p>
@@ -725,7 +735,7 @@
 
   {#if showHelp}
     <div role="presentation" in:fade={{ duration: dur(100) }} out:fade={{ duration: dur(80) }} class="fixed inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-[60]" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
-      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-md rounded-xl border border-edge bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; e.stopPropagation(); }}>
+      <div role="dialog" tabindex="-1" aria-modal="true" aria-label="Keyboard shortcuts" in:scale={enterDialog()} out:scale={leaveDialog()} class="w-full max-w-md rounded-xl border border-ink-700 bg-ink-950 p-6 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; e.stopPropagation(); }}>
         <FocusTrap>
         <h3 class="text-lg font-semibold mb-4 text-ink-100">Keyboard shortcuts</h3>
         <div class="space-y-2.5 text-sm">
@@ -743,7 +753,7 @@
           <div class="flex justify-between items-center"><span class="text-ink-400">Cancel generation / dismiss a dialog</span><kbd class="kbd">Esc</kbd></div>
           <div class="flex justify-between items-center"><span class="text-ink-400">Keyboard help</span><kbd class="kbd">?</kbd></div>
         </div>
-        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-md bg-veil/5 border border-edge text-sm hover:bg-veil/10">Close</button>
+        <button onclick={() => showHelp = false} class="mt-6 w-full py-2 rounded-md bg-veil/5 border border-ink-700 text-sm hover:bg-veil/10">Close</button>
         </FocusTrap>
       </div>
     </div>

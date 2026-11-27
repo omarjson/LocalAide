@@ -1,5 +1,8 @@
 # ADR-0004: Workspace Jail Sandbox and Tool Execution Security
 
+> **2026-11-28:** The Rust/Tauri backend this ADR described was replaced by the Node ESM backend under `electron/`. The decision carries over — the contracts and invariants are the same, implemented in Node.
+
+
 ## Status
 Accepted, amended 2026-11-13 when the jail shipped: capability handles were replaced by canonicalization plus lexical checks, and the audit log is clearable, not append-only.
 

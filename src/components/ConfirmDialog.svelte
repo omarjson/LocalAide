@@ -25,7 +25,7 @@
   onkeydown={(event) => { if (event.key === "Escape") onCancel(); }}
 >
   <div
-    class="w-full max-w-md rounded-lg border border-edge bg-ink-900 p-5 shadow-2xl"
+    class="w-full max-w-md rounded-lg border border-ink-700 bg-ink-900 p-5 shadow-2xl"
     role="dialog"
     tabindex="-1"
     aria-modal="true"

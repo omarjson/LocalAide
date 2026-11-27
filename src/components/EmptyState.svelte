@@ -20,8 +20,8 @@
   } = $props();
 </script>
 
-<div class="ember-glow rounded-lg border border-ink-700 bg-ink-900 px-6 py-14 text-center" in:fly={{ y: 6, duration: dur(motion.slow), easing: motion.enter }}>
-  <div class="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-ink-700 bg-ink-800 text-ember-300 shadow-sm">
+<div class="rounded-lg border border-ink-700 bg-ink-900 px-6 py-14 text-center" in:fly={{ y: 6, duration: dur(motion.slow), easing: motion.enter }}>
+  <div class="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-ink-700 bg-ink-800 text-ink-200">
     <Icon name={icon} class="h-6 w-6" />
   </div>
   {#if greeting}<p class="mt-4 text-sm text-ink-400">{greeting}</p>{/if}

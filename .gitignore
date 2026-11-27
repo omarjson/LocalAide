@@ -1,7 +1,6 @@
-# Tauri
-src-tauri/target
-src-tauri/gen
+# Build output
 dist
+release
 node_modules
 
 # OS
@@ -16,9 +15,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Old sidecar staging folder (the engine is downloaded at runtime now).
-src-tauri/binaries/
 # Browser profiles captured by UI automation hold cookies and saved logins. Never commit them.
 docs/evidence/**/profile/
-# Made by `cargo about` during release builds (see .github/workflows/ci.yml).
-/THIRD_PARTY_LICENSES.html

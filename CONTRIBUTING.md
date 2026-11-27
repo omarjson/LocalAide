@@ -26,13 +26,13 @@ npx tauri dev
 
 ## Project Structure
 
-* `src-tauri/` - Rust backend
+* `electron/` - Node ESM backend (no build step, no native modules)
 * `src/` - Svelte 5 frontend
 * `docs/` - Documentation, ADRs, and evidence
 
 ## Reporting Issues
 
-Please use GitHub Issues. Include OS, version, steps to reproduce, and logs from `tauri-plugin-log`.
+Please use GitHub Issues. Include OS, version, steps to reproduce, and logs from Settings → About & diagnostics.
 
 ## License
 

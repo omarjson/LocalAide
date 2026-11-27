@@ -196,7 +196,7 @@
         {#each automations as a (a.id)}
           <div class={`rounded-lg border border-ink-700 bg-ink-900 p-4 ${a.enabled ? "" : "opacity-70"}`}>
             <div class="flex flex-wrap items-center gap-3">
-              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-ember-300"><Icon name="clock" class="h-[18px] w-[18px]" /></span>
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-ink-400"><Icon name="clock" class="h-[18px] w-[18px]" /></span>
               <div class="min-w-0 flex-1">
                 <p class="truncate font-semibold text-ink-50">{a.name}</p>
                 <p class="truncate text-sm text-ink-400">{scheduleLabel(a)}{a.last_run_at ? ` · last ran ${sinceLabel(a.last_run_at)}` : " · not run yet"}</p>
@@ -234,7 +234,7 @@
 
 {#if editing}
   <div class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Edit automation">
-    <div class="w-full max-w-lg rounded-2xl border border-edge bg-ink-950 p-5 shadow-[var(--shadow-elev)]">
+    <div class="w-full max-w-lg rounded-2xl border border-ink-700 bg-ink-950 p-5 shadow-[var(--shadow-elev)]">
       <h2 class="text-lg font-semibold text-ink-50">{formId ? "Edit automation" : "New automation"}</h2>
       <div class="mt-4 space-y-3">
         <label class="block text-sm text-ink-400">Name

@@ -17,7 +17,7 @@ LocalAide's security model is local-first and least-privilege: with cloud mode o
 
 ## 3. Content Security Policy (CSP)
 
-Tauri enforces the CSP defined in `src-tauri/tauri.conf.json`:
+Electron enforces the CSP set on every `file://` response in `electron/main.mjs`:
 
 ```
 default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
