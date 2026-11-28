@@ -147,8 +147,23 @@ jobs:
             echo "::warning::No Apple certificate is set, so this macOS build is not signed."
           fi
 
+      # electron-builder takes --x64/--arm64 flags (there is no --arch). The
+      # failure tail is emitted as ::error annotations because job logs need
+      # admin access while annotations are readable through the API.
       - name: Package (electron-builder)
-        run: node node_modules/electron-builder/cli.js --mac --arch ${{ matrix.arch }} --publish never
+        shell: bash
+        run: |
+          set +e
+          node node_modules/electron-builder/cli.js --mac --${{ matrix.arch }} --publish never > packaging.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            { grep -aE "⨯|[Ee]rror" packaging.log | tail -6; tail -c 1500 packaging.log | head -6; } | grep -a . | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=electron-builder::$enc"
+            done
+            exit 1
+          fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -189,12 +204,25 @@ jobs:
 
       # Code signing turns on when the CSC_LINK secret exists (a certificate
       # bundle, or Azure Trusted Signing via the azure-signing option).
-      # Without it the build is unsigned. See docs/release.md.
+      # Without it the build is unsigned. See docs/release.md. As on macOS
+      # and Linux, a failed package emits its log tail as ::error annotations.
       - name: Package (electron-builder)
+        shell: bash
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: node node_modules/electron-builder/cli.js --win --arch ${{ matrix.arch }} --publish never
+        run: |
+          set +e
+          node node_modules/electron-builder/cli.js --win --${{ matrix.arch }} --publish never > packaging.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            { grep -aE "⨯|[Ee]rror" packaging.log | tail -6; tail -c 1500 packaging.log | head -6; } | grep -a . | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=electron-builder::$enc"
+            done
+            exit 1
+          fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -230,7 +258,19 @@ jobs:
         run: pnpm run build
 
       - name: Package (electron-builder)
-        run: node node_modules/electron-builder/cli.js --linux --publish never
+        shell: bash
+        run: |
+          set +e
+          node node_modules/electron-builder/cli.js --linux --publish never > packaging.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            { grep -aE "⨯|[Ee]rror" packaging.log | tail -6; tail -c 1500 packaging.log | head -6; } | grep -a . | fold -w 300 | head -12 | while IFS= read -r line; do
+              enc=$(printf '%s' "$line" | sed 's/%/%25/g')
+              echo "::error title=electron-builder::$enc"
+            done
+            exit 1
+          fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

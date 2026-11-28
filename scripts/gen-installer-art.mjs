@@ -7,8 +7,9 @@
 //
 // Run it after changing the logo:
 //   npx -y -p @resvg/resvg-js node scripts/gen-installer-art.mjs
-// (or install @resvg/resvg-js anywhere on NODE_PATH). The outputs are
-// committed, so normal builds do not need this script.
+// (or install @resvg/resvg-js anywhere on NODE_PATH). The outputs land in
+// build/installer/ and are not referenced by the electron-builder config
+// (the default icons are used), so normal builds do not need this script.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
