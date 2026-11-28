@@ -1,0 +1,23 @@
+{
+  "name": "@goat/client-runtime",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./localaide": {
+      "types": "./src/localaide/index.ts",
+      "default": "./src/localaide/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@goat/contracts": "workspace:*",
+    "@goat/shared": "workspace:*"
+  }
+}

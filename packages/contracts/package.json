@@ -1,0 +1,19 @@
+{
+  "name": "@goat/contracts",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./localaide": {
+      "types": "./src/localaide.ts",
+      "default": "./src/localaide.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

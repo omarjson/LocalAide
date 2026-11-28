@@ -11,14 +11,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --config apps/web/vite.config.ts",
     "dev:electron": "electron . --dev",
     "start": "electron .",
     "app": "electron .",
-    "build": "tsc --noEmit && vite build",
-    "build:electron": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "build": "tsc -p apps/web/tsconfig.json --noEmit && vite build --config apps/web/vite.config.ts",
+    "build:electron": "vite build --config apps/web/vite.config.ts",
+    "preview": "vite preview --config apps/web/vite.config.ts",
+    "check": "tsc -p apps/web/tsconfig.json --noEmit",
+    "check:svelte": "svelte-check --tsconfig ./tsconfig.json",
     "smoke": "node scripts/smoke-test.mjs",
     "test:unit": "node --test \"tests/unit/*.test.ts\"",
     "test": "node scripts/smoke-test.mjs && node --test \"tests/unit/*.test.ts\""

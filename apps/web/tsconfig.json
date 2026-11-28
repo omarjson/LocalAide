@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./src/*"],
+      "gt-react": ["./src/i18n/gtShim.tsx"],
+      "@goat/contracts": ["../../packages/contracts/src/index.ts"],
+      "@goat/contracts/*": ["../../packages/contracts/src/*"],
+      "@goat/client-runtime": ["../../packages/client-runtime/src/index.ts"],
+      "@goat/client-runtime/*": ["../../packages/client-runtime/src/*"],
+      "@goat/shared": ["../../packages/shared/src/index.ts"],
+      "@goat/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

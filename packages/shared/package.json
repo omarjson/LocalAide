@@ -1,0 +1,19 @@
+{
+  "name": "@goat/shared",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./qrCode": {
+      "types": "./src/qrCode.ts",
+      "default": "./src/qrCode.ts"
+    },
+    "./keybindings": {
+      "types": "./src/keybindings.ts",
+      "default": "./src/keybindings.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

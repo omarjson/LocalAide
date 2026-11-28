@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>LocalAide</title>
+    <!-- The app's own theme script, so the first paint is already in the
+         right theme. It is a file, not an inline script, because the
+         Electron content security policy allows scripts from the app only. -->
+    <script src="./theme-init.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- The splash shows until the app mounts. It is a sibling of the mount
+         point, so the page keeps the empty container the build expects. -->
+    <div id="boot-shell" aria-hidden="true">
+      <img id="boot-shell-logo" src="./logo.svg" alt="" />
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
