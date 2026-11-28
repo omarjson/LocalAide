@@ -82,10 +82,12 @@ docs/adr/            14 ADRs, each carries a migration note
 
 ## Remaining work
 
-1. **CI is verified green on GitHub** (Quality Gate, catalog pins, version gate) and a real installer
-   (release/LocalAide Setup 0.2.4.exe, x64 + arm64 NSIS) was built and boot-tested from its unpacked
-   build: the packaged app serves real commands over CDP. Signing is the only release step left,
-   and it is optional (CSC_LINK / Apple secrets; docs/release.md).
+1. **The full release pipeline is verified green on GitHub** (Quality Gate, catalog pins, version
+   gate, all five platform builds, draft publish — the v0.2.5 tag run). The draft release for
+   0.2.5 is on GitHub awaiting the publish click. Signing is the only release step left, and it
+   is optional (CSC_LINK / Apple secrets; docs/release.md). Watch out: electron-builder takes
+   `--x64`/`--arm64`, not `--arch`; failed package steps emit their log tail as `::error`
+   annotations because job logs need admin access to download.
 2. **electron-updater**: wire the in-app Install-and-restart (publish: github is already in
    package.json; update_check works and reports can_install: false).
 3. **Feature work** (the goal ceiling): GOAT fleet/memories ideas, more local runtimes on the
