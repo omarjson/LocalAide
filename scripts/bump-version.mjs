@@ -4,8 +4,7 @@
 //   node scripts/bump-version.mjs <new-version> [--dry-run] [--check]
 //   node scripts/bump-version.mjs --check
 //
-// The six files (same set scripts/ci/check-versions.mjs gates on, plus the
-// three it does not cover):
+// The three files:
 //   package.json                  "version": "x.y.z"
 //                                 ONLY — the unrelated cfg_aliases 0.2.2
 //                                 entry is left alone
@@ -13,7 +12,7 @@
 //   README.md                     the version badge (version-vx.y.z-blue)
 //
 // Bump behaviour:
-// - The six files must already agree before a bump; a disagreeing tree is
+// - The three files must already agree before a bump; a disagreeing tree is
 //   refused (fix it first, don't bump from a broken state).
 // - The new version must be x.y.z, and different from the current one.
 // - CHANGELOG.md: the `## [Unreleased]` section is promoted to
@@ -25,11 +24,11 @@
 //
 // Flags:
 //   --dry-run   print what would change, write nothing.
-//   --check     read the version from all six files, print them, and exit
+//   --check     read the version from all three files, print them, and exit
 //               1 when they disagree or any is missing. No writes.
 //   --root <dir>  treat <dir> as the repo root (default: the repo this
 //               script lives in). For testing against a temp copy:
-//                 cp the six files to /tmp/bump-test/<same layout>
+//                 cp the three files to /tmp/bump-test/<same layout>
 //                 node scripts/bump-version.mjs --root /tmp/bump-test 0.2.4
 //
 // Exit codes: 0 on success, 1 on bad usage, disagreement, or a missing

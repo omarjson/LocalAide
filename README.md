@@ -7,7 +7,7 @@
 *Local by default. Zero telemetry. Opt-in cloud, including free providers that need no key.*
 
 [![CI & Release Pipeline](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml/badge.svg)](https://github.com/omarjson/LocalAide/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.2.4-blue.svg)](https://github.com/omarjson/LocalAide/releases)
+[![Version](https://img.shields.io/badge/version-v0.2.5-blue.svg)](https://github.com/omarjson/LocalAide/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Electron: 45](https://img.shields.io/badge/Electron-45-47848F.svg)](https://www.electronjs.org/)
 [![Node: 24](https://img.shields.io/badge/Node-24-339933.svg)](https://nodejs.org/)
